@@ -1,8 +1,7 @@
-import { setTimeout as pause } from "node:timers/promises";
 import { createRequire } from "node:module";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { PROVIDER_ATTEMPTS, providerCall } from "./provider-call.mjs";
+import { providerCall } from "./provider-call.mjs";
 import { isDeepStrictEqual } from "node:util";
 
 export class FunctionsDeployInventoryError extends Error { name = "FunctionsDeployInventoryError"; }
@@ -152,11 +151,11 @@ export function assertNoFunctionDeletions(manifest, functions, { projectId, code
   }
 }
 
-export async function requestDeploymentInventory(client, url, pageToken, wait = pause) {
+export async function requestDeploymentInventory(client, url, pageToken) {
   try {
-    // Bound retries here instead of multiplying them with the HTTP client's.
+    // Retry here, not also in the HTTP client.
     return (await providerCall("deployed function inventory", () =>
-      client.request({ url, method: "GET", params: { pageSize: 100, ...(pageToken ? { pageToken } : {}) }, retry: false }), { wait })).data;
+      client.request({ url, method: "GET", params: { pageSize: 100, ...(pageToken ? { pageToken } : {}) }, retry: false }))).data;
   } catch (error) {
     // Provider errors can contain response bodies and authorization headers.
     const value = error?.response?.status ?? error?.status;
@@ -164,6 +163,6 @@ export async function requestDeploymentInventory(client, url, pageToken, wait = 
     const code = ["ETIMEDOUT", "ECONNRESET", "ECONNREFUSED", "ENOTFOUND", "EAI_AGAIN", "ECONNABORTED"].includes(error?.code)
       ? error.code : Number.isSafeInteger(error?.code) && error.code >= 0 && error.code <= 999 ? error.code : undefined;
     throw new Error(`Could not verify deployed function inventory (${status !== undefined ? `HTTP ${status}`
-      : code !== undefined ? `code ${code}` : "HTTP unavailable"}, attempt ${error.providerAttempts} of ${PROVIDER_ATTEMPTS})`);
+      : code !== undefined ? `code ${code}` : "HTTP unavailable"}, attempt ${error.providerAttempts})`);
   }
 }

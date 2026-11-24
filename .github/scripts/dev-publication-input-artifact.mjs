@@ -7,7 +7,7 @@ export async function hasRetainedDevInput({ env = process.env, fetchImpl = fetch
   }
   const response = await fetchImpl(`https://api.github.com/repos/${env.GITHUB_REPOSITORY}/actions/runs/${env.GITHUB_RUN_ID}/artifacts?per_page=100`, {
     headers: { Authorization: `Bearer ${env.GH_TOKEN}`, Accept: "application/vnd.github+json" },
-    redirect: "error", signal: AbortSignal.timeout(30_000),
+    redirect: "error",
   });
   if (!response.ok) throw new Error("Dev retry artifact lookup failed");
   const result = await response.json();

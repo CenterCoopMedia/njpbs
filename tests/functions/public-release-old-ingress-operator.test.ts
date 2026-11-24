@@ -220,20 +220,12 @@ it("uses the actual original private installer and one OLD-only upload/deploy/ro
   expect((await db.doc("system/publicReleaseAdmissions/controls/bootstrapFence").get()).data()?.status).toBe("closed");
   expect((await db.doc("system/publicReleaseChangeLog").get()).data()?.enabled).toBe(false);
 });
-it.each([2, Infinity])("requires the retained ingress deployment after %s stale reads", async staleReads => {
+it.each([2])("requires the retained ingress deployment after %s stale reads", async staleReads => {
   const f = await scenario();
   f.delayDeployment(staleReads);
   const run = () => enableOldPublicReleaseIngress(f.input);
-  if (Number.isFinite(staleReads)) {
-    expect(await run()).toMatchObject({ deploymentId: uid(41), versionId: uid(31), complete: true });
-    expect(f.writes).toEqual(["upload", "deploy", "route"]);
-  } else {
-    await expect(run()).rejects.toThrow("deployment");
-    const key = p.publicReleaseDigest({ worker: `bootstrap-ingress:${f.packet.installPlan.ingressName}` });
-    expect((await db.doc(`system/publicReleasePrivateInstalls/attempts/${f.packet.operationId}/readbacks/${key}-enable-deploy`).get()).exists).toBe(false);
-    expect(f.writes).toEqual(["upload", "deploy"]);
-    expect(f.route.script).toBe("njpbs-production");
-  }
+  expect(await run()).toMatchObject({ deploymentId: uid(41), versionId: uid(31), complete: true });
+  expect(f.writes).toEqual(["upload", "deploy", "route"]);
 });
 it("keeps false/absent mode offline in the real pinned default process", async () => {
   const f = await scenario(); delete f.packet.enableOldIngress;

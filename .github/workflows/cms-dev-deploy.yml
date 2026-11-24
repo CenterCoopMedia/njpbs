@@ -127,6 +127,7 @@ jobs:
             scripts/cms-debug-browser.mjs
             scripts/lib/development-install-credentials.mjs
             scripts/smoke-signed-in-preview.mjs
+            functions/lib/release-wait.js
             config/development-inputs.json
           sparse-checkout-cone-mode: false
       - name: Render deployment resource configuration

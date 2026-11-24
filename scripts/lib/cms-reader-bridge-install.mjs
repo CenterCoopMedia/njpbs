@@ -120,9 +120,8 @@ export function createCmsReaderReplayTransport({ targets, projectId, readStaffTo
       headers["x-njpbs-cms-edge"] = edge; headers["x-njpbs-cms-reader"] = gatewayReaderDigest;
     }
     try {
-      const timeout = AbortSignal.timeout(20_000);
       const response = await fetchImpl(parsed[component][version], { method: "POST", redirect: "error",
-        signal: signal ? AbortSignal.any([signal, timeout]) : timeout, headers, body: JSON.stringify(envelope) });
+        signal, headers, body: JSON.stringify(envelope) });
       const bytes = await boundedBytes(response, envelope.action === "request" && envelope.endpoint === "cmsReadPairCurrentCodeV2"
         ? Math.ceil(20 * 1024 * 1024 / 3) * 4 + 64 * 1024 : 2 * 1024 * 1024);
       return { status: response.status, contentType: response.headers.get("content-type")?.split(";")[0], bytes,

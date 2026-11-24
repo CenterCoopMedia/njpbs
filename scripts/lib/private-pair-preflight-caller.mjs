@@ -180,9 +180,9 @@ export function createPrivatePairPreflightCaller({ firestore, plan: raw, readTok
     });
     return result;
   };
-  const request = async (url, init = {}, uncertain = false, timeout = 30_000) => {
+  const request = async (url, init = {}, uncertain = false) => {
     let response;
-    try { response = await fetchImpl(url, { ...init, redirect: "error", signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(timeout)]) : AbortSignal.timeout(timeout) }); }
+    try { response = await fetchImpl(url, { ...init, redirect: "error", signal }); }
     catch { refuse("preflight-request-uncertain", uncertain); }
     return boundedJson(response, uncertain);
   };
@@ -248,7 +248,7 @@ export function createPrivatePairPreflightCaller({ firestore, plan: raw, readTok
       const observed = await step("invoke", () => request(`https://${callerName}.${subdomain}.workers.dev/__private_pair_preflight`, {
         method: "POST", headers: { "content-type": "application/json", "cf-workers-preview-token": uploaded.preview_token },
         body: JSON.stringify({ challenge }),
-      }, true, 180_000));
+      }, true));
       refusalHealth = projectRefusalHealth(plan, observed);
       const result = projectResult(plan, observed);
       await currentTarget();

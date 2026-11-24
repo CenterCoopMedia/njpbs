@@ -3,6 +3,7 @@ import { pathToFileURL } from "node:url";
 import { launchCmsBrowser, parseBrowserCredential, submitCmsSignIn } from "./cms-debug-browser.mjs";
 import { developmentInstallAccess } from "./lib/development-install-credentials.mjs";
 import { developmentValues } from "./render-development-config.mjs";
+const { waitFor } = createRequire(import.meta.url)("../functions/lib/release-wait.js");
 
 const production = { admin: "https://admin.njpbs.org", preview: "https://preview.njpbs.org" };
 const editorPath = /^\/content\/(?:pages|post)\/[A-Za-z0-9][A-Za-z0-9_-]{0,127}\/edit$/;
@@ -63,9 +64,10 @@ export async function checkSignedInPreview(browser, { admin, preview, credential
   const saw = {};
   try {
     const context = await browser.newContext({ serviceWorkers: "block", acceptDownloads: false });
+    // No Playwright clock: every wait below ends on what the browser, Admin or the preview reports.
+    context.setDefaultTimeout(0);
     for (const [origin, headers] of access) await routePreviewSmokeAccess(context, origin, headers);
     const page = await context.newPage();
-    page.setDefaultTimeout(30_000);
     const entry = await page.goto(`${admin}/`, { waitUntil: "domcontentloaded" });
     if (entry?.status() !== 200 || new URL(page.url()).origin !== admin) throw new Error();
 
@@ -84,31 +86,31 @@ export async function checkSignedInPreview(browser, { admin, preview, credential
     phase = "private_preview_unavailable";
     const session = `${preview}/__cms-session`;
     const isSession = request => request.url() === session && request.method() === "POST";
-    page.on("requestfailed", request => {
-      if (isSession(request) && !saw.session) saw.session = { failed: failureName(request.failure()?.errorText) };
-    });
     // The document wait ends on the preview job, not on a clock. Admin follows the addressed
     // job (an older blocking job can fail before the requested one is made), so its terminal
     // progress state in the tab ends the wait at once; a ready job is followed by the document.
-    // Coordinator ruling (Nov. 24, 2026, review of e74c821): this state-based wait and the
-    // backstop below are this change's scope, because a 60 s timer failed a working preview.
+    // A session request the browser reports as failed ends the wait too.
     let stop;
     const stopped = new Promise((_, reject) => { stop = reject; });
+    page.on("requestfailed", request => {
+      if (!isSession(request) || saw.session) return;
+      saw.session = { failed: failureName(request.failure()?.errorText) };
+      stop(new Error("preview_session_request_failed"));
+    });
     // The receipt keeps the last job status and error code from Admin's own replies.
     page.on("response", reply => void readJob(reply, saw));
-    // The tab opens inside the click and Admin bounds the session request at 30 s,
-    // so these 60 s waits end on Admin's own outcome for a working system.
+    // The tab opens inside the click; the session wait ends on Admin's reply or the browser's failure.
     const [, , document] = await Promise.all([
-      context.waitForEvent("page", { timeout: 60_000 }).then(value => {
+      context.waitForEvent("page").then(value => {
         popup = value; saw.popup = true;
         watchTab = watchAdminStop(value, () => stop(new PreviewSmokeFailure("preview_admin_stopped")));
         return value;
       }),
-      page.waitForResponse(reply => isSession(reply.request()), { timeout: 60_000 }).then(reply => {
+      page.waitForResponse(reply => isSession(reply.request())).then(reply => {
         saw.session = { status: reply.status() };
         if (reply.status() !== 204) throw new PreviewSmokeFailure("preview_session_failed");
       }),
-      Promise.race([stopped, context.waitForEvent("response", { timeout: DOCUMENT_HANG_BACKSTOP_MS, predicate: reply => {
+      Promise.race([stopped, context.waitForEvent("response", { predicate: reply => {
         const url = new URL(reply.url());
         return url.origin === preview && previewPath.test(url.pathname) &&
           reply.request().isNavigationRequest() && reply.request().resourceType() === "document";
@@ -121,8 +123,8 @@ export async function checkSignedInPreview(browser, { admin, preview, credential
     ]);
     phase = "preview_heading_missing";
     if (document.frame() !== popup.mainFrame()) throw new Error();
-    await popup.waitForURL(url => url.href === document.url(), { timeout: 15_000 });
-    await popup.getByRole("heading", { name: heading, exact: true }).first().waitFor({ state: "visible", timeout: 15_000 });
+    await popup.waitForURL(url => url.href === document.url());
+    await popup.getByRole("heading", { name: heading, exact: true }).first().waitFor({ state: "visible" });
     return { ok: true, code: "signed_in_private_preview" };
   } catch (error) {
     const code = error instanceof PreviewSmokeFailure ? error.message : phase;
@@ -131,17 +133,10 @@ export async function checkSignedInPreview(browser, { admin, preview, credential
       session: saw.session ?? null, job: saw.job ?? null, document: saw.document ?? null,
       popup: await describePopup(popup, { admin, preview }) };
   } finally {
-    clearInterval(watchTab);
+    watchTab?.abort();
   }
 }
 
-// Hang backstop only. Measured on dev, Nov. 24, 2026: with an idle container on a cached
-// image the document arrived 30 s after the click (session +3 s, job accepted +6 s,
-// building +21 s). In run 45436441069 the first job after the renderer image rollout
-// (7 min 38 s after rollout, container idle) did not reach the document within 60 s.
-// The server's own build limit, PREVIEW_BUILD_TIMEOUT_MS, is 45 min, which is longer
-// than this step's 4 min; 180 s fits the step after sign-in (13 s) and the heading (15 s).
-const DOCUMENT_HANG_BACKSTOP_MS = 180_000;
 const jobStatuses = new Set(["pending", "building", "ready", "failed", "expired"]);
 
 // Record the last job status and error code from Admin's preview replies.
@@ -161,13 +156,18 @@ async function readJob(reply, saw) {
   } catch { /* A reply without a readable job leaves the last status in place. */ }
 }
 
+// Reads Admin's progress state now, without waiting for the progress page to exist.
+const readProgress = tab => tab.locator("main.cms-preview-progress")
+  .evaluateAll(nodes => nodes[0]?.getAttribute("data-progress") ?? null).catch(() => null);
+
 // Admin's terminal progress states mean it stopped without opening the preview.
 function watchAdminStop(tab, onStop) {
-  const timer = setInterval(() => {
-    void tab.locator("main.cms-preview-progress").first().getAttribute("data-progress", { timeout: 500 })
-      .then(state => { if (settledStates.has(state)) { clearInterval(timer); onStop(); } }, () => {});
-  }, 1_000);
-  return timer;
+  const watch = new AbortController();
+  waitFor("preview tab Admin stop", async () => {
+    const state = await readProgress(tab);
+    return settledStates.has(state) ? { done: state } : { pending: state };
+  }, { signal: watch.signal }).then(onStop, () => {});
+  return watch;
 }
 
 // Receipts carry statuses, fixed place names and Admin progress state names only:
@@ -191,20 +191,16 @@ const progressStates = new Set(["preparing", "requesting", "waiting", "pending",
   "refresh-failed", "opening", "error", "session-slow", "updating"]);
 const settledStates = new Set(["refresh-failed", "error", "session-slow", "updating"]);
 
-// A fast session failure can arrive before Admin moves the tab, so give it up to 5 s to settle.
-// Coordinator ruling (Nov. 24, 2026): the tab can still show an earlier state after a refused
-// session when the job takes longer than 5 s; the session status already names that cause.
+// A fast session failure can arrive before Admin moves the tab, so the receipt waits for the
+// tab to leave about:blank or for Admin to show a terminal progress state.
 async function describePopup(popup, origins) {
   if (!popup) return null;
-  const deadline = Date.now() + 5_000;
-  for (;;) {
+  return waitFor("preview tab settled", async () => {
     const where = place(popup.url(), origins);
-    const state = where !== "about:blank" ? null : await popup.locator("main.cms-preview-progress").first()
-      .getAttribute("data-progress", { timeout: 1_000 }).catch(() => null);
+    const state = where !== "about:blank" ? null : await readProgress(popup);
     const progress = progressStates.has(state) ? state : null;
-    if (where !== "about:blank" || settledStates.has(progress) || Date.now() >= deadline) return { place: where, progress };
-    await new Promise(resolve => setTimeout(resolve, 250));
-  }
+    return where !== "about:blank" || settledStates.has(progress) ? { done: { place: where, progress } } : { pending: { place: where, progress } };
+  });
 }
 
 async function main() {

@@ -200,19 +200,6 @@ it('accepts documented provider string ids and proves exact terminal failure thr
   expect(await http.waitForDeployment(id, request)).toMatchObject({ outcome: 'failed', proof: { deploymentId: id } });
   expect(calls.every(row => row.method === 'GET')).toBe(true);
 });
-it('ends a nonterminal wait at the existing 30-second bound without a failed proof', async () => {
-  vi.useFakeTimers();
-  const timeout = vi.spyOn(AbortSignal, 'timeout').mockImplementation(ms => {
-    const controller = new AbortController(); setTimeout(() => controller.abort(), ms); return controller.signal;
-  });
-  try {
-    const http = transport(async () => answer(deployment({ latest_stage: { name: 'deploy', status: 'active', ended_on: null } })));
-    const refused = expect(http.waitForDeployment(newId, request)).rejects.toThrow();
-    await vi.advanceTimersByTimeAsync(30_001); await refused;
-    expect(calls.length).toBeGreaterThan(0);
-    expect(calls.every(row => row.method === 'GET')).toBe(true);
-  } finally { timeout.mockRestore(); vi.useRealTimers(); }
-});
 it.each(['empty', 'duplicate', 'truncated', 'wrong-source', 'count-mismatch'])('keeps %s recovery uncertain without a deployment write', async kind => {
   const http = transport(async () => new Response(JSON.stringify({ success: true,
     result: kind === 'empty' ? [] : kind === 'duplicate' ? [deployment(), deployment()] : [deployment(kind === 'wrong-source'

@@ -38,18 +38,10 @@ export async function openDevAdmission(stream) {
     throw new Error("dev_operator_credential_required");
   }
   let input = "";
-  const timeout = setTimeout(
-    () => stream.destroy(new Error("credential_timeout")),
-    10_000,
-  );
-  try {
-    for await (const chunk of stream) {
-      input += chunk.toString();
-      if (Buffer.byteLength(input) > 32_768)
-        throw new Error("dev_operator_credential_required");
-    }
-  } finally {
-    clearTimeout(timeout);
+  for await (const chunk of stream) {
+    input += chunk.toString();
+    if (Buffer.byteLength(input) > 32_768)
+      throw new Error("dev_operator_credential_required");
   }
   const account = parseDevOperatorCredential(input);
   const { cert, initializeApp, deleteApp } = require("firebase-admin/app");

@@ -9,7 +9,7 @@ import { tmpdir, networkInterfaces } from "node:os";
 import { openSync, closeSync, readFileSync, existsSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { CONTRACT_SETTINGS, contractDigest, contractTarget, contractIdentity,
-  compareContractInputs, captureNativeContract, boundedContractProof, writePrivateCapsule, readPrivateCapsule,
+  compareContractInputs, captureNativeContract, contractProof, writePrivateCapsule, readPrivateCapsule,
   assertUnchangedPlan, contractSummary, recheckContractSummary, refuse, CmsPublicContractError } from "./lib/cms-public-contract.mjs";
 import { readReceipt, collectLiveIdentities, functionsInventoryIdentity, fingerprintInputs, fingerprintFunctionGraph } from "./lib/cms-component-receipt.mjs";
 import { FUNCTION_RUNTIME_VARIABLES, runtimeParametersMatch } from "./lib/cms-release-plan.mjs";
@@ -92,11 +92,10 @@ export async function prepareDependencies({ directory, cwd, environment, candida
   };
   try {
     if (trustedRoot !== cwd) await install(trustedRoot);
-    const signal = AbortSignal.timeout(30_000);
     let rendererSha, priorAdminSha;
     try {
-      const [publication, admin] = await Promise.all([publicJson(`${target.origin}/_publication.json`, target, signal),
-        publicJson(`${target.adminOrigin}/admin-status.json`, target, signal)]);
+      const [publication, admin] = await Promise.all([publicJson(`${target.origin}/_publication.json`, target),
+        publicJson(`${target.adminOrigin}/admin-status.json`, target)]);
       rendererSha = publication.body?.commitSha;
       priorAdminSha = previous?.priorAdminSha ?? admin.body?.build?.revision;
       if (!SHA.test(rendererSha ?? "") || !SHA.test(priorAdminSha ?? "")) refuse("prepare-source");
@@ -140,7 +139,7 @@ async function cloudflare(script, suffix, target, signal) {
       script === target.previewWorker ? process.env.CMS_CONTRACT_PREVIEW_TOKEN : process.env.CLOUDFLARE_API_TOKEN;
   if (!token || !/^[a-f0-9]{32}$/i.test(ACCOUNT) || process.env.CLOUDFLARE_ACCOUNT_ID !== ACCOUNT) refuse("provider-credential");
   const body = await boundedJson(await fetch(`https://api.cloudflare.com/client/v4/accounts/${ACCOUNT}/workers/scripts/${script}/${suffix}`, {
-    headers: { authorization: `Bearer ${token}` }, redirect: "error", signal: AbortSignal.any([signal, AbortSignal.timeout(15_000)]),
+    headers: { authorization: `Bearer ${token}` }, redirect: "error", signal,
   }));
   if (body.success !== true || !body.result) refuse("provider-response");
   return body.result;
@@ -172,7 +171,7 @@ async function publicJson(url, target, signal) {
     headers["cf-access-client-id"] = process.env.CMS_DEV_ACCESS_CLIENT_ID;
     headers["cf-access-client-secret"] = process.env.CMS_DEV_ACCESS_CLIENT_SECRET;
   }
-  const response = await fetch(url, { headers, cache: "no-store", redirect: "error", signal: AbortSignal.any([signal, AbortSignal.timeout(10_000)]) });
+  const response = await fetch(url, { headers, cache: "no-store", redirect: "error", signal });
   const rendererSha = response.headers.get("x-njpbs-renderer-sha");
   return { body: await boundedJson(response, 512 * 1024), rendererSha };
 }
@@ -184,7 +183,7 @@ async function listFunctions(target, signal) {
   const functions = [], tokens = new Set(); let pageToken;
   do {
     const { data } = await client.request({ url: `https://cloudfunctions.googleapis.com/v2/projects/${target.projectId}/locations/-/functions`,
-      params: { pageSize: 100, ...(pageToken ? { pageToken } : {}) }, timeout: 15_000, signal });
+      params: { pageSize: 100, ...(pageToken ? { pageToken } : {}) }, signal });
     if (!Array.isArray(data.functions) || (data.unreachable ?? []).length) refuse("functions-inventory");
     functions.push(...data.functions);
     pageToken = data.nextPageToken;
@@ -203,7 +202,7 @@ async function compareFunctionsReplies({ capsule, state, target, signal }) {
   const client = await new GoogleAuth({ scopes: ["https://www.googleapis.com/auth/cloud-platform"] }).getClient();
   let bytes, credential;
   try {
-    const { data } = await client.request({ url: `https://secretmanager.googleapis.com/v1/projects/${target.projectId}/secrets/CMS_EDGE_ORIGIN_SECRET/versions/${bindings[0].version}:access`, timeout: 10_000, signal });
+    const { data } = await client.request({ url: `https://secretmanager.googleapis.com/v1/projects/${target.projectId}/secrets/CMS_EDGE_ORIGIN_SECRET/versions/${bindings[0].version}:access`, signal });
     if (typeof data.payload?.data !== "string" || data.payload.data.length > 64 * 1024) refuse("reader-secret-binding");
     bytes = Buffer.from(data.payload.data, "base64"); data.payload.data = "";
     credential = bytes.toString("utf8");
@@ -212,7 +211,7 @@ async function compareFunctionsReplies({ capsule, state, target, signal }) {
       const response = await fetch(`https://us-central1-${target.projectId}.cloudfunctions.net/cmsGetPublicPage`, {
         method: "POST", headers: { "content-type": "application/json", "cache-control": "no-cache", "x-njpbs-cms-edge": credential },
         body: JSON.stringify({ ...capsule.requests[feature], mode, method: "GET" }), redirect: "error",
-        signal: AbortSignal.any([signal, AbortSignal.timeout(10_000)]),
+        signal,
       });
       const reply = await boundedJson(response);
       if (contractDigest(reply) !== contractDigest(JSON.parse(capsule.replies[feature]))) refuse("capture-moved");
@@ -297,13 +296,13 @@ async function nativeDevelopmentPlan({ state, target, candidateSha, cwd, signal 
   const require = createRequire(join(trustedRoot, "package.json"));
   const { GoogleAuth } = require("google-auth-library");
   const client = await new GoogleAuth({ scopes: ["https://www.googleapis.com/auth/cloud-platform"] }).getClient();
-  const project = (await client.request({ url: `https://cloudresourcemanager.googleapis.com/v1/projects/${target.projectId}`, timeout: 15_000, signal })).data;
+  const project = (await client.request({ url: `https://cloudresourcemanager.googleapis.com/v1/projects/${target.projectId}`, signal })).data;
   const seen = new Map();
   for (const fn of state.providerFunctions) for (const binding of fn.serviceConfig?.secretEnvironmentVariables ?? []) {
     if (![target.projectId, project.projectNumber].includes(binding.projectId) || !/^[A-Za-z0-9_-]+$/.test(binding.secret ?? "") ||
         !/^[1-9][0-9]*$/.test(binding.version ?? "")) refuse("dev-secret-project");
     const key = `${binding.projectId}/${binding.secret}`;
-    if (!seen.has(key)) seen.set(key, (await client.request({ url: `https://secretmanager.googleapis.com/v1/projects/${binding.projectId}/secrets/${binding.secret}/versions/latest`, timeout: 15_000, signal })).data);
+    if (!seen.has(key)) seen.set(key, (await client.request({ url: `https://secretmanager.googleapis.com/v1/projects/${binding.projectId}/secrets/${binding.secret}/versions/latest`, signal })).data);
     const latest = seen.get(key);
     if (latest.state !== "ENABLED" || latest.name?.split("/").at(-1) !== binding.version) refuse("dev-secret-version");
   }
@@ -719,7 +718,7 @@ export async function main(argv = process.argv.slice(2)) {
       credential = null;
       await restoreRendererArchive({ restoreArtifact, reference: state.reference, archive, checkpointDigest: state.identity.publicReader.checkpointDigest, signal });
     });
-    const summary = await boundedContractProof(async ({ signal, attempt }) => {
+    const summary = await contractProof(async ({ signal, attempt }) => {
       const attemptDirectory = await privateDirectory(directory, `attempt-${attempt}-`);
       const state = await readPinnedState({ signal, originalPriorAdminSha: previous?.priorAdminSha });
       await compareContractInputs({ candidateSha, baselineSha: state.identity.backend.baseline.sourceSha, cwd });
@@ -753,7 +752,7 @@ export async function main(argv = process.argv.slice(2)) {
       if (contractDigest(capsule.readset) !== contractDigest(recaptured.readset) || contractDigest(capsule.root) !== contractDigest(recaptured.root)) refuse("capture-moved");
       if (boundary === "settlement" && fresh.adminSha !== candidateSha) refuse("settlement-unconfirmed");
       return contractSummary({ candidateSha, identity: state.identity, capsuleDigest: contractDigest(capsule), replay: result, capturedAt: capsule.capturedAt });
-    }, { boundary });
+    });
     if (previous) recheckContractSummary(previous, summary, { candidateSha, settlement: boundary === "settlement" });
     await writeFile(resolve(options["--summary"]), `${JSON.stringify(summary)}\n`, { mode: 0o600 });
     if (process.env.GITHUB_OUTPUT) {

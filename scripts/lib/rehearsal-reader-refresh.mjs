@@ -28,7 +28,7 @@ function casesProcess({ packet, baseline, templates, developmentCredential, read
       stdio: ['ignore', 'ignore', 'ignore', 'ipc', 'pipe'] });
     let result, failed = false, requests = 0;
     const pending = new Set(), fail = () => { failed = true; child.kill('SIGKILL'); };
-    const timer = setTimeout(fail, 60_000); signal?.addEventListener('abort', fail, { once: true });
+    signal?.addEventListener('abort', fail, { once: true });
     child.on('error', fail);
     child.on('message', message => {
       if (message?.kind === 'cases') {
@@ -46,7 +46,7 @@ function casesProcess({ packet, baseline, templates, developmentCredential, read
       pending.add(request);
     });
     child.once('exit', async (code, stopped) => {
-      clearTimeout(timer); signal?.removeEventListener('abort', fail); await Promise.allSettled([...pending]);
+      signal?.removeEventListener('abort', fail); await Promise.allSettled([...pending]);
       if (failed || stopped || code !== 0 || !result) reject(new Error('Installed rehearsal reader refresh refused'));
       else resolve(result);
     });

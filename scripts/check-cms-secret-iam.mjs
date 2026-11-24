@@ -42,7 +42,7 @@ export function secretRequirements(source, projectNumber) {
 
 function gcloud(args) {
   try {
-    return providerGcloud(args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 30000 }).trim();
+    return providerGcloud(args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
   } catch {
     throw new FunctionsDeployInventoryError(`Could not read CMS IAM metadata: gcloud ${args.join(" ")}`);
   }
@@ -143,7 +143,7 @@ async function firstDeployFunctionNames() {
         "functions(name,labels,environment,eventTrigger),nextPageToken,unreachable");
       for (const [key, value] of Object.entries(params)) target.searchParams.set(key, value);
       const response = await fetch(target, { headers: { Authorization: `Bearer ${token}` },
-        redirect: "error", signal: AbortSignal.timeout(30_000) });
+        redirect: "error" });
       if (!response.ok) {
         await response.body?.cancel();
         throw Object.assign(new Error(), { response: { status: response.status } });
@@ -166,7 +166,7 @@ async function requireInvokerGrantPermission() {
   try {
     granted = (await providerJson("deploy identity permission test", () => fetch(`https://cloudresourcemanager.googleapis.com/v1/projects/${PROJECT}:testIamPermissions`, {
       method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ permissions: INVOKER_GRANT_PERMISSIONS }), redirect: "error", signal: AbortSignal.timeout(30_000) }))).permissions ?? [];
+      body: JSON.stringify({ permissions: INVOKER_GRANT_PERMISSIONS }), redirect: "error" }))).permissions ?? [];
   } catch { /* Reported below without provider response details. */ }
   if (!INVOKER_GRANT_PERMISSIONS.every(permission => granted.includes(permission))) {
     throw new FunctionsDeployInventoryError(`New event trigger services need an invoker grant after deployment; the deploy identity needs ${INVOKER_GRANT_PERMISSIONS.join(" and ")} on ${PROJECT}`);
@@ -244,7 +244,7 @@ export async function main(sourceRoot = new URL("../", import.meta.url), { preDe
           policy = providerGcloud(["run", "services", "add-iam-policy-binding", serviceName,
             `--member=serviceAccount:${account}`, "--role=roles/run.invoker", "--condition=None",
             `--region=${region}`, `--project=${project}`, "--format=json"],
-          { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 30000 });
+          { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
         } catch {
           throw new FunctionsDeployInventoryError(`Could not grant roles/run.invoker on ${serviceName} to serviceAccount:${account} for event trigger ${name}; the deploy identity needs run.services.setIamPolicy`);
         }

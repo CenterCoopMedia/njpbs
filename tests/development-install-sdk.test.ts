@@ -1,10 +1,10 @@
-import { afterAll, beforeAll, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, expect, it } from 'vitest';
 import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
-import { PassThrough, Readable } from 'node:stream';
+import { Readable } from 'node:stream';
 import { developmentInstallCredential } from '../scripts/lib/development-install-credentials.mjs';
 import { operatorAccount } from '../scripts/lib/public-release-operator-io.mjs';
 import { sealedPair } from './helpers/sealed-public-release-pair';
@@ -167,20 +167,13 @@ it('rejects source drift before SDK/dependency evaluation', () => {
   } finally { writeFileSync(filename, original); }
 });
 
-it('reads once at use and bounds a pipe that never reaches EOF', async () => {
+it('reads once at use', async () => {
   let reads = 0;
   const source = Readable.from((async function* () { reads++; yield JSON.stringify(account); })());
   const pipe = developmentInstallCredential(3, raw => operatorAccount(raw, identity), source);
   expect(reads).toBe(0);
   const expected = { projectId: identity.projectId, clientEmail: identity.clientEmail, privateKey: account.private_key };
   expect(await pipe.read()).toEqual(expected); expect(await pipe.read()).toEqual(expected); expect(reads).toBe(1); pipe.close();
-  vi.useFakeTimers();
-  const stalled = developmentInstallCredential(3, x => x, new PassThrough());
-  try {
-    const result = stalled.read().catch(error => error);
-    await vi.advanceTimersByTimeAsync(10_000);
-    expect(await result).toBeInstanceOf(Error);
-  } finally { stalled.close(); vi.useRealTimers(); }
 });
 it('loads the private reader operator through its documented tsx CommonJS path', () => {
   const result = spawnSync(process.execPath, ['--input-type=module', '-e', `

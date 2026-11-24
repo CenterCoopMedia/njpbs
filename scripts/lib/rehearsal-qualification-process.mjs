@@ -102,7 +102,6 @@ export function createRehearsalQualificationProcess({ firestore, packet: raw, st
       failed = true; if (reason === 'child-exit') reason = typeof code === 'string' ? code : 'transport-refused';
       queue.length = 0; child.kill('SIGKILL');
     };
-    const timer = setTimeout(fail, 60_000);
     const cancel = () => fail(); signal?.addEventListener('abort', cancel, { once: true });
     const dispatch = message => {
       active++;
@@ -159,7 +158,7 @@ export function createRehearsalQualificationProcess({ firestore, packet: raw, st
     child.on('error', () => fail('ipc-disconnected'));
     child.once('exit', async (code, stopped) => {
       closing = true; queue.length = 0;
-      clearTimeout(timer); signal?.removeEventListener('abort', cancel);
+      signal?.removeEventListener('abort', cancel);
       await Promise.allSettled([...pending]);
       try { current(); } catch { failed = true; reason = 'source-or-target-changed'; }
       if (failed || stopped || code !== (interrupt ? 86 : 0) || !interrupt && !completed) reject(new Error(`Rehearsal qualifier process refused (${reason})`));

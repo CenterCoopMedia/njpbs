@@ -72,7 +72,7 @@ test('persisted samples drop unknown bodies, headers and credential fields', () 
 test('response size is bounded while streaming and abort cancels a pending body', async () => {
   let cancelled = false;
   const large = new Response(new ReadableStream({ start(controller) { controller.enqueue(new Uint8Array(128 * 1024 + 1)); }, cancel() { cancelled = true; } }));
-  await assert.rejects(readResponseText(large, AbortSignal.timeout(1000)));
+  await assert.rejects(readResponseText(large));
   assert.equal(cancelled, true);
   const controller = new AbortController();
   const pending = readResponseText(new Response(new ReadableStream()), controller.signal);

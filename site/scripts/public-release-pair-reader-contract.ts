@@ -181,7 +181,7 @@ export async function withinReaderDeadline<T>(signal: AbortSignal, operation: ()
   let abort: (() => void) | undefined;
   try {
     return await Promise.race([operation(), new Promise<never>((_, reject) => {
-      abort = () => reject(new Error("Private pair read deadline"));
+      abort = () => reject(new Error("Private pair read stopped"));
       if (signal.aborted) abort(); else signal.addEventListener("abort", abort, { once: true });
     })]);
   } finally { if (abort) signal.removeEventListener("abort", abort); }

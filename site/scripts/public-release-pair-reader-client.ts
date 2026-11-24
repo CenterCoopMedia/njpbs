@@ -4,7 +4,7 @@ import type { PairTaskIdentity } from "../../functions/lib/public-release-pair-w
 import protocol from "../../functions/lib/public-release-pair.js";
 import work from "../../functions/lib/public-release-pair-work.js";
 import { PAIR_READER_PATH, PAIR_READER_REPLY_LIMIT, parseReaderSeals, parseReaderRequest, parseReaderReply,
-  readBoundedBody, readerRefused, withinReaderDeadline, PAIR_READER_DEADLINE_MS,
+  readBoundedBody, readerRefused, withinReaderDeadline,
   type ReaderNamespaceAbsence, type ReaderSeals } from "./public-release-pair-reader-contract";
 
 export class PairReaderReadError extends Error {
@@ -38,7 +38,7 @@ export function createPrivatePairReaderClient({ pair: rawPair, seals: rawSeals, 
   }) => {
     const request = parseReaderRequest({ schemaVersion: 2, pairDigest: protocol.publicReleaseDigest(pair), identity,
       claimDigest, manifestDigest, manifestBytes, nonce: randomBytes(32).toString("hex"), paths, absence }, pair);
-    const signal = AbortSignal.any([...(callerSignal ? [callerSignal] : []), AbortSignal.timeout(PAIR_READER_DEADLINE_MS)]);
+    const signal = AbortSignal.any(callerSignal ? [callerSignal] : []);
     let response: Response | undefined;
     try {
       return await withinReaderDeadline(signal, async () => {

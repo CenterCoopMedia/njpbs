@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import { ABSENT_EXIT, httpFault, main, permanentFailure, providerCall, providerCallSync, providerGcloud, providerJson } from "../../scripts/lib/provider-call.mjs";
 
-const options = () => ({ wait: vi.fn().mockResolvedValue(), log: vi.fn() });
+const options = () => ({ log: vi.fn() });
 const http = (status, headers = {}) => httpFault(new Response(null, { status, headers }));
 const command = stderr => Object.assign(new Error("Command failed"), { status: 1, stderr });
 // Recorded from dev run 45429859229 (Nov. 24, 2026).
@@ -26,7 +26,7 @@ describe("provider call rule", () => {
     const call = vi.fn().mockRejectedValueOnce(fault).mockResolvedValue("answer");
     const o = options();
     expect(await providerCall("label", call, o)).toBe("answer");
-    expect(o.wait.mock.calls).toEqual([[2000]]);
+    expect(call).toHaveBeenCalledTimes(2);
     expect(o.log).not.toHaveBeenCalled();
   });
 
@@ -42,40 +42,26 @@ describe("provider call rule", () => {
     const o = options();
     await expect(providerCall("label", call, o)).rejects.toBe(fault);
     expect(call).toHaveBeenCalledTimes(1);
-    expect(o.log.mock.calls[0][0]).toContain(`Provider call failed: label, class ${kind}, 1 of 5 attempts, last provider line: `);
+    expect(o.log.mock.calls[0][0]).toContain(`Provider call failed: label, class ${kind}, attempt 1, last provider line: `);
   });
 
-  it("ends on the fifth provider answer, waits 2, 4, 8 and 16 s, and prints the last line", async () => {
-    const call = vi.fn().mockRejectedValue(command(`first line\n${secretManager503}`));
-    const o = options();
-    await expect(providerCall("label", call, o)).rejects.toThrow("Command failed");
-    expect(o.wait.mock.calls).toEqual([[2000], [4000], [8000], [16000]]);
-    expect(o.log.mock.calls).toEqual([[`Provider call failed: label, class transient, 5 of 5 attempts, last provider line: ${secretManager503}`]]);
-  });
-
-  it.each([["20", 20_000], ["900", 60_000], ["1", 2_000], ["Tue, 24 Nov 2026", 2_000]])("waits for Retry-After %s", async (value, ms) => {
-    const call = vi.fn().mockRejectedValueOnce(http(429, { "retry-after": value })).mockResolvedValue(1);
-    const o = options();
-    await providerCall("label", call, o);
-    expect(o.wait.mock.calls).toEqual([[ms]]);
-  });
-
-  it("reads a write back before each repeat and after the last attempt", async () => {
+  it("reads a write back before each repeat", async () => {
     const landedSecond = { ...options(), readBack: vi.fn().mockResolvedValueOnce(undefined).mockResolvedValueOnce("landed") };
     const write = vi.fn().mockRejectedValue(http(502));
     expect(await providerCall("write", write, landedSecond)).toBe("landed");
     expect(write).toHaveBeenCalledTimes(2);
+  });
 
-    const last = { ...options(), readBack: vi.fn().mockResolvedValue(undefined) };
-    await expect(providerCall("write", write, last)).rejects.toThrow("HTTP 502");
-    expect(last.readBack).toHaveBeenCalledTimes(5);
+  it("reads a write back after a permanent fault", async () => {
+    const last = { ...options(), readBack: vi.fn().mockResolvedValueOnce("landed") };
+    expect(await providerCall("write", vi.fn().mockRejectedValue(http(400)), last)).toBe("landed");
   });
 
   it("keeps response bodies, headers and command output out of the final line", async () => {
     const o = options();
-    const fault = Object.assign(new Error("private message"), { response: { status: 503, data: "private body", headers: { authorization: "private" } } });
+    const fault = Object.assign(new Error("private message"), { response: { status: 400, data: "private body", headers: { authorization: "private" } } });
     await expect(providerCall("label", () => { throw fault; }, o)).rejects.toBe(fault);
-    const child = Object.assign(new Error("private arguments"), { status: 1, stdout: "private secret value", stderr: "" });
+    const child = Object.assign(new Error("private arguments"), { status: 1, stdout: "private secret value", stderr: "PERMISSION_DENIED" });
     await expect(providerCall("label", () => { throw child; }, o)).rejects.toBe(child);
     expect(o.log.mock.calls.flat().join("\n")).not.toContain("private");
   });
@@ -98,10 +84,10 @@ describe("provider call rule", () => {
     expect(log.mock.calls[0][0]).toContain("gcloud secrets versions describe, class absent");
   });
 
-  it("writes one answer to stdout from a workflow step", () => {
+  it("writes one answer to stdout from a workflow step", async () => {
     const launch = vi.fn().mockReturnValueOnce({ status: 1, stdout: "partial", stderr: secretManager503 }).mockReturnValue({ status: 0, stdout: "answer\n", stderr: "" });
     vi.spyOn(process.stderr, "write").mockReturnValue(true);
-    expect(main(["label", "--", "gh", "api", "path"], launch, { wait: () => {} })).toBe("answer\n");
+    expect(await main(["label", "--", "gh", "api", "path"], launch)).toBe("answer\n");
     expect(launch.mock.calls[1].slice(0, 2)).toEqual(["gh", ["api", "path"]]);
     vi.restoreAllMocks();
     const script = fileURLToPath(new URL("../../scripts/lib/provider-call.mjs", import.meta.url));

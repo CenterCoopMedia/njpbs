@@ -152,12 +152,6 @@ it("redacts malformed endpoint details before credentials or listeners are used"
   await expect(startDevelopmentRehearsalHttp({ ...options(), operatorOrigin: "malformed:fixture-sensitive" })).rejects.toThrow("Development rehearsal HTTP bridge refused");
   expect(operatorReads + ingressReads).toBe(0); expect(requests).toHaveLength(0);
 });
-it("ends the HTTP request at its deadline even when a credential callback never returns", async () => {
-  bridges = await startDevelopmentRehearsalHttp({ ...options(), operatorCredentials: () => new Promise<HeadersInit>(() => {}) });
-  const response = await nativeFetch(`${bridges.proofOrigin}/current/`, { signal: AbortSignal.timeout(6_000),
-    headers: localHeaders(bridges.proofOrigin, { "x-rehearsal-expected-sha256": sha(body), "x-rehearsal-expected-status": "200" }) });
-  expect(response.status).toBe(504); await response.body?.cancel(); expect(requests).toHaveLength(0);
-});
 it("loads the single adapter transport through the actual development Node loader", () => {
   const loader = fileURLToPath(new URL("../../site/node_modules/tsx/dist/loader.mjs", import.meta.url));
   const root = fileURLToPath(new URL("../../", import.meta.url));

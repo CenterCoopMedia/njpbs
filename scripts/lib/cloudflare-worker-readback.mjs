@@ -1,9 +1,6 @@
-import { setTimeout as sleep } from 'node:timers/promises';
+import { createRequire } from 'node:module';
 
-// Cloudflare documents that deployment propagation takes up to a few seconds.
-// https://developers.cloudflare.com/workers/versions-and-deployments/version-skew/
-const propagationMs = 5_000;
-const sampleMs = 500;
+const { waitFor } = createRequire(import.meta.url)('../../functions/lib/release-wait.js');
 const versionId = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
 
 export function wranglerVersion(stdout) {
@@ -23,20 +20,21 @@ export function requireWorkerReadback(condition, field) {
 
 export class CmsApiReadbackError extends Error {}
 
-export async function waitForWorkerReadback(collect, { now = () => performance.now(), wait = sleep } = {}) {
-  const deadline = now() + propagationMs;
-  for (;;) {
+// Cloudflare documents that deployment propagation takes a few seconds; a
+// mismatch is read again until the confirmed write shows.
+// https://developers.cloudflare.com/workers/versions-and-deployments/version-skew/
+export async function waitForWorkerReadback(collect) {
+  return waitFor('Cloudflare Worker readback', async () => {
     try {
-      return await collect();
+      return { done: await collect() };
     } catch (error) {
-      if (!(error instanceof WorkerReadbackMismatch) || deadline - now() <= sampleMs) throw error;
-      await wait(sampleMs);
-      if (now() >= deadline) throw error;
+      if (!(error instanceof WorkerReadbackMismatch)) throw error;
+      return { pending: error.message };
     }
-  }
+  });
 }
 
-export async function readCmsApiDeployment(script, readDeployment, expected, clock) {
+export async function readCmsApiDeployment(script, readDeployment, expected) {
   if (expected !== undefined && !versionId.test(expected)) throw new CmsApiReadbackError("Expected CMS API versionId is invalid");
   const collect = async () => {
     const body = await readDeployment();
@@ -58,5 +56,5 @@ export async function readCmsApiDeployment(script, readDeployment, expected, clo
     }
     return { script, deploymentId: id, versionId: active.version_id };
   };
-  return expected ? waitForWorkerReadback(collect, clock) : collect();
+  return expected ? waitForWorkerReadback(collect) : collect();
 }

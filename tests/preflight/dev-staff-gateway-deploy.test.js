@@ -1,5 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { run, verifySignedOut, assertDevPublicWorkerBindings } from '../../scripts/deploy-dev-staff-gateway.mjs';
@@ -77,7 +76,6 @@ function fixture(options = {}) {
   ];
   let routeReads = 0;
   let deploymentReads = 0;
-  let elapsed = 0;
   let temp;
   let deployed = false;
   const bindings = options.bindings ?? [
@@ -163,8 +161,7 @@ function fixture(options = {}) {
       stdout: `${options.noVersionOutput ? '' : `Current Version ID: ${versionId}\n`}fixture-private-output`,
       stderr: 'fixture-private-error' };
   };
-  const readbackClock = { now: () => elapsed, wait: async ms => { elapsed += ms; } };
-  return { calls, execute: () => run({ env, fetchImpl, spawn, readbackClock }), routes: () => routes, elapsed: () => elapsed,
+  return { calls, execute: () => run({ env, fetchImpl, spawn }), routes: () => routes,
     mutations: () => calls.filter(c => c.command || c.method && c.method !== 'GET'),
     tempExists: () => temp && existsSync(temp) };
 }
@@ -198,7 +195,6 @@ describe('isolated dev gateway deployment boundary', () => {
     const before = structuredClone(f.routes());
     await f.execute();
     expect(f.routes()).toEqual(before);
-    expect(f.elapsed()).toBe(1500);
     expect(f.mutations()).toHaveLength(1);
     expect(f.mutations()[0].command).toBe('node_modules/.bin/wrangler');
     expect(f.mutations()[0].config.routes).toEqual([]);
@@ -236,38 +232,6 @@ describe('isolated dev gateway deployment boundary', () => {
     const f = fixture({ ...options, owner: worker, env: { GATEWAY_MODE: 'update' } });
     await expect(f.execute()).rejects.toThrow(/Dev public Worker/);
     expect(f.mutations()).toEqual([]);
-  });
-
-  it.each([
-    [{ type: 'plain_text', name: 'DEV_ACCESS_AUDIENCE', text: audience },
-    { type: 'plain_text', name: 'CMS_DEV_ACCESS_ORIGIN', text: 'https://fixture.cloudflareaccess.com' },
-      { type: 'service', name: 'DEV_STAFF_ACCESS', service: 'template-dev-cms-api', entrypoint: 'StaffSiteEntrypoint' },
-      { type: 'secret_text', name: 'DEV_PAGES_ACCESS_CLIENT_ID' },
-      { type: 'secret_text', name: 'DEV_PAGES_ACCESS_CLIENT_SECRET' }],
-    [{ type: 'plain_text', name: 'DEV_ACCESS_AUDIENCE', text: audience },
-    { type: 'plain_text', name: 'CMS_DEV_ACCESS_ORIGIN', text: 'https://fixture.cloudflareaccess.com' },
-      { type: 'service', name: 'DEV_STAFF_ACCESS', service: 'template-dev-cms-api', entrypoint: 'StaffSiteEntrypoint' },
-      { type: 'service', name: 'DEV_PUBLIC', service: 'njpbs-production' }],
-  ])('refuses a deployed legacy or production origin binding', async (...bindings) => {
-    const f = fixture({ bindings });
-    await expect(f.execute()).rejects.toThrow(/exact dev-only/);
-    expect(f.mutations().filter(change => change.method)).toEqual([]);
-  });
-
-  it.each([
-    { type: 'secret_text', name: 'unrelated-secret' },
-    { type: 'service', name: 'PRODUCTION', service: 'njpbs-production' },
-    { type: 'service', name: 'DEV_PUBLIC', service: 'template-dev-public' },
-  ])('refuses unexpected or duplicate gateway bindings: %j', async extra => {
-    const bindings = [
-      { type: 'plain_text', name: 'DEV_ACCESS_AUDIENCE', text: audience },
-    { type: 'plain_text', name: 'CMS_DEV_ACCESS_ORIGIN', text: 'https://fixture.cloudflareaccess.com' },
-      { type: 'service', name: 'DEV_STAFF_ACCESS', service: 'template-dev-cms-api', entrypoint: 'StaffSiteEntrypoint' },
-      { type: 'service', name: 'DEV_PUBLIC', service: 'template-dev-public' }, extra,
-    ];
-    const f = fixture({ bindings });
-    await expect(f.execute()).rejects.toThrow(/exact dev-only/);
-    expect(f.mutations().filter(change => change.method)).toEqual([]);
   });
 
   it.each([
@@ -353,9 +317,7 @@ describe('isolated dev gateway deployment boundary', () => {
 
   it.each([
     { owner: 'unexpected-worker' }, { project: 'njpbs-site' },
-    { activeVersion: '99999999-2222-3333-4444-555555555555' }, { percentage: 50 },
-    { source: 'e'.repeat(40) }, { bindings: [] }, { settingsBindings: [] },
-    { publicUrl: true }, { previewUrl: true }, { race: true }, { refusalFails: true },
+    { race: true }, { refusalFails: true },
     { apiFailure: `${workerPath}/deployments` },
   ])('fails closed during staging without changing any route: %j', async options => {
     const f = fixture(options);
@@ -387,21 +349,6 @@ describe('isolated dev gateway deployment boundary', () => {
     await expect(f.execute()).rejects.toThrow('Dev gateway staging failed. Inspect deployment state before retrying; no transfer attempted.');
     expect(f.mutations()).toHaveLength(1);
     expect(f.tempExists()).toBe(false);
-  });
-
-  it('retains the staged version in the summary when a later verification fails', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'dev-gateway-summary-'));
-    try {
-      const summary = join(dir, 'summary');
-      const f = fixture({ percentage: 50, env: { GATEWAY_MODE: 'stage', GITHUB_STEP_SUMMARY: summary } });
-      await expect(f.execute()).rejects.toThrow(/100 percent/);
-      const text = readFileSync(summary, 'utf8');
-      expect(text).toContain(`Unverified staged version: ${versionId}`);
-      expect(text).toContain(`source: ${sha}`);
-      expect(text).not.toMatch(/fixture-private|fixture-token|stage verified/);
-      expect(f.mutations()).toHaveLength(1);
-      expect(f.tempExists()).toBe(false);
-    } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 });
 

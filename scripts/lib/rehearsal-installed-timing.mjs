@@ -72,7 +72,6 @@ function credential(stream, parse) {
   let pending;
   return () => pending ??= (async () => {
     const chunks = []; let size = 0, joined;
-    stream.setTimeout(10_000, () => stream.destroy(new Error('Timing credential source expired')));
     try {
       for await (const chunk of stream) {
         const value = Buffer.from(chunk); chunks.push(value); size += value.length;
@@ -189,7 +188,7 @@ async function openBoundSetup({ plan: raw, pair: rawPair, cases, authorized = fa
     } });
     const dispatch = createRehearsalTimingDispatch({ firestore, pair, cases, publications: plan.publications, authorized: true });
     gate = bindInstalledTimingSetup({ firestore, assertCurrent: current,
-      store: { get(key) { return objects.getWithSignal(key, AbortSignal.any([AbortSignal.timeout(30_000), ...(signal ? [signal] : [])])); } },
+      store: { get(key) { return objects.getWithSignal(key, signal); } },
       ingress: ingressProof, async verifyInstalled(requested) {
         if (!same(requested, pair)) refuse();
         await readInstalledPublisherCompletion({ firestore, plan: upload, pair });

@@ -1,5 +1,8 @@
 #!/usr/bin/env node
+import { createRequire } from "node:module";
 import { isDevelopmentName } from "./lib/cms-target.mjs";
+
+const { waitFor } = createRequire(import.meta.url)("../functions/lib/release-wait.js");
 
 const expected = process.env.DEPLOY_SHA;
 if (!/^[0-9a-f]{40}$/.test(expected ?? "")) {
@@ -16,11 +19,12 @@ if (development && !isDevelopmentName(pagesProject)) {
 async function readRevision() {
   if (development) {
     const response = await fetch(`https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/pages/projects/${pagesProject}/deployments?env=production&per_page=1`, {
-      redirect: "error", headers: { authorization: `Bearer ${process.env.CLOUDFLARE_API_TOKEN}` }, signal: AbortSignal.timeout(5000),
+      redirect: "error", headers: { authorization: `Bearer ${process.env.CLOUDFLARE_API_TOKEN}` },
     });
     if (!response.ok) return { error: `dev Admin Pages deployments HTTP ${response.status}` };
     const latest = (await response.json())?.result?.[0];
     const revision = latest?.deployment_trigger?.metadata?.commit_hash;
+    if (revision === expected && ["failure", "canceled"].includes(latest?.latest_stage?.status)) return { failed: `dev Admin Pages deployment ${latest.latest_stage.status}` };
     return latest?.latest_stage?.name === "deploy" && latest.latest_stage.status === "success"
       ? { revision } : { error: "dev Admin Pages deployment is not complete" };
   }
@@ -33,7 +37,6 @@ async function readRevision() {
       "cache-control": "no-cache",
       pragma: "no-cache",
     },
-    signal: AbortSignal.timeout(5000),
   });
   if (!response.ok) return { error: `Admin status HTTP ${response.status}` };
   const body = await response.json();
@@ -42,18 +45,14 @@ async function readRevision() {
     ? { revision: body?.build?.revision } : { error: "Admin status is not the current production build" };
 }
 
-let lastError = "Admin status was not read";
-for (let attempt = 1; attempt <= 12; attempt += 1) {
+const revision = await waitFor(`live Admin revision ${expected}`, async () => {
   try {
-    const { revision, error } = await readRevision();
-    if (revision === expected) {
-      process.stdout.write(`live Admin revision ${revision}\n`);
-      process.exit(0);
-    }
-    lastError = error ?? `live Admin revision ${revision || "missing"} != ${expected}`;
+    const { revision, error, failed } = await readRevision();
+    if (failed) return { failed: new Error(failed) };
+    if (revision === expected) return { done: revision };
+    return { pending: error ?? `live Admin revision ${revision || "missing"} != ${expected}` };
   } catch (error) {
-    lastError = error instanceof Error ? error.message : "Admin status could not be read";
+    return { pending: error instanceof Error ? error.message : "Admin status could not be read" };
   }
-  if (attempt < 12) await new Promise((resolve) => setTimeout(resolve, 5000));
-}
-throw new Error(lastError);
+});
+process.stdout.write(`live Admin revision ${revision}\n`);

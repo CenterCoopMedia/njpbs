@@ -70,7 +70,7 @@ export async function verifySignedOut(fetchImpl = fetch) {
     let refused = false;
     try {
       const response = await fetchImpl(`https://dev-public.example.org${path}`, {
-        redirect: 'manual', credentials: 'omit', signal: AbortSignal.timeout(30000),
+        redirect: 'manual', credentials: 'omit',
       });
       // Read a bounded body in memory, including on a refusal status.
       const reader = response.body?.getReader();
@@ -192,7 +192,7 @@ export async function verifyGuardedRouteTarget({ api, routePath, routeId, owner,
   return routes;
 }
 
-export async function run({ env = process.env, fetchImpl = fetch, spawn = spawnSync, readbackClock } = {}) {
+export async function run({ env = process.env, fetchImpl = fetch, spawn = spawnSync } = {}) {
   devAccessOrigin(env);
   requireState(env.GITHUB_REF === 'refs/heads/main' && env.GITHUB_EVENT_NAME === 'workflow_dispatch' &&
     repositoryMatches(env.GITHUB_REPOSITORY, env) && /^[a-f0-9]{40}$/.test(env.GITHUB_SHA ?? ''),
@@ -231,7 +231,7 @@ export async function run({ env = process.env, fetchImpl = fetch, spawn = spawnS
       response = await fetchImpl(`https://api.cloudflare.com/client/v4${path}`, {
         method, headers: { Authorization: `Bearer ${env.CLOUDFLARE_API_TOKEN}`, 'Content-Type': 'application/json' },
         ...(data ? { body: JSON.stringify(data) } : {}),
-        redirect: 'error', signal: AbortSignal.timeout(30_000),
+        redirect: 'error',
       });
       body = await response.json();
     } catch { throw new Error('Cloudflare request failed; reconcile before retrying'); }
@@ -280,7 +280,7 @@ export async function run({ env = process.env, fetchImpl = fetch, spawn = spawnS
       const result = spawn('node_modules/.bin/wrangler', [
         'deploy', '--config', temp, '--var', `DEV_ACCESS_AUDIENCE:${audience}`,
         '--message', `dev-staff-gateway:${env.GITHUB_SHA}`,
-      ], { encoding: 'utf8', timeout: 300000, maxBuffer: 4 * 1024 * 1024,
+      ], { encoding: 'utf8', maxBuffer: 4 * 1024 * 1024,
         env: { PATH: env.PATH, HOME: env.HOME, CI: 'true',
           CLOUDFLARE_API_TOKEN: env.CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID: ACCOUNT,
           WRANGLER_SEND_METRICS: 'false', WRANGLER_WRITE_LOGS: 'false' } });
@@ -335,7 +335,7 @@ export async function run({ env = process.env, fetchImpl = fetch, spawn = spawnS
           previewsEnabled: typeof subdomain?.previews_enabled === 'boolean' ? subdomain.previews_enabled : null });
     }
   }
-  await waitForWorkerReadback(verifyVersion, readbackClock);
+  await waitForWorkerReadback(verifyVersion);
   const before = await api(routePath);
   requireState(routeSnapshot(before) === initialSnapshot, 'Routes changed during verification; stop and reconcile');
   const route = devRoute(before, initialOwner);

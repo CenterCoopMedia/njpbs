@@ -88,7 +88,6 @@ function network(overrides = {}, { accountId: targetAccount = accountId } = {}) 
     const url = new URL(input);
     assert.equal(url.origin, "https://api.cloudflare.com");
     assert.equal(init.redirect, "error");
-    assert.ok(init.signal instanceof AbortSignal);
     requests.push({ url, method: init.method, body: init.body });
     const suffix = url.pathname.replace(`/client/v4/accounts/${targetAccount}`, "").replace("/client/v4", "");
     const override = overrides[`${init.method} ${suffix}`];

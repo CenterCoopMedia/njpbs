@@ -30,7 +30,6 @@ export { trackQualificationTransactionReads, assertQualificationTransactionReadB
 export type { QualificationTransactionReadTracker, PreparedQualificationSource } from "./public-release-pair-qualification-source";
 import { canonicalPath, same, withinReaderDeadline } from "./public-release-pair-reader-contract";
 
-export const PAIR_QUALIFICATION_DEADLINE_MS = 10 * 60_000;
 function coverageMismatch(): never { throw new PairQualificationError("coverage-mismatch"); }
 const validDigest = (value: unknown): value is string => typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
 async function witnessProofInTransaction(args: { firestore: Firestore; transaction: Transaction; pair: PublicReleasePair;
@@ -173,7 +172,7 @@ export async function qualifyPublicReleasePair({ firestore, store, pair: rawPair
   work.assertPrivatePairResources(pair);
   if (!validDigest(witnessDigest)) throw new PairQualificationError("replay-unproven");
   const receiptPath = qualificationReceiptPath(pair, qualificationId);
-  const signal = AbortSignal.any([...(callerSignal ? [callerSignal] : []), AbortSignal.timeout(PAIR_QUALIFICATION_DEADLINE_MS)]);
+  const signal = AbortSignal.any(callerSignal ? [callerSignal] : []);
   return withinReaderDeadline(signal, async () => {
     signal.throwIfAborted();
     const authority = await firestore.runTransaction(transaction => readPairQualificationAuthority({ firestore, transaction, pair }), { readOnly: true });

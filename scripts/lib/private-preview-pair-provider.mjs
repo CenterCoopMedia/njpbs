@@ -121,7 +121,7 @@ export function createPrivatePreviewPairProvider({ prepared, operationDigest, re
       const headers = { authorization: `Bearer ${token}`, ...(body && !(body instanceof FormData) ? { "content-type": "application/json" } : {}) };
       sent = true;
       const response = await fetchImpl(API + endpoint, { method, headers, body: body instanceof FormData ? body : body === undefined ? undefined : JSON.stringify(body),
-        redirect: "error", signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000) });
+        redirect: "error", signal });
       if (missing && method === "GET" && response.status === 404) { await response.body?.cancel(); return null; }
       if (!response.ok || response.redirected || !response.body) { await response.body?.cancel(); reject(); }
       const chunks = []; let size = 0;

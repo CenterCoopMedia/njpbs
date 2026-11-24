@@ -31,7 +31,7 @@ export async function installBubblewrap(cacheDirectory, run = spawnSync, downloa
   if (existsSync(path)) {
     bytes = readFileSync(path);
   } else {
-    const response = await download(bubblewrapUrl, { signal: AbortSignal.timeout(60_000) });
+    const response = await download(bubblewrapUrl);
     if (!response.ok) throw new Error(`Bubblewrap download failed (${response.status})`);
     bytes = Buffer.from(await response.arrayBuffer());
   }
@@ -51,7 +51,7 @@ export async function installChromiumDependencies(cacheDirectory, run = spawnSyn
       console.log("Using cached Chromium dependency packages");
     } else {
       console.log("Downloading pinned Chromium dependency seed from GitHub");
-      const response = await download(seed.downloadUrl, { signal: AbortSignal.timeout(120_000) });
+      const response = await download(seed.downloadUrl);
       if (!response.ok) throw new Error(`Chromium seed download failed (${response.status})`);
       const bytes = Buffer.from(await response.arrayBuffer());
       if (bytes.length !== seed.size || digest(bytes) !== seed.sha256) throw new Error("Chromium seed checksum mismatch");

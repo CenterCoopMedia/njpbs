@@ -646,7 +646,10 @@ jobs:
         with:
           ref: ${{ github.sha }}
           path: .release-gate
-          sparse-checkout: .github/scripts
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            .github/scripts
+            functions/lib/release-wait.js
           persist-credentials: false
       - name: Isolate trusted release-gate checkout
         run: |
@@ -1621,6 +1624,7 @@ jobs:
             scripts/lib/cms-target.mjs
             scripts/lib/functions-deploy-inventory.mjs
             scripts/lib/provider-call.mjs
+            functions/lib/release-wait.js
             scripts/lib/functions-readbacks.sh
           persist-credentials: false
       - name: Isolate trusted event IAM gate

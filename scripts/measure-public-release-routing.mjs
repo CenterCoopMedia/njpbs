@@ -175,11 +175,10 @@ async function main() {
     const task = (async () => {
       const start = performance.now();
       try {
-        const signal = AbortSignal.timeout(20000);
-        const response = await fetch(new URL('/sample', target), { method: 'POST', redirect: 'error', signal,
+        const response = await fetch(new URL('/sample', target), { method: 'POST', redirect: 'error',
           headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: JSON.stringify({ caseId, routerFirst: index % 2 === 0 }) });
         if (response.status !== 200) throw new Error('refused');
-        const text = await readResponseText(response, signal);
+        const text = await readResponseText(response);
         samples.push({ ordinal: index, collectedAt: new Date().toISOString(), clientMs: performance.now() - start,
           ...parseSample(JSON.parse(text), { measurementId, versionId, caseId }) });
       } catch { failures.push({ ordinal: index, caseId, kind: 'refused-or-incomplete' }); }
@@ -207,19 +206,19 @@ export async function readResponseText(response, signal) {
   if (!reader) refuse();
   let size = 0;
   const cancel = () => { void reader.cancel().catch(() => {}); };
-  signal.addEventListener('abort', cancel, { once: true });
+  signal?.addEventListener('abort', cancel, { once: true });
   try {
-    signal.throwIfAborted();
+    signal?.throwIfAborted();
     for (;;) {
       const next = await reader.read();
-      signal.throwIfAborted();
+      signal?.throwIfAborted();
       if (next.done) break;
       size += next.value.byteLength;
       if (size > 128 * 1024) refuse();
       parts.push(next.value);
     }
     return new TextDecoder('utf-8', { fatal: true }).decode(Buffer.concat(parts, size));
-  } finally { signal.removeEventListener('abort', cancel); cancel(); }
+  } finally { signal?.removeEventListener('abort', cancel); cancel(); }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {

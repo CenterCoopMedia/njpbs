@@ -1,6 +1,5 @@
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
-import { setTimeout as wait } from 'node:timers/promises';
 import { DEV_TARGETS } from '../assert-dev-cms-targets.mjs';
 import { functionsInventoryIdentity } from './cms-component-receipt.mjs';
 import { listPages } from '../deploy-cms-function-batches.mjs';
@@ -8,6 +7,7 @@ import { pairedAdminArtifactContents } from './paired-admin-pages-artifact.mjs';
 import { ADMIN_PROVIDER_OPERATIONS, createPairedAdminOperationJournal, refuseAdminProvider, isAdminProviderId } from './paired-admin-provider-operation.mjs';
 
 const api = createRequire(import.meta.url)('../../functions/lib/cms-preview-pair.js');
+const { waitFor } = createRequire(import.meta.url)('../../functions/lib/release-wait.js');
 const HEX = /^[a-f0-9]{64}$/;
 const SHA = /^[a-f0-9]{40}$/;
 const token = value => typeof value === 'string' && /^[\x21-\x7e]{1,32768}$/.test(value);
@@ -56,16 +56,16 @@ export function createPairedAdminPagesHttp({ target, prepared, readCloudflareTok
   target = Object.freeze({ ...names, ...target });
   const targetDigest = api.digest(target);
   const base = `/accounts/${target.accountId}/pages/projects/${names.pagesProject}`;
-  const requestSignal = other => AbortSignal.any([...(signal ? [signal] : []), ...(other ? [other] : []), AbortSignal.timeout(30_000)]);
+  const requestSignal = other => AbortSignal.any([...(signal ? [signal] : []), ...(other ? [other] : [])]);
   async function json(url, { method = 'GET', body, authorization, requestHeaders = {}, requestSignal: other, onDispatch } = {}) {
     try {
-      const deadline = requestSignal(other);
-      const credential = authorization ?? await boundaryValue(readCloudflareToken, deadline);
+      const stop = requestSignal(other);
+      const credential = authorization ?? await boundaryValue(readCloudflareToken, stop);
       if (!token(credential)) refuseAdminProvider('credential-unavailable');
-      deadline.throwIfAborted();
+      stop.throwIfAborted();
       onDispatch?.();
       const response = await fetchImpl(url, { method, body, headers: { ...requestHeaders, authorization: `Bearer ${credential}` },
-        redirect: 'error', cache: 'no-store', signal: deadline });
+        redirect: 'error', cache: 'no-store', signal: stop });
       if (!response.ok) { await response.body?.cancel(); refuseAdminProvider('provider-http-refused'); }
       const value = JSON.parse((await bounded(response, 8 * 1024 * 1024)).toString('utf8'));
       if (value.success === false || Array.isArray(value.errors) && value.errors.length) refuseAdminProvider('provider-http-refused');
@@ -131,25 +131,25 @@ export function createPairedAdminPagesHttp({ target, prepared, readCloudflareTok
     },
     async waitForDeployment(id, request, other) {
       if (!isAdminProviderId(id)) refuseAdminProvider('deployment-invalid');
-      const deadline = requestSignal(other);
+      const stop = requestSignal(other);
       try {
-        for (;;) {
-          deadline.throwIfAborted();
-          const value = (await pages(`/deployments/${encodeURIComponent(id)}`, { requestSignal: deadline })).result;
-          deadline.throwIfAborted();
+        return await waitFor(`Admin Pages deployment ${id}`, async () => {
+          stop.throwIfAborted();
+          const value = (await pages(`/deployments/${encodeURIComponent(id)}`, { requestSignal: stop })).result;
+          stop.throwIfAborted();
           const row = deploymentIdentity(value, marker(request)), stage = value.latest_stage;
           if (row.deploymentId !== id || !['queued', 'initialize', 'clone_repo', 'build', 'deploy'].includes(stage?.name) ||
               !['success', 'idle', 'active', 'failure', 'canceled', 'skipped'].includes(stage?.status)) refuseAdminProvider('deployment-unproven');
           if (stage.name === 'deploy' && stage.status === 'success') {
-            return { outcome: 'uploaded', proof: { deploymentId: id, providerReceiptDigest: receipt(row, prepared) } };
+            return { done: { outcome: 'uploaded', proof: { deploymentId: id, providerReceiptDigest: receipt(row, prepared) } } };
           }
           if (stage.status === 'failure' && typeof stage.ended_on === 'string' && Number.isFinite(Date.parse(stage.ended_on))) {
-            return { outcome: 'failed', proof: { deploymentId: id, providerReceiptDigest: api.digest({ targetDigest,
+            return { done: { outcome: 'failed', proof: { deploymentId: id, providerReceiptDigest: api.digest({ targetDigest,
               deploymentId: id, sourceSha: row.sourceSha, manifestDigest: prepared.manifestDigest,
-              stage: { name: stage.name, status: stage.status, endedOn: stage.ended_on } }) } };
+              stage: { name: stage.name, status: stage.status, endedOn: stage.ended_on } }) } } };
           }
-          await wait(1_000, undefined, { signal: deadline });
-        }
+          return { pending: `${stage.name} ${stage.status}` };
+        }, { signal: stop });
       } catch { refuseAdminProvider('deployment-wait-uncertain'); }
     },
     async findDeployment(request) {
@@ -200,11 +200,11 @@ export function createPairedAdminPagesHttp({ target, prepared, readCloudflareTok
           const path = file.path === '/404.html' ? `/_paired-admin-absent-${artifact.manifestDigest}/`
             : file.path.endsWith('/index.html') ? file.path.slice(0, -10)
               : file.path.endsWith('.html') ? file.path.slice(0, -5) : file.path;
-          const deadline = requestSignal();
-          const headers = new Headers(await boundaryValue(readAccessHeaders, deadline));
+          const stop = requestSignal();
+          const headers = new Headers(await boundaryValue(readAccessHeaders, stop));
           headers.set('accept-encoding', 'identity');
           const response = await fetchImpl(`${names.origin}${path}`, { headers, cache: 'no-store',
-            redirect: 'error', signal: deadline });
+            redirect: 'error', signal: stop });
           const contentType = response.headers.get('content-type')?.split(';')[0].trim().toLowerCase();
           const javascript = ['text/javascript', 'application/javascript'];
           if (response.status !== (file.path === '/404.html' ? 404 : 200) || contentType !== file.contentType &&

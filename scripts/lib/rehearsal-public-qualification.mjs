@@ -21,7 +21,7 @@ const cursorFor = head => ({ baselineDigest: head.baselineDigest, sequence: head
  * only the real source owner can prepare their opaque current-source guards.
  * Byte reads finish before the final shared-budget SDK transaction. */
 export async function readRehearsalPairQualifications({ firestore, packet: raw, qualifications, store,
-  signal = AbortSignal.timeout(30_000), authorized = false }) {
+  signal = new AbortController().signal, authorized = false }) {
   const packet = parseRehearsalPacket(raw);
   if (packet.schemaVersion === 1) assertDemoRehearsalEnvironment(packet);
   else {

@@ -131,33 +131,3 @@ it('reads inherited fd3 in a real child while keeping credential bytes out of ar
   expect(JSON.parse(output)).toEqual({ projectId: 'njpbs-site-dev', context: {} });
 });
 
-it('exits at the exact credential deadline with a controlled child clock and an open pipe', async () => {
-  const moduleUrl = new URL('../scripts/lib/development-rehearsal-credentials.mjs', import.meta.url).href;
-  const program = `import { mock } from 'node:test';
-    import { openDevelopmentRehearsalContext } from ${JSON.stringify(moduleUrl)};
-    mock.timers.enable({ apis: ['setTimeout'] });
-    const reading = openDevelopmentRehearsalContext();
-    let pending = true;
-    reading.then(() => { pending = false; }, () => { pending = false; });
-    mock.timers.tick(9999);
-    await new Promise(resolve => setImmediate(resolve));
-    if (!pending) throw new Error('Credential deadline fired early');
-    mock.timers.tick(1);
-    try { await reading; process.exitCode = 2; }
-    catch { process.stderr.write('Development rehearsal credential refused'); process.exitCode = 1; }
-    finally { mock.timers.reset(); }`;
-  const child = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', '--input-type=module', '--eval', program], {
-    env: { PATH: process.env.PATH, HOME: '/nonexistent' }, stdio: ['ignore', 'pipe', 'pipe', 'pipe'],
-  });
-  let output = '', errors = '', killed = false;
-  child.stdout.on('data', bytes => { output += bytes; });
-  child.stderr.on('data', bytes => { errors += bytes; });
-  const deadline = setTimeout(() => { killed = true; child.kill('SIGKILL'); }, 5_000);
-  try {
-    const code = await new Promise((accept, reject) => { child.on('error', reject); child.on('close', accept); });
-    expect(killed).toBe(false);
-    expect(code).toBe(1);
-    expect(output).toBe('');
-    expect(errors).toBe('Development rehearsal credential refused');
-  } finally { clearTimeout(deadline); child.stdio[3].destroy(); child.kill(); }
-});

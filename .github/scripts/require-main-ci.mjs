@@ -57,7 +57,6 @@ const development = process.env.CMS_TARGET === "development" || process.env.RELE
 if (development && process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   console.log(`Development deploy SHA ${process.env.DEPLOY_SHA}: main CI is not required.`);
 } else if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const signal = AbortSignal.timeout(30_000);
   const run = await requireReleaseCi({
     repository: process.env.GITHUB_REPOSITORY,
     sha: process.env.DEPLOY_SHA,
@@ -65,7 +64,6 @@ if (development && process.argv[1] && import.meta.url === pathToFileURL(process.
     request: async (path) => {
       const response = await fetch(`${process.env.GITHUB_API_URL || "https://api.github.com"}${path}`, {
         headers: { Accept: "application/vnd.github+json", Authorization: `Bearer ${process.env.GH_TOKEN}` },
-        signal,
         redirect: "error",
       });
       if (!response.ok) throw new Error("Main CI lookup failed");

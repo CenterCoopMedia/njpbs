@@ -65,7 +65,7 @@ export async function checkDevAnonymousRefusal({ hosts = DEV_HOSTS, fetchImpl = 
     try {
       const response = await fetchImpl(`https://${host}${path}`, {
         method, credentials: 'omit', redirect: 'manual',
-        signal: AbortSignal.any([AbortSignal.timeout(10_000), ...(signal ? [signal] : [])]),
+        signal,
       });
       status = response.status;
       passed = await refuses(response, host, method);

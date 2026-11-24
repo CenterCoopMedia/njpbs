@@ -946,7 +946,7 @@ export async function collectPreviewPairIdentities(value, deps = {}) {
   if (imageDigest !== pair.imageDigest) fail("Pair renderer image does not match its immutable digest");
   const response = await request(
     `https://api.cloudflare.com/client/v4/accounts/${account}/workers/scripts/${pair.workerName}/deployments`, {
-      headers: { authorization: `Bearer ${token}` }, redirect: "error", signal: AbortSignal.timeout(15_000),
+      headers: { authorization: `Bearer ${token}` }, redirect: "error",
     });
   if (!response?.ok) fail("Pair renderer Worker deployment could not be read");
   const body = await response.json();
@@ -1144,37 +1144,32 @@ export function rolloutApplied(application, rollout) {
     && rolloutBoundToApplication(application, rollout);
 }
 
-async function readProvider(fetchFn, url, token, deps) {
+async function readProvider(fetchFn, url, token) {
   // Provider code loads on use: the staged legacy rollback helpers start without it.
   const { providerJson } = await import("./provider-call.mjs");
   return providerJson(`Cloudflare ${new URL(url).pathname.split("/").slice(5).join("/")}`,
-    () => fetchFn(url, { headers: { authorization: `Bearer ${token}` }, redirect: "error", signal: AbortSignal.timeout(15_000) }),
-    { wait: deps.sleep });
+    () => fetchFn(url, { headers: { authorization: `Bearer ${token}` }, redirect: "error" }));
 }
 
 export async function readConsistentRendererApplication(fetchFn, account, token, deps) {
   const base = `https://api.cloudflare.com/client/v4/accounts/${account}/containers/applications`;
   const read = async (url, error) => {
-    try { return await readProvider(fetchFn, url, token, deps); }
+    try { return await readProvider(fetchFn, url, token); }
     catch { fail(error); }
   };
   const releases = async () => deps.rendererRelease
     ? releasesOfCommit(deps.rendererRelease, deps.rendererSha)
     : releasesOfCommit(await readReceipt(deps.firestore, "renderer"), deps.rendererSha);
-  const sleep = deps.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
-  const now = deps.now ?? Date.now;
   const log = deps.log ?? ((line) => {
     process.stderr.write(`${line}\n`);
   });
-  const requestedDeadline = deps.rolloutDeadlineMs;
-  const deadlineMs = Number.isFinite(requestedDeadline) ? Math.max(0, requestedDeadline) : 5 * 60 * 1000;
-  const started = now();
   // Terminal statuses from Containers API ApplicationRollout.status in
   // cloudflare/workers-sdk packages/containers-shared ApplicationRollout.ts:
   // pending, progressing, completed, reverted, replaced.
   // reverted and replaced do not finish.
   const terminalFailure = new Set(["reverted", "replaced"]);
-  for (;;) {
+  const { waitFor } = createRequire(import.meta.url)("../../functions/lib/release-wait.js");
+  return waitFor("Renderer container rollout", async () => {
     const body = await read(base, "Renderer container identity could not be read");
     const applications = Array.isArray(body?.result) ? body.result : body?.result?.applications;
     const matches = Array.isArray(applications)
@@ -1195,7 +1190,7 @@ export async function readConsistentRendererApplication(fetchFn, account, token,
         && rolloutAfterRelease(application, starts)
         && typeof image === "string"
         && image.length > 0
-      ) return application;
+      ) return { done: application };
       fail("Renderer container rollout is invalid");
     }
     const datedRollouts = rollouts.map((rollout) => ({ rollout, time: Date.parse(rollout?.created_at) }));
@@ -1210,18 +1205,15 @@ export async function readConsistentRendererApplication(fetchFn, account, token,
     const starts = await releases();
     if (starts.length === 0) fail("Renderer receipt does not match the live renderer commit");
     const afterRelease = rolloutAfterRelease(latest, starts);
-    if (applied && afterRelease) return applicationAtRolloutTarget(application, latest);
+    if (applied && afterRelease) return { done: applicationAtRolloutTarget(application, latest) };
     const status = typeof latest.status === "string" ? latest.status : "";
-    log(rendererRolloutLog(latest, application, afterRelease));
+    const line = rendererRolloutLog(latest, application, afterRelease);
+    log(line);
     if (terminalFailure.has(status)) fail(`Renderer container rollout ${status}`);
     // created_at and the receipt do not change while this loop waits.
     if (status === "completed" && !afterRelease) fail("Renderer container rollout predates this renderer release");
-    const elapsed = now() - started;
-    if (elapsed >= deadlineMs) {
-      fail("Renderer container rollout and application identity did not converge");
-    }
-    await sleep(Math.min(5_000, deadlineMs - elapsed));
-  }
+    return { pending: line };
+  }, { signal: deps.signal });
 }
 
 export async function collectLiveIdentities(component, deps = {}) {
@@ -1326,7 +1318,7 @@ export async function collectLiveIdentities(component, deps = {}) {
     const { cmsApiWorker } = cmsTarget();
     return await readCmsApiDeployment(cmsApiWorker, () => readProvider(fetchFn,
       `https://api.cloudflare.com/client/v4/accounts/${account}/workers/scripts/${cmsApiWorker}/deployments`, token, deps)
-      .catch(() => fail("CMS API deployment identity could not be read")), deps.expectedWorkerVersion, deps.readbackClock);
+      .catch(() => fail("CMS API deployment identity could not be read")), deps.expectedWorkerVersion);
   } catch (error) {
     if (error instanceof CmsApiReadbackError || error instanceof WorkerReadbackMismatch) fail(error.message);
     throw error;

@@ -54,7 +54,7 @@ export async function writeDevReconcileEnvironment(env, { fetchRun = fetch, appe
   try {
     const response = await fetchRun(`https://api.github.com/repos/${env.GITHUB_REPOSITORY}/actions/runs/${runId}`, {
       headers: { Authorization: `Bearer ${env.GH_TOKEN}`, Accept: "application/vnd.github+json" },
-      redirect: "error", signal: AbortSignal.timeout(30000),
+      redirect: "error",
     });
     if (!response.ok) throw new ReconcileRefusal("api_lookup");
     run = await response.json();

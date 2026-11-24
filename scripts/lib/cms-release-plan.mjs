@@ -303,7 +303,7 @@ export async function componentReceiptRunCompleted(receipt, { token, repository,
   try {
     const response = await fetchImpl(`https://api.github.com/repos/${repository}/actions/runs/${runId}`, {
       headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json" },
-      redirect: "error", signal: AbortSignal.timeout(15_000),
+      redirect: "error",
     });
     if (!response.ok) {
       await response.body?.cancel();

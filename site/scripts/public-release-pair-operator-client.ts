@@ -15,7 +15,7 @@ export function createPrivatePairOperatorClient({ origin, credentials }: {
       const encoded = JSON.stringify(body);
       headers.set("content-length", String(new TextEncoder().encode(encoded).byteLength));
       const response = await fetch(`${origin}${path}`, { method: "POST", headers, body: encoded,
-        redirect: "manual", cache: "no-store", signal: AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(30_000)]) });
+        redirect: "manual", cache: "no-store", signal });
       if (response.headers.get("cache-control") !== "private, no-store") {
         await response.body?.cancel(); throw new Error();
       }

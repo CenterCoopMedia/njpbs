@@ -31,6 +31,9 @@ describe("trusted Containers read gate", () => {
       mkdirSync(gateDirectory, { recursive: true });
       writeFileSync(join(gateDirectory, "cms-containers-read-probe.mjs"),
         readFileSync(new URL(".github/scripts/cms-containers-read-probe.mjs", root)));
+      mkdirSync(join(runnerTemp, "release-gate/functions/lib"), { recursive: true });
+      writeFileSync(join(runnerTemp, "release-gate/functions/lib/release-wait.js"),
+        readFileSync(new URL("functions/lib/release-wait.js", root)));
       const preload = join(directory, "fetch-fixture.mjs");
       writeFileSync(preload, `
         import { appendFileSync } from "node:fs";
@@ -50,7 +53,7 @@ describe("trusted Containers read gate", () => {
           NODE_OPTIONS: `--import=${pathToFileURL(preload).href}` },
       });
       expect(result.status, result.stderr).toBe(0);
-      expect(result.stdout).toBe("Cloud preview Containers reads verified\n");
+      expect(result.stdout.split("\n").filter(line => !line.startsWith('{"releaseWait":true')).join("\n")).toBe("Cloud preview Containers reads verified\n");
       const requests = readFileSync(join(directory, "requests.jsonl"), "utf8").trim().split("\n").map(JSON.parse);
       expect(requests).toHaveLength(3);
       expect(requests.at(-1).url).toMatch(new RegExp(`/${id}/rollouts\\?limit=100$`));
@@ -58,36 +61,16 @@ describe("trusted Containers read gate", () => {
     } finally { rmSync(directory, { recursive: true, force: true }); }
   });
 
-  it.each(["transport", 408, 429, 503])("bounds transient %s failures to three GETs and two deferrals", async status => {
-    const request = vi.fn(async () => {
-      if (status === "transport") throw new Error("Provider request failed");
-      return new Response("private provider response", { status });
-    });
-    const sleep = vi.fn(async () => {});
-    await expect(probeCmsContainers(token, { request, sleep })).rejects.toThrow("could not be verified");
-    expect(request).toHaveBeenCalledTimes(3);
-    expect(sleep.mock.calls).toEqual([[10000], [10000]]);
-    for (const [, options] of request.mock.calls) {
-      expect(options.method).toBe("GET");
-      expect(options.redirect).toBe("error");
-      expect(options.signal).toBeInstanceOf(AbortSignal);
-    }
-  });
-
   it.each([400, 401, 403])("does not retry permanent HTTP %s failures", async status => {
     const request = vi.fn(async () => new Response("private provider response", { status }));
-    const sleep = vi.fn();
-    await expect(probeCmsContainers(token, { request, sleep })).rejects.toThrow("could not be verified");
+    await expect(probeCmsContainers(token, { request })).rejects.toThrow("could not be verified");
     expect(request).toHaveBeenCalledTimes(1);
-    expect(sleep).not.toHaveBeenCalled();
   });
 
   it("recovers a transient read and permits a first installation", async () => {
     const request = vi.fn().mockResolvedValueOnce(new Response("", { status: 429 })).mockResolvedValueOnce(response([]));
-    const sleep = vi.fn(async () => {});
-    await expect(probeCmsContainers(token, { request, sleep })).resolves.toBeUndefined();
+    await expect(probeCmsContainers(token, { request })).resolves.toBeUndefined();
     expect(request).toHaveBeenCalledTimes(2);
-    expect(sleep.mock.calls).toEqual([[10000]]);
   });
 
   it("reads every rollout page without writing", async () => {
@@ -100,16 +83,14 @@ describe("trusted Containers read gate", () => {
     for (const [, options] of request.mock.calls) expect(options.method).toBe("GET");
   });
 
-  it.each(["identity", "metadata", "repeated-page", "json"])("fails closed for invalid %s without deferring", async invalid => {
+  it.each(["identity", "metadata", "repeated-page", "json"])("fails closed for invalid %s without asking again", async invalid => {
     const request = vi.fn().mockResolvedValueOnce(response([application]))
       .mockResolvedValueOnce(response(invalid === "identity" ? { id: "different" } : application));
     const page = Array.from({ length: 100 }, (_, index) => rollout(index));
     request.mockResolvedValueOnce(invalid === "json" ? new Response("invalid json")
       : response(invalid === "metadata" ? [{ id: "incomplete" }] : page));
     if (invalid === "repeated-page") request.mockResolvedValueOnce(response(page));
-    const sleep = vi.fn();
-    await expect(probeCmsContainers(token, { request, sleep })).rejects.toThrow("could not be verified");
-    expect(sleep).not.toHaveBeenCalled();
+    await expect(probeCmsContainers(token, { request })).rejects.toThrow("could not be verified");
   });
 
   it("reads only the dev renderer the workflow names on a development run", () => {

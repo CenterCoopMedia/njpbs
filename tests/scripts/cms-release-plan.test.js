@@ -366,7 +366,6 @@ describe("stopped component receipt recovery", () => {
       headers: { Authorization: "Bearer synthetic-job-token", Accept: "application/vnd.github+json" },
       redirect: "error",
     });
-    expect(request.signal).toBeInstanceOf(AbortSignal);
   });
 
   it.each(["success", "failure", "cancelled", "timed_out"])("releases both sides after a %s renderer run", async conclusion => {

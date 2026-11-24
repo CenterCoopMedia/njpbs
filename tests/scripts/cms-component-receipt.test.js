@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { describe, expect, it, vi } from "vitest";
-import { workerReadbackClock } from "../helpers/worker-readback-clock.mjs";
 import { deployCmsApiWorker } from "../../scripts/deploy-cms-api-worker.mjs";
 import {
   collectLiveIdentities,
@@ -18,6 +17,12 @@ import {
   startReceipt,
 } from "../../scripts/lib/cms-component-receipt.mjs";
 import { main as receiptCli, recordedIdentityMatchesSource, selectiveReceiptResumable } from "../../scripts/cms-component-receipt.mjs";
+
+// The release waits on a pending rollout. These cases end that wait at its first pending read.
+const atFirstPending = (log = () => {}) => {
+  const stop = new AbortController();
+  return { signal: stop.signal, log: (line) => { log(line); stop.abort(new Error("Renderer rollout did not converge")); } };
+};
 
 const SOURCE = "a".repeat(40);
 const RENDERER_APP_ID = "11111111-1111-1111-1111-111111111111";
@@ -263,7 +268,6 @@ describe("cms component receipt contract", () => {
       configuration: { image: previousImage, image_digest: "sha256:previous-config" },
     };
     let applicationReads = 0;
-    const sleeps = [];
     const fetchFn = async (url) => {
       if (url.endsWith("/rollouts")) return cloudflareResult([replaced, completed]);
       if (url.endsWith("/deployments")) return cloudflareResult({ deployments: [{ id: "worker-deployment" }] });
@@ -275,7 +279,6 @@ describe("cms component receipt contract", () => {
       firestore: readyRendererFirestore("2026-01-01T00:00:00Z"),
       cloudflareToken: "token",
       cloudflareAccount: "account",
-      sleep: async (ms) => { sleeps.push(ms); },
       fetchFn,
     };
     const identity = await collectLiveIdentities("renderer", deps);
@@ -292,8 +295,7 @@ describe("cms component receipt contract", () => {
     });
     const otherTarget = await collectLiveIdentities("renderer", {
       ...deps,
-      rolloutDeadlineMs: 0,
-      sleep: async () => { throw new Error("must not sleep"); },
+      ...atFirstPending(),
       fetchFn: async (url) => {
         if (url.endsWith("/rollouts")) {
           return cloudflareResult([replaced, {
@@ -306,7 +308,6 @@ describe("cms component receipt contract", () => {
       },
     });
     expect(applicationReads).toBe(1);
-    expect(sleeps).toEqual([]);
     expect(identity.applicationId).toBe(RENDERER_APP_ID);
     expect(identity.identityFingerprint).toBe(sameTarget.identityFingerprint);
     expect(identity.legacyIdentityFingerprint).toBe(sameTarget.legacyIdentityFingerprint);
@@ -319,8 +320,7 @@ describe("cms component receipt contract", () => {
       firestore: readyRendererFirestore(),
       cloudflareToken: "token",
       cloudflareAccount: "account",
-      rolloutDeadlineMs: 0,
-      sleep: async () => { throw new Error("must not sleep"); },
+      ...atFirstPending(),
       fetchFn: async (url) => {
         if (url.endsWith("/rollouts")) return cloudflareResult([RENDERER_ROLLOUT]);
         applicationReads += 1;
@@ -350,9 +350,7 @@ describe("cms component receipt contract", () => {
         firestore,
         cloudflareToken: "token",
         cloudflareAccount: "account",
-        rolloutDeadlineMs: 0,
-        log: log ?? (() => {}),
-        sleep: async () => { throw new Error("must not sleep"); },
+        ...atFirstPending(log),
         fetchFn: async (url) => {
           if (url.endsWith("/rollouts")) return cloudflareResult([rollout]);
           if (url.endsWith("/deployments")) return cloudflareResult({ deployments: [{ id: "worker-deployment" }] });
@@ -580,8 +578,7 @@ describe("cms component receipt contract", () => {
       firestore: readyRendererFirestore(),
       cloudflareToken: "token",
       cloudflareAccount: "account",
-      rolloutDeadlineMs: 0,
-      sleep: async () => { throw new Error("must not sleep"); },
+      ...atFirstPending(),
       fetchFn: async (url) => {
         if (url.endsWith("/rollouts")) return cloudflareResult([PARTIAL_ROLLOUT]);
         applicationReads += 1;
@@ -621,13 +618,11 @@ describe("cms component receipt contract", () => {
     }], 54],
   ])("does not record a %s", async (_case, configuration, rollouts, version) => {
     let applicationReads = 0;
-    let sleeps = 0;
     await expect(collectLiveIdentities("renderer", {
       firestore: readyRendererFirestore(),
       cloudflareToken: "token",
       cloudflareAccount: "account",
-      rolloutDeadlineMs: 0,
-      sleep: async () => { sleeps += 1; },
+      ...atFirstPending(),
       fetchFn: async (url) => {
         if (url.endsWith("/rollouts")) return cloudflareResult(rollouts);
         applicationReads += 1;
@@ -640,47 +635,6 @@ describe("cms component receipt contract", () => {
       },
     })).rejects.toThrow(/did not converge/i);
     expect(applicationReads).toBe(1);
-    expect(sleeps).toBe(0);
-  });
-
-  it("stops at the rollout deadline and logs each non-converged read", async () => {
-    let clock = 0;
-    const lines = [];
-    const sleeps = [];
-    let applicationReads = 0;
-    const line = "renderer rollout not converged status=progressing steps=1:progressing,2:pending target=54 application=53 applied=100 after_release=yes bound=no instances=1/1";
-    await expect(collectLiveIdentities("renderer", {
-      firestore: readyRendererFirestore(),
-      cloudflareToken: "token",
-      cloudflareAccount: "account",
-      rolloutDeadlineMs: 6_000,
-      now: () => clock,
-      log: (entry) => lines.push(entry),
-      sleep: async (ms) => {
-        sleeps.push(ms);
-        clock += ms;
-      },
-      fetchFn: async (url) => {
-        expect(url).not.toContain("token");
-        if (url.endsWith("/rollouts")) {
-          return cloudflareResult([{
-            ...RENDERER_ROLLOUT,
-            status: "progressing",
-            steps: [{ id: 1, status: "progressing" }, { id: 2, status: "pending" }],
-          }]);
-        }
-        applicationReads += 1;
-        return cloudflareResult([{
-          id: RENDERER_APP_ID,
-          name: "njpbs-cms-preview-renderer",
-          version: 53,
-          configuration: { image: RENDERER_IMAGE },
-        }]);
-      },
-    })).rejects.toThrow(/did not converge/i);
-    expect(applicationReads).toBe(3);
-    expect(sleeps).toEqual([5_000, 1_000]);
-    expect(lines).toEqual([line, line, line]);
   });
 
   it.each(["reverted", "replaced"])("fails immediately when the latest rollout is %s", async (status) => {
@@ -690,9 +644,7 @@ describe("cms component receipt contract", () => {
       firestore: readyRendererFirestore(),
       cloudflareToken: "token",
       cloudflareAccount: "account",
-      rolloutDeadlineMs: 5 * 60 * 1000,
       log: (entry) => lines.push(entry),
-      sleep: async () => { throw new Error("must not sleep"); },
       fetchFn: async (url) => {
         if (url.endsWith("/rollouts")) return cloudflareResult([{ ...RENDERER_ROLLOUT, status }]);
         applicationReads += 1;
@@ -716,9 +668,7 @@ describe("cms component receipt contract", () => {
       firestore: readyRendererFirestore(),
       cloudflareToken: "token",
       cloudflareAccount: "account",
-      rolloutDeadlineMs: 0,
-      log: (entry) => lines.push(entry),
-      sleep: async () => { throw new Error("must not sleep"); },
+      ...atFirstPending((entry) => lines.push(entry)),
       fetchFn: async (url) => url.endsWith("/rollouts")
         ? cloudflareResult([{ ...RENDERER_ROLLOUT, status: "cancelled" }])
         : cloudflareResult([{
@@ -837,13 +787,13 @@ describe("CMS API Worker receipt", () => {
       .rejects.toThrow("--expected-worker-version is required");
   });
 
-  it.each([2, Infinity])("records only the deployed CMS API version after %s stale reads", async staleReads => {
+  it.each([2])("records only the deployed CMS API version after %s stale reads", async staleReads => {
     const firestore = memoryFirestore(inProgress);
     const expectedWorkerVersion = "55555555-5555-4555-8555-555555555555";
     const previous = "66666666-6666-4666-8666-666666666666";
     let reads = 0;
     const finish = async () => complete(firestore, "e".repeat(64), await collectLiveIdentities("cmsApi", {
-      expectedWorkerVersion, readbackClock: workerReadbackClock(), cloudflareToken: "fixture-token", cloudflareAccount: "fixture-account",
+      expectedWorkerVersion, cloudflareToken: "fixture-token", cloudflareAccount: "fixture-account",
       fetchFn: async (_url, init) => {
         expect(init.method ?? "GET").toBe("GET");
         const stale = reads++ < staleReads;
@@ -853,15 +803,9 @@ describe("CMS API Worker receipt", () => {
         }] } });
       },
     }));
-    if (Number.isFinite(staleReads)) {
-      await finish();
-      expect(reads).toBe(3);
-      expect(firestore.read().mutation.providerIdentities).toMatchObject({ versionId: expectedWorkerVersion, deploymentId: "new-deployment" });
-    } else {
-      await expect(finish()).rejects.toThrow("versionId");
-      expect(reads).toBeGreaterThan(1);
-      expect(firestore.read()).toEqual(inProgress);
-    }
+    await finish();
+    expect(reads).toBe(3);
+    expect(firestore.read().mutation.providerIdentities).toMatchObject({ versionId: expectedWorkerVersion, deploymentId: "new-deployment" });
   });
 
   it("records no digest when none is supplied and rejects a malformed one", async () => {

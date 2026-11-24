@@ -1,6 +1,7 @@
 import { devAccessOrigin, deploymentEmail } from "./deployment-settings.mjs";
 import { execFile } from "node:child_process";
 import { createReadStream, fstatSync } from "node:fs";
+import { createRequire } from "node:module";
 import { Readable } from "node:stream";
 import { promisify } from "node:util";
 import {
@@ -13,7 +14,7 @@ export const PUBLIC_ORIGIN = "https://dev-public.example.org";
 
 const EMAIL = (process.env.CMS_DEV_EDITOR_EMAIL ?? "").toLowerCase();
 const run = promisify(execFile);
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const { waitFor } = createRequire(import.meta.url)("../../functions/lib/release-wait.js");
 
 export function openCredentialPipe(fd) {
   // The Python launcher captures identity before Node can reuse a missing FD.
@@ -39,18 +40,10 @@ export function openCredentialPipe(fd) {
 // Keep only the password line. Pass metadata never reaches a browser or report.
 export async function readDevEditorCredential(stream) {
   let input = "";
-  const timeout = setTimeout(
-    () => stream.destroy(new Error("credential_timeout")),
-    10_000,
-  );
-  try {
-    for await (const chunk of stream) {
-      input += chunk.toString();
-      if (Buffer.byteLength(input) > 16 * 1024)
-        throw new Error("invalid_credential");
-    }
-  } finally {
-    clearTimeout(timeout);
+  for await (const chunk of stream) {
+    input += chunk.toString();
+    if (Buffer.byteLength(input) > 16 * 1024)
+      throw new Error("invalid_credential");
   }
   return readBrowserCredential(
     Readable.from([`${input.split(/\r?\n/)[0]}\nemail: ${EMAIL}\n`]),
@@ -61,14 +54,14 @@ async function inboxRequest(operation, params) {
   const command = process.env.CMS_DEV_INBOX_COMMAND;
   if (!command?.startsWith("/")) throw new Error("inbox_command_required");
   const { stdout } = await run(command, [operation, JSON.stringify(params)], {
-    timeout: 15_000, maxBuffer: 1024 * 1024,
+    maxBuffer: 1024 * 1024,
   });
   return JSON.parse(stdout);
 }
 
-async function accessCode(since) {
-  const deadline = Date.now() + 180_000;
-  while (Date.now() < deadline) {
+// Waits until the login code mail arrives.
+function accessCode(since) {
+  return waitFor("dev Access login code mail", async () => {
     const list = await inboxRequest("list", {
       userId: "me",
       q: `to:${EMAIL} newer_than:1h`,
@@ -82,11 +75,10 @@ async function accessCode(since) {
       });
       if (Number(item.internalDate) < since) continue;
       const code = item.snippet?.match(/\b(\d{6})\b/);
-      if (code) return code[1];
+      if (code) return { done: code[1] };
     }
-    await sleep(5_000);
-  }
-  throw new Error("access_code_unavailable");
+    return { pending: { messages: list.messages?.length ?? 0 } };
+  });
 }
 
 export async function passDevAccess(page, destination) {
@@ -112,9 +104,7 @@ export async function passDevAccess(page, destination) {
     await page
       .getByRole("button", { name: /sign in|submit|verify|continue/i })
       .click();
-    await page.waitForURL((url) => url.origin === new URL(destination).origin, {
-      timeout: 60_000,
-    });
+    await page.waitForURL((url) => url.origin === new URL(destination).origin);
   } finally {
     // No snapshot after typing. Clear only our code field if the login did not leave.
     if (new URL(page.url()).origin === ACCESS_ORIGIN)
@@ -133,6 +123,8 @@ export async function openDevEditor({
   const browser = await launchCmsBrowser(chromium);
   try {
     const context = await browser.newContext();
+    // No Playwright clock: each wait ends on what the browser or the dev services report.
+    context.setDefaultTimeout(0);
     // Dry runs refuse content writes even if the UI changes or auto-save starts.
     if (dryRun)
       await context.route("**/*", async (route) => {
@@ -147,7 +139,6 @@ export async function openDevEditor({
         return route.continue();
       });
     const page = await context.newPage();
-    page.setDefaultTimeout(30_000);
     await onStage("admin-access");
     await passDevAccess(page, `${ADMIN_ORIGIN}/`);
     if (new URL(page.url()).origin !== ADMIN_ORIGIN)
@@ -196,12 +187,9 @@ export async function openDevEditor({
       throw new Error("dev_target_required");
     // The top-level public visit obtains Access admission and the existing staff handoff.
     const publicPage = await context.newPage();
-    publicPage.setDefaultTimeout(30_000);
     await onStage("public-access");
     await passDevAccess(publicPage, `${PUBLIC_ORIGIN}/`);
-    await publicPage.waitForURL((url) => url.origin === PUBLIC_ORIGIN, {
-      timeout: 60_000,
-    });
+    await publicPage.waitForURL((url) => url.origin === PUBLIC_ORIGIN);
     await page.bringToFront();
     await onStage("signed-in");
     return { browser, context, page, publicPage, authUid: await identity };

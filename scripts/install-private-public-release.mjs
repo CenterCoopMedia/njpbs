@@ -89,7 +89,7 @@ export async function compilePrivateWorker(main) {
  * readerReceiptDigest; both are computed from the actual uploaded version.
  * The resulting full pairs are output for separate guarded registration; this
  * operator never writes pair registry, capability, selector, pin or apex route. */
-export async function installPrivatePublicRelease({ plan, ledger, provider, compile = compilePrivateWorker, dryRun = true, signal, onStage = () => {}, readbackClock }) {
+export async function installPrivatePublicRelease({ plan, ledger, provider, compile = compilePrivateWorker, dryRun = true, signal, onStage = () => {} }) {
   const { default: protocol } = await import("../functions/lib/public-release-pair.js");
   const { configurePublicReleaseSlot, configurePublicReleaseIngress } = await import("./configure-public-release-ingress.mjs");
   const { installPrivateWorker } = await import("./lib/public-release-private-provider.mjs");
@@ -128,7 +128,7 @@ export async function installPrivatePublicRelease({ plan, ledger, provider, comp
   onStage("provider");
   const pairs = [], readbacks = [];
   for (const [index, config] of slots.entries()) {
-    const result = await installPrivateWorker({ ledger, provider, attemptId: plan.operationId, config, source: slotSource, dryRun, signal, readbackClock });
+    const result = await installPrivateWorker({ ledger, provider, attemptId: plan.operationId, config, source: slotSource, dryRun, signal });
     const template = [oldPair, newPair][index];
     const readerReceiptDigest = dryRun ? template.readerReceiptDigest : protocol.publicReleaseDigest({ schemaVersion: 1,
       environment: template.environment, service: template.publicWorker.service, versionId: result.versionId,
@@ -138,7 +138,7 @@ export async function installPrivatePublicRelease({ plan, ledger, provider, comp
     readbacks.push(result);
   }
   const ingress = configurePublicReleaseIngress({ oldPair: pairs[0], newPair: pairs[1], accountId: plan.accountId, ingressName: plan.ingressName, ...ingressOptions });
-  readbacks.push(await installPrivateWorker({ ledger, provider, attemptId: plan.operationId, config: ingress, source: ingressSource, dryRun, signal, readbackClock }));
+  readbacks.push(await installPrivateWorker({ ledger, provider, attemptId: plan.operationId, config: ingress, source: ingressSource, dryRun, signal }));
   return { schemaVersion: 1, dryRun, operationId: plan.operationId, bootstrapPairId: pairs[0].pairId, pairs, readbacks };
 }
 export function privateInstallCredential(stream) {
@@ -202,7 +202,7 @@ export async function main(args) {
     targets.assertPublicationDatabase(firestore, target);
     stage = "preflight";
     const result = await installPrivatePublicRelease({ plan, provider, ledger: privateInstallLedger(firestore), dryRun: false,
-      signal: AbortSignal.timeout(120_000), onStage: value => { stage = value; } });
+      onStage: value => { stage = value; } });
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   } catch (error) {
     if (safeOperatorCode(error)) throw error;

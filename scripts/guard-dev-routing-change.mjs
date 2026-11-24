@@ -91,7 +91,7 @@ export async function guardDevRoutingChange({ plan, receiptPath, apply = false, 
     try {
       const response = await fetchImpl(`https://api.cloudflare.com/client/v4${path}`, {
         method, redirect: 'error',
-        signal: AbortSignal.any([AbortSignal.timeout(10_000), ...(operationSignal ? [operationSignal] : [])]),
+        signal: operationSignal ?? undefined,
         headers: { Authorization: `Bearer ${env.CLOUDFLARE_API_TOKEN}`, 'Content-Type': 'application/json' },
         ...(body ? { body: JSON.stringify(body) } : {}),
       });
@@ -135,7 +135,7 @@ export async function guardDevRoutingChange({ plan, receiptPath, apply = false, 
   const record = event => appendFileSync(receiptPath, `${JSON.stringify({ event, at: new Date(now()).toISOString() })}\n`);
   async function prove(probeSignal = signal) {
     await checkDevAnonymousRefusal({ hosts: [plan.host], fetchImpl, log, signal: probeSignal });
-    if (machine) await checkDevMachineReceipt({ env, fetchImpl, log, signal: probeSignal, requestTimeoutMs: 10_000 });
+    if (machine) await checkDevMachineReceipt({ env, fetchImpl, log, signal: probeSignal });
   }
   await prove();
   requireState(isDeepStrictEqual(await api(path), before), 'Record changed during preflight; no mutation attempted');

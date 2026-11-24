@@ -6,7 +6,6 @@ import { createRehearsalHttpCredential, bindRehearsalHttpCredential, acceptRehea
   closeRehearsalHttpCredential } from "../../scripts/lib/public-release-rehearsal-http-auth.mjs";
 
 function refuse(): never { throw new Error("Development rehearsal HTTP bridge refused"); }
-const deadlineMs = 3_000;
 const bodyLimit = 16 * 1024 * 1024;
 const developmentTarget = targets.publicationTarget("development");
 const transportHeaders = new Set(["connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
@@ -89,12 +88,6 @@ export async function startDevelopmentRehearsalHttp({ projectId, operatorOrigin,
   const httpCredential = createRehearsalHttpCredential();
   const handle = (proof: boolean) => (request: IncomingMessage, response: ServerResponse) => {
     const controller = new AbortController();
-    const timer = setTimeout(() => {
-      controller.abort();
-      if (response.destroyed || response.writableEnded) return;
-      if (response.headersSent) response.destroy();
-      else response.writeHead(504, { "cache-control": "no-store" }).end();
-    }, deadlineMs);
     response.on("close", () => { if (!response.writableEnded) controller.abort(); });
     void (async () => {
       const authority = `127.0.0.1:${request.socket.localPort}`;
@@ -125,10 +118,11 @@ export async function startDevelopmentRehearsalHttp({ projectId, operatorOrigin,
       if (response.destroyed) return;
       if (response.headersSent) response.destroy();
       else response.writeHead(502, { "cache-control": "no-store" }).end();
-    }).finally(() => clearTimeout(timer));
+    });
   };
   const ingress = createServer(handle(false)), proof = createServer(handle(true));
-  for (const server of [ingress, proof]) { server.headersTimeout = deadlineMs; server.requestTimeout = deadlineMs; }
+  // Zero turns off Node's own header and request limits.
+  for (const server of [ingress, proof]) { server.headersTimeout = 0; server.requestTimeout = 0; }
   try {
     const ingressOrigin = await listen(ingress, ingressPort), proofOrigin = await listen(proof, proofPort);
     bindRehearsalHttpCredential(httpCredential, [ingressOrigin, proofOrigin]);

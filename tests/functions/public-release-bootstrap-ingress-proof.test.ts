@@ -151,7 +151,7 @@ it.each(["firestore", "storage"])("bounds a stalled %s read by the caller abort 
   let hitsAtAbort = 0;
   try {
     await entered; hitsAtAbort = hits; const abortedAt = performance.now(); controller.abort();
-    await expect(result).rejects.toThrow("Private pair read deadline");
+    await expect(result).rejects.toThrow("Private pair read stopped");
     expect(performance.now() - abortedAt).toBeLessThan(1_000); expect(request).not.toHaveBeenCalled();
   } finally { release(); }
   // Let the uncancellable read finish; it cannot start public I/O or mint a
@@ -174,6 +174,6 @@ it("cancels a stalled immutable object body when readiness is aborted", async ()
   } };
   const result = prepareBootstrapIngressProof({ ...options(request), store, signal: controller.signal });
   await entered; const abortedAt = performance.now(); controller.abort();
-  await expect(result).rejects.toThrow("Private pair read deadline"); await cancelled;
+  await expect(result).rejects.toThrow("Private pair read stopped"); await cancelled;
   expect(performance.now() - abortedAt).toBeLessThan(1_000); expect(cancel).toHaveBeenCalledTimes(1); expect(request).not.toHaveBeenCalled();
 }, 10_000);

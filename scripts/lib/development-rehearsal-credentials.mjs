@@ -26,7 +26,7 @@ function inheritedCredential() {
     const stat = fstatSync(3);
     if (!stat.isFIFO() && !stat.isSocket()) refuse();
     // A libuv pipe handle can cancel a pending read. fs.ReadStream on a
-    // blocking inherited pipe can keep its threadpool read alive after timeout.
+    // blocking inherited pipe can keep its threadpool read alive after destroy.
     return new Socket({ fd: 3, readable: true, writable: false, pauseOnCreate: true });
   } catch { refuse(); }
 }
@@ -34,7 +34,6 @@ function inheritedCredential() {
 async function readCredential(stream) {
   const chunks = [];
   let size = 0;
-  const timeout = setTimeout(() => stream.destroy(new Error('Development rehearsal credential refused')), 10_000);
   try {
     for await (const chunk of stream) {
       const bytes = Buffer.from(chunk);
@@ -49,7 +48,6 @@ async function readCredential(stream) {
   } catch {
     refuse();
   } finally {
-    clearTimeout(timeout);
     chunks.forEach(chunk => chunk.fill(0));
   }
 }

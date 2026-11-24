@@ -49,13 +49,13 @@ export async function checkProductionSessionRefusal({
     await context.route("**/*", (route) => productionProbeRequestAllowed(route.request().url(), route.request().method())
       ? route.fallback() : route.abort("blockedbyclient"));
     const page = await context.newPage();
-    page.setDefaultTimeout(30_000);
-    await page.goto(`${ADMIN}/`, { waitUntil: "domcontentloaded", timeout: 30_000 });
+    page.setDefaultTimeout(0);
+    await page.goto(`${ADMIN}/`, { waitUntil: "domcontentloaded" });
     if (new URL(page.url()).origin !== ADMIN) throw new Error("invalid_production_session");
     token = await submitCmsSignIn(page, readCredential, async () => {
       const response = await page.waitForResponse((reply) =>
         `${new URL(reply.url()).origin}${new URL(reply.url()).pathname}` === SIGN_IN &&
-        reply.request().method() === "POST", { timeout: 30_000 });
+        reply.request().method() === "POST");
       if (response.status() !== 200) throw new Error("invalid_production_session");
       return productionToken(await response.json(), now());
     });
@@ -65,7 +65,6 @@ export async function checkProductionSessionRefusal({
     const access = await readAccess();
     const response = await fetchImpl(ROUTE, {
       method: "POST", redirect: "manual", cache: "no-store",
-      signal: AbortSignal.timeout(30_000),
       headers: { ...access, origin: DEV_ADMIN, authorization: `Bearer ${token}` },
     });
     token = undefined;

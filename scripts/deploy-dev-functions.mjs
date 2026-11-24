@@ -27,8 +27,7 @@ async function readDevFunctions(root, request) {
     try {
       const fields = url.includes("/v1/") ? "functions(name,labels,eventTrigger),nextPageToken,unreachable" :
         "functions(name,labels,environment,eventTrigger,state,updateTime,buildConfig,serviceConfig),nextPageToken,unreachable";
-      return (await request({ url, params: { pageSize: 100, fields, ...(pageToken ? { pageToken } : {}) },
-        timeout: 15000, retry: false })).data;
+      return (await request({ url, params: { pageSize: 100, fields, ...(pageToken ? { pageToken } : {}) }, retry: false })).data;
     } catch { throw new Error("Could not read live Functions deployment inventory"); }
   }, { includeMetadata: true });
 }

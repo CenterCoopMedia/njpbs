@@ -444,7 +444,8 @@ describe("deployed Functions secret IAM", () => {
     expect(checker.with["persist-credentials"]).toBe(false);
     expect(checker.with["sparse-checkout-cone-mode"]).toBe(false);
     expect(checker.with["sparse-checkout"].trim().split("\n")).toEqual([
-      "scripts/check-cms-secret-iam.mjs", "scripts/lib/cms-target.mjs", "scripts/lib/functions-deploy-inventory.mjs", "scripts/lib/provider-call.mjs", "scripts/lib/functions-readbacks.sh",
+      "scripts/check-cms-secret-iam.mjs", "scripts/lib/cms-target.mjs", "scripts/lib/functions-deploy-inventory.mjs", "scripts/lib/provider-call.mjs", "functions/lib/release-wait.js",
+      "scripts/lib/functions-readbacks.sh",
     ]);
     const setup = steps.findIndex(step => step.name === "Set up Google Cloud CLI for Functions IAM");
     const deploy = steps.findIndex(step => step.id === "deploy_functions");

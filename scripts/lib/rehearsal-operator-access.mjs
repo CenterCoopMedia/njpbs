@@ -35,6 +35,7 @@ export function createRehearsalOperatorAccess({ target, readToken, fetchImpl = f
 }
 
 async function bounded(work, signal) {
+  if (!signal) return work;
   signal.throwIfAborted(); let abort;
   const canceled = new Promise((_, reject) => { abort = () => reject(new Error('Operator read expired')); signal.addEventListener('abort', abort, { once: true }); });
   try { return await Promise.race([work, canceled]); }
@@ -44,10 +45,10 @@ async function request(context, path, signal) {
   let response, reader;
   try {
     const token = await bounded(Promise.resolve().then(context.readToken), signal);
-    signal.throwIfAborted();
+    signal?.throwIfAborted();
     const pending = Promise.resolve(context.fetchImpl(`https://api.cloudflare.com/client/v4${path}`, {
       method: 'GET', headers: { authorization: `Bearer ${token}` }, redirect: 'error', signal }));
-    void pending.then(value => { if (signal.aborted) void value.body?.cancel().catch(() => {}); }, () => {});
+    void pending.then(value => { if (signal?.aborted) void value.body?.cancel().catch(() => {}); }, () => {});
     response = await bounded(pending, signal);
     if (!response.ok || !response.body) refuse();
     reader = response.body.getReader(); const chunks = []; let size = 0;
@@ -70,11 +71,10 @@ function list(envelope, limit) {
 
 /** Every call performs fresh control-plane GETs. The opaque handle binds only
  * the named target; neither JSON nor a prior digest can certify privacy. */
-export async function assertRehearsalOperatorAccessCurrent(handle, identity, callerSignal) {
+export async function assertRehearsalOperatorAccessCurrent(handle, identity, signal) {
   try {
     const context = prepared.get(handle), target = context?.target;
     if (!context || identity.accountId !== target.accountId || identity.workerName !== target.workerName || identity.versionId !== target.versionId) refuse();
-    const signal = AbortSignal.any([AbortSignal.timeout(30_000), ...(callerSignal ? [callerSignal] : [])]);
     const account = `/accounts/${target.accountId}`, origin = new URL(target.origin);
     const domains = list(await request(context, `${account}/workers/domains`, signal), 1000);
     const matching = domains.filter(row => row.service === target.workerName);
@@ -104,7 +104,7 @@ export async function assertRehearsalOperatorAccessCurrent(handle, identity, cal
     if (token.id !== target.serviceTokenId || token.client_id !== target.clientId || token.enabled !== true ||
         token.leak_reported_at || token.leak_report_url || Object.hasOwn(token, 'client_secret') ||
         !(token.duration === 'forever' && token.expires_at == null || Number.isFinite(Date.parse(token.expires_at)) && Date.parse(token.expires_at) > Date.now() + 60_000)) refuse();
-    signal.throwIfAborted();
+    signal?.throwIfAborted();
     return Object.freeze({ receiptDigest: protocol.publicReleaseDigest({ kind: 'rehearsal-operator-access', target,
       domain: { id: domain.id, hostname: domain.hostname, service: domain.service, zoneId: domain.zone_id },
       application: { id: app.id, type: app.type, domain: app.domain, aud: app.aud },

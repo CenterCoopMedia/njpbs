@@ -107,7 +107,7 @@ it.each(["before", "after-hit", "after-miss"])("bounds a stalled real SDK author
   let expired: ReturnType<typeof setTimeout> | undefined;
   try {
     const ceiling = new Promise<never>((_resolve, reject) => { expired = setTimeout(() => reject(new Error("SDK read still pending after caller deadline")), 500); });
-    await expect(Promise.race([result, ceiling])).rejects.toThrow("Private pair read deadline");
+    await expect(Promise.race([result, ceiling])).rejects.toThrow("Private pair read stopped");
     expect(get).toHaveBeenCalledTimes(point === "before" ? 0 : 1);
   } finally { clearTimeout(abort); if (expired) clearTimeout(expired); release(); }
 });
@@ -122,6 +122,6 @@ it("bounds a stalled object GET, forwards its signal and cancels a late returned
   }) };
   const store = createBootstrapReadStore({ firestore, attempt: f.attempt, objects, enabled: true, signal: controller.signal });
   const result = store.get(keys()[0]); await observed; controller.abort();
-  await expect(result).rejects.toThrow("Private pair read deadline"); expect(propagated?.aborted).toBe(true); expect(objects.get).not.toHaveBeenCalled();
+  await expect(result).rejects.toThrow("Private pair read stopped"); expect(propagated?.aborted).toBe(true); expect(objects.get).not.toHaveBeenCalled();
   release(); await cancellation; expect(objects.getWithSignal).toHaveBeenCalledTimes(1);
 });

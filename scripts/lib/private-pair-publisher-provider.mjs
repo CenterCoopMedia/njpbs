@@ -264,7 +264,7 @@ export function createPrivatePairPublisherProvider({ prepared, fetchImpl, readTo
       const headers = { Authorization: `Bearer ${token}` };
       if (body !== undefined && !(body instanceof FormData)) headers["Content-Type"] = "application/json";
       dispatched = true;
-      const response = await fetchImpl(`${API}${path}`, { method, headers, body: body instanceof FormData ? body : body === undefined ? undefined : JSON.stringify(body), redirect: "error", signal: AbortSignal.timeout(30_000) });
+      const response = await fetchImpl(`${API}${path}`, { method, headers, body: body instanceof FormData ? body : body === undefined ? undefined : JSON.stringify(body), redirect: "error" });
       if (method === "GET" && allowNotFound && response.status === 404) { await response.body?.cancel(); return null; }
       requireValue(response.ok && !response.redirected, "http-rejected");
       const chunks = [];

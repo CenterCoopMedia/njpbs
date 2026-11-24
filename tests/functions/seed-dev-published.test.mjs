@@ -421,7 +421,7 @@ describe('isolated published-content seed', () => {
     const manifest = await exportSeed({ fetchImpl });
     expect(manifest.records.find(record => record.id === 'image-1').projection.sizeBytes).toBe(mediaBytes.length);
     expect(fetchImpl).toHaveBeenCalledExactlyOnceWith(mediaUrl,
-      expect.objectContaining({ method: 'HEAD', redirect: 'manual', credentials: 'omit', signal: expect.any(AbortSignal) }));
+      expect.objectContaining({ method: 'HEAD', redirect: 'manual', credentials: 'omit' }));
   });
   it.each([null, '', 'unknown', '1.5'])('measures a streamed brand GET when HEAD length is %s', async headLength => {
     const url = 'https://njpbs.org/brand/newsletter/abstract-blue-folds.webp';
@@ -440,7 +440,7 @@ describe('isolated published-content seed', () => {
     expect(validateManifest(manifest).hash).toBe(manifest.hash);
     expect(fetchImpl).toHaveBeenCalledTimes(2);
     for (const [index, method] of ['HEAD', 'GET'].entries()) expect(fetchImpl).toHaveBeenNthCalledWith(index + 1, url,
-      expect.objectContaining({ method, redirect: 'manual', credentials: 'omit', signal: expect.any(AbortSignal) }));
+      expect.objectContaining({ method, redirect: 'manual', credentials: 'omit', ...(method === 'GET' ? { signal: expect.any(AbortSignal) } : {}) }));
   });
   it('aborts and cancels an oversized GET stream at the 25 MiB boundary', async () => {
     let signal; let chunks = 0;

@@ -199,7 +199,6 @@ async function probeGuideHost(origin, { optional = false } = {}) {
         const answer = await fetch(new URL(probe.path, origin), {
           cache: "no-store",
           redirect: "follow",
-          signal: AbortSignal.timeout(15_000),
         });
         if (answer.status >= 500 || answer.status === 429) throw httpFault(answer);
         return answer;

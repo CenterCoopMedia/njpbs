@@ -224,7 +224,7 @@ function publicMedia(value) {
   return { ...publicMediaFields(value), sizeBytes: value.sizeBytes };
 }
 async function publicMediaSize(url, mimeType, id, fetchImpl) {
-  const head = await fetchImpl(url, { method: 'HEAD', redirect: 'manual', credentials: 'omit', signal: AbortSignal.timeout(30_000) });
+  const head = await fetchImpl(url, { method: 'HEAD', redirect: 'manual', credentials: 'omit' });
   const headType = (head.headers.get('content-type') ?? '').split(';')[0].trim().toLowerCase();
   if (head.status !== 200 || headType !== mimeType) fail(`Cannot verify public media metadata: ${id}`);
   const headLength = head.headers.get('content-length');
@@ -232,9 +232,8 @@ async function publicMediaSize(url, mimeType, id, fetchImpl) {
 
   // Some public hosts omit HEAD length. Count bytes without retaining the body.
   const controller = new AbortController();
-  const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(30_000)]);
   try {
-    const response = await fetchImpl(url, { method: 'GET', redirect: 'manual', credentials: 'omit', signal });
+    const response = await fetchImpl(url, { method: 'GET', redirect: 'manual', credentials: 'omit', signal: controller.signal });
     const responseType = (response.headers.get('content-type') ?? '').split(';')[0].trim().toLowerCase();
     if (response.status !== 200 || responseType !== mimeType) fail(`Cannot verify public media metadata: ${id}`);
     const lengthHeader = response.headers.get('content-length');
@@ -498,7 +497,7 @@ export async function copyMedia({ manifest, directory, fetchImpl = fetch }) {
   await mkdir(objectDirectory, { recursive: true, mode: 0o700 });
   for (const sourceUrl of manifest.mediaUrls) {
     assertPublicMediaUrl(sourceUrl);
-    const response = await fetchImpl(sourceUrl, { redirect: 'manual', signal: AbortSignal.timeout(120_000), credentials: 'omit' });
+    const response = await fetchImpl(sourceUrl, { redirect: 'manual', credentials: 'omit' });
     if (response.status !== 200 || !response.body) fail('Public media download failed or redirected');
     const mimeType = (response.headers.get('content-type') ?? '').split(';')[0].trim().toLowerCase();
     if (!COPY_TYPES.includes(mimeType)) fail('Unsupported public media response type');

@@ -15,7 +15,6 @@ import { readRehearsalInstalledState } from '../../scripts/lib/rehearsal-install
 import { createInstalledRehearsalPreflights } from '../../scripts/lib/rehearsal-installed-preflights.mjs';
 import { createRehearsalPublicOwners } from '../../scripts/lib/rehearsal-public-owners.mjs';
 import { InstalledRehearsalStop } from '../../scripts/lib/rehearsal-installed-stop.mjs';
-import { setTimeout as delay } from 'node:timers/promises';
 import { openRehearsalJournal } from '../../scripts/lib/rehearsal-installed-journal.mjs';
 import { openRehearsalControlObserver, readRehearsalControlEvidence } from '../../scripts/lib/rehearsal-installed-controls.mjs';
 
@@ -124,7 +123,7 @@ describe.sequential('installed rehearsal current SDK authority', () => {
   }
   it('records real timed native readiness observations and independently verifies an audit prefix', async () => {
     await monitor('native-control-positive', async (observer, options) => {
-      // Each real timer sample includes native observation and commit time.
+      // Each paced sample includes native observation and commit time.
       // Wait for committed rows; sampler failures must still fail immediately.
       await vi.waitUntil(async () => {
         observer.assertHealthy();
@@ -147,14 +146,6 @@ describe.sequential('installed rehearsal current SDK authority', () => {
       try { await expect(observer.sampleNow()).rejects.toThrow(); }
       finally { if (before.exists) await ref.set(before.data()!); else await ref.delete(); }
       expect(() => observer.assertHealthy()).toThrow();
-      await expect(readRehearsalControlEvidence(options)).rejects.toThrow();
-      await expect(openRehearsalControlObserver(options)).rejects.toThrow();
-    });
-  });
-  it('refuses an unobserved gap and cannot start a new parent across that gap', async () => {
-    await monitor('native-control-gap', async (observer, options) => {
-      await observer.sampleNow(); await observer.sampleNow(); observer.stop();
-      await delay(5100);
       await expect(readRehearsalControlEvidence(options)).rejects.toThrow();
       await expect(openRehearsalControlObserver(options)).rejects.toThrow();
     });

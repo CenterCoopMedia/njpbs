@@ -7,8 +7,6 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 const MAX_CREDENTIAL_BYTES = 16 * 1024;
-const SIGN_IN_TIMEOUT_MS = 60_000;
-const CREDENTIAL_TIMEOUT_MS = 10_000;
 const CREDENTIAL_FD = 3;
 const MINIMUM_BROWSER_VERSION = "156.0.8078.73";
 const BROWSER_SAFETY_ERRORS = [
@@ -106,16 +104,9 @@ export function parseBrowserCredential(input) {
   return { email: credential.email, password: credential.password };
 }
 
-export async function readBrowserCredential(
-  stream,
-  timeoutMs = CREDENTIAL_TIMEOUT_MS,
-) {
+export async function readBrowserCredential(stream) {
   if (!stream || stream.isTTY) throw new Error("invalid_credential");
   stream.setEncoding("utf8");
-  const timeout = setTimeout(
-    () => stream.destroy(new Error("credential_timeout")),
-    timeoutMs,
-  );
   let input = "";
   try {
     for await (const chunk of stream) {
@@ -126,15 +117,9 @@ export async function readBrowserCredential(
     }
     return parseBrowserCredential(input);
   } catch (error) {
-    if (
-      error?.message === "invalid_credential" ||
-      error?.message === "credential_timeout"
-    ) {
-      throw error;
-    }
+    if (error?.message === "invalid_credential") throw error;
     throw new Error("invalid_credential");
   } finally {
-    clearTimeout(timeout);
     if (!stream.destroyed) stream.destroy();
   }
 }
@@ -179,17 +164,17 @@ export async function openAuthenticatedCmsBrowser({
     if (shouldStop()) throw new Error("browser_sign_in_failed");
     const context = await browser.newContext();
     const page = await context.newPage();
-    page.setDefaultTimeout(SIGN_IN_TIMEOUT_MS);
+    // No Playwright clock: sign-in ends on what Admin reports.
+    page.setDefaultTimeout(0);
     await page.goto("https://admin.njpbs.org/", {
       waitUntil: "domcontentloaded",
-      timeout: SIGN_IN_TIMEOUT_MS,
     });
     if (new URL(page.url()).origin !== "https://admin.njpbs.org") {
       throw new Error("browser_sign_in_failed");
     }
     await submitCmsSignIn(page, async () => credential, () => page
       .getByRole("button", { name: /^Account menu for / })
-      .waitFor({ state: "visible", timeout: SIGN_IN_TIMEOUT_MS }));
+      .waitFor({ state: "visible" }));
     if (new URL(page.url()).origin !== "https://admin.njpbs.org") {
       throw new Error("browser_sign_in_failed");
     }
@@ -316,7 +301,6 @@ async function main() {
     const allowed = [
       "invalid_arguments",
       "invalid_credential",
-      "credential_timeout",
       "browser_sign_in_failed",
       "debug_logging_not_allowed",
       ...BROWSER_SAFETY_ERRORS,

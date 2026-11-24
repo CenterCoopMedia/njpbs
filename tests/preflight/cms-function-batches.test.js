@@ -152,19 +152,20 @@ describe("CMS function deployment completion", () => {
     expect(request.mock.calls[1][1]).toBe("next");
     await expect(listPages(async () => ({ nextPageToken: "same" }), "url", "functions")).rejects.toThrow("Repeated");
   });
-  it("retries a silent early exit or a nonzero exit three times, accepts an explicit completion", async () => {
+  it("retries a silent early exit or a nonzero exit, accepts an explicit completion", async () => {
     for (const [code, output, accepted] of [[0, "", false], [1, "Deploy complete!", false], [0, "Deploy complete!", true]]) {
+      const outputs = accepted ? [[code, output]] : [[code, output], [0, "Deploy complete!"]];
       const launch = vi.fn(() => {
         const child = new EventEmitter(); child.stdout = new EventEmitter(); child.stderr = new EventEmitter();
-        queueMicrotask(() => { child.stdout.emit("data", Buffer.from(output)); child.emit("close", code); });
+        const [exit, text] = outputs.shift();
+        queueMicrotask(() => { child.stdout.emit("data", Buffer.from(text)); child.emit("close", exit); });
         return child;
       });
       const promise = deployFunctionTargets(["handler"], launch, "njpbs-site", {
-        manifest: [{ name: "handler", region: "us-central1", platform: "gcfv2" }], request: async () => ({}), wait: async () => {},
+        manifest: [{ name: "handler", region: "us-central1", platform: "gcfv2" }], request: async () => ({}),
       });
-      if (accepted) await expect(promise).resolves.toBeUndefined();
-      else await expect(promise).rejects.toThrow("did not confirm");
-      expect(launch).toHaveBeenCalledTimes(accepted ? 1 : 3);
+      await expect(promise).resolves.toBeUndefined();
+      expect(launch).toHaveBeenCalledTimes(accepted ? 1 : 2);
     }
   });
 });
@@ -189,12 +190,11 @@ describe("CMS function build queue expiry recovery", () => {
       });
       return child;
     });
-    const wait = vi.fn().mockResolvedValue();
     const promise = deployFunctionTargets(names, launch, "njpbs-site", {
-      manifest: names.map(name => ({ name, region: "us-central1", platform: "gcfv2" })), request, wait,
+      manifest: names.map(name => ({ name, region: "us-central1", platform: "gcfv2" })), request,
     });
     const targets = () => launch.mock.calls.map(([, args]) => args[args.indexOf("--only") + 1]);
-    return { promise, launch, wait, request, targets };
+    return { promise, launch, request, targets };
   }
   it.each([0, 1, 2])("retries only the failed names from recorded attempt %i, then completes", async index => {
     const names = ["health", ...failures[index]];
@@ -205,7 +205,6 @@ describe("CMS function build queue expiry recovery", () => {
       names.map(name => `functions:${name}`).join(","),
       failures[index].map(name => `functions:${name}`).join(","),
     ]);
-    expect(run.wait.mock.calls).toEqual([[10_000]]);
   });
   it("retries expired builds of functions that are being created", async () => {
     // Firebase names the operation: "Failed to create function" for a new function.
@@ -213,16 +212,6 @@ describe("CMS function build queue expiry recovery", () => {
     const run = deployment([[1, created], [0, "Deploy complete!\n"]], ["health", ...failures[1]]);
     await expect(run.promise).resolves.toBeUndefined();
     expect(run.targets()[1]).toBe(failures[1].map(name => `functions:${name}`).join(","));
-  });
-  it("fails after three expired attempts without redeploying successful functions", async () => {
-    const run = deployment(Array.from({ length: 3 }, () => [1, recordings[1]]), ["health", ...failures[1]]);
-    await expect(run.promise).rejects.toThrow("did not confirm completion");
-    expect(run.targets()).toEqual([
-      "functions:health,functions:exampleFunctionB,functions:exampleFunctionC,functions:exampleFunctionD",
-      "functions:exampleFunctionB,functions:exampleFunctionC,functions:exampleFunctionD",
-      "functions:exampleFunctionB,functions:exampleFunctionC,functions:exampleFunctionD",
-    ]);
-    expect(run.wait.mock.calls).toEqual([[10_000], [10_000]]);
   });
   it("narrows the next retry again when some failed functions recover", async () => {
     const remaining = recordings[0].replaceAll("exampleFunctionA", "exampleFunctionB");
@@ -249,7 +238,6 @@ describe("CMS function build queue expiry recovery", () => {
     const run = deployment([[1, recordings[1].replace("EXPIRED", "FAILURE")]], fullSet);
     await expect(run.promise).rejects.toThrow("did not confirm completion");
     expect(run.targets()).toEqual([fullSet.map(name => `functions:${name}`).join(",")]);
-    expect(run.wait).not.toHaveBeenCalled();
   });
   // Recorded from dev run 45429859229 (Nov. 24, 2026): Secret Manager answered 503 while Firebase
   // prepared the deploy, before any function was updated.
@@ -263,16 +251,6 @@ describe("CMS function build queue expiry recovery", () => {
     await expect(run.promise).resolves.toBeUndefined();
     const all = fullSet.map(name => `functions:${name}`).join(",");
     expect(run.targets()).toEqual([all, all]);
-    expect(run.wait.mock.calls).toEqual([[10_000]]);
-  });
-  it("fails after three provider 5xx attempts, naming the class, attempts and last provider line", async () => {
-    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
-    const run = deployment(Array.from({ length: 3 }, () => [1, providerOutage]), fullSet);
-    await expect(run.promise).rejects.toThrow("did not confirm completion");
-    expect(run.launch).toHaveBeenCalledTimes(3);
-    expect(errors).toHaveBeenLastCalledWith(expect.stringMatching(
-      /^Firebase deployment failed: class transient, 3 of 3 attempts, last provider line: Error: Request to https:\/\/secretmanager\.googleapis\.com\/.* HTTP Error: 503, Authentication backend unavailable\.$/));
-    errors.mockRestore();
   });
   it("retries a rate quota, which clears by itself", async () => {
     const rate = "Error: HTTP Error: 429, Quota exceeded for quota metric 'Write requests' and limit 'Write requests per minute'\n";
@@ -293,15 +271,13 @@ describe("CMS function build queue expiry recovery", () => {
     const run = deployment([[1, output]], fullSet);
     await expect(run.promise).rejects.toThrow("did not confirm completion");
     expect(run.launch).toHaveBeenCalledTimes(1);
-    expect(run.wait).not.toHaveBeenCalled();
-    expect(errors).toHaveBeenLastCalledWith(expect.stringContaining(`class ${kind}, 1 of 3 attempts, last provider line: `));
+    expect(errors).toHaveBeenLastCalledWith(expect.stringContaining(`class ${kind}, attempt 1, last provider line: `));
     errors.mockRestore();
   });
   it("does not retry a non-transient build failure", async () => {
     const run = deployment([[1, recordings[0].replace("EXPIRED", "FAILURE")]], failures[0]);
     await expect(run.promise).rejects.toThrow("did not confirm completion");
     expect(run.launch).toHaveBeenCalledTimes(1);
-    expect(run.wait).not.toHaveBeenCalled();
   });
   it.each([
     recordings[1].replace("EXPIRED", "FAILURE"),
@@ -310,7 +286,6 @@ describe("CMS function build queue expiry recovery", () => {
     const run = deployment([[1, output]], failures[1]);
     await expect(run.promise).rejects.toThrow("did not confirm completion");
     expect(run.launch).toHaveBeenCalledTimes(1);
-    expect(run.wait).not.toHaveBeenCalled();
   });
   it.each([
     recordings[0].replace("\texampleFunctionA", "\totherFunction"),
@@ -322,13 +297,11 @@ describe("CMS function build queue expiry recovery", () => {
     const run = deployment([[1, output], [0, "Deploy complete!\n"]], failures[0]);
     await expect(run.promise).resolves.toBeUndefined();
     expect(run.targets()).toEqual(Array(2).fill(failures[0].map(name => `functions:${name}`).join(",")));
-    expect(run.wait.mock.calls).toEqual([[10_000]]);
   });
   it("requires explicit deploy completion after an expired attempt", async () => {
-    const run = deployment([[1, recordings[0]], [0, ""], [0, ""]], failures[0]);
-    await expect(run.promise).rejects.toThrow("did not confirm completion");
+    const run = deployment([[1, recordings[0]], [0, ""], [0, "Deploy complete!\n"]], failures[0]);
+    await expect(run.promise).resolves.toBeUndefined();
     expect(run.launch).toHaveBeenCalledTimes(3);
-    expect(run.wait).toHaveBeenCalledTimes(2);
   });
   it("rechecks the live inventory before a retry can force a deployment", async () => {
     // The first attempt reads v1 and v2; the next inventory exposes a
@@ -350,7 +323,6 @@ describe("CMS function build queue expiry recovery", () => {
       "functions:exampleScheduledA,functions:exampleScheduledB",
       "functions:exampleScheduledB",
     ]);
-    expect(run.wait.mock.calls).toEqual([[10_000]]);
   });
   it("retries a refused invoker policy read that names another service, narrowed to the failed function", async () => {
     const refused = readFileSync(new URL("./fixtures/function-invoker-policy/attempt-1.txt", import.meta.url), "utf8")

@@ -1,7 +1,6 @@
 import { createRequire } from 'node:module';
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
-import { setTimeout as delay } from 'node:timers/promises';
 import protocol from '../../functions/lib/public-release-pair.js';
 import work from '../../functions/lib/public-release-pair-work.js';
 import replay from '../../functions/lib/public-release-pair-replay.js';
@@ -28,6 +27,7 @@ import { openRehearsalControlObserver, readRehearsalControlEvidence } from './re
 import { prepareRehearsalAcceptedRecovery, advanceRehearsalAcceptedRecovery } from './rehearsal-accepted-recovery.mjs';
 import { waitForRehearsalReplay } from './rehearsal-replay-catch-up.mjs';
 
+const { waitFor: waitForState } = createRequire(import.meta.url)('../../functions/lib/release-wait.js');
 const { require: typedRequire } = createRequire(new URL('../../site/package.json', import.meta.url))('tsx/cjs/api');
 const { advancePublicReleaseSwitchCodeHead } = typedRequire('../../site/scripts/public-release-switch-code-head.ts', import.meta.url);
 const sessions = new WeakMap();
@@ -122,14 +122,11 @@ export async function createInstalledRehearsalSession(options = {}) {
   const previewResults = new Map();
   const issued = new Map();
   const pathFor = step => step === 'scheduled' ? options.scheduledPath : publications.get(step)?.path;
-  async function waitFor(action) {
-    const deadline = Date.now() + 120_000;
-    while (true) {
+  function waitFor(action) {
+    return waitForState('installed rehearsal state', async () => {
       signal?.throwIfAborted();
-      const result = await action(); if (result) return result;
-      if (Date.now() >= deadline) refuse();
-      await delay(500, undefined, { signal });
-    }
+      const result = await action(); return result ? { done: result } : { pending: null };
+    }, { signal });
   }
   async function recovery() { current(); await options.captureRecovery(signal); }
   async function caughtUp() {

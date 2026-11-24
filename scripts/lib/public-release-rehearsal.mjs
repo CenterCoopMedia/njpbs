@@ -192,8 +192,8 @@ export function parseRehearsalPacket(packet) {
 }
 
 /** Legacy adapters cross a process boundary without the parent credential
- * environment. Opaque installed sessions use their native owner deadlines. */
-export async function invokeRehearsalAdapter(request, { timeoutMs = 60_000, developmentCredential, installedSession } = {}) {
+ * environment. Opaque installed sessions use their native owners. */
+export async function invokeRehearsalAdapter(request, { developmentCredential, installedSession } = {}) {
   const packet = parseRehearsalPacket(request.packet), development = packet.schemaVersion === 2;
   if (installedSession !== undefined) {
     const { installedRehearsalSession } = await import('./rehearsal-installed-session.mjs');
@@ -212,26 +212,23 @@ export async function invokeRehearsalAdapter(request, { timeoutMs = 60_000, deve
         GOOGLE_CLOUD_PROJECT: packet.projectId }, stdio: ['pipe', 'pipe', 'pipe', ...(development ? ['pipe'] : [])],
     });
     let output = '', exceeded = false;
-    const timer = setTimeout(() => child.kill('SIGKILL'), timeoutMs);
     child.stdout.on('data', data => {
       output += data;
       if (Buffer.byteLength(output) > replyLimit) { exceeded = true; child.kill('SIGKILL'); }
     });
     // Neither arbitrary child output nor provider/credential errors enter reports.
     child.stderr.resume();
-    child.on('error', () => { clearTimeout(timer); reject(new RehearsalRefusal('adapter-start-failed')); });
+    child.on('error', () => reject(new RehearsalRefusal('adapter-start-failed')));
     child.on('close', (code, signal) => {
-      clearTimeout(timer);
       if (exceeded) return reject(new RehearsalRefusal('adapter-reply-too-large'));
       if (request.action === 'interrupt-qualification' && code === 86 && !signal) return accept({ interrupted: true });
-      if (code !== 0 || signal) return reject(new RehearsalRefusal(signal === 'SIGKILL' ? 'adapter-timeout' : 'adapter-exit'));
+      if (code !== 0 || signal) return reject(new RehearsalRefusal('adapter-exit'));
       try { accept(JSON.parse(output)); } catch { reject(new RehearsalRefusal('adapter-reply-invalid')); }
     });
     child.stdin.on('error', () => {});
     if (development) {
       child.stdio[3].on('error', () => {});
       writeDevelopmentCredential(developmentCredential, child.stdio[3]).catch(() => {
-        clearTimeout(timer);
         child.kill('SIGKILL');
         reject(new RehearsalRefusal('development-credential-refused'));
       });
@@ -356,7 +353,7 @@ async function checkPublicBytes(packet, proof, state, operation, httpCredential,
   const response = await fetch(url, { redirect: 'manual', cache: 'no-store',
     headers: { 'x-rehearsal-expected-sha256': proof.bodyDigest,
       'x-rehearsal-expected-status': String(proof.status),
-      ...(httpCredential ? rehearsalHttpHeaders(httpCredential, url.origin) : {}) }, signal: AbortSignal.timeout(3_000) });
+      ...(httpCredential ? rehearsalHttpHeaders(httpCredential, url.origin) : {}) } });
   assert.equal(response.status, proof.status);
   if (proof.status === 302) {
     assert.equal(response.headers.get('location'), location);
@@ -387,7 +384,7 @@ async function checkOrdinaryIngress(packet, proof, httpCredential) {
   headers['x-rehearsal-expected-sha256'] = '0'.repeat(64);
   headers['x-rehearsal-expected-status'] = '418';
   if (httpCredential) Object.assign(headers, rehearsalHttpHeaders(httpCredential, url.origin));
-  const response = await fetch(url, { headers, redirect: 'manual', cache: 'no-store', signal: AbortSignal.timeout(3_000) });
+  const response = await fetch(url, { headers, redirect: 'manual', cache: 'no-store' });
   try {
     assert.equal(response.status, proof.status);
     for (const [name] of response.headers) {

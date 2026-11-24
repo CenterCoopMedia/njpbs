@@ -9,7 +9,7 @@ import { openStagedPublicReleasePairComposite } from "./public-release-pair-comp
 import type { PairViewStore } from "./public-release-pair-view-storage";
 import { PAIR_READER_PATH, PAIR_READER_REQUEST_LIMIT, PAIR_READER_BYTES_LIMIT, PAIR_READER_REPLY_LIMIT,
   exact, readerRefused, bytesDigest, same, compareReaderPaths, parseReaderRequest, parseReaderSeals, readBoundedBody,
-  withinReaderDeadline, PAIR_READER_DEADLINE_MS, type ReaderRequest, type ReaderSeals, type ReaderOutput, type ReaderNamespaceAbsenceReply } from "./public-release-pair-reader-contract";
+  withinReaderDeadline, type ReaderRequest, type ReaderSeals, type ReaderOutput, type ReaderNamespaceAbsenceReply } from "./public-release-pair-reader-contract";
 
 // A private batch has its own bounded budget. This does not change the public
 // decision deadline, public route handler or the active-source CMS reader.
@@ -70,7 +70,7 @@ export function createPrivatePairReader({ firestore, store, pair: rawPair, insta
   return async (httpRequest: Request): Promise<Response> => {
     if (httpRequest.method !== "POST" || new URL(httpRequest.url).pathname !== PAIR_READER_PATH ||
         new URL(httpRequest.url).search || httpRequest.headers.get("content-type") !== "application/json") return new Response(null, { status: 404 });
-    const signal = AbortSignal.any([httpRequest.signal, AbortSignal.timeout(PAIR_READER_DEADLINE_MS)]);
+    const signal = httpRequest.signal;
     const run = async () => {
       const request = parseReaderRequest(decode(await readBoundedBody(httpRequest.body, PAIR_READER_REQUEST_LIMIT, signal)), pair);
 

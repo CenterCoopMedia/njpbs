@@ -10,12 +10,11 @@ export function developmentInstallCredential(fd, parse, supplied) {
   stream.pause?.(); let pending;
   const read = () => pending ??= (async () => {
     const chunks = []; let size = 0, joined;
-    const timer = setTimeout(() => stream.destroy(new Error('Development install credential expired')), 10_000);
     try {
       for await (const chunk of stream) { const bytes = Buffer.from(chunk); size += bytes.length; chunks.push(bytes); if (size > 32768) refuse(); }
       joined = Buffer.concat(chunks); return parse(joined.toString('utf8'));
     } catch { return refuse(); }
-    finally { clearTimeout(timer); joined?.fill(0); chunks.forEach(value => value.fill(0)); stream.destroy(); }
+    finally { joined?.fill(0); chunks.forEach(value => value.fill(0)); stream.destroy(); }
   })();
   return { read, close: () => stream.destroy() };
 }

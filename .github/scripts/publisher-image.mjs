@@ -53,7 +53,7 @@ export async function verifySource({ sha, cwd = process.cwd(), env = process.env
 // in memory; response bodies and authorization headers never enter logs/files.
 export async function registryReader(account, token, imageName, request = fetch) {
   const response = await request(`https://api.cloudflare.com/client/v4/accounts/${account}/containers/registries/registry.cloudflare.com/credentials`, {
-    method: "POST", redirect: "error", signal: AbortSignal.timeout(30_000),
+    method: "POST", redirect: "error",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify({ expiration_minutes: 15, permissions: ["pull"] }),
   });
@@ -65,7 +65,7 @@ export async function registryReader(account, token, imageName, request = fetch)
   const authorization = `Basic ${Buffer.from(`v1:${envelope.result.password}`).toString("base64")}`;
   return async (tag) => {
     const manifest = await request(`https://registry.cloudflare.com/v2/${account}/${imageName}/manifests/${tag}`, {
-      method: "GET", redirect: "error", signal: AbortSignal.timeout(30_000),
+      method: "GET", redirect: "error",
       headers: { Authorization: authorization, Accept: "application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json" },
     });
     if (manifest.status === 404) return null;
@@ -79,7 +79,7 @@ export async function registryReader(account, token, imageName, request = fetch)
     if (!digestPattern.test(configDigest ?? "")) throw new ImageRefusal("Registry image config digest missing");
     const blobUrl = `https://registry.cloudflare.com/v2/${account}/${imageName}/blobs/${configDigest}`;
     let blob = await request(blobUrl, {
-      method: "GET", redirect: "manual", signal: AbortSignal.timeout(30_000), headers: { Authorization: authorization },
+      method: "GET", redirect: "manual", headers: { Authorization: authorization },
     });
     // Distribution permits a storage redirect. Never forward registry credentials.
     if ([302, 307].includes(blob.status)) {
@@ -87,7 +87,7 @@ export async function registryReader(account, token, imageName, request = fetch)
       if (!location) throw new ImageRefusal("Registry blob redirect missing");
       const download = new URL(location, blobUrl);
       if (download.protocol !== "https:" || download.username || download.password) throw new ImageRefusal("Registry blob redirect refused");
-      blob = await request(download.href, { method: "GET", redirect: "error", signal: AbortSignal.timeout(30_000) });
+      blob = await request(download.href, { method: "GET", redirect: "error" });
     }
     if (!blob.ok) throw new ImageRefusal("Registry image config lookup refused");
     const configBytes = Buffer.from(await blob.arrayBuffer());
@@ -202,7 +202,7 @@ async function main(mode, env = process.env) {
     await verifySource({ sha, env, request: async route => {
       const response = await fetch(`https://api.github.com${route}`, {
         headers: { Accept: "application/vnd.github+json", Authorization: `Bearer ${env.GH_TOKEN}` },
-        redirect: "error", signal: AbortSignal.timeout(30_000),
+        redirect: "error",
       });
       if (!response.ok) throw new ImageRefusal("Source CI lookup refused");
       return response.json();

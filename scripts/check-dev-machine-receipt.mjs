@@ -5,7 +5,7 @@ const receiptUrl = "https://dev-public.example.org/_publication.json";
 
 // Statuses and a valid GET's exact byte digest leave this probe. Access redirect
 // URLs, credentials and response bodies stay private.
-export async function checkDevMachineReceipt({ env = process.env, fetchImpl = fetch, log = console.log, signal, requestTimeoutMs = 30_000 } = {}) {
+export async function checkDevMachineReceipt({ env = process.env, fetchImpl = fetch, log = console.log, signal } = {}) {
   const id = env.CMS_DEV_ACCESS_CLIENT_ID;
   const secret = env.CMS_DEV_ACCESS_CLIENT_SECRET;
   if (!id || !secret) throw new Error("Missing dev Access credentials");
@@ -14,7 +14,7 @@ export async function checkDevMachineReceipt({ env = process.env, fetchImpl = fe
     const response = await fetchImpl(receiptUrl, {
       method,
       redirect: "manual",
-      signal: AbortSignal.any([AbortSignal.timeout(requestTimeoutMs), ...(signal ? [signal] : [])]),
+      signal,
       headers: { "CF-Access-Client-Id": id, "CF-Access-Client-Secret": secret },
     });
     log(`${method} /_publication.json: ${response.status}`);

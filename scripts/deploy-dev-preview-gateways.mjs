@@ -4,13 +4,14 @@ import { devDeploySourceSha } from "./lib/dev-deploy-source.mjs";
 import { activeWorkerDeploymentQuery, isActiveWorkerDeploymentPage } from './lib/cloudflare-active-worker-deployment.mjs';
 import { waitForWorkerReadback, WorkerReadbackMismatch, wranglerVersion } from './lib/cloudflare-worker-readback.mjs';
 import { spawnSync } from 'node:child_process';
+import { createRequire } from 'node:module';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
-import { setTimeout as sleep } from 'node:timers/promises';
 
+const { waitFor } = createRequire(import.meta.url)('../functions/lib/release-wait.js');
 const ACCOUNT = (process.env.CMS_DEV_CLOUDFLARE_ACCOUNT_ID ?? "");
 const HOST = 'dev-preview.example.org';
 const PRIVATE = 'template-dev-cms-preview';
@@ -72,22 +73,20 @@ function verifyDomain(domain, zoneId) {
     domain.enabled === true && domain.previews_enabled === false);
 }
 
-// #2957: custom-domain DNS/TLS provisioning is asynchronous. Retry only
-// transport/provisioning failures for five minutes; content or foreign login
-// redirects are never accepted. Network and clock are the test boundaries.
-export async function verifyDevPreviewAccessReady(fetchImpl = fetch, { now = Date.now, wait = sleep } = {}) {
-  const deadline = now() + 300_000;
-  while (true) {
-    let ready = true;
+// #2957: custom-domain DNS/TLS provisioning is asynchronous. Read again only
+// after transport/provisioning failures, until Access answers; content or
+// foreign login redirects are never accepted. The network is the test boundary.
+export async function verifyDevPreviewAccessReady(fetchImpl = fetch) {
+  await waitFor('dev preview Access readiness', async () => {
     for (const pathname of ['/', '/__cms-session', '/previews/denied/index.html']) {
       let response;
       try {
         response = await fetchImpl(`https://${HOST}${pathname}`, {
-          redirect: 'manual', credentials: 'omit', signal: AbortSignal.timeout(30_000),
+          redirect: 'manual', credentials: 'omit',
         });
-      } catch { ready = false; break; }
+      } catch { return { pending: `${pathname} unreachable` }; }
       await response.body?.cancel();
-      if ([404, 421, 502, 503, 504, 525, 526, 530].includes(response.status)) { ready = false; break; }
+      if ([404, 421, 502, 503, 504, 525, 526, 530].includes(response.status)) return { pending: `${pathname} ${response.status}` };
       let location;
       try { location = new URL(response.headers.get('location') ?? 'https://invalid.example'); }
       catch { throw new Error('Dev preview Access refusal differs'); }
@@ -95,10 +94,8 @@ export async function verifyDevPreviewAccessReady(fetchImpl = fetch, { now = Dat
         location.pathname === `/cdn-cgi/access/login/${HOST}` && !location.username && !location.password &&
         ![...response.headers.keys()].some(name => name.startsWith('x-njpbs-')));
     }
-    if (ready) return;
-    requireState(now() < deadline);
-    await wait(Math.min(10_000, deadline - now()));
-  }
+    return { done: true };
+  });
 }
 
 // Only this new custom hostname can be attached. Existing routes and DNS owners
@@ -114,7 +111,7 @@ export async function deployDevPreviewGateways(options = {}) {
 }
 
 async function releaseDevPreviewGateways({ env = process.env, fetchImpl = fetch,
-  spawn = spawnSync, log = console.log, readbackClock } = {}, diagnostic) {
+  spawn = spawnSync, log = console.log } = {}, diagnostic) {
   function setPhase(phase) {
     diagnostic.phase = phase;
     diagnostic.status = undefined;
@@ -137,7 +134,7 @@ async function releaseDevPreviewGateways({ env = process.env, fetchImpl = fetch,
     diagnostic.mismatch = undefined;
     try {
       const response = await fetchImpl(`https://api.cloudflare.com/client/v4${suffix}`, {
-        method, redirect: 'error', signal: AbortSignal.timeout(15_000),
+        method, redirect: 'error',
         headers: { Authorization: `Bearer ${env.CLOUDFLARE_API_TOKEN}`, 'Content-Type': 'application/json' },
         ...(body ? { body: JSON.stringify(body) } : {}),
       });
@@ -283,7 +280,7 @@ async function releaseDevPreviewGateways({ env = process.env, fetchImpl = fetch,
       setPhase(`wrangler-deploy:${config.name}`);
       const result = spawn(new URL('node_modules/.bin/wrangler', ROOT).pathname,
         ['deploy', '--config', filename, '--tag', sourceSha], {
-          stdio: ['ignore', 'pipe', 'ignore'], encoding: 'utf8', maxBuffer: 4 * 1024 * 1024, timeout: 300_000,
+          stdio: ['ignore', 'pipe', 'ignore'], encoding: 'utf8', maxBuffer: 4 * 1024 * 1024,
           env: { PATH: env.PATH, HOME: env.HOME, CI: 'true', CLOUDFLARE_API_TOKEN: env.CLOUDFLARE_API_TOKEN,
             CLOUDFLARE_ACCOUNT_ID: ACCOUNT, WRANGLER_SEND_METRICS: 'false', WRANGLER_WRITE_LOGS: 'false' },
         });
@@ -291,7 +288,7 @@ async function releaseDevPreviewGateways({ env = process.env, fetchImpl = fetch,
       const versionId = wranglerVersion(result.stdout);
       requireState(versionId);
       const startedAt = performance.now();
-      identities.push(await waitForWorkerReadback(() => collect(config.name, versionId), readbackClock));
+      identities.push(await waitForWorkerReadback(() => collect(config.name, versionId)));
       readbackMs.push(Math.round(performance.now() - startedAt));
     }
     const staged = await inventory('staged-inventory');

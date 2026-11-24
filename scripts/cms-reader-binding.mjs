@@ -108,7 +108,7 @@ const binding = () => {
 
 async function cloudflare(path) {
   const response = await fetch(`https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/${path}`,
-    { redirect: "error", headers: { authorization: `Bearer ${process.env.CLOUDFLARE_API_TOKEN}` }, signal: AbortSignal.timeout(15_000) });
+    { redirect: "error", headers: { authorization: `Bearer ${process.env.CLOUDFLARE_API_TOKEN}` } });
   const body = await response.json();
   if (!response.ok || body?.success !== true) fail("The live CMS API reader binding could not be read");
   return body.result;

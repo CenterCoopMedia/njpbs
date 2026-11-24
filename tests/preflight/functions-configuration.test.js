@@ -282,7 +282,7 @@ describe("Functions configuration contract", () => {
       .rejects.toThrow("CLOUDFLARE_API_TOKEN cannot read the fixture-media lifecycle: give the production deploy token the account permission Workers R2 Storage Read");
     await expect(verifyMediaLifecycle(env.CLOUDFLARE_ACCOUNT_ID, "fixture-media", "token", reply(200, { success: true, result: { rules: [] } })))
       .rejects.toThrow("npx wrangler r2 bucket lifecycle add fixture-media cms-media-staging-expiry cms-media-staging/ --expire-days 7");
-    await expect(verifyMediaLifecycle(env.CLOUDFLARE_ACCOUNT_ID, "fixture-media", "token", reply(500), async () => {})).rejects.toThrow("Could not verify media bucket retention lifecycle");
+    await expect(verifyMediaLifecycle(env.CLOUDFLARE_ACCOUNT_ID, "fixture-media", "token", reply(404))).rejects.toThrow("Could not verify media bucket retention lifecycle");
     await expect(verifyMediaLifecycle(env.CLOUDFLARE_ACCOUNT_ID, "fixture-media", "token", reply(200, { success: true, result: { rules: [rule] } }))).resolves.toBeUndefined();
   });
 

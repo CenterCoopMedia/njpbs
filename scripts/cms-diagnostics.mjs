@@ -8,9 +8,6 @@ import publicDeployment from "../functions/lib/public-deployment-pointer.js";
 const { previewTimings, previewStartup } = timingsModule;
 const { isPublicDeploymentIdentifier } = publicDeployment;
 
-const TIMEOUT_MS = 10_000;
-// The Worker allows three seconds for its reader, before transport time.
-const CANDIDATE_PROBE_TIMEOUT_MS = 5_000;
 const MAX_BYTES = 256 * 1024;
 const SHA = /^[a-f0-9]{40}$/;
 const QUEUE_ID = /^[a-zA-Z0-9]{20}$/;
@@ -62,16 +59,8 @@ export function parseCredential(input, env = process.env) {
   // Discard caller-supplied endpoints and all unrelated credential fields.
   return { projectId: "njpbs-site", clientEmail: value.client_email, privateKey: value.private_key };
 }
-async function bounded(operation) {
-  let timer;
-  try {
-    return await Promise.race([operation(), new Promise((_, reject) => {
-      timer = setTimeout(() => reject(new Error("timeout")), TIMEOUT_MS);
-    })]);
-  } finally { clearTimeout(timer); }
-}
 async function fetchJson(url, fetcher) {
-  const response = await fetcher(url, { signal: AbortSignal.timeout(TIMEOUT_MS), redirect: "error", credentials: "omit" });
+  const response = await fetcher(url, { redirect: "error", credentials: "omit" });
   if (!response.ok) fail("http_error");
   const reader = response.body.getReader();
   let bytes = 0;
@@ -104,8 +93,7 @@ async function candidateProbe(pointer, readCandidate, fetcher) {
   const started = performance.now();
   let response;
   try {
-    response = await fetcher(url.href, { signal: AbortSignal.timeout(CANDIDATE_PROBE_TIMEOUT_MS),
-      redirect: "error", credentials: "omit", headers: { "cache-control": "no-cache" } });
+    response = await fetcher(url.href, { redirect: "error", credentials: "omit", headers: { "cache-control": "no-cache" } });
   } catch {
     return { status: null, durationMs: Math.round(performance.now() - started), refreshOutcome: "unknown" };
   }
@@ -161,16 +149,16 @@ export function firestoreReads(db, queueId) {
     },
   };
 }
-const SAFE_CODES = new Set(["invalid_arguments", "invalid_credential", "emulator_not_allowed", "invalid_data", "not_found", "http_error", "timeout"]);
+const SAFE_CODES = new Set(["invalid_arguments", "invalid_credential", "emulator_not_allowed", "invalid_data", "not_found", "http_error"]);
 function safeCode(error) { return SAFE_CODES.has(error?.message) ? error.message : "unavailable"; }
 async function gitRevision(ref) {
-  const { stdout } = await promisify(execFile)("git", ["rev-parse", "--verify", ref], { timeout: TIMEOUT_MS, maxBuffer: 1024 });
+  const { stdout } = await promisify(execFile)("git", ["rev-parse", "--verify", ref], { maxBuffer: 1024 });
   return required(sha(stdout.trim()));
 }
 export async function diagnose({ fetcher = fetch, readGit = gitRevision, reads, firebaseError, checkedAt = new Date().toISOString() } = {}) {
   const report = { checkedAt, ok: true, checks: {} };
   async function check(name, operation) {
-    try { report.checks[name] = { ok: true, data: await bounded(operation) }; }
+    try { report.checks[name] = { ok: true, data: await operation() }; }
     catch (error) { report.ok = false; report.checks[name] = { ok: false, error: safeCode(error) }; }
   }
   async function checkDeployment() {
@@ -244,7 +232,7 @@ async function main() {
     const options = parseArguments(process.argv.slice(2));
     if (options.firebase) {
       try {
-        const credential = parseCredential(await bounded(readStdin));
+        const credential = parseCredential(await readStdin());
         const { initializeApp, cert } = await import("firebase-admin/app");
         const { getFirestore } = await import("firebase-admin/firestore");
         app = initializeApp({ credential: cert(credential), projectId: "njpbs-site" }, "cms-diagnostics");
@@ -260,7 +248,7 @@ async function main() {
   } finally {
     if (app) {
       const { deleteApp } = await import("firebase-admin/app");
-      await bounded(() => deleteApp(app)).catch(() => {});
+      await deleteApp(app).catch(() => {});
     }
   }
 }

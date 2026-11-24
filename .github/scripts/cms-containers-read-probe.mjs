@@ -1,4 +1,7 @@
+import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
+
+const { callOutside } = createRequire(import.meta.url)("../../functions/lib/release-wait.js");
 
 const failure = () => new Error("Cloud preview Containers reads could not be verified");
 
@@ -10,37 +13,30 @@ export function probeApplication(env = process.env) {
   return name;
 }
 
-// This trusted-workflow gate uses only Node built-ins. Older selected releases
-// do not need a new CLI command, dependencies or a copied deployment helper.
+// This trusted-workflow gate uses only Node built-ins and the release-gate
+// checkout's wait module. Older selected releases do not need a new CLI
+// command, dependencies or a copied deployment helper.
 export async function probeCmsContainers(token, {
-  accountId = process.env.CLOUDFLARE_ACCOUNT_ID, application = probeApplication(), request = fetch, sleep = ms => new Promise(resolve => setTimeout(resolve, ms)),
+  accountId = process.env.CLOUDFLARE_ACCOUNT_ID, application = probeApplication(), request = fetch,
 } = {}) {
   if (!/^[a-f0-9]{32}$/.test(accountId ?? "")) throw failure();
   const api = `https://api.cloudflare.com/client/v4/accounts/${accountId}/containers/applications`;
   if (!/^[A-Za-z0-9_-]{20,80}$/.test(token ?? "")) throw failure();
   const read = async suffix => {
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      let response;
-      try {
-        response = await request(api + suffix, {
-          method: "GET", headers: { Authorization: `Bearer ${token}` },
-          redirect: "error", signal: AbortSignal.timeout(15_000),
-        });
-      } catch {
-        if (attempt === 3) throw failure();
-        await sleep(10_000);
-        continue;
-      }
-      if (response.ok) {
-        let body;
-        try { body = await response.json(); } catch { throw failure(); }
-        if (body?.success !== true) throw failure();
-        return body.result;
-      }
-      await response.body?.cancel();
-      if ((![408, 429].includes(response.status) && response.status < 500) || attempt === 3) throw failure();
-      await sleep(10_000);
-    }
+    let response;
+    try {
+      response = await callOutside(`Cloudflare Containers read ${suffix || "/"}`, async () => {
+        const answer = await request(api + suffix, { method: "GET", headers: { Authorization: `Bearer ${token}` }, redirect: "error" });
+        if (answer.ok || (![408, 429].includes(answer.status) && answer.status < 500)) return answer;
+        await answer.body?.cancel();
+        throw Object.assign(new Error(`Containers read answered ${answer.status}`), { retry: true });
+      });
+    } catch { throw failure(); }
+    if (!response.ok) { await response.body?.cancel(); throw failure(); }
+    let body;
+    try { body = await response.json(); } catch { throw failure(); }
+    if (body?.success !== true) throw failure();
+    return body.result;
   };
   const applications = await read("");
   if (!Array.isArray(applications) || applications.some(row => !row || typeof row !== "object")) throw failure();

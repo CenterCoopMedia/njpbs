@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { appendFileSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import { cert, deleteApp, getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
@@ -16,6 +17,8 @@ import {
   startReceipt,
 } from "./lib/cms-component-receipt.mjs";
 import { assertLegacyCmsWorkflow, fingerprintExecutionSource, fingerprintReceiptExecutionSource, identitiesMatch, planCmsApiRelease } from "./lib/cms-release-plan.mjs";
+
+const { waitFor } = createRequire(import.meta.url)("../functions/lib/release-wait.js");
 
 function fail(message) {
   throw new ComponentReceiptError(message);
@@ -166,23 +169,16 @@ async function main(argv = process.argv.slice(2)) {
       if (!recordedIdentityMatchesSource(component, recorded, expectedSha)) {
         fail("Receipt renderer identity does not match the planned release");
       }
-      let lastError = "Live identity does not match the receipt";
-      const attempts = component === "renderer" ? 8 : 1;
-      for (let attempt = 1; attempt <= attempts; attempt += 1) {
-        try {
-          // One sample per confirm attempt. This loop waits for a state that has not settled.
-          const live = await collectLiveIdentities(component, { firestore, rolloutDeadlineMs: 0 });
-          if (identitiesMatch(live, recorded)) {
-            process.stdout.write(`${component} live identity matches the receipt\n`);
-            return;
-          }
-          lastError = "Live identity does not match the receipt";
-        } catch (error) {
-          lastError = error instanceof ComponentReceiptError ? error.message : "Live identity could not be read";
-        }
-        if (attempt < attempts) await new Promise((resolve) => setTimeout(resolve, 5000));
-      }
-      fail(lastError);
+      // The renderer read waits for its rollout; a settled mismatch is read again until it matches.
+      const compare = async () => {
+        let live;
+        try { live = await collectLiveIdentities(component, { firestore }); }
+        catch (error) { fail(error instanceof ComponentReceiptError ? error.message : "Live identity could not be read"); }
+        return identitiesMatch(live, recorded) ? { done: true } : { pending: "Live identity does not match the receipt" };
+      };
+      if (component === "renderer") await waitFor(`${component} live identity`, compare);
+      else if (!(await compare()).done) fail("Live identity does not match the receipt");
+      process.stdout.write(`${component} live identity matches the receipt\n`);
     });
     return;
   }

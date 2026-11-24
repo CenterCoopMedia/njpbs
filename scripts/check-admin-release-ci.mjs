@@ -11,7 +11,7 @@ try {
     repository: repositoryIdentity().repository,
     sha,
     request: endpoint => JSON.parse(execFileSync("gh", ["api", endpoint], {
-      encoding: "utf8", timeout: 30_000, stdio: ["ignore", "pipe", "pipe"],
+      encoding: "utf8", stdio: ["ignore", "pipe", "pipe"],
     })),
   });
   console.log(`Admin release ${sha} passed main CI run ${run}.`);

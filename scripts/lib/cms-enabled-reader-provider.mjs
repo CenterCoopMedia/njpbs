@@ -21,7 +21,7 @@ export async function readEnabledCmsReaderProviders({ projectId, accountId, sour
   // Check the exact executing version's public vars, never secret field values.
   const token = await readCloudflareToken();
   const response = await fetchImpl(`https://api.cloudflare.com/client/v4/accounts/${accountId}/workers/scripts/${identities.cmsApi.script}/versions/${identities.cmsApi.versionId}`,
-    { method: "GET", redirect: "error", headers: { authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(30_000) });
+    { method: "GET", redirect: "error", headers: { authorization: `Bearer ${token}` } });
   if (!response.ok || !response.body) refuse();
   const reader = response.body.getReader(), chunks = []; let size = 0;
   try {

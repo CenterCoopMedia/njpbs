@@ -3,12 +3,13 @@ import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import { existsSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { setTimeout as pause } from "node:timers/promises";
 import { stripVTControlCharacters } from "node:util";
 import { explicitCloudWakeDecision } from "./lib/cms-release-plan.mjs";
 import { assertNoFunctionDeletions, loadFunctionDeployManifest, readFunctionsDeployInventory, requestDeploymentInventory } from "./lib/functions-deploy-inventory.mjs";
 import { cmsTarget } from "./lib/cms-target.mjs";
 import { lastProviderLine, permanentFailure } from "./lib/provider-call.mjs";
+
+const { callOutside } = createRequire(import.meta.url)("../functions/lib/release-wait.js");
 
 const PROJECT = cmsTarget().projectId;
 const REGION = "us-central1";
@@ -202,24 +203,25 @@ function runFunctionDeploy(names, launch, project) {
 // named function to this exact source and configuration, so repeating it after a
 // partial attempt reaches the same state, and the inventory check before every
 // attempt still refuses any deletion.
-export async function deployFunctionTargets(names, launch = spawn, project = PROJECT, { manifest, request, wait = pause } = {}) {
+export async function deployFunctionTargets(names, launch = spawn, project = PROJECT, { manifest, request } = {}) {
   if (!Array.isArray(names) || !names.length || !Array.isArray(manifest) ||
       names.some(name => !manifest.some(fn => fn.name === name))) throw new ComponentReceiptError("Function targets differ from the exact manifest");
-  let pending = names;
-  for (let attempt = 1; attempt <= 3; attempt++) {
+  let pending = names, attempt = 0;
+  await callOutside("Firebase function deployment", async () => {
+    attempt += 1;
+    if (attempt > 1) console.log(`Retrying function deployment, attempt ${attempt}: ${pending.join(", ")}`);
     assertNoFunctionDeletions(manifest, await readFunctionsDeployInventory(project, request), { projectId: project, codebase: cmsTarget().codebase, only: pending });
     const { code, output } = await runFunctionDeploy(pending, launch, project);
     if (code === 0 && output.includes("Deploy complete!")) return;
     const permanent = permanentFailure(output);
-    if (permanent || attempt === 3) {
-      console.error(`Firebase deployment failed: class ${permanent ?? "transient"}, ${attempt} of 3 attempts, last provider line: ${lastProviderLine(output)}`);
+    if (permanent) {
+      console.error(`Firebase deployment failed: class ${permanent}, attempt ${attempt}, last provider line: ${lastProviderLine(output)}`);
       throw new ComponentReceiptError("Firebase deployment did not confirm completion");
     }
     const failed = code === 0 ? [] : failedFunctionNames(output, pending);
     if (failed.length) pending = failed;
-    console.log(`Retrying function deployment, attempt ${attempt + 1} of 3: ${pending.join(", ")}`);
-    await wait(10_000);
-  }
+    throw Object.assign(new Error(`Firebase deployment did not confirm completion: ${lastProviderLine(output)}`), { retry: true });
+  });
 }
 
 export async function main({ retireCloudWake, verifyOnly = false } = {}) {

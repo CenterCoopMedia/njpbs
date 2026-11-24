@@ -292,7 +292,7 @@ test(`trusted gates resolve workspace dependencies from a separate temporary dir
   try {
     const gate = join(directory, ".cms-smoke-gate");
     await copyImportClosure(root, gate, ["scripts/cms-component-receipt.mjs", ".github/scripts/ensure-panel-browser-deps.mjs"], {
-      assets: ["config/functions-configuration.json"],
+      assets: ["config/functions-configuration.json", "functions/lib/release-wait.js"],
     });
     symlinkSync(join(root, "node_modules"), join(directory, "node_modules"));
     const workflow = parse(readFileSync(join(root, ".github/workflows/cms-staging-deploy.yml"), "utf8"));
@@ -366,18 +366,19 @@ test("preserves placeholder sentinels and configures an unrendered trusted smoke
       rule: "the unrendered trusted smoke probe's independence at startup",
       files: [smoke],
     } });
-    // The first probe imports the retry rule, which has no source imports of its own.
+    // The first probe imports the retry rule, whose only source dependency is the wait module.
     const helper = "scripts/lib/provider-call.mjs";
-    await copyImportClosure(root, directory, [helper], { boundary: { rule: "the retry rule's independence", files: [helper] } });
+    await copyImportClosure(root, directory, [helper], { boundary: { rule: "the retry rule's independence", files: [helper] },
+      assets: ["functions/lib/release-wait.js"] });
     const program = `import assert from "node:assert/strict";
       import {parseApiOrigin} from ${JSON.stringify(pathToFileURL(join(root, "agents/vmix/configuration.mjs")).href)};
       import {runCmsFunctionSmoke} from ${JSON.stringify(pathToFileURL(join(directory, smoke)).href)};
       assert.equal(parseApiOrigin(process.env.CMS_PRODUCTION_API_ORIGIN), process.env.CMS_PRODUCTION_API_ORIGIN);
       const requests = [];
-      await assert.rejects(runCmsFunctionSmoke({ wait: () => {}, request: async url => {
-        requests.push(url); throw new Error("private-provider-canary");
+      await assert.rejects(runCmsFunctionSmoke({ request: async url => {
+        requests.push(url); throw Object.assign(new Error("private-provider-canary"), { stderr: "PERMISSION_DENIED" });
       }}), /health request failed/);
-      assert.deepEqual(requests, Array(5).fill(process.env.CMS_PRODUCTION_API_ORIGIN + "/health"));
+      assert.deepEqual(requests, [process.env.CMS_PRODUCTION_API_ORIGIN + "/health"]);
       await assert.rejects(runCmsFunctionSmoke({baseUrl:"https://other.fixture.test",request:async()=>{throw new Error("unexpected-request")}}), /CMS API URL must/);`;
     const result = spawnSync(process.execPath, ["--input-type=module", "-e", program], {
       env: { PATH: process.env.PATH, CMS_PRODUCTION_API_ORIGIN: inputs.CMS_PRODUCTION_API_ORIGIN }, encoding: "utf8", timeout: 5000 });

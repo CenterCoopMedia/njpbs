@@ -63,7 +63,7 @@ export function createRehearsalIngressProof({ packet, httpCredential }) {
         response = await fetch(new URL(url.pathname, packet.proofOrigin), { redirect: 'manual', cache: 'no-store',
           headers: { ...rehearsalHttpHeaders(httpCredential, packet.proofOrigin),
             'x-rehearsal-expected-sha256': bodyDigest, 'x-rehearsal-expected-status': String(status) },
-          signal: AbortSignal.any([request.signal, AbortSignal.timeout(3_000)]) });
+          signal: request.signal });
         if (response.status !== status || response.headers.get('cache-control') !== 'private, no-store') refuse();
         return response;
       } catch { await response?.body?.cancel().catch(() => {}); refuse(); }
@@ -100,7 +100,7 @@ export async function verifyRehearsalRoot({ packet, selector: raw, httpCredentia
   let response;
   try {
     response = await fetch(new URL(rootPath, packet.ingressOrigin), { redirect: 'manual', cache: 'no-store',
-      headers, signal: AbortSignal.timeout(3_000) });
+      headers });
     if (response.status !== 200 || response.headers.get('cache-control') !== 'no-store' ||
         response.headers.get('publication-refresh') === 'pending' || response.headers.get('x-njpbs-publication-refresh') === 'pending' ||
         response.headers.get('x-njpbs-publication-origin') !== target.workerName ||

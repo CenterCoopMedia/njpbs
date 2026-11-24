@@ -359,7 +359,7 @@ export function publisherReceiptHeaders(receiptUrl, env = process.env) {
 
 export async function verifyLivePublisher(repoRoot, receiptUrl) {
   const response = await fetch(receiptUrl, {
-    cache: "no-store", redirect: "error", signal: AbortSignal.timeout(10_000),
+    cache: "no-store", redirect: "error",
     headers: publisherReceiptHeaders(receiptUrl),
   });
   if (!response.ok) throw new Error(`Public publication receipt returned HTTP ${response.status}`);

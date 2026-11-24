@@ -54,7 +54,7 @@ export async function readClosedInitialIngressAuthority({ firestore, attempt: ra
   });
   if (!signal) return read;
   let abort;
-  try { return await Promise.race([read, new Promise((_, reject) => { abort = () => reject(new Error("Initial ingress authority deadline"));
+  try { return await Promise.race([read, new Promise((_, reject) => { abort = () => reject(new Error("Initial ingress authority read stopped"));
     if (signal.aborted) abort(); else signal.addEventListener("abort", abort, { once: true }); })]); }
   finally { if (abort) signal.removeEventListener("abort", abort); }
 }

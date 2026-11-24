@@ -172,17 +172,6 @@ describe("CMS diagnostics", () => {
       expect(queueSummary(id, { status: "ready", requestedAt: start, timingsMs: invalid }, now).timingsMs).toEqual({});
     }
   });
-  it("times out unavailable checks and retains the completed API check", async () => {
-    vi.useFakeTimers();
-    try {
-      const pending = diagnose({ ...options, readGit: () => new Promise(() => {}) });
-      await vi.advanceTimersByTimeAsync(10_000);
-      const result = await pending;
-      expect(result.ok).toBe(false);
-      expect(result.checks.gitHead.error).toBe("timeout");
-      expect(result.checks.api.ok).toBe(true);
-    } finally { vi.useRealTimers(); }
-  });
   it("rejects oversized or malformed responses without leaking bodies", async () => {
     const result = await diagnose({ ...options, fetcher: async () => new Response(secret.repeat(5000)) });
     expect(result.ok).toBe(false);

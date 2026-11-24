@@ -48,18 +48,13 @@ test("adds Access headers on one origin and refuses to forward them on redirects
 });
 
 function fixtureBrowser(settings, { sessionStatus = 204, documentStatus = 200, headingVisible = true,
-  sessionFailure, noDocument = false, progress = "building", later, job, hang = false } = {}) {
+  sessionFailure, noDocument = false, progress = "building", later, job } = {}) {
   const context = new EventEmitter();
   const page = new EventEmitter();
   const frame = {};
   const artifact = `${settings.preview}/p/abcdefghijklmnopqrst/smoke-fixture/`;
   const staffSession = `${settings.preview}/__cms-session`;
-  const wait = (emitter, event, predicate, timeout) => new Promise((resolve, reject) => {
-    // A wait for something the fixture never sends times out at once.
-    if (timeout && ((event === "response" && emitter === context && noDocument && !hang) ||
-        (event === "response" && emitter === page && sessionFailure))) {
-      setTimeout(() => reject(new Error("Timeout exceeded")), 5);
-    }
+  const wait = (emitter, event, predicate) => new Promise(resolve => {
     const receive = value => {
       if (predicate && !predicate(value)) return;
       emitter.off(event, receive);
@@ -73,7 +68,7 @@ function fixtureBrowser(settings, { sessionStatus = 204, documentStatus = 200, h
     url: () => popupUrl,
     locator(selector) {
       assert.equal(selector, "main.cms-preview-progress");
-      return { first: () => ({ async getAttribute(name) { assert.equal(name, "data-progress"); return progress; } }) };
+      return { async evaluateAll(read) { return read([{ getAttribute: name => name === "data-progress" ? progress : null }]); } };
     },
     async waitForURL(matches) { assert.equal(matches(new URL(artifact)), true); },
     getByRole(role, options) {
@@ -93,7 +88,7 @@ function fixtureBrowser(settings, { sessionStatus = 204, documentStatus = 200, h
     url: () => location,
     async goto(url) { location = url; return { status: () => 200 }; },
     setDefaultTimeout() {},
-    waitForResponse: (predicate, options) => wait(page, "response", predicate, options?.timeout),
+    waitForResponse: predicate => wait(page, "response", predicate),
     locator: selector => selector === "body"
       ? { async ariaSnapshot() { assert.equal(password, ""); } }
       : { getByRole: () => ({ async click() { assert.equal(password, credential.password); } }) },
@@ -124,7 +119,8 @@ function fixtureBrowser(settings, { sessionStatus = 204, documentStatus = 200, h
       },
     }),
   });
-  Object.assign(context, { newPage: async () => page, waitForEvent: (event, options) => wait(context, event, options.predicate, options.timeout) });
+  Object.assign(context, { newPage: async () => page, setDefaultTimeout(value) { assert.equal(value, 0); },
+    waitForEvent: (event, options) => wait(context, event, options?.predicate) });
   return { newContext: async () => context };
 }
 
@@ -147,23 +143,19 @@ test("requires staff session, first private document response and fixture headin
 test("names the missing wait and where the preview tab settled", async () => {
   const settings = previewSmokeSettings("production", env);
   const check = input => checkSignedInPreview(fixtureBrowser(settings, input), settings);
-  // Only the hang backstop ends the wait while the job is still building.
-  assert.deepEqual(await check({ noDocument: true, job: { status: "building" } }), {
-    ok: false, code: "private_preview_unavailable", missing: ["document"],
-    session: { status: 204 }, job: { status: "building" }, document: null, popup: { place: "about:blank", progress: "building" },
-  });
   // A failed older job alone does not end the wait; Admin's terminal state does, and the receipt names the job error.
-  assert.deepEqual(await check({ noDocument: true, hang: true, job: { status: "failed", error: "preview_build_timeout" },
+  assert.deepEqual(await check({ noDocument: true, job: { status: "failed", error: "preview_build_timeout" },
     progress: "waiting", later: { progress: "error" } }), {
     ok: false, code: "preview_admin_stopped", missing: ["document"],
     session: { status: 204 }, job: { status: "failed", error: "preview_build_timeout" }, document: null,
     popup: { place: "about:blank", progress: "error" },
   });
   // Admin stopping in the tab (for example while the renderer updates) also ends the wait.
-  assert.deepEqual(await check({ noDocument: true, hang: true, progress: "updating" }), {
+  assert.deepEqual(await check({ noDocument: true, progress: "updating" }), {
     ok: false, code: "preview_admin_stopped", missing: ["document"],
     session: { status: 204 }, job: null, document: null, popup: { place: "about:blank", progress: "updating" },
   });
+  // A session request the browser reports as failed ends the wait at once.
   assert.deepEqual(await check({ sessionFailure: "net::ERR_HTTP2_PROTOCOL_ERROR", noDocument: true, progress: "session-slow" }), {
     ok: false, code: "private_preview_unavailable", missing: ["document"],
     session: { failed: "net::ERR_HTTP2_PROTOCOL_ERROR" }, job: null, document: null, popup: { place: "about:blank", progress: "session-slow" },

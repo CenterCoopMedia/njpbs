@@ -152,7 +152,8 @@ export CMS_READER_CREDENTIAL_PIPES
     const result = spawnSync("bash", ["-c", script, "reader-pipe-boundary", process.execPath,
       join(process.cwd(), "scripts/describe-cms-reader-credential-pipes.mjs"), childPath, built.adapterPath, fixturePath,
       new URL("../../package.json", import.meta.url).href], { env: { ...process.env }, encoding: "utf8", timeout: 5000 });
-    expect(result.status, result.stderr).toBe(0); expect(result.stdout).toBe("provider-identity-matched");
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout.split("\n").filter(line => !line.startsWith('{"releaseWait":true')).join("\n")).toBe("provider-identity-matched");
     const env = { ...process.env }; delete env.CMS_READER_CREDENTIAL_PIPES;
     const refused = spawnSync(process.execPath, ["scripts/bootstrap-cms-preview-pair.cjs", "plan", "demo-reader-fd-boundary", inputPath,
       built.adapterPath, built.sha256], { cwd: process.cwd(), env, encoding: "utf8", timeout: 5000 });

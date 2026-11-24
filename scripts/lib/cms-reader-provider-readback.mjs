@@ -16,7 +16,7 @@ async function bytes(response) {
 
 /** The deploy owner's inventory identity, over bounded native provider GETs.
  * No ADC fallback, provider mutation or caller-selected endpoint. */
-export async function readCmsReaderProviderIdentities({ projectId, accountId, readCloudflareToken, readGoogleToken, signal, fetchImpl = fetch, inspectFunctions, expectedWorkerVersion, readbackClock, wait }) {
+export async function readCmsReaderProviderIdentities({ projectId, accountId, readCloudflareToken, readGoogleToken, signal, fetchImpl = fetch, inspectFunctions, expectedWorkerVersion }) {
   const development = projectId === "njpbs-site-dev";
   if (!development && projectId !== "njpbs-site" || !/^[a-f0-9]{32}$/.test(accountId ?? "") ||
       development && accountId !== DEV_TARGETS.CLOUDFLARE_ACCOUNT_ID) refuse();
@@ -27,8 +27,8 @@ export async function readCmsReaderProviderIdentities({ projectId, accountId, re
       const token = await readToken();
       if (typeof token !== "string" || !/^[\x21-\x7e]{1,32768}$/.test(token)) refuse();
       const value = await providerCall(`CMS reader readback ${new URL(url).hostname}`, async () => bytes(await fetchImpl(url, { method: "GET", redirect: "error", cache: "no-store",
-        headers: { authorization: `Bearer ${token}` }, signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000) })),
-      { wait, permanent: error => signal?.aborted ? "aborted" : permanentFault(error) });
+        headers: { authorization: `Bearer ${token}` }, signal })),
+      { permanent: error => signal?.aborted ? "aborted" : permanentFault(error) });
       if (value.success === false || value.errors?.length) refuse();
       return value;
     } catch { refuse(); }
@@ -49,7 +49,7 @@ export async function readCmsReaderProviderIdentities({ projectId, accountId, re
   const started = performance.now();
   const cmsApi = await readCmsApiDeployment(script, () => json(
     `https://api.cloudflare.com/client/v4/accounts/${accountId}/workers/scripts/${script}/deployments`, readCloudflareToken),
-    expectedWorkerVersion, readbackClock).catch(refuse);
+    expectedWorkerVersion).catch(refuse);
   if (!/^[A-Za-z0-9._:-]{1,80}$/.test(cmsApi.deploymentId)) refuse();
   if (expectedWorkerVersion) console.log(`CMS API expected version readback: ${Math.round(performance.now() - started)} ms`);
   return { functions: functionsInventoryIdentity(functions), cmsApi };

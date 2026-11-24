@@ -1,21 +1,22 @@
 // The one rule for a call to an outside service (Google, Cloudflare, GitHub,
-// our own sites through the edge): a failure is retried unless it is a known
-// permanent fault of ours. A provider-side or unknown fault never ends a
-// release on its first occurrence.
+// our own sites through the edge): a failure is retried until the provider
+// answers, unless it is a known permanent fault of ours. A provider-side or
+// unknown fault never ends a release. functions/lib/release-wait.js paces and
+// journals the repeats.
 //
 // Wrap only the idempotent transport. Checks of the answer stay outside, so a
 // refusal of ours is never repeated. A write whose repeat is not idempotent
 // passes `readBack`, which answers undefined when the write did not land.
 import { execFileSync, spawnSync } from "node:child_process";
-import { setTimeout as pause } from "node:timers/promises";
+import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 
-export const PROVIDER_ATTEMPTS = 5;
+const { callOutside, setJournal } = createRequire(import.meta.url)("../../functions/lib/release-wait.js");
 
-// Waits of 2, 4, 8 and 16 s. Dev run 45429859229 (Nov. 24, 2026) ended on one
-// Secret Manager 503; such faults clear in seconds, and 30 s in total is short
-// beside the 26 minutes a new run costs. A provider that names a longer
-// Retry-After is waited for, to 60 s, so one answer cannot hold a job.
+// The promise-free form below still counts and sleeps by itself: its callers
+// (gcloud reads in configure-cms-functions.mjs and check-cms-secret-iam.mjs,
+// the CMS API wrangler deploy) are synchronous, and the wait module is not.
+export const PROVIDER_ATTEMPTS = 5;
 const FIRST_WAIT_MS = 2_000;
 const LONGEST_WAIT_MS = 60_000;
 
@@ -102,24 +103,32 @@ function afterFailure(label, error, attempt, { permanent = permanentFault, log =
  * @template T
  * @param {string} label
  * @param {() => T | Promise<T>} call
- * @param {{ wait?: (ms: number) => unknown, readBack?: () => Promise<T | undefined> | T | undefined,
+ * @param {{ readBack?: () => Promise<T | undefined> | T | undefined,
  *   permanent?: (error: any) => string | null, log?: (line: string) => void }} [options]
  * @returns {Promise<T>}
  */
-export async function providerCall(label, call, { wait = pause, readBack, ...options } = {}) {
-  for (let attempt = 1; ; attempt++) {
-    try { return await call(); }
-    catch (error) {
-      let delay, failure;
-      try { delay = afterFailure(label, error, attempt, options); }
-      catch (final) { failure = final; }
-      // A lost answer can hide a write that landed, after the last attempt too.
-      if (!failure) await wait(delay);
+export async function providerCall(label, call, { readBack, permanent = permanentFault, log = console.error } = {}) {
+  let attempt = 0;
+  // A final fault returns from the wait, so its own error code cannot ask for another try.
+  const outcome = await callOutside(label, async () => {
+    // A lost answer can hide a write that landed.
+    if (attempt > 0) {
       const landed = await readBack?.();
-      if (landed !== undefined) return landed;
-      if (failure) throw failure;
+      if (landed !== undefined) return { value: landed };
     }
-  }
+    attempt += 1;
+    try { return { value: await call() }; }
+    catch (error) {
+      const kind = error?.name === "AbortError" ? "cancelled" : permanent(error);
+      if (!kind) throw Object.assign(new Error(`${label}: ${faultLine(error)}`), { retry: true });
+      const landed = await readBack?.();
+      if (landed !== undefined) return { value: landed };
+      log(`Provider call failed: ${label}, class ${kind}, attempt ${attempt}, last provider line: ${faultLine(error)}`);
+      return { failure: Object.assign(error, { providerAttempts: attempt }) };
+    }
+  });
+  if ("failure" in outcome) throw outcome.failure;
+  return outcome.value;
 }
 
 const pauseSync = ms => { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); };
@@ -155,7 +164,7 @@ export function providerGcloud(args, childOptions, execute = execFileSync, optio
 export const ABSENT_EXIT = 4;
 export function main([label, separator, command, ...args], launch = spawnSync, options = {}) {
   if (!label || separator !== "--" || !command) throw new Error("Usage: provider-call <label> -- <command> [arguments]");
-  return providerCallSync(label, () => {
+  return providerCall(label, () => {
     const result = launch(command, args, { stdio: ["ignore", "pipe", "pipe"], encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
     process.stderr.write(result.stderr ?? "");
     if (result.error || result.status !== 0) {
@@ -166,6 +175,8 @@ export function main([label, separator, command, ...args], launch = spawnSync, o
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  try { process.stdout.write(main(process.argv.slice(2))); }
+  // A command substitution reads stdout, so the wait journal goes to stderr.
+  setJournal(line => process.stderr.write(`${JSON.stringify(line)}\n`));
+  try { process.stdout.write(await main(process.argv.slice(2))); }
   catch (error) { process.exitCode = permanentGcloudFault(error) === "absent" ? ABSENT_EXIT : 1; }
 }

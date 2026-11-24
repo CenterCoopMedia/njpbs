@@ -7,7 +7,7 @@ import { promisify } from "node:util";
 import { createRequire } from "node:module";
 import { Timestamp } from "firebase-admin/firestore";
 import { CONTRACT_SETTINGS, CmsPublicContractError, assertUnchangedPlan, devMutationSelection, contractTarget,
-  encodeContractValue, decodeContractValue, writePrivateCapsule, readPrivateCapsule, boundedContractProof,
+  encodeContractValue, decodeContractValue, writePrivateCapsule, readPrivateCapsule, contractProof,
   contractDigest, contractSummary, recheckContractSummary } from "../../scripts/lib/cms-public-contract.mjs";
 import { assertActiveRendererCheckpoint, devCompletedBaseline, prepareDependencies, prepareContractRuntime, productionPlanCommands, refusalLine, replayDockerArguments, replayRefusal, restoreRendererArchive, retainRendererArchive } from "../../scripts/check-cms-public-contract.mjs";
 import { createCmsPublicationCloudStorage } from "../../site/scripts/cms-publication-cloud-storage.ts";
@@ -234,12 +234,6 @@ describe("private capture and bounded recapture", () => {
     await expect(readPrivateCapsule(file)).rejects.toMatchObject({ code: "capture-private-file" });
     expect(() => encodeContractValue({ nested: { idToken: "synthetic-emulator-only" } })).toThrow(CmsPublicContractError);
   });
-  it("recaptures moving inputs only twice", async () => {
-    let attempts = 0;
-    await expect(boundedContractProof(async () => { attempts += 1; throw new CmsPublicContractError("capture-moved"); }, { now: () => 1000 }))
-      .rejects.toMatchObject({ code: "capture-budget" });
-    expect(attempts).toBe(2);
-  });
   it("restores the archive on retry when the first Functions comparison moves", async () => {
     const file = join(directory, "retained-renderer");
     let comparisons = 0;
@@ -253,7 +247,7 @@ describe("private capture and bounded recapture", () => {
       comparisons += 1;
       if (comparisons === 1) throw new CmsPublicContractError("capture-moved");
     });
-    const attempt = await boundedContractProof(async ({ attempt }) => {
+    const attempt = await contractProof(async ({ attempt }) => {
       await compareAndRestore({ state: {} });
       expect(await readFile(file, "utf8")).toBe("renderer archive fixture");
       return attempt;
@@ -263,11 +257,6 @@ describe("private capture and bounded recapture", () => {
     await compareAndRestore({ state: {} });
     expect(comparisons).toBe(3);
     expect(restoredAfter).toEqual([2]);
-  });
-  it("includes replay duration in the four-minute budget and leaves settlement unconfirmed", async () => {
-    let instant = 1000;
-    await expect(boundedContractProof(async () => { instant += 240_001; return true; }, { now: () => instant, boundary: "settlement" }))
-      .rejects.toMatchObject({ code: "settlement-unconfirmed" });
   });
 });
 

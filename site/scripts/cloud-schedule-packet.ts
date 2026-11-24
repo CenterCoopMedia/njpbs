@@ -11,8 +11,8 @@ const MAX_BYTES = 16 * 1024 * 1024;
 const INPUT_NAMES = ["launch-media-manager.json", "spotlight-news.json", "schedule.json"];
 const hash = (bytes: Buffer | string) => createHash("sha256").update(bytes).digest("hex");
 interface Storage {
-  get(key: string, options: { signal: AbortSignal; maxBytes: number }): Promise<Uint8Array>;
-  put(key: string, bytes: Buffer, options: { signal: AbortSignal; contentType: string }): Promise<unknown>;
+  get(key: string, options: { signal?: AbortSignal; maxBytes: number }): Promise<Uint8Array>;
+  put(key: string, bytes: Buffer, options: { signal?: AbortSignal; contentType: string }): Promise<unknown>;
 }
 export type { CloudSchedulePacket } from "../src/lib/cloud-schedule-packet-types";
 import type { CloudSchedulePacket, FileSeal } from "../src/lib/cloud-schedule-packet-types";
@@ -63,7 +63,7 @@ function checkedSchedule(bytes: Buffer, checkedAt: number): BakedScheduleData {
   return data;
 }
 async function readSealed(storage: Storage, seal: FileSeal | { key: string; digest: string; size: number }) {
-  const bytes = Buffer.from(await storage.get(seal.key, { signal: AbortSignal.timeout(30_000), maxBytes: MAX_BYTES }));
+  const bytes = Buffer.from(await storage.get(seal.key, { maxBytes: MAX_BYTES }));
   requireValue(bytes.length === seal.size && hash(bytes) === seal.digest);
   return bytes;
 }
@@ -96,7 +96,7 @@ export async function createCloudSchedulePacket({ inputs, storage }: { inputs: P
   ] as const) {
     requireValue(bytes.length > 0 && bytes.length <= MAX_BYTES);
     const seal = { key: `${prefix}/${hash(bytes)}/${filename}`, digest: hash(bytes), size: bytes.length, contentType };
-    await storage.put(seal.key, bytes, { signal: AbortSignal.timeout(30_000), contentType });
+    await storage.put(seal.key, bytes, { contentType });
     await readSealed(storage, seal);
     files[kind] = seal;
   }

@@ -8,11 +8,11 @@ import { contractInputs } from "./functions-contracts.mjs";
 
 const require = createRequire(import.meta.url);
 const targets = require("../../functions/lib/publication-target.js");
+const { waitFor } = require("../../functions/lib/release-wait.js");
 const SHA = /^[a-f0-9]{40}$/;
 const DIGEST = /^[a-f0-9]{64}$/;
 const UUID = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/;
 export const CONTRACT_BUDGET_MS = 240_000;
-export const CONTRACT_ATTEMPTS = 2;
 export const CONTRACT_SETTINGS = Object.freeze(["site-navigation", "public-site-chrome", "nj-decides-brand", "public-homepage-banner", "coverage-labels"]);
 export const CONTRACT_FEATURES = Object.freeze(["settings", "postChrome", "capabilities", "previewRequest", "adminSession"]);
 const PROOF_PATHS = [...contractInputs, "scripts/lib/cms-public-contract.mjs", "scripts/check-cms-public-contract.mjs", "scripts/cms-public-contract-runtime.Dockerfile", "tests/functions/cms-public-contract.test.ts",
@@ -275,23 +275,17 @@ export async function captureNativeContract({ firestore, baselineRoot, target, r
   }, { readOnly: true });
 }
 
-export async function boundedContractProof(run, { now = Date.now, boundary, signal } = {}) {
-  const startedAt = now();
-  for (let attempt = 1; attempt <= CONTRACT_ATTEMPTS; attempt += 1) {
-    const remaining = CONTRACT_BUDGET_MS - (now() - startedAt);
-    if (remaining <= 0) break;
-    const deadline = AbortSignal.any([AbortSignal.timeout(remaining), ...(signal ? [signal] : [])]);
-    try {
-      const result = await run({ attempt, signal: deadline });
-      deadline.throwIfAborted();
-      if (now() - startedAt >= CONTRACT_BUDGET_MS) break;
-      return result;
-    } catch (error) {
-      if (deadline.aborted || now() - startedAt >= CONTRACT_BUDGET_MS) break;
+// Inputs that move during a capture are captured again until one capture holds.
+export async function contractProof(run, { signal } = {}) {
+  let attempt = 0;
+  return waitFor("CMS public contract capture", async () => {
+    attempt += 1;
+    try { return { done: await run({ attempt, signal }) }; }
+    catch (error) {
       if (error?.code !== "capture-moved") throw error;
+      return { pending: "capture-moved" };
     }
-  }
-  refuse(boundary === "settlement" ? "settlement-unconfirmed" : "capture-budget");
+  }, { signal });
 }
 
 export function validateReplayResult(result, { capsuleDigest, candidateSha, identityDigest }) {

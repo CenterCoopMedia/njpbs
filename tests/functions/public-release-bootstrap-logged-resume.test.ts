@@ -192,7 +192,7 @@ it.each(["initial-authority", "installed-guard", "after-authority"])("bounds a s
   } });
   const result = prepareBootstrapLoggedResume({ firestore: database, attempt, store, evidence: f.options, signal: controller.signal });
   await entered; const abortedAt = performance.now(); controller.abort();
-  await expect(result).rejects.toThrow("Private pair read deadline");
+  await expect(result).rejects.toThrow("Private pair read stopped");
   expect(performance.now() - abortedAt).toBeLessThan(1_000); await unchanged();
 });
 it("parses separate explicit readback, resume readback and dry-run/apply modes", () => {

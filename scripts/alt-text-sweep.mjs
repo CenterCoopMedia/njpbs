@@ -6,11 +6,13 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { Readable, Transform } from "node:stream";
+import { createRequire } from "node:module";
 import { setTimeout as sleep } from "node:timers/promises";
 import { pathToFileURL } from "node:url";
 import { parseBrowserCredential } from "./cms-debug-browser.mjs";
 import postLeadMedia from "../functions/lib/post-lead-media.js";
 const { readPostLeadMedia } = postLeadMedia;
+const { callOutside } = createRequire(import.meta.url)("../functions/lib/release-wait.js");
 
 const DEFAULT_BASE_URL = "https://api.example.org"; // scripts/smoke-cms-functions.mjs
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
@@ -20,9 +22,8 @@ const CMS_ENDPOINTS = new Map([
   ["cmsUpdateMediaMetadata", "metadata"], ["cmsSaveContent", "mutation"],
 ]);
 // Match the actor refill of the shared read bucket in cms-api/src/config.ts.
+// Rate pacing before each read, not a wait on a state.
 const CMS_READ_INTERVAL_MS = 500;
-const MAX_CMS_RETRIES = 3;
-const MAX_CMS_RETRY_DELAY_MS = 60_000;
 const SAVABLE_STATUSES = new Set(["draft", "published"]);
 const isObject = value => value !== null && typeof value === "object" && !Array.isArray(value);
 const empty = value => value == null || (typeof value === "string" && !value.trim());
@@ -99,7 +100,7 @@ export async function claudeModel({ imagePath, title, context, retryNote = "" },
     const child = runCli("claude", ["-p", "--model", "claude-opus-5-5", "--effort", "medium", "--output-format", "json",
       "--restricted", "--strict-mcp-config", "--no-session-persistence", "--permission-prompts", "none",
       "--tools", "Read", "--allowedTools", "Read"],
-      { cwd: dirname(imagePath), timeout: 120_000, maxBuffer: 1024 * 1024,
+      { cwd: dirname(imagePath), maxBuffer: 1024 * 1024,
         env: { ...process.env, CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1" } },
       (error, output) => error ? reject(error) : resolve(output));
     child.stdin.end(prompt);
@@ -124,8 +125,8 @@ export function createCmsClient({ fetchImpl, credential, apiKey, baseUrl = DEFAU
       ? `https://securetoken.googleapis.com/v1/token?key=${encodeURIComponent(apiKey)}`
       : `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${encodeURIComponent(apiKey)}`;
     const response = await fetchImpl(url, refresh
-      ? { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: session.refreshToken }), signal: AbortSignal.timeout(30_000) }
-      : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...credential, returnSecureToken: true }), signal: AbortSignal.timeout(30_000) });
+      ? { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: session.refreshToken }) }
+      : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...credential, returnSecureToken: true }) });
     if (!response.ok) throw new Error("authentication_failed");
     const data = await response.json();
     const idToken = data.idToken ?? data.id_token;
@@ -139,7 +140,7 @@ export function createCmsClient({ fetchImpl, credential, apiKey, baseUrl = DEFAU
     const rateClass = CMS_ENDPOINTS.get(endpoint);
     if (!rateClass) throw new Error("endpoint_not_allowed");
     const isRead = rateClass === "read";
-    for (let attempt = 0; ; attempt++) {
+    return callOutside(`cms ${endpoint}`, async () => {
       const authorization = `Bearer ${await token()}`;
       if (isRead) {
         const remaining = Math.min(CMS_READ_INTERVAL_MS, nextReadAt - now());
@@ -148,17 +149,15 @@ export function createCmsClient({ fetchImpl, credential, apiKey, baseUrl = DEFAU
       }
       const response = await fetchImpl(`${baseUrl.replace(/\/$/, "")}/${endpoint}`, {
         method: "POST", headers: { "Content-Type": "application/json", Authorization: authorization, ...headers },
-        body: JSON.stringify(body), signal: AbortSignal.timeout(30_000),
+        body: JSON.stringify(body),
       });
       if (response.ok) return response.json();
       const error = new CmsHttpError(endpoint, response, now());
       await response.body?.cancel().catch(() => {});
-      // A scoped gateway rejection occurs before a write reaches the Function.
-      if (error.status !== 429 || attempt >= MAX_CMS_RETRIES || (!isRead && !error.scope)) throw error;
-      const delay = error.retryAfterMs ?? 1000 * 2 ** attempt;
-      if (delay > MAX_CMS_RETRY_DELAY_MS) throw error;
-      if (delay > 0) await wait(delay);
-    }
+      // A throttled read, or a write the gateway rejected by scope before it reached the Function, is asked again.
+      error.retry = error.status === 429 && (isRead || Boolean(error.scope));
+      throw error;
+    });
   };
 }
 
@@ -180,7 +179,7 @@ export async function downloadImage(asset, { fetchImpl, tempRoot = tmpdir() }) {
   if (url === asset.url && Number(asset.sizeBytes) > MAX_IMAGE_BYTES) throw new SkipImage("image_too_large");
   if (url === asset.url && !IMAGE_TYPES.has(asset.mimeType)) throw new SkipImage("unsupported_image_type");
   if (typeof url !== "string" || !/^https?:\/\//.test(url)) throw new Error("invalid_image_url");
-  const response = await fetchImpl(url, { signal: AbortSignal.timeout(30_000) });
+  const response = await fetchImpl(url);
   if (!response.ok || !response.body) throw new Error("image_download_failed");
   const type = (response.headers.get("content-type") || asset.mimeType || "").split(";")[0].trim().toLowerCase();
   if (!IMAGE_TYPES.has(type)) { await response.body.cancel(); throw new SkipImage("unsupported_image_type"); }
