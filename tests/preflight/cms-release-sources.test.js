@@ -35,7 +35,7 @@ beforeEach(async () => {
     writeFileSync(join(releaseRoot, path), "export {};\n");
   }
   await copyImportClosure(repoRoot, releaseRoot, ["scripts/component-runner.mjs"],
-    { assets: [...CMS_FUNCTION_CONTRACT_FILES, "config/functions-deployment.development.json"] });
+    { assets: [...CMS_FUNCTION_CONTRACT_FILES, "config/functions-deployment.development.json", "scripts/cms-reader-binding.mjs"] });
   const smoke = "scripts/smoke-cms-functions.mjs";
   const gate = ".github/scripts/require-cms-release-sources.mjs";
   await copyImportClosure(repoRoot, releaseRoot, [smoke, gate], { boundary: {

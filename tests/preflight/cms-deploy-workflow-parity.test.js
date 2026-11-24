@@ -192,6 +192,9 @@ describe("Route D Cut A boundary placement", () => {
       const planner = production.jobs["firebase-preflight"].steps.find(row => row.name === "Plan Functions and renderer release");
       // Read-only contract capture proves its own graph from the pinned checkout.
       const { FUNCTION_TARGETS: functionTargets, ...providerEnvironment } = planner.env;
+      // Later jobs read the same reader binding through the preflight job's output.
+      if (jobName !== "firebase-preflight") providerEnvironment.FORCE_FIREBASE = providerEnvironment.FORCE_FIREBASE
+        .replace("steps.reader_binding.outputs.binding", "needs.firebase-preflight.outputs.reader_binding");
       expect(functionTargets).toBe("${{ needs.verify.outputs.function_targets }}");
       expect(capture.env).toMatchObject({ ...providerEnvironment,
         FIREBASE_WEB_API_KEY: "${{ vars.VITE_FIREBASE_API_KEY || inputs.target != 'development' && secrets.VITE_FIREBASE_API_KEY || '' }}",
@@ -283,7 +286,7 @@ describe("Route D Cut A boundary placement", () => {
     // The capture follows every backend mutation, and the upload waits for it.
     expect(contractJob.needs).toEqual(deployJob.needs.filter(name => name !== "admin-contract"));
     expect(deployJob.needs).toContain("admin-contract");
-    expect(settlementJob.needs).toEqual(["admin-build", "admin-contract", "live-smoke"]);
+    expect(settlementJob.needs).toEqual(["admin-build", "admin-contract", "live-smoke", "firebase-preflight"]);
     expect(settlementJob.if).toBe(`${production.jobs["live-smoke"].if} && needs.admin-contract.outputs.independent != 'false'`);
     expect(contractJob.outputs.independent).toBe("${{ steps.public_contract.outputs.independent }}");
     expect(contract[proof(contract, "before-upload")].id).toBe("public_contract");
