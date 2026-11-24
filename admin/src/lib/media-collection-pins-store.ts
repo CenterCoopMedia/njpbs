@@ -1,10 +1,16 @@
-import { doc, runTransaction } from "firebase/firestore";
+import { deleteField, doc, getDocFromServer, runTransaction } from "firebase/firestore";
 import { db } from "./firebase";
 import {
-  readMediaCollectionPins,
+  parseMediaCollectionPins,
+  readLegacyMediaCollectionPins,
   setMediaCollectionPinned,
   type MediaCollectionPins,
 } from "./media-collection-pins";
+
+export async function loadMediaCollectionPins(userId: string, profile: unknown): Promise<MediaCollectionPins> {
+  const snapshot = await getDocFromServer(doc(db, "mediaCollectionPins", userId));
+  return snapshot.exists() ? parseMediaCollectionPins(snapshot.data()) : readLegacyMediaCollectionPins(profile);
+}
 
 export async function saveMediaCollectionPin(
   userId: string,
@@ -13,19 +19,19 @@ export async function saveMediaCollectionPin(
 ): Promise<MediaCollectionPins> {
   try {
     return await runTransaction(db, async transaction => {
+      const pinsRef = doc(db, "mediaCollectionPins", userId);
       const profileRef = doc(db, "users", userId);
-      const snapshot = await transaction.get(profileRef);
-      if (!snapshot.exists()) throw new Error("Staff profile is unavailable");
+      const [snapshot, profile] = await Promise.all([transaction.get(pinsRef), transaction.get(profileRef)]);
+      if (!profile.exists()) throw new Error("Staff profile is unavailable");
       const pins = setMediaCollectionPinned(
-        readMediaCollectionPins(snapshot.data()),
+        snapshot.exists() ? parseMediaCollectionPins(snapshot.data()) : readLegacyMediaCollectionPins(profile.data()),
         collectionId,
         pinned,
       );
-      transaction.set(
-        profileRef,
-        { preferences: { mediaCollectionPins: pins } },
-        { mergeFields: ["preferences.mediaCollectionPins"] },
-      );
+      transaction.set(pinsRef, pins);
+      if (profile.get("preferences.mediaCollectionPins") !== undefined) {
+        transaction.update(profileRef, "preferences.mediaCollectionPins", deleteField());
+      }
       return pins;
     });
   } catch {

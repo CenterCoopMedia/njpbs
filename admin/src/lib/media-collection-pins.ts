@@ -25,7 +25,7 @@ export function parseMediaCollectionPins(value: unknown): MediaCollectionPins {
   };
 }
 
-export function readMediaCollectionPins(profile: unknown): MediaCollectionPins {
+export function readLegacyMediaCollectionPins(profile: unknown): MediaCollectionPins {
   return parseMediaCollectionPins(record(record(profile)?.preferences)?.mediaCollectionPins);
 }
 

@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   openSubclip: vi.fn(),
   mutate: vi.fn(),
   setItems: vi.fn(),
+  loadPins: vi.fn(),
   savePins: vi.fn(),
   loadViews: vi.fn(),
   mutateViews: vi.fn(),
@@ -43,6 +44,7 @@ vi.mock("../src/lib/media-collections", async importOriginal => ({
   setMediaCollectionItems: (...args: unknown[]) => mocks.setItems(...args),
 }));
 vi.mock("../src/lib/media-collection-pins-store", () => ({
+  loadMediaCollectionPins: (...args: unknown[]) => mocks.loadPins(...args),
   saveMediaCollectionPin: (...args: unknown[]) => mocks.savePins(...args),
 }));
 vi.mock("../src/lib/saved-media-view-store", () => ({
@@ -144,6 +146,7 @@ beforeEach(() => {
   mocks.refreshAsset.mockResolvedValue({ success: true, records: [], nextCursor: null, hasMore: false, total: 0 });
   mocks.mutate.mockResolvedValue({ success: true, changed: true, replayed: false, collection: summary("all_staff") });
   mocks.setItems.mockResolvedValue({ success: true, collectionId, changed: true, replayed: false, version: 1, membershipVersion: 4 });
+  mocks.loadPins.mockResolvedValue({ version: 1, ids: [] });
   mocks.savePins.mockImplementation(async (_userId: string, targetId: string, pinned: boolean) => ({
     version: 1,
     ids: pinned ? [targetId] : [],
@@ -496,6 +499,29 @@ describe("MediaCollectionsLibrary", () => {
     first.unmount();
     renderLibrary("/media/collections", true, "staff-a", "text");
     expect((await screen.findAllByRole("button", { name: /Pin Election package/ }))[0]).toHaveTextContent("Pin");
+  });
+
+  it("opens a pinned collection ahead of its regular page and shows it only once when that page loads", async () => {
+    const laterPin = { ...summary("all_staff"), id: "c".repeat(64), name: "Weekend package" };
+    mocks.loadPins.mockResolvedValue({ version: 1, ids: [laterPin.id] });
+    mocks.list.mockImplementation(async (_token: string, query: { scope: MediaCollectionScope; cursor?: string; pinnedIds?: string[] }) => {
+      if (query.cursor) return { collections: [laterPin], nextCursor: null };
+      return {
+        collections: [summary(query.scope)],
+        pinnedCollections: query.pinnedIds?.includes(laterPin.id) ? [laterPin] : [],
+        nextCursor: query.scope === "all_staff" ? "next-page" : null,
+      };
+    });
+    const { router } = renderLibrary();
+    const grid = await screen.findByRole("list");
+    const openPin = within(grid).getByRole("button", { name: /^Weekend package/ });
+    expect(within(grid).getAllByRole("listitem")[0]).toContainElement(openPin);
+    fireEvent.click(openPin);
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/media/collections/${laterPin.id}`));
+    fireEvent.click(screen.getByRole("button", { name: "All collections" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Load more shared collections" }));
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Load more shared collections" })).toBeNull());
+    expect(screen.getAllByRole("button", { name: /^Weekend package/ })).toHaveLength(1);
   });
 
   it("does not offer the image library to a staff role that cannot open it", async () => {

@@ -1294,10 +1294,66 @@ describe("media collection service", () => {
     expect(own.body.collections[0]).not.toHaveProperty("ownerUid");
   });
 
+  it("resolves accessible pins outside the page without exposing another account's private collection", async () => {
+    const pinned = await create("private");
+    const first = await create("private");
+    const other = await create("private", actor("staff-2"));
+    const shared = await create("all_staff");
+    await db.doc(`mediaCollections/${pinned.id}`).update({ updatedAt: admin.firestore.Timestamp.fromMillis(1) });
+    const request = { scope: "private", lifecycle: "active", limit: 1,
+      pinnedIds: [pinned.id, other.id, shared.id, pinned.id, "b".repeat(64)] };
+    const page = await list(request);
+    expect(page.statusCode, JSON.stringify(page.body)).toBe(200);
+    expect(page.body.collections.map(({ id }) => id)).toEqual([first.id]);
+    expect(page.body.pinnedCollections.map(({ id }) => id).sort()).toEqual([pinned.id, shared.id].sort());
+    expect(JSON.stringify(page.body)).not.toContain(other.id);
+    const next = await list({ scope: "private", lifecycle: "active", limit: 1, cursor: page.body.nextCursor });
+    expect(next.body.collections.map(({ id }) => id)).toEqual([pinned.id]);
+    expect((await list({ ...request, pinnedIds: Array(21).fill(pinned.id) })).statusCode).toBe(400);
+  });
+
+  it("resolves a direct view pin until its grant is revoked and rechecks asset access", async () => {
+    const collection = await create("private");
+    const reader = actor("staff-2");
+    const ref = { backend: "r2", id: "asset-1" };
+    expect((await setItems({ collectionId: collection.id, requestId: randomUUID(),
+      baseMembershipVersion: 1, present: true, refs: [ref] })).statusCode).toBe(200);
+    const covered = await mutate({ action: "update", requestId: randomUUID(), collectionId: collection.id,
+      baseVersion: 1, coverRef: ref });
+    expect(covered.statusCode).toBe(200);
+    const shared = await setSharing(covered.body.collection, reader.uid, "view");
+    expect(shared.statusCode).toBe(200);
+
+    const query = { scope: "private", lifecycle: "active", pinnedIds: [collection.id] };
+    const before = await list(query, reader);
+    expect(before.body.pinnedCollections).toEqual([
+      expect.objectContaining({
+        id: collection.id, access: "view", canEdit: false, shared: true,
+        cover: expect.objectContaining({ id: ref.id }),
+      }),
+    ]);
+    expect(before.body.collections).toEqual([]);
+
+    const restricted = actor(reader.uid, true, []);
+    const after = await list(query, restricted);
+    expect(after.statusCode).toBe(200);
+    expect(after.body.pinnedCollections).toEqual([expect.objectContaining({ id: collection.id, cover: null })]);
+    const items = await listItems({ collectionId: collection.id }, restricted);
+    expect(items.statusCode).toBe(200);
+    expect(items.body.items).toEqual([]);
+    expect(JSON.stringify([after.body, items.body])).not.toContain(ref.id);
+
+    expect((await setSharing(shared.body.collection, reader.uid, null)).statusCode).toBe(200);
+    const revoked = await list(query, reader);
+    expect(revoked.statusCode).toBe(200);
+    expect(revoked.body.pinnedCollections).toEqual([]);
+    expect((await listItems({ collectionId: collection.id }, reader)).statusCode).toBe(404);
+  });
+
   it("blocks inactive accounts without deleting shared collection state", async () => {
     const collection = await create("all_staff");
     const inactive = await list(
-      { scope: "all_staff", lifecycle: "active" },
+      { scope: "all_staff", lifecycle: "active", pinnedIds: [collection.id] },
       actor("staff-1", false),
     );
     expect(inactive.statusCode).toBe(403);

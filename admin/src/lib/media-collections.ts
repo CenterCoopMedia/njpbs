@@ -86,6 +86,7 @@ export type MediaCollectionSubclip = {
 export interface MediaCollectionPage {
   success: true;
   collections: MediaCollectionSummary[];
+  pinnedCollections?: MediaCollectionSummary[];
   nextCursor: string | null;
   hasMore: boolean;
 }
@@ -132,6 +133,7 @@ export function listMediaCollections(
     lifecycle: MediaCollectionLifecycle;
     cursor?: string;
     limit?: number;
+    pinnedIds?: string[];
   },
 ) {
   return postFunction<MediaCollectionPage>("cmsListMediaCollections", token, query);
