@@ -898,7 +898,7 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
     const record = workerJob.slice(workerJob.indexOf("- name: Record the completed CMS API receipt"));
     expect(record.slice(0, record.indexOf("- name:", 10))).toContain("--configuration-fingerprint-file");
     const confirm = workerJob.slice(workerJob.indexOf("- name: Confirm the live CMS API identity"));
-    expect(confirm).toContain("if: steps.cms_api_plan.outputs.mutated == 'false'");
+    expect(confirm).toContain("steps.cms_api_plan.outputs.mutated == 'false'");
     expect(confirm).toContain("component-runner.mjs cmsApi confirm");
     expect(workflow).not.toContain("cms_api_mutated");
     expect(workflow).toContain("Deploy Firestore and Storage rules without Functions");

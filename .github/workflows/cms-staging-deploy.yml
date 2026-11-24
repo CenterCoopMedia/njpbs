@@ -1032,7 +1032,7 @@ jobs:
           CMS_PREVIEW_FIREBASE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
         run: node scripts/production-reader-deployment.mjs start cmsApi
       - name: Mark the CMS API receipt in progress
-        if: (steps.cms_api_plan.outputs.mutated != 'false' || steps.reader_bind_api.outputs.redeploy == 'true') && !inputs.install_reader_bridge
+        if: (steps.cms_api_plan.outputs.mutated != 'false' || steps.reader_bind_api.outputs.redeploy == 'true') && steps.reader_bind_api.outputs.redeploy != 'false' && !inputs.install_reader_bridge
         env:
           CMS_PREVIEW_FIREBASE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           DEPLOY_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
@@ -1043,8 +1043,8 @@ jobs:
             --run-id "$GITHUB_RUN_ID" \
             --run-attempt "$GITHUB_RUN_ATTEMPT"
       - name: Deploy CMS API Worker
-        # A bound run deploys the Worker with this run's reader binding.
-        if: steps.cms_api_plan.outputs.mutated != 'false' || steps.reader_bind_api.outputs.redeploy == 'true'
+        # A bound run deploys the Worker with this run's reader binding; a rerun that finds it live keeps that Worker.
+        if: (steps.cms_api_plan.outputs.mutated != 'false' || steps.reader_bind_api.outputs.redeploy == 'true') && steps.reader_bind_api.outputs.redeploy != 'false'
         id: deploy_cms_api
         env:
           DEPLOY_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
@@ -1100,7 +1100,7 @@ jobs:
               "https://us-central1-$CMS_TARGET_FIREBASE_PROJECT.cloudfunctions.net/$endpoint"
           done
       - name: Record the completed CMS API receipt
-        if: (steps.cms_api_plan.outputs.mutated != 'false' || steps.reader_bind_api.outputs.redeploy == 'true') && !inputs.install_reader_bridge
+        if: (steps.cms_api_plan.outputs.mutated != 'false' || steps.reader_bind_api.outputs.redeploy == 'true') && steps.reader_bind_api.outputs.redeploy != 'false' && !inputs.install_reader_bridge
         env:
           CMS_PREVIEW_FIREBASE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           DEPLOY_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
@@ -1156,7 +1156,7 @@ jobs:
           path: ${{ runner.temp }}/production-reader-deployment-receipt.json
           if-no-files-found: error
       - name: Confirm the live CMS API identity
-        if: steps.cms_api_plan.outputs.mutated == 'false' && steps.reader_bind_api.outputs.redeploy != 'true'
+        if: (steps.cms_api_plan.outputs.mutated == 'false' && steps.reader_bind_api.outputs.redeploy != 'true') || steps.reader_bind_api.outputs.redeploy == 'false'
         env:
           CMS_PREVIEW_FIREBASE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

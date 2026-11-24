@@ -103,7 +103,7 @@ describe("CMS reader binding for an ordinary deploy", () => {
       "Record and verify this run's CMS reader candidates"]) expect(steps[name].if).toContain("reader_binding != ''");
     // With no binding (production today) each expression reduces to its earlier form.
     expect(steps["Plan Functions and renderer release"].env.FORCE_FIREBASE).toBe("${{ inputs.force_firebase || steps.reader_binding.outputs.binding != '' }}");
-    expect(steps["Deploy CMS API Worker"].if).toBe("steps.cms_api_plan.outputs.mutated != 'false' || steps.reader_bind_api.outputs.redeploy == 'true'");
-    expect(steps["Confirm the live CMS API identity"].if).toBe("steps.cms_api_plan.outputs.mutated == 'false' && steps.reader_bind_api.outputs.redeploy != 'true'");
+    expect(steps["Deploy CMS API Worker"].if).toBe("(steps.cms_api_plan.outputs.mutated != 'false' || steps.reader_bind_api.outputs.redeploy == 'true') && steps.reader_bind_api.outputs.redeploy != 'false'");
+    expect(steps["Confirm the live CMS API identity"].if).toBe("(steps.cms_api_plan.outputs.mutated == 'false' && steps.reader_bind_api.outputs.redeploy != 'true') || steps.reader_bind_api.outputs.redeploy == 'false'");
   });
 });
