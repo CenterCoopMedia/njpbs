@@ -76,9 +76,7 @@ jobs:
       - name: Prepare exact source and target configuration
         working-directory: source
         env:
-          # The script selects by target and refuses an empty value for it.
-          PUBLISHER_PUBLIC_VARS_JSON: ${{ vars.PUBLISHER_PUBLIC_VARS_JSON }}
-          PUBLISHER_DEVELOPMENT_PUBLIC_VARS_JSON: ${{ vars.PUBLISHER_DEVELOPMENT_PUBLIC_VARS_JSON }}
+          PUBLISHER_PUBLIC_VARS_JSON: ${{ inputs.target == 'development' && vars.PUBLISHER_DEVELOPMENT_PUBLIC_VARS_JSON || vars.PUBLISHER_PUBLIC_VARS_JSON }}
           CMS_PRODUCTION_API_ORIGIN: ${{ vars.CMS_PRODUCTION_API_ORIGIN }}
           CMS_LOCAL_PUBLICATION_OWNER: ${{ vars.CMS_LOCAL_PUBLICATION_OWNER }}
           CMS_GPU_WORKER_ID: ${{ vars.CMS_GPU_WORKER_ID }}

@@ -63,8 +63,9 @@ describe("component runner", () => {
       .toBe("Component operation did not complete: Error code ENOENT");
     const firestore = Object.assign(new Error("10 ABORTED: Too much contention on doc 'cmsDeploymentReceipts/functions' token ya29.synthetic-private-credential-value"),
       { code: 10, details: "Too much contention" });
-    expect(componentFailureDiagnostic(firestore)).toBe("Component operation did not complete: Error code 10: 10 ABORTED: Too much contention on doc <value> token <value>");
-    const admin = Object.assign(new Error("Failed to parse private key for synthetic@example.test"), { name: "FirebaseAppError", code: "app/invalid-credential" });
+    expect(componentFailureDiagnostic(firestore)).toBe("Component operation did not complete: Error code 10: Too much contention");
+    const admin = Object.assign(new Error("Failed to parse private key for synthetic@example.test"), { name: "FirebaseAppError", code: "app/invalid-credential",
+      errorInfo: { code: "app/invalid-credential", message: "Failed to parse private key for synthetic@example.test" } });
     expect(componentFailureDiagnostic(admin)).toBe("Component operation did not complete: FirebaseAppError code app/invalid-credential: Failed to parse private key for <value>");
   });
 

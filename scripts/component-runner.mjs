@@ -24,24 +24,24 @@ export async function runComponentOperation(component, operation, argv = [], loa
   return main(args);
 }
 
-// Firestore (gRPC status) and Firebase Admin errors describe the request, not
-// its input; quoted text, addresses and long tokens are still removed.
+// Firestore's gRPC status carries its message in `details`, Firebase Admin in
+// `errorInfo.message`. Quoted text, addresses and long tokens are still removed.
 const scrubbed = message => String(message).replace(/(["'`]).*?\1/g, "<value>").replace(/\S+@\S+|https?:\/\/\S+/g, "<value>")
   .replace(/[A-Za-z0-9_+/=.-]{24,}/g, "<value>").replace(/\s+/g, " ").trim().slice(0, 200);
 
 export function componentFailureDiagnostic(error) {
   // Deliberate adapter refusals are shown whole. Any other error shows only its
-  // class and code, plus a scrubbed message for Firestore and Firebase SDK
-  // errors: native parse and subprocess messages can contain credentials or
+  // class and code, plus the structured message of a Firestore or Firebase
+  // error, never its raw text: native parse and subprocess messages can contain credentials or
   // secret-derived inputs.
   if (error instanceof ComponentReceiptError || ["CmsSmokeError", "FunctionsDeployInventoryError", "FunctionsConfigurationError"].includes(error?.name)) {
     return error.message;
   }
   const name = /^[A-Za-z]{1,40}$/.test(error?.name ?? "") ? error.name : "unknown";
   const code = Number.isSafeInteger(error?.code) || /^[A-Za-z0-9/_-]{1,60}$/.test(error?.code ?? "") ? error.code : null;
-  const sdk = Number.isSafeInteger(error?.code) && typeof error?.details === "string" || /^Firebase[A-Za-z]*Error$/.test(name);
+  const structured = Number.isSafeInteger(error?.code) ? error.details : /^Firebase[A-Za-z]*Error$/.test(name) ? error.errorInfo?.message : null;
   return `Component operation did not complete: ${name}${code === null ? "" : ` code ${code}`}` +
-    (sdk && error?.message ? `: ${scrubbed(error.message)}` : "");
+    (typeof structured === "string" && structured ? `: ${scrubbed(structured)}` : "");
 }
 
 export async function main(argv = process.argv.slice(2)) {

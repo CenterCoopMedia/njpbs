@@ -194,8 +194,9 @@ describe("Route D Cut A boundary placement", () => {
       const planner = production.jobs["firebase-preflight"].steps.find(row => row.name === "Plan Functions and renderer release");
       // Read-only contract capture proves its own graph from the pinned checkout.
       const { FUNCTION_TARGETS: functionTargets, ...providerEnvironment } = planner.env;
-      // A reader binding forces the planner's Functions deploy, never the contract's refusal.
-      providerEnvironment.FORCE_FIREBASE = "${{ inputs.force_firebase }}";
+      // Later jobs read the same reader binding through the preflight job's output.
+      if (jobName !== "firebase-preflight") providerEnvironment.FORCE_FIREBASE = providerEnvironment.FORCE_FIREBASE
+        .replace("steps.reader_binding.outputs.binding", "needs.firebase-preflight.outputs.reader_binding");
       expect(functionTargets).toBe("${{ needs.verify.outputs.function_targets }}");
       expect(capture.env).toMatchObject({ ...providerEnvironment,
         FIREBASE_WEB_API_KEY: "${{ vars.VITE_FIREBASE_API_KEY || inputs.target != 'development' && secrets.VITE_FIREBASE_API_KEY || '' }}",

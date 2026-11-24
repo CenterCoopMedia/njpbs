@@ -767,8 +767,7 @@ jobs:
           CMS_BUG_REPORT_TELEGRAM_WEBHOOK_SECRET: ${{ secrets.CMS_BUG_REPORT_TELEGRAM_WEBHOOK_SECRET }}
           CMS_BUG_REPORT_GITHUB_TOKEN: ${{ secrets.CMS_BUG_REPORT_GITHUB_TOKEN }}
           CMS_BUG_REPORT_GITHUB_WEBHOOK_SECRET: ${{ secrets.CMS_BUG_REPORT_GITHUB_WEBHOOK_SECRET }}
-          # A reader binding forces the Functions plan only; the contract refuses a real force alone.
-          FORCE_FIREBASE: ${{ inputs.force_firebase }}
+          FORCE_FIREBASE: ${{ inputs.force_firebase || steps.reader_binding.outputs.binding != '' }}
           CMS_DEPLOY_MIGRATIONS: ${{ inputs.migrations }}
           CMS_EDGE_ORIGIN_SECRET: ${{ secrets.CMS_EDGE_ORIGIN_SECRET }}
           CLOUD_PUBLICATION_WAKE_ENVIRONMENT: ${{ env.CMS_TARGET }}
@@ -2261,8 +2260,7 @@ jobs:
           CMS_BUG_REPORT_TELEGRAM_WEBHOOK_SECRET: ${{ secrets.CMS_BUG_REPORT_TELEGRAM_WEBHOOK_SECRET }}
           CMS_BUG_REPORT_GITHUB_TOKEN: ${{ secrets.CMS_BUG_REPORT_GITHUB_TOKEN }}
           CMS_BUG_REPORT_GITHUB_WEBHOOK_SECRET: ${{ secrets.CMS_BUG_REPORT_GITHUB_WEBHOOK_SECRET }}
-          # A reader binding forces the Functions plan only; the contract refuses a real force alone.
-          FORCE_FIREBASE: ${{ inputs.force_firebase }}
+          FORCE_FIREBASE: ${{ inputs.force_firebase || needs.firebase-preflight.outputs.reader_binding != '' }}
           CMS_DEPLOY_MIGRATIONS: ${{ inputs.migrations }}
           CMS_EDGE_ORIGIN_SECRET: ${{ secrets.CMS_EDGE_ORIGIN_SECRET }}
           CLOUD_PUBLICATION_WAKE_ENVIRONMENT: ${{ env.CMS_TARGET }}
@@ -2414,8 +2412,7 @@ jobs:
           CMS_BUG_REPORT_TELEGRAM_WEBHOOK_SECRET: ${{ secrets.CMS_BUG_REPORT_TELEGRAM_WEBHOOK_SECRET }}
           CMS_BUG_REPORT_GITHUB_TOKEN: ${{ secrets.CMS_BUG_REPORT_GITHUB_TOKEN }}
           CMS_BUG_REPORT_GITHUB_WEBHOOK_SECRET: ${{ secrets.CMS_BUG_REPORT_GITHUB_WEBHOOK_SECRET }}
-          # A reader binding forces the Functions plan only; the contract refuses a real force alone.
-          FORCE_FIREBASE: ${{ inputs.force_firebase }}
+          FORCE_FIREBASE: ${{ inputs.force_firebase || needs.firebase-preflight.outputs.reader_binding != '' }}
           CMS_DEPLOY_MIGRATIONS: ${{ inputs.migrations }}
           CMS_EDGE_ORIGIN_SECRET: ${{ secrets.CMS_EDGE_ORIGIN_SECRET }}
           CLOUD_PUBLICATION_WAKE_ENVIRONMENT: ${{ env.CMS_TARGET }}

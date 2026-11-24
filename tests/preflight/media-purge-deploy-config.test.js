@@ -59,7 +59,8 @@ describe("purge activation decision", () => {
       PURGE_STUB_ERROR: "ERROR: (gcloud.secrets.versions.describe) UNAVAILABLE: The service is currently unavailable." });
     expect(result.status, result.stderr).toBe(0);
     expect(result.calls.split("\n").filter(Boolean)).toHaveLength(4);
-    expect(result.stderr).toContain("UNAVAILABLE");
+    // Only a provider answer ends the read; the retry line names the check and that answer.
+    expect(result.stderr).toContain("check=secret version HEALTHCHECKS_MEDIA_PURGE_SWEEP got=ERROR: (gcloud.secrets.versions.describe) UNAVAILABLE");
     expect(result.decision).toEqual({ enabled: true, realDeletesEnabled: false });
   });
   it("fails loud and writes no decision when the state read is refused", () => {

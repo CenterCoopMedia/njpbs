@@ -189,27 +189,21 @@ export function prepareTarget({ sha, target, variables, checkout, source, env })
   return { prepared, inputFingerprint };
 }
 
-// The last stderr lines of a failed child, with quoted text, addresses and long
-// tokens removed. Wrangler and the prepare script print their error there.
-export function stderrTail(stderr) {
-  return String(stderr ?? "").split("\n").map(line => line.trim()).filter(Boolean).slice(-5)
-    .map(line => line.replace(/(["'`]).*?\1/g, "<value>").replace(/\S+@\S+|https?:\/\/\S+/g, "<value>")
-      .replace(/[A-Za-z0-9_+/=.-]{24,}/g, "<value>").slice(0, 200)).join(" | ");
-}
-
-// Each target reads only its own variables; an empty one never falls back to production's.
-export function publicVariables(target, env) {
-  const selected = target.environment === "development" ? env.PUBLISHER_DEVELOPMENT_PUBLIC_VARS_JSON : env.PUBLISHER_PUBLIC_VARS_JSON;
-  if (!selected) throw new ImageRefusal(`Publisher public variables for ${target.environment} are empty`);
-  return JSON.parse(selected);
+// Child output can hold credentials and these logs are public: only Wrangler's
+// numeric API code is taken from it.
+export function childFailure(error) {
+  const status = Number.isInteger(error?.status) ? `exit ${error.status}` : "exit unknown";
+  const signal = /^SIG[A-Z0-9]{2,12}$/.test(error?.signal ?? "") ? `, signal ${error.signal}` : "";
+  const code = /\[code: (\d{1,6})\]/.exec(String(error?.stderr ?? ""))?.[1] ??
+    (/^E[A-Z0-9_]{2,30}$/.test(error?.code ?? "") ? error.code : null);
+  return `Publisher image command failed (${status}${signal}${code === null ? "" : `, code ${code}`}); child output withheld`;
 }
 
 function command(executable, args, options = {}) {
   try {
     return execFileSync(executable, args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 64 * 1024 * 1024, ...options });
   } catch (error) {
-    // Child errors can retain credential-bearing output. Never print the error object or stdout.
-    throw new ImageRefusal(`Publisher image command failed (exit ${Number.isInteger(error.status) ? error.status : "unknown"}): ${stderrTail(error.stderr) || "no stderr"}`);
+    throw new ImageRefusal(childFailure(error));
   }
 }
 
@@ -229,7 +223,7 @@ async function main(mode, env = process.env) {
     } });
   } else if (mode === "prepare") {
     // The development pin comes from its own repository variable, separate from the account in the vars JSON.
-    const variables = { ...publicVariables(target, env),
+    const variables = { ...JSON.parse(env.PUBLISHER_PUBLIC_VARS_JSON),
       ...(target.environment === "development" ? { CMS_DEV_CLOUDFLARE_ACCOUNT_ID: env.CMS_DEV_CLOUDFLARE_ACCOUNT_ID ?? "" } : {}) };
     const { prepared, inputFingerprint } = prepareTarget({ sha, target, variables, checkout, source: source(), env });
     const dockerfile = readFileSync(path.join(prepared.source, "publisher/Dockerfile"), "utf8");
