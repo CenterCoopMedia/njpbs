@@ -585,6 +585,7 @@ jobs:
     permissions:
       contents: read
       actions: read
+      checks: read
     environment: ${{ inputs.target == 'development' && 'development' || 'production' }}
     if: >-
       (vars.CANONICAL_GITHUB_REPOSITORY != '' && vars.CANONICAL_GITHUB_REPOSITORY_ID != '' && github.repository == vars.CANONICAL_GITHUB_REPOSITORY && github.repository_id == vars.CANONICAL_GITHUB_REPOSITORY_ID) &&
@@ -612,6 +613,25 @@ jobs:
       release_reason: ${{ steps.release_plan.outputs.release_reason }}
       reader_binding: ${{ steps.reader_binding.outputs.binding }}
     steps:
+      - name: Stop on a job output GitHub dropped
+        # GitHub skips a job output that contains a masked value and only warns; a later job then reads it
+        # as empty and runs on (CenterCoopMedia/njpbs#561: the reader binding; dev run 6: a fingerprint).
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Every attempt: a rerun of failed jobs keeps the outputs an earlier attempt's producer wrote.
+          jobs=$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?filter=all" \
+            --jq '.jobs[] | select(.status == "completed") | [.id, .name] | @tsv')
+          dropped=""
+          while IFS=$'\t' read -r job name; do
+            [ -n "$job" ] || continue
+            messages=$(gh api --paginate "repos/$GITHUB_REPOSITORY/check-runs/$job/annotations" --jq '.[].message')
+            dropped+=$(sed -n "s/^Skip output '\([^']*\)' since it may contain secret.*/ $name.\1/p" <<<"$messages")
+          done <<<"$jobs"
+          if [ -n "$dropped" ]; then
+            echo "::error::GitHub dropped job output ${dropped# } because it contains a masked value; fix the value and dispatch a new run"
+            exit 1
+          fi
       - uses: actions/checkout@v7
         with:
           ref: ${{ needs.admin-build.outputs.deploy_sha }}
@@ -1046,11 +1066,14 @@ jobs:
             --secrets-file "$RUNNER_TEMP/cms-api-secrets.json" \
             --configuration-fingerprint-file "$RUNNER_TEMP/cms-api-configuration.sha256"
       - name: Bind the CMS readers into the CMS API config
-        # A bound run refuses a failed-job rerun here; dispatch a new run.
+        # A bound run refuses a rerun here; dispatch a new run.
         if: needs.firebase-preflight.outputs.reader_binding != ''
         env:
           CMS_READER_BINDING: ${{ needs.firebase-preflight.outputs.reader_binding }}
-        run: node scripts/cms-reader-binding.mjs bind cmsApi
+        run: |
+          # Trusted here: a rerun keeps the attempt-1 binding and runs the release source's binder.
+          [ "$GITHUB_RUN_ATTEMPT" = 1 ] || { echo "::error::A bound run cannot be rerun; dispatch a new run"; exit 1; }
+          node scripts/cms-reader-binding.mjs bind cmsApi
       - name: Bind and start the original production API reader candidate
         if: inputs.install_reader_bridge
         env:
@@ -1211,7 +1234,34 @@ jobs:
     runs-on: ubuntu-24.04
     # Measured Nov. 2026: 34m55s, 40m0s, 26m54s (45191230409, 44613342087, dev 45310500950).
     timeout-minutes: 107 # Runaway guard: 3x max 35m25s (14d, 2026-10-26; #2657).
+    permissions:
+      contents: read
+      actions: read
+      checks: read
     steps:
+      - name: Stop on a job output GitHub dropped
+        # GitHub skips a job output that contains a masked value and only warns; a later job then reads it
+        # as empty and runs on (CenterCoopMedia/njpbs#561: the reader binding; dev run 6: a fingerprint).
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Every attempt: a rerun of failed jobs keeps the outputs an earlier attempt's producer wrote.
+          jobs=$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?filter=all" \
+            --jq '.jobs[] | select(.status == "completed") | [.id, .name] | @tsv')
+          dropped=""
+          while IFS=$'\t' read -r job name; do
+            [ -n "$job" ] || continue
+            messages=$(gh api --paginate "repos/$GITHUB_REPOSITORY/check-runs/$job/annotations" --jq '.[].message')
+            dropped+=$(sed -n "s/^Skip output '\([^']*\)' since it may contain secret.*/ $name.\1/p" <<<"$messages")
+          done <<<"$jobs"
+          if [ -n "$dropped" ]; then
+            echo "::error::GitHub dropped job output ${dropped# } because it contains a masked value; fix the value and dispatch a new run"
+            exit 1
+          fi
+      - name: Refuse a rerun of a bound run
+        # Before any receipt write or preview pause: a rerun keeps the attempt-1 binding (CenterCoopMedia/njpbs#561).
+        if: needs.firebase-preflight.outputs.reader_binding != ''
+        run: '[ "$GITHUB_RUN_ATTEMPT" = 1 ] || { echo "::error::A bound run cannot be rerun; dispatch a new run"; exit 1; }'
       - uses: actions/checkout@v7
         with:
           ref: ${{ needs.admin-build.outputs.deploy_sha }}
@@ -1386,7 +1436,10 @@ jobs:
         if: needs.firebase-preflight.outputs.functions_mutated == 'true' && needs.firebase-preflight.outputs.reader_binding != ''
         env:
           CMS_READER_BINDING: ${{ needs.firebase-preflight.outputs.reader_binding }}
-        run: node scripts/cms-reader-binding.mjs bind functions
+        run: |
+          # Trusted here: a rerun keeps the attempt-1 binding and runs the release source's binder.
+          [ "$GITHUB_RUN_ATTEMPT" = 1 ] || { echo "::error::A bound run cannot be rerun; dispatch a new run"; exit 1; }
+          node scripts/cms-reader-binding.mjs bind functions
       - name: Bind and start the original production Functions reader candidate
         if: inputs.install_reader_bridge
         env:
@@ -1913,7 +1966,30 @@ jobs:
     runs-on: ubuntu-24.04
     # Measured Nov. 2026: 70 s, 66 s, 43 s (45191230409, 44613342087, dev 45310500950).
     timeout-minutes: 20 # Runaway guard: 3x max rounds to 8m; retain 20m floor (#2657).
+    permissions:
+      contents: read
+      actions: read
+      checks: read
     steps:
+      - name: Stop on a job output GitHub dropped
+        # GitHub skips a job output that contains a masked value and only warns; a later job then reads it
+        # as empty and runs on (CenterCoopMedia/njpbs#561: the reader binding; dev run 6: a fingerprint).
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Every attempt: a rerun of failed jobs keeps the outputs an earlier attempt's producer wrote.
+          jobs=$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?filter=all" \
+            --jq '.jobs[] | select(.status == "completed") | [.id, .name] | @tsv')
+          dropped=""
+          while IFS=$'\t' read -r job name; do
+            [ -n "$job" ] || continue
+            messages=$(gh api --paginate "repos/$GITHUB_REPOSITORY/check-runs/$job/annotations" --jq '.[].message')
+            dropped+=$(sed -n "s/^Skip output '\([^']*\)' since it may contain secret.*/ $name.\1/p" <<<"$messages")
+          done <<<"$jobs"
+          if [ -n "$dropped" ]; then
+            echo "::error::GitHub dropped job output ${dropped# } because it contains a masked value; fix the value and dispatch a new run"
+            exit 1
+          fi
       - uses: actions/checkout@v7
         with:
           ref: ${{ needs.admin-build.outputs.deploy_sha }}
@@ -2217,7 +2293,30 @@ jobs:
     runs-on: ubuntu-24.04
     # Measured 68 s in 44337773774, the only run where it ran.
     timeout-minutes: 20 # Runaway guard: two bounded four-minute captures plus setup.
+    permissions:
+      contents: read
+      actions: read
+      checks: read
     steps:
+      - name: Stop on a job output GitHub dropped
+        # GitHub skips a job output that contains a masked value and only warns; a later job then reads it
+        # as empty and runs on (CenterCoopMedia/njpbs#561: the reader binding; dev run 6: a fingerprint).
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Every attempt: a rerun of failed jobs keeps the outputs an earlier attempt's producer wrote.
+          jobs=$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?filter=all" \
+            --jq '.jobs[] | select(.status == "completed") | [.id, .name] | @tsv')
+          dropped=""
+          while IFS=$'\t' read -r job name; do
+            [ -n "$job" ] || continue
+            messages=$(gh api --paginate "repos/$GITHUB_REPOSITORY/check-runs/$job/annotations" --jq '.[].message')
+            dropped+=$(sed -n "s/^Skip output '\([^']*\)' since it may contain secret.*/ $name.\1/p" <<<"$messages")
+          done <<<"$jobs"
+          if [ -n "$dropped" ]; then
+            echo "::error::GitHub dropped job output ${dropped# } because it contains a masked value; fix the value and dispatch a new run"
+            exit 1
+          fi
       - uses: actions/checkout@v7
         with:
           ref: ${{ needs.admin-build.outputs.deploy_sha }}

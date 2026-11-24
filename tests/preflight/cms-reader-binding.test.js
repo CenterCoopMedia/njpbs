@@ -2,7 +2,8 @@ import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { describe, expect, it, vi } from "vitest";
 import { parse } from "yaml";
-import { assertFirstApiAttempt, bindApiConfig, bindFunctionsDotenv, recordReaderCandidates, selectReaderBinding } from "../../scripts/cms-reader-binding.mjs";
+import { assertFirstAttempt, bindApiConfig, bindFunctionsDotenv, decodeBinding, encodeBinding, recordReaderCandidates, releaseSourceBinds,
+  selectReaderBinding } from "../../scripts/cms-reader-binding.mjs";
 import { cmsTarget } from "../../scripts/lib/cms-target.mjs";
 
 const require = createRequire(import.meta.url);
@@ -89,9 +90,38 @@ describe("CMS reader binding for an ordinary deploy", () => {
     expect(calls[4][2]).toEqual({ adminSession: [1, 2] });
   });
 
-  it("refuses a failed-job rerun of a bound run's CMS API job", () => {
-    expect(() => assertFirstApiAttempt({ GITHUB_RUN_ATTEMPT: "1" })).not.toThrow();
-    expect(() => assertFirstApiAttempt({ GITHUB_RUN_ATTEMPT: "2" })).toThrow("dispatch a new run");
+  it("passes the binding between jobs without the braces a multiline secret masks", () => {
+    const binding = { CMS_READER_BRIDGE_ENABLED: "true", CMS_READER_BRIDGE_OPERATION_ID: "reader-dev-45330201062-1" };
+    expect(encodeBinding(binding)).not.toMatch(/[{}]/);
+    expect(decodeBinding(encodeBinding(binding))).toEqual(binding);
+    expect(decodeBinding("")).toBeNull();
+    // A release source from before the base64 binding (036901d parses JSON) is refused in preflight.
+    expect(releaseSourceBinds(readFileSync(new URL("../../scripts/cms-reader-binding.mjs", import.meta.url), "utf8"))).toBe(true);
+    expect(releaseSourceBinds("const parsed = value ? JSON.parse(value) : null;")).toBe(false);
+    expect(releaseSourceBinds("")).toBe(false);
+  });
+
+  it("refuses a rerun of a bound run before selection and before each bind", () => {
+    expect(() => assertFirstAttempt({ GITHUB_RUN_ATTEMPT: "1" })).not.toThrow();
+    expect(() => assertFirstAttempt({ GITHUB_RUN_ATTEMPT: "2" })).toThrow("dispatch a new run");
+    const source = readFileSync(new URL("../../scripts/cms-reader-binding.mjs", import.meta.url), "utf8");
+    expect(source).toContain("if (selected) assertFirstAttempt(process.env);");
+    // The firebase job refuses before any receipt write or preview pause; the bind steps refuse again.
+    const firebase = parse(readFileSync(new URL("../../.github/workflows/cms-staging-deploy.yml", import.meta.url), "utf8")).jobs.firebase.steps;
+    expect(firebase[1]).toMatchObject({ name: "Refuse a rerun of a bound run", if: "needs.firebase-preflight.outputs.reader_binding != ''" });
+    expect(firebase[1].run).toContain('[ "$GITHUB_RUN_ATTEMPT" = 1 ] || {');
+    // The workflow refuses too, so an older release-source binder never runs on a rerun.
+    const workflow = parse(readFileSync(new URL("../../.github/workflows/cms-staging-deploy.yml", import.meta.url), "utf8"));
+    const steps = Object.fromEntries(Object.values(workflow.jobs).flatMap(job => job.steps).filter(row => row.name).map(row => [row.name, row]));
+    for (const name of ["Bind the CMS readers into the Functions configuration", "Bind the CMS readers into the CMS API config"]) {
+      const run = steps[name].run;
+      expect(run.indexOf('[ "$GITHUB_RUN_ATTEMPT" = 1 ] || {')).toBeGreaterThan(-1);
+      expect(run.indexOf('[ "$GITHUB_RUN_ATTEMPT" = 1 ] || {')).toBeLessThan(run.indexOf("node scripts/cms-reader-binding.mjs bind"));
+    }
+    for (const write of ["writeFileSync(path, bindFunctionsDotenv(", "writeFileSync(path, `${JSON.stringify(bindApiConfig("]) {
+      const at = source.indexOf(write);
+      expect(source.lastIndexOf("assertFirstAttempt(process.env);", at)).toBeGreaterThan(source.lastIndexOf("} else if", at));
+    }
   });
 
   it("binds only a run whose binding is set and keeps production's force and Worker conditions", () => {
