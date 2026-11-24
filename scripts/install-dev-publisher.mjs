@@ -20,6 +20,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { prepareTarget, productionConfig, publisherTarget, targetSource } from "../.github/scripts/publisher-image.mjs";
 import { developmentInputs } from "./render-development-config.mjs";
 import { repositoryIdentity } from "./lib/repository-identity.mjs";
+import { rolloutApplied } from "./lib/cms-component-receipt.mjs";
 
 const require = createRequire(import.meta.url);
 const repository = fileURLToPath(new URL("..", import.meta.url));
@@ -33,7 +34,6 @@ export const SECRETS = ["ACTIVATION_TOKEN", "CMS_DEV_ACCESS_CLIENT_ID", "CMS_DEV
   "MEDIA_MANAGER_CREDENTIAL", "PUBLICATION_WAKE_TOKEN", "R2_PREVIEW_CREDENTIAL", "R2_PUBLICATION_CREDENTIAL"];
 export const WAIT = { attempts: 60, intervalMs: 15_000 };
 // Emulator settings take precedence over the credential in the Firebase SDK.
-// config-input: FIREBASE_AUTH_EMULATOR_HOST, FIREBASE_CONFIG, FIRESTORE_EMULATOR_HOST, GOOGLE_APPLICATION_CREDENTIALS
 const AMBIENT = ["FIRESTORE_EMULATOR_HOST", "FIREBASE_AUTH_EMULATOR_HOST", "GOOGLE_APPLICATION_CREDENTIALS", "FIREBASE_CONFIG"];
 
 export class InstallRefusal extends Error {}
@@ -46,6 +46,7 @@ export function parseArguments(args, env = process.env) {
   if (flag0 !== "--sha" || !SHA.test(sha ?? "") || flag1 !== "--image-run" || !/^[1-9][0-9]{0,19}$/.test(run ?? "") || rest.length) {
     refuse("Usage: install-dev-publisher --sha <40-hex main commit> --image-run <run id> [--check]");
   }
+  // config-input: FIREBASE_AUTH_EMULATOR_HOST, FIREBASE_CONFIG, FIRESTORE_EMULATOR_HOST, GOOGLE_APPLICATION_CREDENTIALS
   if (AMBIENT.some(key => env[key] !== undefined)) refuse("Unset Firebase emulator and ambient credential settings");
   return { sha, run, check };
 }
@@ -129,8 +130,13 @@ export async function readPublisher(cloudflare) {
     cloudflare(`workers/scripts/${WORKER}/settings`), cloudflare("containers/applications"), cloudflare(`workers/scripts/${WORKER}/deployments`)]);
   const named = Array.isArray(applications) ? applications.filter(app => app?.name === WORKER) : [];
   if (named.length !== 1 || !/^[a-f0-9-]{36}$/.test(named[0].id ?? "")) refuse("The development publisher container application is not unique");
+  // The application must serve the Worker's PUBLISHER Durable Object namespace.
+  const namespace = settings?.bindings?.filter(b => b.type === "durable_object_namespace" && b.name === "PUBLISHER") ?? [];
+  if (namespace.length !== 1 || !namespace[0].namespace_id || named[0].durable_objects?.namespace_id !== namespace[0].namespace_id) {
+    refuse("The development publisher container application is not bound to the Worker");
+  }
   const versions = deployments?.deployments?.[0]?.versions ?? [];
-  return { secrets: secretNames(settings), commit: plain(settings, "PUBLICATION_COMMIT_SHA"), application: named[0].id,
+  return { secrets: secretNames(settings), commit: plain(settings, "PUBLICATION_COMMIT_SHA"), application: named[0],
     image: named[0].configuration?.image, version: versions.length === 1 && versions[0].percentage === 100 ? versions[0].version_id : undefined };
 }
 
@@ -141,23 +147,23 @@ export function assertBefore(before) {
 }
 
 // Waits for the newest rollout to reach the receipt image and for /health to answer 200.
-export async function readBack({ cloudflare, health, sleep, before, sha, image, deployed }) {
+export async function readBack({ cloudflare, health, sleep, before, sha, image }) {
   for (let attempt = 0; attempt < WAIT.attempts; attempt += 1) {
     if (attempt) await sleep(WAIT.intervalMs);
     const after = await readPublisher(cloudflare);
     if (JSON.stringify(after.secrets) !== JSON.stringify(before.secrets)) refuse("Publisher secret names changed");
-    if (after.application !== before.application) refuse("Publisher container application changed");
-    if (after.commit !== sha || !after.version || (deployed && after.version === before.version)) continue;
-    const rollouts = await cloudflare(`containers/applications/${after.application}/rollouts`);
+    if (after.application.id !== before.application.id) refuse("Publisher container application changed");
+    if (after.commit !== sha || !after.version || after.version === before.version) continue;
+    const rollouts = await cloudflare(`containers/applications/${after.application.id}/rollouts`);
     if (!Array.isArray(rollouts) || !rollouts.length) continue;
     const newest = newestRollout(rollouts);
     if (newest.target_configuration?.image !== image) continue;
-    // The application record can keep the previous image after a rollout completes; the rollout is the applied state.
     if (!["pending", "progressing", "completed"].includes(newest.status)) refuse("Publisher rollout was reverted or replaced");
-    if (newest.status !== "completed") continue;
+    // The application record can keep the previous image after a rollout completes; the applied target is the proof.
+    if (!rolloutApplied(after.application, newest)) continue;
     if (await health() !== 200) continue;
     return { schema: 1, target: "development", worker: WORKER, source_sha: sha, image, previous_version: before.version ?? null,
-      version: after.version, rollout: newest.id, health: 200, deployed };
+      version: after.version, rollout: newest.id, health: 200 };
   }
   refuse("Publisher readback did not complete; rerun --check to read the live state");
 }
@@ -180,23 +186,20 @@ export async function install({ sha, run, check }, io) {
     const cloudflare = route => io.cloudflare(account, route, readToken);
     const before = await readPublisher(cloudflare);
     assertBefore(before);
-    // A live Worker at the commit whose app already runs the image needs only the readback.
-    const deployed = before.image !== receipt.image || before.commit !== sha;
-    if (!deployed) {
-      const rollouts = await cloudflare(`containers/applications/${before.application}/rollouts`);
-      // A deploy with no container change starts no rollout, so none can be created for this image.
-      if (!Array.isArray(rollouts) || !rollouts.length || newestRollout(rollouts).target_configuration?.image !== receipt.image) {
-        refuse("The live application already runs this image without its rollout; install a newer commit");
-      }
+    // Every run deploys, so Worker drift is repaired; an unchanged image keeps its earlier rollout.
+    // A first-install application already at this image has no rollout and a deploy cannot start one.
+    // The finish line requires a rollout, so that state refuses rather than passing on health alone.
+    const rollouts = await cloudflare(`containers/applications/${before.application.id}/rollouts`);
+    if (before.image === receipt.image && (!Array.isArray(rollouts) || !rollouts.length)) {
+      refuse("The live application already runs this image without a rollout; install a newer commit");
     }
-    if (check) return { schema: 1, check: true, source_sha: sha, image: receipt.image, live: before, deploy_needed: deployed };
-    if (deployed) {
-      const configPath = path.join(prepared.directory, "deploy.json"), secretsFile = path.join(prepared.directory, "keep-secrets.json");
-      writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
-      writeFileSync(secretsFile, "{}\n");
-      io.deploy(deployCommand({ wrangler: prepared.wrangler, config: configPath, secretsFile, sha, token: io.token(4), account }), prepared.source);
-    }
-    return await readBack({ cloudflare, health: io.health, sleep: io.sleep, before, sha, image: receipt.image, deployed });
+    const live = { version: before.version ?? null, commit: before.commit ?? null, application: before.application.id, image: before.image ?? null };
+    if (check) return { schema: 1, check: true, source_sha: sha, image: receipt.image, live };
+    const configPath = path.join(prepared.directory, "deploy.json"), secretsFile = path.join(prepared.directory, "keep-secrets.json");
+    writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
+    writeFileSync(secretsFile, "{}\n");
+    io.deploy(deployCommand({ wrangler: prepared.wrangler, config: configPath, secretsFile, sha, token: io.token(4), account }), prepared.source);
+    return await readBack({ cloudflare, health: io.health, sleep: io.sleep, before, sha, image: receipt.image });
   } finally {
     rmSync(prepared.directory, { recursive: true, force: true });
   }
