@@ -142,6 +142,7 @@ mutation and names the fix below.
 | The dev Cloudflare deploy token (`CLOUDFLARE_API_TOKEN` in the `development` environment) has the account permission Workers R2 Storage Read, which the media lifecycle read uses | `functions verify-config`: "CLOUDFLARE_API_TOKEN cannot read the njpbs-dev-media lifecycle" | The token owner adds the permission to the existing token |
 | `njpbs-dev-media` deletes `cms-media-staging/` after seven days, and no delete rule reaches `cms-media/` | `functions verify-config`, through [assert-r2-lifecycle.mjs](../../scripts/assert-r2-lifecycle.mjs) | `npx wrangler r2 bucket lifecycle add njpbs-dev-media cms-media-staging-expiry cms-media-staging/ --expire-days 7`, with a token that can edit R2 |
 | `system/noBuildPostAdmission` exists in `njpbs-site-dev` with production's shape and the dev artifact bucket | The release pause (`NJPBS_RELEASE_PAUSE_ADMISSION`) | `jawn-ops njpbs release admission --target development --install` (creates only an absent record, then reads it back) |
+| At least one instant-published Post: a document in `system/publicDeployment/noBuildPostOwners` in `njpbs-site-dev`. With none, the previous CMS answers `pass` on `/_publication.json` instead of `receipts` (development dry run 4) | Release qualification (fact `qualification-owners`) | After dev instant publication is on: `jawn-ops njpbs release owner-post --target development --checkout <njpbs checkout>`. It publishes one Post hidden from search engines through Boardwalk and reads back the owner. Keep that Post published |
 
 ## Event trigger IAM
 

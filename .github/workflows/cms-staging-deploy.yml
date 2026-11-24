@@ -223,7 +223,9 @@ jobs:
             # GitHub masks every secret value in logs and drops any job output that contains one. A dev
             # placeholder "1" emptied the Functions configuration fingerprint (dev CMS run 45306098095,
             # Nov. 23, 2026). Six characters keep real Telegram chat IDs valid; a fixed six-character value
-            # occurs in a 64-character hex output with odds of about 64/16^6 (4 in a million).
+            # occurs in a 64-character hex output with odds of about 64/16^6 (4 in a million). A shorter
+            # value, a chat ID included, breaks the deploy the same way, so the floor applies to every
+            # name (review finding to drop it for chat IDs rejected by the coordinator, Nov. 23, 2026).
             # Fix: docs/cms/functions-deploy.md#development-project-setup.
             short=()
             for name in $(jq -r '.secrets[]' <<<"$CMS_DEVELOPMENT_ENVIRONMENT_NAMES"); do
