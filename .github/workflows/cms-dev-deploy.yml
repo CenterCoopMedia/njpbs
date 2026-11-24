@@ -299,13 +299,14 @@ jobs:
         run: |
           node scripts/assert-dev-cms-targets.mjs
           test -n "$CLOUDFLARE_API_TOKEN"
-          upload_directory="$(mktemp -d)"
-          trap 'rm -rf "$upload_directory"' EXIT
-          cd "$upload_directory"
+          # Same upload as cms-staging-deploy: Pages Functions and bindings come from admin/.
+          cp "$GITHUB_WORKSPACE/admin/wrangler.dev.jsonc" "$GITHUB_WORKSPACE/admin/wrangler.jsonc"
+          node -e 'import("./scripts/assert-dev-cms-targets.mjs").then(m => m.assertDevAdminConfig(require("node:url").pathToFileURL(`${process.env.GITHUB_WORKSPACE}/`), "admin/wrangler.jsonc"))'
+          cd "$GITHUB_WORKSPACE/admin"
           env -i PATH="$PATH" HOME="$HOME" \
             CLOUDFLARE_ACCOUNT_ID="$CLOUDFLARE_ACCOUNT_ID" \
             CLOUDFLARE_API_TOKEN="$CLOUDFLARE_API_TOKEN" WRANGLER_SEND_METRICS=false \
-            "$GITHUB_WORKSPACE/node_modules/.bin/wrangler" pages deploy "$GITHUB_WORKSPACE/admin/dist" \
+            "$GITHUB_WORKSPACE/node_modules/.bin/wrangler" pages deploy dist \
             --project-name="$CMS_ADMIN_PAGES" --branch=main --commit-hash="$DEPLOY_SHA" --commit-dirty=true
       - name: Smoke-test the pinned dev CMS boundaries
         run: node scripts/smoke-dev-cms-functions.mjs

@@ -16,7 +16,7 @@ const configRoot = pathToFileURL(`${configDirectory}/`);
 const readConfigSource = path => path === "functions/.env.njpbs-site-dev"
   ? Buffer.from(devFunctionsEnvironment(DEV_TARGETS))
   : readFileSync(new URL(`../${path}`, import.meta.url));
-for (const path of ["cms-api/wrangler.dev.jsonc", "preview-renderer/wrangler.dev.jsonc", "workers/wrangler.preview.dev.jsonc",
+for (const path of ["admin/wrangler.dev.jsonc", "cms-api/wrangler.dev.jsonc", "preview-renderer/wrangler.dev.jsonc", "workers/wrangler.preview.dev.jsonc",
   "workers/wrangler.staff-preview.dev.jsonc", "firebase.dev.json", "functions/.env.njpbs-site-dev"]) {
   mkdirSync(dirname(join(configDirectory, path)), { recursive: true });
   writeFileSync(join(configDirectory, path), readConfigSource(path));
@@ -90,7 +90,7 @@ test("dev dispatch repository admits only the approved repository without admitt
   const workspace = mkdtempSync(join(tmpdir(), "dev-repository-test-"));
   const root = pathToFileURL(`${workspace}/`);
   try {
-    for (const path of ["cms-api/wrangler.dev.jsonc", "preview-renderer/wrangler.dev.jsonc",
+    for (const path of ["admin/wrangler.dev.jsonc", "cms-api/wrangler.dev.jsonc", "preview-renderer/wrangler.dev.jsonc",
       "workers/wrangler.preview.dev.jsonc", "workers/wrangler.staff-preview.dev.jsonc", "firebase.dev.json", "functions/.env.njpbs-site-dev"]) {
       mkdirSync(dirname(join(workspace, path)), { recursive: true });
       writeFileSync(join(workspace, path), readConfigSource(path));
@@ -128,7 +128,7 @@ test("dev writeback readiness requires the proved enabled value", () => {
   const workspace = mkdtempSync(join(tmpdir(), "dev-writeback-test-"));
   const root = pathToFileURL(`${workspace}/`);
   try {
-    for (const path of ["cms-api/wrangler.dev.jsonc", "preview-renderer/wrangler.dev.jsonc",
+    for (const path of ["admin/wrangler.dev.jsonc", "cms-api/wrangler.dev.jsonc", "preview-renderer/wrangler.dev.jsonc",
       "workers/wrangler.preview.dev.jsonc", "workers/wrangler.staff-preview.dev.jsonc", "firebase.dev.json", "functions/.env.njpbs-site-dev"]) {
       mkdirSync(dirname(join(workspace, path)), { recursive: true });
       writeFileSync(join(workspace, path), readConfigSource(path));
@@ -158,7 +158,7 @@ test("dev preview readiness requires the verified renderer SHA and dev-only serv
   const previousSha = process.env.CMS_DEV_RENDERER_SOURCE_SHA;
   const sha = "a".repeat(40);
   try {
-    for (const path of ["cms-api/wrangler.dev.jsonc", "preview-renderer/wrangler.dev.jsonc",
+    for (const path of ["admin/wrangler.dev.jsonc", "cms-api/wrangler.dev.jsonc", "preview-renderer/wrangler.dev.jsonc",
       "workers/wrangler.preview.dev.jsonc", "workers/wrangler.staff-preview.dev.jsonc", "firebase.dev.json", "functions/.env.njpbs-site-dev"]) {
       mkdirSync(dirname(join(workspace, path)), { recursive: true });
       writeFileSync(join(workspace, path), readConfigSource(path));
@@ -258,7 +258,7 @@ test("both dev intake bindings refuse missing, blank, and sending modes", () => 
   const workspace = mkdtempSync(join(tmpdir(), "dev-report-intake-"));
   const root = pathToFileURL(`${workspace}/`);
   try {
-    for (const path of ["cms-api/wrangler.dev.jsonc", "preview-renderer/wrangler.dev.jsonc",
+    for (const path of ["admin/wrangler.dev.jsonc", "cms-api/wrangler.dev.jsonc", "preview-renderer/wrangler.dev.jsonc",
       "workers/wrangler.preview.dev.jsonc", "workers/wrangler.staff-preview.dev.jsonc", "firebase.dev.json", "functions/.env.njpbs-site-dev"]) {
       mkdirSync(dirname(join(workspace, path)), { recursive: true });
       writeFileSync(join(workspace, path), readConfigSource(path));
@@ -369,7 +369,7 @@ test("dev source discovery refuses a production Firebase project", () => {
 });
 
 
-test("Admin upload executes only the checked dev Pages target outside repository config", () => {
+test("Admin upload runs from admin/ with only the rendered dev Pages config", () => {
   const { parse } = require("yaml");
   const workflow = parse(readFileSync(new URL("../.github/workflows/cms-dev-deploy.yml", import.meta.url), "utf8"));
   const job = workflow.jobs.deploy;
@@ -381,11 +381,15 @@ test("Admin upload executes only the checked dev Pages target outside repository
   const workspace = mkdtempSync(join(tmpdir(), "dev-admin-upload-test-"));
   try {
     mkdirSync(join(workspace, "node_modules/.bin"), { recursive: true });
-    writeFileSync(join(workspace, "wrangler.jsonc"), '{"name":"production"}');
+    mkdirSync(join(workspace, "admin/functions"), { recursive: true });
+    const productionAdmin = readFileSync(new URL("../admin/wrangler.jsonc", import.meta.url));
+    writeFileSync(join(workspace, "admin/wrangler.jsonc"), productionAdmin);
+    writeFileSync(join(workspace, "admin/wrangler.dev.jsonc"), readFileSync(new URL("../admin/wrangler.dev.jsonc", import.meta.url)));
     writeFileSync(join(workspace, "node_modules/.bin/wrangler"), `#!/usr/bin/env node
       const fs = require("node:fs");
-      if(process.cwd() === process.env.HOME || fs.existsSync("wrangler.jsonc") || process.env.CMS_PAGES_BROKER_URL) process.exit(9);
-      process.stdout.write(JSON.stringify({cwd:process.cwd(), args:process.argv.slice(2), account:process.env.CLOUDFLARE_ACCOUNT_ID}));
+      if(!fs.existsSync("functions") || process.env.CMS_PAGES_BROKER_URL) process.exit(9);
+      const config = JSON.parse(fs.readFileSync("wrangler.jsonc", "utf8"));
+      process.stdout.write(JSON.stringify({cwd:process.cwd(), args:process.argv.slice(2), account:process.env.CLOUDFLARE_ACCOUNT_ID, config}));
     `, { mode: 0o755 });
     const run = extra => spawnSync("bash", ["-e", "-c", upload.run], { cwd: configRoot, encoding: "utf8",
       env: { PATH: process.env.PATH, HOME: workspace, ...job.env, ...DEV_TARGETS, ...repositoryFixture, GITHUB_WORKSPACE: workspace,
@@ -397,10 +401,18 @@ test("Admin upload executes only the checked dev Pages target outside repository
     const result = run({});
     assert.equal(result.status, 0, result.stderr);
     const output = JSON.parse(result.stdout.split("\n").at(-1));
-    assert.deepEqual(output.args, ["pages", "deploy", join(workspace, "admin/dist"), "--project-name=template-dev-admin",
+    assert.deepEqual(output.args, ["pages", "deploy", "dist", "--project-name=template-dev-admin",
       "--branch=main", `--commit-hash=${"a".repeat(40)}`, "--commit-dirty=true"]);
     assert.equal(output.account, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
-    assert.notEqual(output.cwd, workspace);
+    assert.equal(output.cwd, join(workspace, "admin"));
+    assert.deepEqual(output.config.services, [{ binding: "STAFF_ACCESS", service: "template-dev-cms-api", entrypoint: "StaffSiteEntrypoint" }]);
+    assert.equal(output.config.r2_buckets, undefined);
+    // A dev template carrying a production name refuses before upload.
+    writeFileSync(join(workspace, "admin/wrangler.dev.jsonc"), productionAdmin.toString().replace(/^\s*\/\/.*$/gm, ""));
+    const productionNamed = run({});
+    assert.notEqual(productionNamed.status, 0);
+    assert.match(productionNamed.stderr, /Dev Admin Pages config refused/);
+    writeFileSync(join(workspace, "admin/wrangler.dev.jsonc"), readFileSync(new URL("../admin/wrangler.dev.jsonc", import.meta.url)));
     for (const extra of [{ CMS_ADMIN_PAGES: "njpbs-admin" }, { CMS_ADMIN_PAGES_BRANCH: "production" }, { CLOUDFLARE_ACCOUNT_ID: "other" }]) {
       const refused = run(extra);
       assert.notEqual(refused.status, 0);

@@ -47,7 +47,21 @@ export function devPublicationIdentity(env) {
   return identity;
 }
 
+// Pages reads admin/wrangler.jsonc from its working directory and takes no --config,
+// so a dev Admin upload installs this rendered file in its place first.
+export function assertDevAdminConfig(root = new URL("../", import.meta.url), file = "admin/wrangler.dev.jsonc") {
+  const admin = JSON.parse(readFileSync(new URL(file, root), "utf8"));
+  if (Object.keys(admin).sort().join() !== "compatibility_date,name,pages_build_output_dir,services" ||
+      admin.name !== DEV_TARGETS.CMS_ADMIN_PAGES || admin.pages_build_output_dir !== "./dist" ||
+      admin.services?.length !== 1 || admin.services[0].binding !== "STAFF_ACCESS" ||
+      admin.services[0].service !== DEV_TARGETS.CMS_API_WORKER || admin.services[0].entrypoint !== "StaffSiteEntrypoint") {
+    throw new Error("Dev Admin Pages config refused");
+  }
+  return true;
+}
+
 export function assertDevConfigs(root = new URL("../", import.meta.url), deploymentEnv = process.env) {
+  assertDevAdminConfig(root);
   const api = JSON.parse(readFileSync(new URL("cms-api/wrangler.dev.jsonc", root), "utf8"));
   const renderer = JSON.parse(readFileSync(new URL("preview-renderer/wrangler.dev.jsonc", root), "utf8"));
   const staffPreview = JSON.parse(readFileSync(new URL("workers/wrangler.staff-preview.dev.jsonc", root), "utf8"));

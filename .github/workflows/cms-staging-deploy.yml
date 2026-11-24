@@ -2109,6 +2109,13 @@ jobs:
         with:
           name: cms-public-contract-before-upload
           path: ${{ runner.temp }}/cms-contract-proof
+      - name: Install the rendered dev Admin Pages config
+        if: inputs.target == 'development'
+        run: |
+          set -euo pipefail
+          node -e 'import("./scripts/assert-dev-cms-targets.mjs").then(m => m.assertDevAdminConfig())'
+          cp admin/wrangler.dev.jsonc admin/wrangler.jsonc
+          node -e 'import("./scripts/assert-dev-cms-targets.mjs").then(m => m.assertDevAdminConfig(undefined, "admin/wrangler.jsonc"))'
       - name: Require the before-upload proof for this exact Admin artifact
         env:
           DEPLOY_SHA: ${{ needs.admin-build.outputs.deploy_sha }}

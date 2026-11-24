@@ -1,0 +1,12 @@
+{
+  "name": "template-dev-admin",
+  "pages_build_output_dir": "./dist",
+  "compatibility_date": "2026-07-09",
+  "services": [
+    {
+      "binding": "STAFF_ACCESS",
+      "service": "template-dev-cms-api",
+      "entrypoint": "StaffSiteEntrypoint"
+    }
+  ]
+}
