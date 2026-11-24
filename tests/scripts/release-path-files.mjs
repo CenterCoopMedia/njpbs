@@ -1,12 +1,15 @@
 // Lists the files the release path runs and the time constructs in them.
 // tests/scripts/release-path-waits.test.mjs is the only caller. Run this file
 // with --list to print every site.
-import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 
 export const ROOT = resolve(dirname(new URL(import.meta.url).pathname), "../..");
 export const WAIT_MODULE = "functions/lib/release-wait.js";
 export const REMAINING = "tests/scripts/release-path-waits-remaining.json";
+// Tracked files only: build outputs differ between machines.
+const TRACKED = new Set(execFileSync("git", ["ls-files", "-z"], { cwd: ROOT, encoding: "utf8" }).split("\0").filter(Boolean));
 
 // The release run, the candidate build, the publish path, the confirmation and
 // recovery functions, and the dev and production deploy workflows.
@@ -30,16 +33,16 @@ const EXTENSIONS = ["", ".js", ".mjs", ".cjs", ".ts", ".mts", "/index.js", "/ind
 function resolveLocal(from, spec) {
   const base = spec.startsWith(".") ? resolve(dirname(join(ROOT, from)), spec) : join(ROOT, spec);
   for (const suffix of EXTENSIONS) {
-    const path = base + suffix;
-    if (existsSync(path) && statSync(path).isFile()) return relative(ROOT, path);
+    const path = relative(ROOT, base + suffix);
+    if (TRACKED.has(path)) return path;
   }
   return null;
 }
 
 function npmScriptCommands(prefix, name) {
-  const file = join(ROOT, prefix, "package.json");
-  if (!existsSync(file)) return [];
-  const command = JSON.parse(readFileSync(file, "utf8")).scripts?.[name];
+  const file = join(prefix, "package.json");
+  if (!TRACKED.has(file)) return [];
+  const command = JSON.parse(readFileSync(join(ROOT, file), "utf8")).scripts?.[name];
   return command ? [{ prefix, command }] : [];
 }
 
@@ -51,7 +54,7 @@ function namedPaths(text, prefix = "") {
   for (const [, runPrefix = "", name] of text.matchAll(/npm\s+(?:--prefix\s+([\w./-]+)\s+)?run\s+([\w:.-]+)/g)) {
     for (const script of npmScriptCommands(runPrefix || prefix, name)) found.push(...namedPaths(script.command, script.prefix));
   }
-  return found.filter(path => existsSync(join(ROOT, path)));
+  return found.filter(path => TRACKED.has(path));
 }
 
 function codeImports(file, text) {
@@ -70,7 +73,7 @@ export function listReleasePathFiles() {
   const seen = new Set(), queue = [...RELEASE_ENTRIES];
   while (queue.length) {
     const file = queue.shift();
-    if (seen.has(file) || file.includes("node_modules") || !existsSync(join(ROOT, file))) continue;
+    if (seen.has(file) || !TRACKED.has(file)) continue;
     seen.add(file);
     const text = readFileSync(join(ROOT, file), "utf8");
     if (CODE.test(file)) queue.push(...codeImports(file, text));
