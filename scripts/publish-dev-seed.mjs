@@ -1,85 +1,150 @@
-#!/usr/bin/env node
+#!/usr/bin/env -S node --experimental-strip-types
 // Publishes a seeded dev project through Boardwalk, so it holds what a normal
-// publish leaves behind: Post owners, publication rows, history, media usage and
-// settings receipts. Run it after `seed-dev-published.mjs verify`; rerun to resume.
-// Development only: run it from a checkout rendered by render-development-config.mjs. The Boardwalk sign-in is on fd 3, the Access headers JSON on fd 4.
-import { readFileSync } from 'node:fs';
+// publish leaves behind: Post, Page and record owners, publication rows, history,
+// media usage and settings receipts. Settings are created, saved and published
+// only through these calls; the import never writes them. Run it after
+// `seed-dev-published.mjs verify`; rerun with the same journal to resume.
+// Development only: run it from a checkout rendered by render-development-config.mjs.
+// The Boardwalk sign-in is on fd 3, the Access headers JSON on fd 4.
+import { appendFileSync, existsSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { chromium } from '@playwright/test';
-import { launchCmsBrowser, parseBrowserCredential, submitCmsSignIn } from './cms-debug-browser.mjs';
+import { parseArgs } from 'node:util';
+import { ACTOR, canonical, validateManifest } from './seed-dev-published.mjs';
 
 const ADMIN = 'https://dev-admin.example.org';
 const API = 'https://dev-cms-api.example.org';
-const TRANSPORT = 'public-context-no-build-v1';
+const SETTINGS_TRANSPORT = 'public-context-no-build-v1';
+// The transport each publish must report: the owner that writes its owner row.
+const CONTENT_TRANSPORT = { page: 'page-no-build-v1', post: 'post-no-build-v1',
+  program: 'public-context-no-build-v1', event: 'public-context-no-build-v1' };
 // Chrome is last: its receipt proves the whole published site.
-const SETTINGS = ['story-ctas', 'public-homepage-banner', 'site-navigation', 'public-site-chrome'];
+const LAST_SETTING = 'public-site-chrome';
+// These change what Node or Playwright print or load, and could expose the sign-in.
+const REFUSED_ENVIRONMENT = ['DEBUG', 'PWDEBUG', 'NODE_OPTIONS'];
 const PACE_MS = 4_000;
 const RATE_WAIT_MS = 65_000;
 const RECEIPT_WAIT_MS = 30 * 60_000;
 
 const say = value => console.log(JSON.stringify({ at: new Date().toISOString(), ...value }));
-const refused = (step, reply) => Object.assign(new Error(`${step} refused: ${reply.status} ${reply.body?.error ?? ''}`.slice(0, 200)), { authored: true });
+const authored = message => Object.assign(new Error(message.slice(0, 200)), { authored: true });
+const refused = (step, reply) => authored(`${step} refused: ${reply.status} ${reply.body?.error ?? ''}`);
 
-// A seeded row is published at its own version; a normal publish leaves the
-// working version ahead of the snapshot. A draft left by an earlier run is resumed.
-export function needsPublication(document) {
-  return document.status === 'published' && document.version === document.published?.sourceVersion ||
-    document.status === 'draft' && document.publiclyVisible === true;
+export function refuseUnsafeEnvironment(env = process.env) {
+  const set = REFUSED_ENVIRONMENT.filter(name => env[name] !== undefined && env[name] !== '');
+  if (set.length) throw authored(`Unset ${set.join(', ')} before signing in`);
 }
 
-export async function publishPosts({ ids, call }) {
+// Every routed Page, Post, Program and Event in the manifest, in a stable order.
+export function contentTargets(manifest) {
+  return manifest.records.flatMap(record => {
+    const kind = record.collection === 'cmsPages' ? 'page' : record.collection === 'cmsPosts' ? record.projection.metadata?.type : null;
+    return Object.hasOwn(CONTENT_TRANSPORT, kind ?? '') ? [{ collection: record.collection, id: record.id, kind }] : [];
+  });
+}
+export function settingsTargets(manifest) {
+  const rows = manifest.records.filter(record => record.collection === 'cmsSettings');
+  return [...rows.filter(row => row.id !== LAST_SETTING), ...rows.filter(row => row.id === LAST_SETTING)]
+    .map(row => ({ id: row.id, values: row.projection.values }));
+}
+
+// The journal names each row this script moved to a draft, with the draft version
+// the edit returned. Only those drafts are resumed; any other draft is someone's work.
+export function readJournal(lines) {
+  const drafts = new Map(); const pending = new Set();
+  for (const line of lines.split('\n').filter(Boolean)) {
+    const entry = JSON.parse(line);
+    const key = `${entry.collection}/${entry.id}`;
+    if (entry.step === 'edit-intent') pending.add(key);
+    if (entry.step === 'edit-done') { pending.delete(key); drafts.set(key, entry.version); }
+    if (entry.step === 'published') drafts.delete(key);
+  }
+  return { drafts, pending };
+}
+
+// A seed-written row carries the seed actor as its publisher. A normal publish
+// replaces it with the staff account, so a published row needs nothing more.
+export function publicationStep(document, key, journal) {
+  if (document.status === 'published') return document.published?.publishedBy === ACTOR ? 'edit' : 'current';
+  if (document.status === 'draft' && journal.drafts.get(key) === document.version) return 'publish';
+  if (journal.pending.has(key)) return 'unconfirmed';
+  return 'not-seeded';
+}
+
+export async function publishContent({ targets, call, journal, record = () => {} }) {
   const result = { published: 0, current: 0, failed: [] };
-  for (const id of ids) {
-    const read = await call('cmsGetContent', { collection: 'cmsPosts', id });
+  for (const { collection, id, kind } of targets) {
+    const key = `${collection}/${id}`;
+    const read = await call('cmsGetContent', { collection, id });
     const document = read.body?.document;
-    if (read.status !== 200 || !document) { result.failed.push({ id, step: 'read', status: read.status }); continue; }
-    if (!needsPublication(document)) { result.current++; continue; }
+    if (read.status !== 200 || !document) { result.failed.push({ collection, id, step: 'read', status: read.status }); continue; }
+    const step = publicationStep(document, key, journal);
+    if (step === 'current') { result.current++; continue; }
+    // A draft the journal does not name, or an edit whose reply was lost, is left
+    // for an operator: publishing it could release another person's work.
+    if (step === 'not-seeded' || step === 'unconfirmed') { result.failed.push({ collection, id, step, status: document.status }); continue; }
     let version = document.version;
-    if (document.status === 'published') {
-      const edit = await call('cmsTransitionContent', { collection: 'cmsPosts', id, action: 'edit', baseVersion: version });
-      if (edit.status !== 200) { result.failed.push({ id, step: 'edit', status: edit.status, error: edit.body?.error }); continue; }
+    if (step === 'edit') {
+      record({ step: 'edit-intent', collection, id, baseVersion: version });
+      const edit = await call('cmsTransitionContent', { collection, id, action: 'edit', baseVersion: version });
+      if (edit.status !== 200 || !Number.isSafeInteger(edit.body?.version)) { result.failed.push({ collection, id, step: 'edit', status: edit.status, error: edit.body?.error }); continue; }
       version = edit.body.version;
+      record({ step: 'edit-done', collection, id, version });
+      journal.pending.delete(key); journal.drafts.set(key, version);
     }
-    const published = await call('cmsSaveContent', { collection: 'cmsPosts', id, baseVersion: version, publish: true, document: {} });
-    if (published.status === 200 && published.body?.publication?.transport === 'post-no-build-v1') result.published++;
-    else result.failed.push({ id, step: 'publish', status: published.status, error: published.body?.error, transport: published.body?.publication?.transport });
+    // Publishing a published row is refused, so the row is first moved to a draft.
+    const published = await call('cmsSaveContent', { collection, id, baseVersion: version, publish: true, document: {} });
+    if (published.status === 200 && published.body?.publication?.transport === CONTENT_TRANSPORT[kind]) {
+      record({ step: 'published', collection, id });
+      journal.drafts.delete(key);
+      result.published++;
+    } else result.failed.push({ collection, id, step: 'publish', status: published.status, error: published.body?.error, transport: published.body?.publication?.transport });
   }
   return result;
 }
 
-export async function publishSettings({ call, wait, report = () => {} }) {
-  for (const id of SETTINGS) {
+const settled = publication => publication?.status === 'success' && !publication.missingConsumers?.length;
+export async function publishSettings({ targets, call, wait, report = () => {}, now = Date.now }) {
+  for (const { id, values } of targets) {
     let read = await call('cmsGetSettings', { id });
     if (read.status !== 200) throw refused(id, read);
-    if (read.body.found === false) {
-      if (id !== 'story-ctas') throw refused(id, { status: 404 });
-      const saved = await call('cmsSaveSettings', { id, createOnly: true, values: { rules: [] } });
+    const stored = read.body.found === false ? null : read.body.settings;
+    if (!stored || canonical(stored.values) !== canonical(values)) {
+      const saved = await call('cmsSaveSettings', stored ? { id, baseVersion: stored.version, values } : { id, createOnly: true, values });
       if (saved.status !== 200) throw refused(id, saved);
       read = await call('cmsGetSettings', { id });
+      if (read.status !== 200 || read.body.found === false) throw refused(id, read);
     }
-    if (read.body.publication?.status !== 'success' || read.body.publication.missingConsumers.length) {
-      const published = await call('cmsPublishSettings', { id, baseVersion: read.body.settings.version, publicationTransport: TRANSPORT });
+    const current = read.body.settings;
+    if (!current.published || canonical(current.published.values) !== canonical(values) || !settled(read.body.publication)) {
+      const published = await call('cmsPublishSettings', { id, baseVersion: current.version, publicationTransport: SETTINGS_TRANSPORT });
       if (published.status !== 200) throw refused(id, published);
     }
     report({ setting: id, published: true });
   }
   // Only the last receipt is awaited: a newer context replaces the earlier ones.
-  const id = SETTINGS.at(-1);
-  for (const end = Date.now() + RECEIPT_WAIT_MS; ; await wait(10_000)) {
+  const id = targets.at(-1)?.id;
+  if (!id) return null;
+  for (const end = now() + RECEIPT_WAIT_MS; ; await wait(10_000)) {
     const publication = (await call('cmsGetSettings', { id })).body?.publication;
-    if (publication?.status === 'success' && !publication.missingConsumers.length) return publication;
-    if (publication?.status === 'failed' || Date.now() > end) throw Object.assign(new Error(`${id} receipt: ${publication?.status} missing ${publication?.missingConsumers?.join()}`), { authored: true });
+    if (settled(publication)) return publication;
+    if (publication?.status === 'failed' || now() > end) throw authored(`${id} receipt: ${publication?.status} missing ${publication?.missingConsumers?.join()}`);
   }
 }
 
 async function main() {
-  const [manifestPath] = process.argv.slice(2);
-  if (!manifestPath) throw Object.assign(new Error('Usage: publish-dev-seed.mjs <seed manifest>'), { authored: true });
-  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
-  const ids = manifest.records.filter(record => record.collection === 'cmsPosts' && record.projection.metadata?.type === 'post').map(record => record.id);
+  refuseUnsafeEnvironment();
+  const { values, positionals } = parseArgs({ allowPositionals: true, options: { journal: { type: 'string' } } });
+  if (positionals.length !== 1 || !values.journal) throw authored('Usage: publish-dev-seed.mjs <seed manifest> --journal <file>');
+  const manifest = validateManifest(JSON.parse(readFileSync(positionals[0], 'utf8')));
+  const journalPath = resolve(values.journal);
+  const journal = readJournal(existsSync(journalPath) ? readFileSync(journalPath, 'utf8') : '');
+  const record = entry => appendFileSync(journalPath, `${JSON.stringify({ at: new Date().toISOString(), ...entry })}\n`, { mode: 0o600 });
+  const { chromium } = await import('@playwright/test');
+  const { launchCmsBrowser, parseBrowserCredential, submitCmsSignIn } = await import('./cms-debug-browser.mjs');
   const credential = parseBrowserCredential(readFileSync(3, 'utf8'));
   const access = JSON.parse(readFileSync(4, 'utf8'));
-  if (Object.keys(access).sort().join() !== 'CF-Access-Client-Id,CF-Access-Client-Secret') throw Object.assign(new Error('Access headers are required'), { authored: true });
+  if (Object.keys(access).sort().join() !== 'CF-Access-Client-Id,CF-Access-Client-Secret') throw authored('Access headers are required');
   const browser = await launchCmsBrowser(chromium);
   try {
     const context = await browser.newContext();
@@ -95,11 +160,11 @@ async function main() {
       if (header?.startsWith('Bearer ') && new URL(request.url()).origin === API) token = header;
     });
     await page.goto(`${ADMIN}/`, { waitUntil: 'domcontentloaded' });
-    if (new URL(page.url()).origin !== ADMIN) throw Object.assign(new Error('The dev Boardwalk did not open'), { authored: true });
+    if (new URL(page.url()).origin !== ADMIN) throw authored('The dev Boardwalk did not open');
     await submitCmsSignIn(page, async () => credential, () => page.getByRole('button', { name: /^Account menu for / }).waitFor({ state: 'visible' }));
     credential.password = '';
     for (let i = 0; !token && i < 60; i++) await page.waitForTimeout(500);
-    if (!token) throw Object.assign(new Error('Boardwalk made no signed-in request'), { authored: true });
+    if (!token) throw authored('Boardwalk made no signed-in request');
     const call = async (endpoint, body) => {
       for (;;) {
         await page.waitForTimeout(PACE_MS);
@@ -111,10 +176,10 @@ async function main() {
         await page.waitForTimeout(RATE_WAIT_MS);
       }
     };
-    const posts = await publishPosts({ ids, call });
-    say({ posts });
-    if (posts.failed.length) throw Object.assign(new Error(`${posts.failed.length} Posts were not published`), { authored: true });
-    say({ receipt: await publishSettings({ call, wait: ms => page.waitForTimeout(ms), report: say }) });
+    const content = await publishContent({ targets: contentTargets(manifest), call, journal, record });
+    say({ content });
+    if (content.failed.length) throw authored(`${content.failed.length} records were not published`);
+    say({ receipt: await publishSettings({ targets: settingsTargets(manifest), call, wait: ms => page.waitForTimeout(ms), report: say }) });
   } finally { await browser.close().catch(() => {}); }
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

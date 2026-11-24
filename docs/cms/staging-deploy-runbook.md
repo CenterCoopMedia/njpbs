@@ -327,19 +327,25 @@ created or verified. Then verify:
 sh -c "$SEED_WRITER_COMMAND" | $SEED verify $PAIR --manifest "$MANIFEST" | tee "$STATE/verify.json"
 ```
 
-Then publish the seeded rows through Boardwalk. Seeded rows bypass their
-publication owners, so without this step dev Posts have no instant owner, the
-public Worker serves them without a receipt, and the settings receipts never
-complete. From a checkout rendered by `scripts/render-development-config.mjs`,
-with the dev Boardwalk sign-in on fd 3 and the Access headers on fd 4:
+Then publish the seeded rows and settings through Boardwalk. The import writes
+Pages, Posts and records with the seed as their publisher and writes no
+settings. This step gives each row the owner, publication row, history and media
+usage a staff publish writes, and creates, saves and publishes every public
+settings row in the manifest (`cmsSaveSettings`, `cmsPublishSettings`). From a
+checkout rendered by `scripts/render-development-config.mjs`, with the dev
+Boardwalk sign-in on fd 3 and the Access headers on fd 4, and with `DEBUG`,
+`PWDEBUG` and `NODE_OPTIONS` unset:
 
 ```bash
-node scripts/publish-dev-seed.mjs "$MANIFEST" 3< <(sh -c "$DEV_SIGN_IN_COMMAND") 4< <(sh -c "$DEV_ACCESS_COMMAND") | tee -a "$STATE/publish.json"
+node --experimental-strip-types scripts/publish-dev-seed.mjs "$MANIFEST" --journal "$STATE/publish-journal.jsonl" 3< <(sh -c "$DEV_SIGN_IN_COMMAND") 4< <(sh -c "$DEV_ACCESS_COMMAND") | tee -a "$STATE/publish.json"
 ```
 
-It publishes each seeded Post, then the settings, and waits for the
-`public-site-chrome` receipt. Rerun it to resume. Run `verify` before it: a
-published row is a dev edit for the next refresh, which lists it as `restored`.
+It publishes each row whose publisher is still the seed, then the settings, and
+waits for the `public-site-chrome` receipt. Rerun it with the same journal to
+resume: it resumes only drafts the journal records at the version it recorded,
+and reports any other draft for an operator. Run `verify` before it: a published
+row is a dev edit for the next refresh, which lists it as `restored`, keeps its
+version ahead of dev's, and leaves it for this step to publish again.
 
 If the snapshot references a Sponsor or Newsletter card, export also needs
 `--context` with the retained public context of that publication and refuses

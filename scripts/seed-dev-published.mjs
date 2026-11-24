@@ -39,7 +39,11 @@ const CONFIGURATION_FIELDS = {
   sections: ['id', 'label', 'description', 'order'],
   mediaCategories: ['id', 'label', 'description', 'order', 'active', 'version'],
 };
-const SETTINGS = ['public-homepage-banner', 'public-site-chrome', 'site-navigation'];
+// Every public settings row. The import never writes them: publish-dev-seed.mjs
+// creates, saves and publishes each through Boardwalk, as staff do.
+const SETTINGS = [settingsContract.STORY_CTAS_SETTINGS_ID, settingsContract.COVERAGE_LABELS_SETTINGS_ID,
+  settingsContract.NJ_DECIDES_SETTINGS_ID, settingsContract.PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID,
+  settingsContract.PUBLIC_SITE_CHROME_SETTINGS_ID, settingsContract.SITE_NAVIGATION_SETTINGS_ID];
 const SHA = /^[a-f0-9]{64}$/;
 const ID = /^[A-Za-z0-9_-]{1,128}$/;
 const PUBLIC_ORIGIN = 'https://media.njpbs.org';
@@ -587,7 +591,7 @@ function editableRecords(manifest) {
     } else if (Object.hasOwn(CONFIGURATION_FIELDS, record.collection)) {
       output.push({ path: `${record.collection}/${record.id}`, data: { ...projection, ...dates } });
     } else if (record.collection === 'cmsSettings') {
-      output.push({ path: `cmsSettings/${record.id}`, data: { version, schemaVersion: projection.schemaVersion, values: projection.values, published: projection } });
+      continue;
     } else if (record.collection === 'media_assets_public') {
       if (PAGE_SEED_IDS.has(record.id)) continue;
       const type = mediaContract.MEDIA_TYPES[projection.mimeType];
@@ -623,7 +627,7 @@ function seedHashOf(data) {
 // dev does too. Shared rows (media, categories, sections, private author rows and
 // Sponsor or Newsletter cards) stay, because dev-authored records may use them.
 // A configuration-only manifest removes nothing.
-const REMOVABLE = /^(cmsPages|cmsPosts|cmsSettings|cmsAuthorProfilesPublic)\//;
+const REMOVABLE = /^(cmsPages|cmsPosts|cmsAuthorProfilesPublic)\//;
 async function trackedRemovals(transaction, firestore, manifest, records) {
   if (manifest.configurationOnly) return { removals: [], unresolved: [] };
   const paths = new Set(records.map(record => record.path));
@@ -646,7 +650,12 @@ async function trackedRemovals(transaction, firestore, manifest, records) {
   const byPath = (a, b) => a.localeCompare(b, 'en');
   return { removals: candidates.filter(path => !kept.has(path)).sort(byPath), unresolved: unresolved.sort(byPath) };
 }
-const PUBLIC_RECORD = /^(cmsPosts|cmsPages|cmsSettings|cmsAuthorProfilesPublic|media_assets_public)\//;
+const CREATE_ONLY = /^cmsPublicVideos\//;
+const VERSIONED = /^(cmsPages|cmsPosts)\//;
+// The seeded form of a row, read back with the version dev may have advanced.
+const seededForm = (record, current) => VERSIONED.test(record.path) && Number.isSafeInteger(current.version) && current.version > record.data.version
+  ? { ...record.data, version: current.version } : record.data;
+const PUBLIC_RECORD = /^(cmsPosts|cmsPages|cmsAuthorProfilesPublic|media_assets_public)\//;
 
 // A dry run is the plan. Each entry binds a seed-written path to the document
 // and receipt hashes the dry run saw. Apply restores or removes a row only while
@@ -696,6 +705,9 @@ export async function importPublished({ firestore, manifest, copy, plan, source 
       const ref = firestore.doc(record.path);
       const priorRef = firestore.doc(`devSeedRecords/${digest(record.path)}`);
       const [current, prior] = await transaction.getAll(ref, priorRef);
+      // A public video copy is create-only: dev owns its revocation, operation and
+      // generation fields once it exists, so the seed never rewrites it.
+      if (CREATE_ONLY.test(record.path) && current.exists) { unchanged++; continue; }
       const seedHash = seedHashOf(record.data);
       const tracked = prior.exists && prior.data().path === record.path;
       // An untracked row at a source path is dev-authored work; overwriting it would lose it.
@@ -713,6 +725,10 @@ export async function importPublished({ firestore, manifest, copy, plan, source 
       if (current.exists) {
         if (!record.path.startsWith('cmsSettings/') && current.data().createdAt !== undefined) data = { ...data, createdAt: current.data().createdAt };
         if (data.mediaDiscovery) data = mediaDiscovery.withMediaDiscovery(record.path.split('/')[1], data);
+        // A restored Page or Post stays ahead of dev's version: its owner rows and
+        // publication operation ids are keyed by version, and reusing one collides.
+        const devVersion = current.data().version;
+        if (VERSIONED.test(record.path) && Number.isSafeInteger(devVersion) && devVersion >= data.version) data = { ...data, version: devVersion + 1 };
       }
       changes.push({ ref, priorRef, record, data, seedHash });
     }
@@ -811,8 +827,9 @@ export async function verifyPublished({ firestore, manifest, source = SOURCE, de
       const snapshots = await transaction.getAll(...group.flatMap(record => [firestore.doc(record.path), firestore.doc(`devSeedRecords/${digest(record.path)}`)]));
       group.forEach((record, index) => {
         const [current, prior] = snapshots.slice(index * 2, index * 2 + 2);
+        if (CREATE_ONLY.test(record.path)) { if (!current.exists) differ.push(record.path); return; }
         // A matching receipt is what lets the next refresh treat this row as seeded.
-        if (!current.exists || seedHashOf(current.data()) !== seedHashOf(record.data) || !prior.exists ||
+        if (!current.exists || seedHashOf(current.data()) !== seedHashOf(seededForm(record, current.data())) || !prior.exists ||
             prior.data().path !== record.path || prior.data().recordHash !== digest(current.data()) ||
             prior.data().seedHash !== seedHashOf(record.data)) differ.push(record.path);
       });

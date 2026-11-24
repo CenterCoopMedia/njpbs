@@ -17,7 +17,6 @@ import deployment from '../../functions/lib/public-deployment.js';
 import { DEFAULT_SITE_NAVIGATION } from '../../packages/content-core/src/cms-settings.ts';
 import { createPublicArtifactInventoryReceipt } from '../../site/src/lib/public-artifact-inventory.ts';
 import settings from '../../functions/lib/cms-settings-contract.js';
-import settingsApi from '../../functions/settings.js';
 import contentSections from '../../functions/lib/content-sections.js';
 import mediaCategories from '../../functions/lib/media-categories.js';
 import { backfillPageSeedMedia, PAGE_SEED_MEDIA } from '../../scripts/backfill-page-seed-media.mjs';
@@ -77,38 +76,33 @@ describe('isolated published-content seed', () => {
     ['public-homepage-banner', settings.DEFAULT_PUBLIC_HOMEPAGE_BANNER_SETTINGS],
     ['site-navigation', DEFAULT_SITE_NAVIGATION],
     ['public-site-chrome', { newsletterEnabled: false, newsletterLabel: 'Newsletter', newsletterHref: '/contact/', newsletterOpensInNewTab: false }],
-  ])('imports and refreshes %s through the real staff settings reader', async (id, values) => {
+    ['story-ctas', { rules: [] }],
+  ])('exports %s for the Boardwalk publish and never writes it to dev', async (id, values) => {
     await source.doc(`cmsSettings/${id}`).set({ version: 3,
       published: { schemaVersion: 1, values, sourceVersion: 3, publishedAt: when } });
     const manifest = await exportSeed();
+    expect(manifest.records.find(record => record.collection === 'cmsSettings' && record.id === id))
+      .toMatchObject({ sourceVersion: 3, projection: { values } });
     const copy = await copied(manifest);
     await importPublished({ firestore: dev, manifest, copy, apply: true });
-    // Only the authentication boundary is supplied. The reader, contract,
-    // authorization decision and Firestore data are the real collaborators.
-    const reader = settingsApi.createCmsGetSettingsHandler({ firestore: dev,
-      requirePrincipalFn: async () => ({ uid: 'seed-reader', principal: { id: 'seed-reader', grants: [{ role: 'admin' }] } }),
-      log: { error() {}, warn() {} } });
-    const read = async () => {
-      const response = { statusCode: null, body: null, headersSent: false,
-        set() { return this; }, status(code) { this.statusCode = code; return this; },
-        json(body) { this.body = body; this.headersSent = true; return this; } };
-      await reader({ method: 'POST', headers: { 'content-type': 'application/json' }, body: { id } }, response);
-      return response;
-    };
-    expect(await read()).toMatchObject({ statusCode: 200, body: { id, found: true, settings: { version: 3 } } });
-    const clean = (await dev.doc(`cmsSettings/${id}`).get()).data();
-    // Reproduce the old writer and its provenance receipt, then exercise refresh.
-    const legacy = { ...clean, id, createdAt: when, updatedAt: when, createdBy: ACTOR, updatedBy: ACTOR };
-    await dev.doc(`cmsSettings/${id}`).set(legacy);
-    await dev.doc(`devSeedRecords/${digest(`cmsSettings/${id}`)}`).update({ recordHash: digest(legacy),
-      seedHash: digest(Object.fromEntries(Object.entries(legacy).filter(([key]) => !['createdAt', 'updatedAt'].includes(key)))) });
-    expect((await read()).statusCode).toBe(409);
+    // Settings reach dev only through cmsSaveSettings and cmsPublishSettings
+    // (publish-dev-seed.mjs), which write the version, queue row and receipt.
+    expect((await dev.doc(`cmsSettings/${id}`).get()).exists).toBe(false);
+    expect((await dev.doc(`devSeedRecords/${digest(`cmsSettings/${id}`)}`).get()).exists).toBe(false);
+    expect((await verifyPublished({ firestore: dev, manifest })).verified).toBe(true);
+  });
+
+  it('restores a published seeded Page ahead of the version dev reached, and verifies it', async () => {
+    const manifest = await exportSeed(); const copy = await copied(manifest);
     await importPublished({ firestore: dev, manifest, copy, apply: true });
-    expect(await read()).toMatchObject({ statusCode: 200, body: { settings: clean } });
-    expect((await dev.doc(`cmsSettings/${id}`).get()).data()).toEqual(clean);
-    const provenance = (await dev.doc(`devSeedRecords/${digest(`cmsSettings/${id}`)}`).get()).data();
-    expect(provenance.recordHash).toBe(digest(clean));
-    expect(provenance.seedHash).toBe(digest(clean));
+    const seeded = (await dev.doc('cmsPages/contact').get()).data();
+    // A staff publish advances the version and replaces the seed's publisher.
+    await dev.doc('cmsPages/contact').set({ ...seeded, version: seeded.version + 2, title: 'Published in dev' });
+    const plan = await importPublished({ firestore: dev, manifest, copy });
+    await importPublished({ firestore: dev, manifest, copy, plan, apply: true });
+    const restored = (await dev.doc('cmsPages/contact').get()).data();
+    expect(restored).toMatchObject({ title: seeded.title, version: seeded.version + 3 });
+    expect((await verifyPublished({ firestore: dev, manifest })).verified).toBe(true);
   });
 
   it('carries allowlisted editor registries and admits News and media uploads after import', async () => {
@@ -678,6 +672,13 @@ describe('isolated published-content seed', () => {
     const record = (await dev.doc('cmsPages/contact').get()).data();
     expect(record.published.blocks[0].data.public.url).toBe(`https://media.njpbs.org/cms-media/video/video-one/${'a'.repeat(64)}.mp4`);
     expect(blocks.parseBlocks(record.blocks, { complete: true }).ok).toBe(true);
+    // The public video copy is create-only: dev's own revocation state survives a refresh.
+    const video = dev.doc('cmsPublicVideos/video-one');
+    expect((await video.get()).data()).toMatchObject({ schemaVersion: 1, media: { mimeType: 'video/mp4' } });
+    await video.update({ revoked: true, publicGeneration: 7 });
+    await importPublished({ firestore: dev, manifest, apply: true });
+    expect((await video.get()).data()).toMatchObject({ revoked: true, publicGeneration: 7 });
+    expect((await verifyPublished({ firestore: dev, manifest })).verified).toBe(true);
   });
   it('refuses every other project pair and mismatched clients before any writes', async () => {
     for (const pair of [[DESTINATION, SOURCE], [SOURCE, SOURCE], ['other', DESTINATION], [SOURCE, 'other']]) expect(() => assertPair(...pair)).toThrow();
