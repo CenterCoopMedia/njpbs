@@ -173,6 +173,7 @@ jobs:
           tests/datasets-contract.test.ts tests/data-figure.test.ts
           tests/dev-current-code-preflight.test.ts
           tests/development-install-command-files.test.ts
+          tests/dev-setup-check.test.mjs
           --maxWorkers=1 --no-file-parallelism
       - name: Check build-free Post reader in workerd
         run: node scripts/test-no-build-post-reader-runtime.mjs
