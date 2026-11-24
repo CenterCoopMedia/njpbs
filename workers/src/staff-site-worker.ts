@@ -31,7 +31,8 @@ function response(body: BodyInit | null, status: number, extra: HeadersInit = {}
   const headers = new Headers(extra);
   if (!origin || !directives(headers.get("cache-control")).includes("no-store")) headers.set("cache-control", "private, no-store");
   if (status === 429 && (!origin || !headers.has("retry-after"))) headers.set("retry-after", "1");
-  if (!origin || !headers.has("referrer-policy")) headers.set("referrer-policy", "no-referrer");
+  // No reader compares it; the origin's public policy would disclose the private dev origin.
+  headers.set("referrer-policy", "no-referrer");
   if (!origin || !directives(headers.get("x-robots-tag")).includes("noindex")) headers.set("x-robots-tag", "noindex, nofollow, noarchive");
   if (!origin || !headers.has("x-content-type-options")) headers.set("x-content-type-options", "nosniff");
   return new Response(body, { status, headers });

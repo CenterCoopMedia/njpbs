@@ -123,13 +123,13 @@ describe("isolated dev public Worker origin", () => {
     expect((await devWorker.fetch(authenticated("/"), originEnv)).status).toBe(503);
   });
 
-  it("passes origin security, CORS and Vary headers and grants credentials only to dev Admin", async () => {
+  it("passes origin CORS and Vary headers, keeps no-referrer and grants credentials only to dev Admin", async () => {
     vi.stubGlobal("fetch", async () => new Response("page", { headers: {
       "referrer-policy": "strict-origin-when-cross-origin", "x-content-type-options": "nosniff",
       "access-control-allow-origin": "https://dev-admin.example.org", "access-control-allow-credentials": "true",
       vary: "Accept-Encoding", "access-control-expose-headers": "x-njpbs-content-source" } }));
     const admin = await devWorker.fetch(authenticated("/"), originEnv);
-    expect(admin.headers.get("referrer-policy")).toBe("strict-origin-when-cross-origin");
+    expect(admin.headers.get("referrer-policy")).toBe("no-referrer");
     expect(admin.headers.get("access-control-allow-origin")).toBe("https://dev-admin.example.org");
     expect(admin.headers.get("access-control-allow-credentials")).toBe("true");
     expect(admin.headers.get("access-control-expose-headers")).toBe("x-njpbs-content-source");
