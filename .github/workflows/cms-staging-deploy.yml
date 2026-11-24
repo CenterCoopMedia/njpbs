@@ -1016,6 +1016,7 @@ jobs:
         if: needs.firebase-preflight.outputs.reader_binding != ''
         env:
           CMS_READER_BINDING: ${{ needs.firebase-preflight.outputs.reader_binding }}
+          CMS_PREVIEW_FIREBASE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: node scripts/cms-reader-binding.mjs bind cmsApi
@@ -1100,13 +1101,16 @@ jobs:
               "https://us-central1-$CMS_TARGET_FIREBASE_PROJECT.cloudfunctions.net/$endpoint"
           done
       - name: Record the completed CMS API receipt
-        if: (steps.cms_api_plan.outputs.mutated != 'false' || steps.reader_bind_api.outputs.redeploy == 'true') && steps.reader_bind_api.outputs.redeploy != 'false' && !inputs.install_reader_bridge
+        # A rerun that kept the live Worker completes the receipt an earlier attempt left open.
+        if: >-
+          ((steps.cms_api_plan.outputs.mutated != 'false' || steps.reader_bind_api.outputs.redeploy == 'true') && steps.reader_bind_api.outputs.redeploy != 'false'
+          || steps.reader_bind_api.outputs.receipt_open == 'true') && !inputs.install_reader_bridge
         env:
           CMS_PREVIEW_FIREBASE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           DEPLOY_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          DEPLOYED_WORKER_VERSION: ${{ steps.deploy_cms_api.outputs.version_id }}
+          DEPLOYED_WORKER_VERSION: ${{ steps.deploy_cms_api.outputs.version_id || steps.reader_bind_api.outputs.live_version }}
         run: |
           node scripts/component-runner.mjs cmsApi complete \
             --source-sha "$DEPLOY_SHA" \
@@ -1123,7 +1127,7 @@ jobs:
           SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-service-account.json
           DEPLOY_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
-          DEPLOYED_WORKER_VERSION: ${{ steps.deploy_cms_api.outputs.version_id }}
+          DEPLOYED_WORKER_VERSION: ${{ steps.deploy_cms_api.outputs.version_id || steps.reader_bind_api.outputs.live_version }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CMS_DEV_CLOUDFLARE_ACCOUNT_ID: ${{ inputs.target == 'development' && vars.CMS_DEV_CLOUDFLARE_ACCOUNT_ID || '' }}
