@@ -142,28 +142,36 @@ export async function readPublisher(cloudflare) {
 
 const newestRollout = rollouts => rollouts.reduce((a, b) => (Date.parse(b.created_at) > Date.parse(a.created_at) ? b : a));
 
+// The image running on the application: the newest rollout's target once it is applied, or the
+// application record for a first install, which creates the application with no rollout.
+// A rollout still in flight, or one bound elsewhere, gives no applied image.
+export function appliedImage(application, rollouts) {
+  if (!Array.isArray(rollouts)) return undefined;
+  if (!rollouts.length) return application.configuration?.image;
+  const newest = newestRollout(rollouts);
+  if (!["pending", "progressing", "completed"].includes(newest.status)) refuse("Publisher rollout was reverted or replaced");
+  return rolloutApplied(application, newest) ? newest.target_configuration.image : undefined;
+}
+
 export function assertBefore(before) {
   if (JSON.stringify(before.secrets) !== JSON.stringify(SECRETS)) refuse("Live publisher secret names differ from the development contract");
 }
 
-// Waits for the newest rollout to reach the receipt image and for /health to answer 200.
-export async function readBack({ cloudflare, health, sleep, before, sha, image }) {
+// Waits for the commit on one Worker version, the receipt image applied and /health 200.
+// After a deploy the Worker version must also differ from the one read before it.
+export async function readBack({ cloudflare, health, sleep, before, sha, image, deployed }) {
   for (let attempt = 0; attempt < WAIT.attempts; attempt += 1) {
     if (attempt) await sleep(WAIT.intervalMs);
     const after = await readPublisher(cloudflare);
     if (JSON.stringify(after.secrets) !== JSON.stringify(before.secrets)) refuse("Publisher secret names changed");
     if (after.application.id !== before.application.id) refuse("Publisher container application changed");
-    if (after.commit !== sha || !after.version || after.version === before.version) continue;
+    if (after.commit !== sha || !after.version || (deployed && after.version === before.version)) continue;
     const rollouts = await cloudflare(`containers/applications/${after.application.id}/rollouts`);
-    if (!Array.isArray(rollouts) || !rollouts.length) continue;
-    const newest = newestRollout(rollouts);
-    if (newest.target_configuration?.image !== image) continue;
-    if (!["pending", "progressing", "completed"].includes(newest.status)) refuse("Publisher rollout was reverted or replaced");
     // The application record can keep the previous image after a rollout completes; the applied target is the proof.
-    if (!rolloutApplied(after.application, newest)) continue;
+    if (appliedImage(after.application, rollouts) !== image) continue;
     if (await health() !== 200) continue;
     return { schema: 1, target: "development", worker: WORKER, source_sha: sha, image, previous_version: before.version ?? null,
-      version: after.version, rollout: newest.id, health: 200 };
+      version: after.version, rollout: rollouts.length ? newestRollout(rollouts).id : null, noRollout: !rollouts.length, health: 200, deployed };
   }
   refuse("Publisher readback did not complete; rerun --check to read the live state");
 }
@@ -186,20 +194,19 @@ export async function install({ sha, run, check }, io) {
     const cloudflare = route => io.cloudflare(account, route, readToken);
     const before = await readPublisher(cloudflare);
     assertBefore(before);
-    // Every run deploys, so Worker drift is repaired; an unchanged image keeps its earlier rollout.
-    // A first-install application already at this image has no rollout and a deploy cannot start one.
-    // The finish line requires a rollout, so that state refuses rather than passing on health alone.
+    // A Worker at the commit on one version whose application already runs the image is installed,
+    // including a first install with no rollout (jawn-ops records it as NoRollout); only the readback runs.
     const rollouts = await cloudflare(`containers/applications/${before.application.id}/rollouts`);
-    if (before.image === receipt.image && (!Array.isArray(rollouts) || !rollouts.length)) {
-      refuse("The live application already runs this image without a rollout; install a newer commit");
-    }
-    const live = { version: before.version ?? null, commit: before.commit ?? null, application: before.application.id, image: before.image ?? null };
-    if (check) return { schema: 1, check: true, source_sha: sha, image: receipt.image, live };
+    const applied = appliedImage(before.application, rollouts);
+    const installed = before.commit === sha && Boolean(before.version) && applied === receipt.image;
+    const live = { version: before.version ?? null, commit: before.commit ?? null, application: before.application.id, image: applied ?? null };
+    if (check) return { schema: 1, check: true, source_sha: sha, image: receipt.image, live, deploy_needed: !installed };
+    if (installed) return await readBack({ cloudflare, health: io.health, sleep: io.sleep, before, sha, image: receipt.image, deployed: false });
     const configPath = path.join(prepared.directory, "deploy.json"), secretsFile = path.join(prepared.directory, "keep-secrets.json");
     writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
     writeFileSync(secretsFile, "{}\n");
     io.deploy(deployCommand({ wrangler: prepared.wrangler, config: configPath, secretsFile, sha, token: io.token(4), account }), prepared.source);
-    return await readBack({ cloudflare, health: io.health, sleep: io.sleep, before, sha, image: receipt.image });
+    return await readBack({ cloudflare, health: io.health, sleep: io.sleep, before, sha, image: receipt.image, deployed: true });
   } finally {
     rmSync(prepared.directory, { recursive: true, force: true });
   }

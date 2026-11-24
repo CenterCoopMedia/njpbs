@@ -148,22 +148,25 @@ existing secret, including a placeholder, stays unchanged. Per Cloudflare's
 "Secrets not included in the file are preserved from the previous version".
 The script handles no secret values.
 
-When the Worker already names X and the app already runs the receipt image,
-the script skips the deploy and only reads back. If that image has no
-rollout (a first install), the script refuses, because a deploy without a
-container change creates no rollout. Install a newer commit instead. The readback waits up to 15 minutes for all of the
-following:
+The script skips the deploy and only reads back when the Worker is on one
+version naming X and the app already runs the receipt image. The image a
+completed rollout applied counts, and so does a first install's own image
+with no rollout (jawn-ops records that state as `NoRollout`). Otherwise it
+deploys, so Worker drift at an unchanged image is repaired. The readback
+waits up to 15 minutes for all of the following:
 
-- a single new Worker version at 100% with `PUBLICATION_COMMIT_SHA` X;
+- a single Worker version at 100% with `PUBLICATION_COMMIT_SHA` X (a new one
+  after a deploy);
 - the same secret names;
-- the newest rollout `completed` at the receipt image. The rollout is the
-  applied state, because the application record can keep the previous image
-  after the rollout completes. `pending` and `progressing` keep the wait
-  going, and `reverted` or `replaced` refuse;
+- the receipt image applied. With rollouts, the newest must be `completed`,
+  bound to the application, and on every instance; the application record
+  can keep the previous image after the rollout completes. `pending` and
+  `progressing` keep the wait going, and `reverted` or `replaced` refuse.
+  With none, the application record's image must be the receipt image;
 - `/health` 200.
 
-It prints one JSON receipt with the previous and new version IDs and the
-rollout ID. After an install, jawn-ops' development first-install record
-(`release_target_settings.go`) no longer describes the live publisher. Update
-or delete that record from the printed version before the next development
-release run.
+It prints one JSON receipt with the previous and current version IDs, the
+rollout ID or `noRollout: true`, and whether it deployed. After a deploy,
+jawn-ops' development first-install record (`release_target_settings.go`)
+no longer describes the live publisher. Update or delete that record from
+the printed version before the next development release run.

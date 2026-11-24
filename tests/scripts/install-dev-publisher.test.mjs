@@ -128,7 +128,7 @@ test("install deploys the receipt image at the commit and reads back version, ro
   const h = harness();
   const result = await install({ sha, run, check: false }, h.io);
   assert.deepEqual(result, { schema: 1, target: "development", worker: "njpbs-dev-cms-publisher", source_sha: sha, image,
-    previous_version: "v-old", version: "v-new", rollout: "r-new", health: 200 });
+    previous_version: "v-old", version: "v-new", rollout: "r-new", noRollout: false, health: 200, deployed: true });
   const deploy = h.calls.find(call => call.command);
   assert.equal(deploy.keep, "{}\n");
   assert.equal(deploy.config.name, "njpbs-dev-cms-publisher");
@@ -143,6 +143,7 @@ test("check reads everything and never opens the deploy token", async () => {
   const h = harness();
   const result = await install({ sha, run, check: true }, h.io);
   assert.deepEqual(result.live, { version: "v-old", commit: "f".repeat(40), application: applicationId, image: oldImage });
+  assert.equal(result.deploy_needed, true);
   assert.deepEqual(h.tokens, [3, 5]);
   assert.equal(h.calls.some(call => call.command), false);
 });
@@ -179,19 +180,41 @@ test("emulator or ambient credential settings refuse", () => {
   }
 });
 
-test("an installed image redeploys the Worker and keeps its earlier applied rollout", async () => {
-  for (const liveCommit of [sha, "f".repeat(40)]) {
-    const h = harness({ live: image, liveCommit, history: [{ ...rollout("r-old", "2026-11-24T00:00:00Z"), current_version: 0, target_version: 1 }] });
+test("an installed Worker at an applied image takes no deploy and reads back", async () => {
+  const history = [{ ...rollout("r-old", "2026-11-24T00:00:00Z"), current_version: 0, target_version: 1 }];
+  const h = harness({ live: image, liveCommit: sha, history });
+  const result = await install({ sha, run, check: false }, h.io);
+  assert.equal(result.deployed, false);
+  assert.equal(result.rollout, "r-old");
+  assert.deepEqual(h.tokens, [3, 5]);
+});
+
+test("a first install at the image with no rollout is installed: noRollout, no deploy", async () => {
+  const h = harness({ live: image, liveCommit: sha });
+  const result = await install({ sha, run, check: false }, h.io);
+  assert.equal(result.deployed, false);
+  assert.equal(result.noRollout, true);
+  assert.equal(result.rollout, null);
+  assert.equal(result.version, "v-old");
+  assert.deepEqual(h.tokens, [3, 5]);
+});
+
+test("Worker-only drift at the applied image deploys and keeps the earlier state", async () => {
+  for (const history of [[], [{ ...rollout("r-old", "2026-11-24T00:00:00Z"), current_version: 0, target_version: 1 }]]) {
+    const h = harness({ live: image, liveCommit: "f".repeat(40), history });
     const result = await install({ sha, run, check: false }, h.io);
-    assert.equal(result.rollout, "r-old");
+    assert.equal(result.deployed, true);
+    assert.equal(result.noRollout, history.length === 0);
     assert.deepEqual(h.tokens, [3, 5, 4]);
   }
 });
 
-test("a first-install application at the image with no rollout refuses before any deploy", async () => {
-  const h = harness({ live: image, liveCommit: sha });
-  await assert.rejects(install({ sha, run, check: false }, h.io), /without a rollout/);
-  assert.deepEqual(h.tokens, [3, 5]);
+test("an image recorded on the application but not yet applied by its rollout deploys", async () => {
+  const pending = [{ ...rollout("r-old", "2026-11-24T00:00:00Z", { status: "progressing", applied: false }) }];
+  const h = harness({ live: oldImage, liveCommit: sha, history: pending });
+  h.provider.record = image;
+  const result = await install({ sha, run, check: true }, h.io);
+  assert.equal(result.deploy_needed, true);
 });
 
 test("a completed rollout is the applied state while the application record lags", async () => {
