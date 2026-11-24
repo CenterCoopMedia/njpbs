@@ -27,6 +27,9 @@ const confirmationSecrets = [PURGE_TOKEN, CMS_EDGE_ORIGIN_SECRET, ...(DEVELOPMEN
 // record the attempt.
 const CONFIRMATION_TIMEOUT_SECONDS = 300;
 const CONFIRMATION_RESERVE_MS = 15_000;
+// One proof holds every published detail and exceeds the 256 MiB default. The
+// platform kills that process before it can record its attempt.
+const CONFIRMATION_MEMORY = "1GiB";
 const confirmationDeadline = startedAt => startedAt + CONFIRMATION_TIMEOUT_SECONDS * 1_000 - CONFIRMATION_RESERVE_MS;
 const purgeConfigFn = () => ({ zoneId: ZONE_ID.value(), token: PURGE_TOKEN.value() });
 const readbackOptions = () => ({ target: publicationTarget(DEVELOPMENT ? "development" : "production"),
@@ -97,7 +100,7 @@ function createNoBuildPostConfirmationHandler(deps = {}) {
 // Acceptance and explicit retries wake detail confirmation independently of the
 // publisher's build lock. The same durable claim deduplicates delivered events.
 const onNoBuildPostConfirmation = onDocumentWritten({
-  document: "cmsPublishQueue/{queueId}", retry: true, timeoutSeconds: CONFIRMATION_TIMEOUT_SECONDS,
+  document: "cmsPublishQueue/{queueId}", retry: true, timeoutSeconds: CONFIRMATION_TIMEOUT_SECONDS, memory: CONFIRMATION_MEMORY,
   minInstances: 0, maxInstances: 2, concurrency: 4, secrets: confirmationSecrets,
 }, async event => {
   if (process.env.FUNCTIONS_EMULATOR === "true") return;
@@ -125,7 +128,7 @@ async function recoverNoBuildPublications({ firestore = db, config = purgeConfig
 
 
 const onNoBuildPostConfirmationRecovery = onSchedule({
-  schedule: "every 1 minutes", timeZone: "UTC", timeoutSeconds: CONFIRMATION_TIMEOUT_SECONDS,
+  schedule: "every 1 minutes", timeZone: "UTC", timeoutSeconds: CONFIRMATION_TIMEOUT_SECONDS, memory: CONFIRMATION_MEMORY,
   minInstances: 0, maxInstances: 1, concurrency: 1, retryCount: 0,
   secrets: DEVELOPMENT ? confirmationSecrets : [PURGE_TOKEN, CMS_EDGE_ORIGIN_SECRET, productionAlerts.TELEGRAM_BOT_TOKEN],
 }, async () => {
