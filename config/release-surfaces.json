@@ -1095,7 +1095,7 @@
     {"id":"pub-routing-mirror","kind":"release","sources":["functions/lib/public-release-routing-mirror-outbox.js"],"states":["pending","running","done"]},
     {"id":"pub-hold","kind":"release","sources":["functions/lib/public-release-rehearsal-hold.js"],"states":["reserved","held","expired","released","cancelled"]},
     {"id":"pub-publisher-runtime","kind":"release","sources":["publisher/worker.ts"],"states":["stopped","running","healthy","unhealthy"]},
-    {"id":"pub-release-retry","kind":"release","sources":["site/scripts/no-build-cloud-release.ts"],"states":["pending","claimed","failed_retrying","failed_exhausted","terminal_batch"]},
+    {"id":"pub-release-retry","kind":"release","sources":["site/scripts/no-build-cloud-release.ts"],"states":["pending","claimed","failed_retrying","terminal_batch"]},
     {"id":"pub-family-admission","kind":"release","sources":["functions/lib/no-build-family-admission.js"],"states":["invalid_closed","disabled","selected_enabled","not_selected"]},
     {"id":"pub-route-purge","kind":"release","sources":["functions/lib/post-route-purge.js"],"states":["pending","processing","retry","success","failed"]},
     {"id":"pub-withdrawal-proof","kind":"release","sources":["functions/lib/no-build-post-withdrawal.js"],"states":["pending","failed","latched"]},

@@ -165,13 +165,17 @@ window. Do not insert a site-wide crawl into the short pause.
 
 ## Ordinary producer and retained attempts
 
-The existing producer also supports `--apply <operation-id> <commit>`,
-`--retry <operation-id> <new-commit-sha> <old-commit-sha>` and
+The existing producer also supports `--apply <operation-id> <commit>` and
 `--retire <operation-id> <commit>` under its own source validation. Ordinary
 apply checks exact cloud runtime, idle predecessor and inactive target source,
 reserves, freezes CMS input once, fetches bounded external input/images, builds
 offline and seals the release directory. It stages a journal request last;
 the cloud publisher owns upload/activation. It does not itself activate.
+
+The cloud publisher retries a failed release request with no attempt limit,
+with exponential backoff of at most 30 minutes between attempts, and keeps
+each failure in its `failureReason`. A request stops only when it is deployed,
+superseded or cancelled, or when activation itself reports a final failure.
 
 Retain `dist/`, `artifact-inventory.json`, `prepared-worker.json`,
 `public-context.json` and the complete renderer graph/seals. Immutable private

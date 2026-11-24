@@ -324,7 +324,7 @@ function decodeFields(fields: Record<string, unknown>): Record<string, any> {
 
 import externalRefresh from "../functions/lib/cloud-external-refresh-state.js";
 import cloudWork from "../functions/lib/no-build-cloud-work.js";
-import { readPublicationHealth, publicationAttemptsExhausted, type PublicationHealth } from "./publication-health";
+import { readPublicationHealth, type PublicationHealth } from "./publication-health";
 import targets, { type PublicationTarget } from "../functions/lib/publication-target.js";
 import runtimeControl from "../functions/lib/cms-publication-runtime-control.js";
 const CONTROL_FIELDS = ["disabled", "schemaVersion", "phase", "commitSha", "serializerId", "runtime", "state",
@@ -432,7 +432,9 @@ export async function readNoBuildPublicationWork(options: {
     if (batch?.status === "retired") throw new Error("A retired legacy reservation cannot belong to the cloud journal");
     journalSettlement = ["deployed", "failed", "superseded", "cancelled"].includes(batch?.status);
     const retained = await read(`cmsPublicationSerializerJournals/${options.serializerId}/releases/${journal.job.queueId}`);
-    retainedDue = cloudWork.retryDue(retained, Date.now());
+    // A release retries with no attempt limit, so the shared bounded retryDue does not apply.
+    retainedDue = ["pending", "failed"].includes(retained?.status) && Number.isSafeInteger(retained.attempts) &&
+      retained.attempts >= 0 && Number.isFinite(retained.nextAttemptAt) && retained.nextAttemptAt <= Date.now();
   }
   let work = { maintenance: false, reconcile: false };
   let workUnreadable = false;
@@ -473,17 +475,11 @@ export async function readNoBuildPublicationWork(options: {
   const retainedUnreadable = journal?.job && !journalSettlement && (!retained ||
     retained.runtime?.owner !== "cloudflare" || retained.runtime?.release !== options.commitSha ||
     !["pending", "failed"].includes(retained.status) || !Number.isSafeInteger(retained.attempts) ||
-    retained.attempts < 0 || retained.attempts > 4 ||
-    !(Number.isFinite(retained.nextAttemptAt) && retained.nextAttemptAt >= 0 ||
-      retained.nextAttemptAt === null && retained.status === "failed" && retained.attempts === 4));
+    retained.attempts < 0 || !(Number.isFinite(retained.nextAttemptAt) && retained.nextAttemptAt >= 0));
   if (retainedUnreadable) { progress.healthy = false; progress.reasons.push("state_unreadable"); }
-  const releaseExhausted = publicationAttemptsExhausted(retained);
-  // An interrupted final claim gets one wake to record exhaustion and clear its due time.
-  const exhaustionDue = !retainedUnreadable && releaseExhausted && Number.isFinite(retained?.nextAttemptAt);
-  if (releaseExhausted) progress.reasons.push("release_exhausted");
   if (control.phase !== "ready") progress.reasons.push("runtime_not_ready");
   const previewDue = control.phase === "ready" && "previewContext" in work && work.previewContext === true;
-  return { needsRuntime: control.phase === "starting" || refreshDue || previewDue || work.maintenance || work.reconcile || (idle && (releaseDue || journalSettlement || retainedDue || exhaustionDue)),
-    healthy: control.phase === "ready" && progress.healthy && !releaseExhausted,
+  return { needsRuntime: control.phase === "starting" || refreshDue || previewDue || work.maintenance || work.reconcile || (idle && (releaseDue || journalSettlement || retainedDue)),
+    healthy: control.phase === "ready" && progress.healthy,
     diagnostics: { reasons: [...new Set(progress.reasons)].sort(), oldestDueAt: progress.oldestDueAt } };
 }

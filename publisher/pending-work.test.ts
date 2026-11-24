@@ -519,7 +519,7 @@ it("preserves an independently due release wake when owner pagination cannot com
     diagnostics: { reasons: ["state_unreadable"], oldestDueAt: null } });
 });
 
-it.each(["pending", "failed"])("wakes the fourth retained %s release once after its bounded lease expires", async status => {
+it.each(["pending", "failed"])("wakes a retained %s release after its fifth attempt with no attempt limit", async status => {
   vi.spyOn(Date, "now").mockReturnValue(1000);
   const docs: Record<string, any> = {
     "system/cmsPublicationRuntime": { schemaVersion: 1, phase: "ready", commitSha: COMMIT_SHA, serializerId: SERIALIZER_ID },
@@ -527,7 +527,7 @@ it.each(["pending", "failed"])("wakes the fourth retained %s release once after 
     "system/publicDeployment/contexts/public": { schemaVersion: 1, revision: 1 },
     [`cmsPublicationSerializerJournals/${SERIALIZER_ID}`]: { runtime: cloudRuntime, job: { queueId: QUEUE_ID, commitSha: COMMIT_SHA } },
     [`system/publicDeployment/buildBatches/cms-${QUEUE_ID}`]: { status: "reserved" },
-    [`cmsPublicationSerializerJournals/${SERIALIZER_ID}/releases/${QUEUE_ID}`]: { runtime: cloudRuntime, status, attempts: 4, nextAttemptAt: 1001 },
+    [`cmsPublicationSerializerJournals/${SERIALIZER_ID}/releases/${QUEUE_ID}`]: { runtime: cloudRuntime, status, attempts: 5, nextAttemptAt: 1001 },
   };
   const request = (async (url: string) => {
     if (url === "https://oauth2.googleapis.com/token") return token();
@@ -537,13 +537,9 @@ it.each(["pending", "failed"])("wakes the fourth retained %s release once after 
   }) as typeof fetch;
   expect(await readNoBuildPublicationWork(options, request)).toMatchObject({ needsRuntime: false, healthy: true });
   vi.spyOn(Date, "now").mockReturnValue(1001);
-  expect(await readNoBuildPublicationWork(options, request)).toEqual({ needsRuntime: true, healthy: false,
-    diagnostics: { reasons: ["release_exhausted"], oldestDueAt: null } });
+  expect(await readNoBuildPublicationWork(options, request)).toMatchObject({ needsRuntime: true, healthy: true });
   const path = `cmsPublicationSerializerJournals/${SERIALIZER_ID}/releases/${QUEUE_ID}`;
-  docs[path] = { ...docs[path], status: "failed", nextAttemptAt: null };
-  expect(await readNoBuildPublicationWork(options, request)).toEqual({ needsRuntime: false, healthy: false,
-    diagnostics: { reasons: ["release_exhausted"], oldestDueAt: null } });
-  const valid = { ...docs[path], attempts: 1, nextAttemptAt: 1002 };
+  const valid = { ...docs[path], status: "failed", attempts: 1, nextAttemptAt: 1002 };
   for (const invalid of [null, { ...valid, attempts: "1" }, { runtime: cloudRuntime, status: "failed", attempts: 1 },
     { ...valid, nextAttemptAt: null }, { ...valid, runtime: { owner: "node-compute", release: COMMIT_SHA } }]) {
     docs[path] = invalid;

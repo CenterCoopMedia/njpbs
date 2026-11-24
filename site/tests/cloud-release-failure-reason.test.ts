@@ -24,15 +24,6 @@ describe("bounded cloud release failure reasons", () => {
     const reason = cloudReleaseFailureReason("input read", { message: "PRIVATE provider body", $metadata: { httpStatusCode: 403, requestId: "PRIVATE request" } });
     expect(reason).toContain("HTTP 403"); expect(reason).not.toMatch(/PRIVATE|requestId|provider body/);
   });
-  it.each(stages)("makes exhausted %s attempts explicit without copying the provider failure", stage => {
-    const reason = cloudReleaseFailureReason(stage, { status: 503, message: "PRIVATE provider body" }, true);
-    expect(reason).toContain(`${stage}:`);
-    expect(reason).toContain("HTTP 503");
-    expect(reason).toContain("Automatic retry attempts exhausted");
-    expect(reason).toContain("original release ownership is retained");
-    expect(reason.length).toBeLessThanOrEqual(300);
-    expect(reason).not.toMatch(/PRIVATE|provider body/);
-  });
 });
 
 describe("the refused Cloudflare call", () => {

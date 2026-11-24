@@ -30,7 +30,9 @@ export const cloudReleaseCollection = (serializerId: string) => {
   return `cmsPublicationSerializerJournals/${serializerId}/releases`;
 };
 const hash = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex");
-export const CLOUD_RELEASE_ATTEMPT_LIMIT = 4;
+/** Longest pause between two attempts. It never limits the number of attempts. */
+const CLOUD_RELEASE_MAX_RETRY_PAUSE_MS = 30 * 60_000;
+const cloudReleaseRetryPause = (attempts: number) => Math.min(60_000 * 2 ** attempts, CLOUD_RELEASE_MAX_RETRY_PAUSE_MS);
 export type CloudReleaseFailureStage = "source check" | "input read" | "artifact restore" | "release verification" |
   "candidate upload" | "context retention" | "activation";
 const failureMessages: Record<CloudReleaseFailureStage, string> = {
@@ -42,9 +44,6 @@ const failureMessages: Record<CloudReleaseFailureStage, string> = {
   "context retention": "The frozen public preview context could not be retained",
   "activation": "The public Worker activation did not complete",
 };
-const activationExhaustionReason = "activation: Automatic retry attempts exhausted while activation remains nonterminal. Retain the original journal and lease for reconciliation.";
-const interruptedExhaustionReason = "release: Automatic retry attempts exhausted without a terminal result. Inspect the original request, batch and journal before recovery.";
-const terminalExhaustionReason = "release: Automatic retry attempts exhausted; the release has a failed terminal batch. Inspect that receipt before recovery.";
 
 /** Read only bounded status metadata from a provider error. */
 export function cloudReleaseHttpStatus(error: unknown): number | undefined {
@@ -80,12 +79,11 @@ function cloudReleaseCall(error: unknown): string {
 /** Only operator-owned text, a bounded HTTP status and the operator's own call
  * leave this boundary. Provider bodies, arbitrary messages, headers, ids and
  * queries are never copied. */
-export function cloudReleaseFailureReason(stage: CloudReleaseFailureStage, error?: unknown, exhausted = false): string {
+export function cloudReleaseFailureReason(stage: CloudReleaseFailureStage, error?: unknown): string {
   const status = cloudReleaseHttpStatus(error);
   const message = Object.hasOwn(failureMessages, stage) ? `${stage}: ${failureMessages[stage]}` : "release: The attempt did not complete";
   const detail = `${status === undefined ? "" : `HTTP ${status}`}${cloudReleaseCall(error)}`.replace(/^; /, "");
-  return `${message}${detail && ` (${detail})`}.${exhausted
-    ? " Automatic retry attempts exhausted; original release ownership is retained." : ""}`.slice(0, 300);
+  return `${message}${detail && ` (${detail})`}.`.slice(0, 300);
 }
 
 async function verifyRelease(directory: string, identity: CloudPublicationIdentity) {
@@ -196,38 +194,13 @@ export async function runNoBuildCloudRelease({ firestore, storage, serializerId,
   if (!batch) throw new Error("Cloud release batch is missing");
   assertPublicationOwner(batch, runtime);
   if (["deployed", "failed", "superseded", "cancelled"].includes(batch.status)) {
-    const exhausted = typeof request.failureReason === "string" && request.failureReason.includes("Automatic retry attempts exhausted");
-    await row.ref.update({ status: batch.status, nextAttemptAt: null, failureReason: batch.status === "failed"
-      ? exhausted ? terminalExhaustionReason : request.failureReason ?? null : null });
+    await row.ref.update({ status: batch.status, nextAttemptAt: null,
+      failureReason: batch.status === "failed" ? request.failureReason ?? null : null });
     if (retained) await journal.clear({ queueId: retained.queueId, claimToken: retained.claimToken });
     return;
   }
   if (!["pending", "failed"].includes(request.status) || !Number.isFinite(request.nextAttemptAt) || request.nextAttemptAt > Date.now()) return;
   if (!Number.isSafeInteger(request.attempts) || request.attempts < 0) return;
-  const recordRetryExhaustion = async (attempts: number) => {
-    const reason = await firestore.runTransaction(async tx => {
-      const [currentRow, currentBatch] = await tx.getAll(row.ref, batchRef);
-      const current = currentRow.data(), liveBatch = currentBatch.data();
-      if (!current || !liveBatch) throw new Error("Cloud release exhaustion evidence is missing");
-      assertPublicationOwner(current, runtime);
-      assertPublicationOwner(liveBatch, runtime);
-      if (["deployed", "failed", "superseded", "cancelled"].includes(liveBatch.status) ||
-          !["pending", "failed"].includes(current.status) || current.attempts !== attempts ||
-          !Number.isFinite(current.nextAttemptAt) || current.inputSha256 !== request.inputSha256 ||
-          current.artifactCheckpointDigest !== request.artifactCheckpointDigest) return null;
-      const failureReason = ["deploying", "reconciling"].includes(liveBatch.status)
-        ? activationExhaustionReason : interruptedExhaustionReason;
-      tx.update(row.ref, { status: "failed", nextAttemptAt: null, failureReason });
-      return failureReason;
-    });
-    if (reason) console.error(reason);
-  };
-  if (request.attempts >= CLOUD_RELEASE_ATTEMPT_LIMIT) {
-    // A crash can leave a due retry after the final attempt.
-    // Only an activation-state batch proves that this release reached a lease.
-    await recordRetryExhaustion(request.attempts);
-    return;
-  }
   const { job } = await journal.reserve({ queueId: row.id, buildBatchId: identity.buildBatchId, commitSha });
   const claimed = await firestore.runTransaction(async tx => {
     const current = (await tx.get(row.ref)).data();
@@ -293,15 +266,12 @@ export async function runNoBuildCloudRelease({ firestore, storage, serializerId,
       if (failureReason) console.error(failureReason);
       await row.ref.update({ status: result.outcome, nextAttemptAt: null, failureReason });
       await journal.clear({ queueId: job.queueId, claimToken: job.claimToken });
-    } else if (request.attempts + 1 >= CLOUD_RELEASE_ATTEMPT_LIMIT) {
-      await recordRetryExhaustion(request.attempts + 1);
     } else await row.ref.update({ nextAttemptAt: Date.now() + 60_000 });
   } catch (error) {
-    // Keep original ownership and journal after uncertainty. Reconciliation is
-    // never bypassed by the finite upload/preparation attempt budget.
-    const failureReason = cloudReleaseFailureReason(stage, error, request.attempts + 1 >= CLOUD_RELEASE_ATTEMPT_LIMIT);
+    // Keep original ownership and journal after uncertainty. A failed attempt
+    // is retried after a backoff with no attempt limit; its reason stays visible.
+    const failureReason = cloudReleaseFailureReason(stage, error);
     console.error(failureReason);
-    await row.ref.update({ status: "failed", failureReason,
-      nextAttemptAt: request.attempts + 1 >= CLOUD_RELEASE_ATTEMPT_LIMIT ? null : Date.now() + 60_000 * 2 ** request.attempts });
+    await row.ref.update({ status: "failed", failureReason, nextAttemptAt: Date.now() + cloudReleaseRetryPause(request.attempts) });
   }
 }
