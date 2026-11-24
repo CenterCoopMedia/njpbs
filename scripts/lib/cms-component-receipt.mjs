@@ -503,13 +503,15 @@ async function buildFunctionGraph(sourceSha, deps, env, manifest) {
     const runtimeReads = new Map();
     const parser = createRequire(new URL("../../site/package.json", import.meta.url))("typescript");
     const result = await build({
-      entryPoints: [...new Set(["functions/index.js", ...Object.values(roots)])], bundle: true, write: false,
+      // One entry: a separate entry per export emits each shared closure again, and only the metafile is read.
+      stdin: { sourcefile: "cms-graph-entry", loader: "js",
+        contents: [...new Set(["functions/index.js", ...Object.values(roots)])].map(path => `require(${JSON.stringify(`./${path}`)});`).join("\n") },
+      bundle: true, write: false,
       outdir: "/cms-graph-unused", platform: "node", format: "cjs", metafile: true,
       logLevel: "silent", treeShaking: false,
       logOverride: { "unsupported-require-call": "error", "unsupported-dynamic-import": "error", "indirect-require": "error", "direct-eval": "error" },
       plugins: [{ name: "committed-functions", setup(builder) {
         builder.onResolve({ filter: /.*/ }, args => {
-          if (args.kind === "entry-point") return { path: posix.normalize(args.path), namespace: "git" };
           if (!args.path.startsWith(".")) {
             if (["module", "node:module"].includes(args.path)
               && (args.importer !== "functions/lib/home-retained-sources.js" || generated.has(args.importer))) {
