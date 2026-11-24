@@ -70,7 +70,7 @@ function harness({ live = oldImage, liveCommit = "f".repeat(40), history = [], l
       if (route.endsWith("/settings")) return { bindings: [...provider.secrets,
         ...Object.entries({ ...renderedVars, ...provider.drift, PUBLICATION_COMMIT_SHA: provider.commit }).map(([name, text]) => ({ type: "plain_text", name, text })),
         { type: "durable_object_namespace", name: "PUBLISHER", class_name: "PublicationRuntime", namespace_id: "ns-dev" },
-        { type: "r2_bucket", name: "DURABLE_POST_WITHDRAWALS", bucket_name: provider.bucket }] };
+        { type: "r2_bucket", name: "DURABLE_POST_WITHDRAWALS", bucket_name: provider.bucket, ...provider.jurisdiction }] };
       if (route.endsWith("/deployments")) return { deployments: [{ versions: [{ version_id: provider.version, percentage: 100 }] }] };
       if (route === `containers/applications/${applicationId}/rollouts`) {
         return provider.rollouts.map(r => r.id === "r-new" ? { ...r, status: rollouts[Math.min(reads++, rollouts.length - 1)] } : r);
@@ -88,7 +88,7 @@ function harness({ live = oldImage, liveCommit = "f".repeat(40), history = [], l
         provider.rollouts = [...provider.rollouts, rollout("r-new", "2026-11-24T01:00:00Z", { current: provider.record })];
         if (!lag) Object.assign(provider, { record: image, appVersion: 2 });
       }
-      Object.assign(provider, { version: "v-new", commit: sha, drift: {}, bucket: "njpbs-dev-cms-publication" });
+      Object.assign(provider, { version: "v-new", commit: sha, drift: {}, bucket: "njpbs-dev-cms-publication", jurisdiction: {} });
     },
     sleep: async () => {},
     ...overrides,
@@ -227,6 +227,14 @@ test("a live withdrawal bucket other than the rendered one deploys", async () =>
   const history = [{ ...rollout("r-old", "2026-11-24T00:00:00Z"), current_version: 0, target_version: 1 }];
   const h = harness({ live: image, liveCommit: sha, history });
   h.provider.bucket = "njpbs-cms-publication";
+  assert.equal((await install({ sha, run, check: true }, h.io)).deploy_needed, true);
+  assert.equal((await install({ sha, run, check: false }, h.io)).deployed, true);
+});
+
+test("a live withdrawal bucket in another jurisdiction deploys", async () => {
+  const history = [{ ...rollout("r-old", "2026-11-24T00:00:00Z"), current_version: 0, target_version: 1 }];
+  const h = harness({ live: image, liveCommit: sha, history });
+  h.provider.jurisdiction = { jurisdiction: "eu" };
   assert.equal((await install({ sha, run, check: true }, h.io)).deploy_needed, true);
   assert.equal((await install({ sha, run, check: false }, h.io)).deployed, true);
 });

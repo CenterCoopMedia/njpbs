@@ -125,12 +125,12 @@ export function deployCommand({ wrangler, config, secretsFile, sha, token, accou
 const sortedBindings = list => JSON.stringify(list.sort((a, b) => `${a.type}:${a.name}`.localeCompare(`${b.type}:${b.name}`)));
 export function liveBindings(settings) {
   return sortedBindings((settings?.bindings ?? []).filter(b => b.type !== "secret_text").map(b => b.type === "plain_text"
-    ? { type: b.type, name: b.name, text: b.text } : b.type === "r2_bucket" ? { type: b.type, name: b.name, bucket_name: b.bucket_name }
+    ? { type: b.type, name: b.name, text: b.text } : b.type === "r2_bucket" ? { type: b.type, name: b.name, bucket_name: b.bucket_name, jurisdiction: b.jurisdiction ?? "" }
       : b.type === "durable_object_namespace" ? { type: b.type, name: b.name, class_name: b.class_name } : { type: b.type, name: b.name }));
 }
 export function renderedBindings(config) {
   return sortedBindings([...Object.entries(config.vars).map(([name, text]) => ({ type: "plain_text", name, text })),
-    ...config.r2_buckets.map(b => ({ type: "r2_bucket", name: b.binding, bucket_name: b.bucket_name })),
+    ...config.r2_buckets.map(b => ({ type: "r2_bucket", name: b.binding, bucket_name: b.bucket_name, jurisdiction: b.jurisdiction ?? "" })),
     ...config.durable_objects.bindings.map(b => ({ type: "durable_object_namespace", name: b.name, class_name: b.class_name }))]);
 }
 
