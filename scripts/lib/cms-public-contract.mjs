@@ -5,10 +5,11 @@ import { join, resolve } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { fingerprintInputs, fingerprintFunctionGraph, fingerprintPaths } from "./cms-component-receipt.mjs";
 import { contractInputs } from "./functions-contracts.mjs";
+import releaseWait from "../../functions/lib/release-wait.js";
+const { waitFor } = releaseWait;
 
 const require = createRequire(import.meta.url);
 const targets = require("../../functions/lib/publication-target.js");
-const { waitFor } = require("../../functions/lib/release-wait.js");
 const SHA = /^[a-f0-9]{40}$/;
 const DIGEST = /^[a-f0-9]{64}$/;
 const UUID = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/;

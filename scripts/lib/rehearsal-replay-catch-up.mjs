@@ -1,10 +1,10 @@
-import { createRequire } from 'node:module';
 import protocol from '../../functions/lib/public-release-pair.js';
 import replay from '../../functions/lib/public-release-pair-replay.js';
 import changes from '../../functions/lib/public-release-change-log.js';
 import { assertRehearsalAuditScope } from './rehearsal-installed-audit.mjs';
 import { assertNativeRehearsalDatabase } from './rehearsal-sdk-identity.mjs';
-const { waitFor } = createRequire(import.meta.url)('../../functions/lib/release-wait.js');
+import releaseWait from '../../functions/lib/release-wait.js';
+const { waitFor } = releaseWait;
 
 /** Wake the existing sealed continuation, then observe both exact native
  * cursors at one SDK snapshot before an owner seals a new replay witness.

@@ -6,13 +6,13 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { Readable, Transform } from "node:stream";
-import { createRequire } from "node:module";
 import { setTimeout as sleep } from "node:timers/promises";
 import { pathToFileURL } from "node:url";
 import { parseBrowserCredential } from "./cms-debug-browser.mjs";
 import postLeadMedia from "../functions/lib/post-lead-media.js";
+import releaseWait from "../functions/lib/release-wait.js";
+const { callOutside } = releaseWait;
 const { readPostLeadMedia } = postLeadMedia;
-const { callOutside } = createRequire(import.meta.url)("../functions/lib/release-wait.js");
 
 const DEFAULT_BASE_URL = "https://api.example.org"; // scripts/smoke-cms-functions.mjs
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;

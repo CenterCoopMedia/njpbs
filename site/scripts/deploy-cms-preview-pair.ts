@@ -59,10 +59,9 @@ export function previewPairConfiguration(pair: PreviewPairIdentity, { main, imag
 
 /** Inert operator boundary: no default adapter, credentials, shared pause or
  * legacy-container stop. An uncertain provider attempt permits readback only. */
-export async function deployPreviewPairRuntime({ firestore, pair, operationId, expectedSelectorDigest, candidate, adapter, signal, qualificationRequestDigest, readbackClock }: {
+export async function deployPreviewPairRuntime({ firestore, pair, operationId, expectedSelectorDigest, candidate, adapter, signal, qualificationRequestDigest }: {
   firestore: Firestore; pair: PreviewPairIdentity; operationId: string; expectedSelectorDigest: string;
   candidate: Candidate; adapter: PreviewPairDeploymentAdapter; signal?: AbortSignal; qualificationRequestDigest?: string;
-  readbackClock?: Parameters<typeof waitForWorkerReadback>[1];
 }) {
   api.parsePair(pair);
   if (!/^preview-[a-z0-9][a-z0-9-]{0,31}$/.test(operationId) || candidate.sourceSha !== pair.rendererSha
@@ -121,7 +120,7 @@ export async function deployPreviewPairRuntime({ firestore, pair, operationId, e
           requireWorkerReadback(identities?.[field] === pair[field], `Private preview ${field}`);
         }
         return identities;
-      }, readbackClock) });
+      }) });
     }
     stage = "private_replay";
     const privateProof = await adapter.provePrivate(pair, context);

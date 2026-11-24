@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 import { appendFileSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import { cert, deleteApp, getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
@@ -17,8 +16,9 @@ import {
   startReceipt,
 } from "./lib/cms-component-receipt.mjs";
 import { assertLegacyCmsWorkflow, fingerprintExecutionSource, fingerprintReceiptExecutionSource, identitiesMatch, planCmsApiRelease } from "./lib/cms-release-plan.mjs";
+import releaseWait from "../functions/lib/release-wait.js";
 
-const { waitFor } = createRequire(import.meta.url)("../functions/lib/release-wait.js");
+const { waitFor } = releaseWait;
 
 function fail(message) {
   throw new ComponentReceiptError(message);

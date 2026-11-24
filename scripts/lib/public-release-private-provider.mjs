@@ -140,17 +140,17 @@ export function checkPrivateWorkerDeployment(row, versionId, tag, expectedDeploy
 
 // The ledger still calls observe without arguments. Capture only this
 // invocation's confirmed response for its own readback.
-export function workerReadbackAfterWrite(effect, collect, readbackClock) {
+export function workerReadbackAfterWrite(effect, collect) {
   let response;
   return {
     effect: async () => { response = await effect(); },
-    observe: () => waitForWorkerReadback(() => collect(response), readbackClock),
+    observe: () => waitForWorkerReadback(() => collect(response)),
   };
 }
 
 /** One durable claim precedes each non-idempotent effect. A later caller may
  * only reconcile the original claim; it never retries an ambiguous POST. */
-export async function installPrivateWorker({ ledger, provider, attemptId, config, source, dryRun = true, signal, readbackClock }) {
+export async function installPrivateWorker({ ledger, provider, attemptId, config, source, dryRun = true, signal }) {
   signal?.throwIfAborted();
   if (!/^[A-Za-z0-9_-]{1,128}$/.test(attemptId ?? "") || !(source instanceof Uint8Array) || source.length < 1 || source.length > 1024 * 1024) refuse();
   const sourceDigest = hash(source), { main, ...portableConfig } = config;
@@ -160,7 +160,7 @@ export async function installPrivateWorker({ ledger, provider, attemptId, config
   if (dryRun) return { dryRun, attemptId, worker: config.name, planDigest, sourceDigest, metadata };
   const step = (action, effect, observe) => {
     signal?.throwIfAborted(); // Known pre-cancellation must not reserve a send.
-    return ledger.once({ attemptId, worker: config.name, planDigest, action, ...workerReadbackAfterWrite(effect, observe, readbackClock) });
+    return ledger.once({ attemptId, worker: config.name, planDigest, action, ...workerReadbackAfterWrite(effect, observe) });
   };
   const checkWorker = async (response) => {
     const row = await provider.worker(config.name, signal);

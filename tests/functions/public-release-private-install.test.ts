@@ -10,7 +10,6 @@ import { releasePair } from "../helpers/private-public-release-pair.js";
 import { sealedPair } from "../helpers/sealed-public-release-pair";
 import protocol from "../../functions/lib/public-release-pair.js";
 import { PAIR_READER_CONTRACT } from "../../packages/content-core/src/private-pair-http";
-import { workerReadbackClock } from "../helpers/worker-readback-clock.mjs";
 const hash = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 const slotSource = new TextEncoder().encode("export default {fetch(){return new Response(null,{status:404})}}"), ingressSource = new TextEncoder().encode("export default {fetch(){return new Response(null,{status:404})}} // ingress");
 const compile = async (main: string) => main.includes("-slot-") ? slotSource : ingressSource;
@@ -50,7 +49,7 @@ beforeEach(async () => {
   };
 });
 const run = (dryRun = false, signal?: AbortSignal) => installPrivatePublicRelease({ plan, provider, ledger: privateInstallLedger(db), compile,
-  dryRun, signal, readbackClock: workerReadbackClock() });
+  dryRun, signal });
 it("dry-runs both private slots and fixed OLD/NEW ingress without any SDK/provider effect", async () => {
   const result = await run(true); expect(result.readbacks).toHaveLength(3); expect(provider.upload).not.toHaveBeenCalled();
   expect((await db.doc(`system/publicReleasePrivateInstalls/plans/${plan.operationId}`).get()).exists).toBe(false);

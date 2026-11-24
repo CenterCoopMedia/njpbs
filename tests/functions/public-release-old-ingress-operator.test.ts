@@ -20,7 +20,6 @@ import adoption from "../../functions/lib/public-release-bootstrap-adoption.js";
 import p from "../../functions/lib/public-release-pair.js";
 import work from "../../functions/lib/public-release-pair-work.js";
 import admissions from "../../functions/lib/public-release-admission.js";
-import { workerReadbackClock } from "../helpers/worker-readback-clock.mjs";
 const rawDb = isolatedFirestore("public-release-old-ingress-operator.test.ts"), emulator = process.env.FIRESTORE_EMULATOR_HOST!;
 const authEmulator = process.env.FIREBASE_AUTH_EMULATOR_HOST;
 const restoreAuthEmulator = () => {
@@ -207,7 +206,7 @@ async function scenario(oldSlotEnabled = true) {
     lose: (action: string, after: boolean) => { lost = action; afterLoss = after; },
     onUpload: (effect: () => Promise<unknown>) => { onUpload = effect; },
     changeRateControls: () => { changeRateControls = true; }, changeSlot: () => { changeSlot = true; },
-    input: { firestore: db, packet, readToken, fetchImpl, readbackClock: workerReadbackClock() }, loseBefore: () => { loseRouteBefore = true; },
+    input: { firestore: db, packet, readToken, fetchImpl }, loseBefore: () => { loseRouteBefore = true; },
     loseAfter: () => { loseRouteAfter = true; }, changeAuthority: () => { changeAuthority = true; },
     delayDeployment: (reads: number) => { staleDeploymentReads = reads; } };
 }

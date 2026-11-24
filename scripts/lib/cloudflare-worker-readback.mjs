@@ -1,6 +1,6 @@
-import { createRequire } from 'node:module';
+import releaseWait from '../../functions/lib/release-wait.js';
 
-const { waitFor } = createRequire(import.meta.url)('../../functions/lib/release-wait.js');
+const { waitFor } = releaseWait;
 const versionId = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
 
 export function wranglerVersion(stdout) {

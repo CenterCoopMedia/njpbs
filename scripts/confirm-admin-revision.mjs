@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-import { createRequire } from "node:module";
 import { isDevelopmentName } from "./lib/cms-target.mjs";
+import releaseWait from "../functions/lib/release-wait.js";
 
-const { waitFor } = createRequire(import.meta.url)("../functions/lib/release-wait.js");
+const { waitFor } = releaseWait;
 
 const expected = process.env.DEPLOY_SHA;
 if (!/^[0-9a-f]{40}$/.test(expected ?? "")) {

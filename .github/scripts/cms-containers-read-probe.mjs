@@ -1,7 +1,7 @@
-import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
+import releaseWait from "../../functions/lib/release-wait.js";
 
-const { callOutside } = createRequire(import.meta.url)("../../functions/lib/release-wait.js");
+const { callOutside } = releaseWait;
 
 const failure = () => new Error("Cloud preview Containers reads could not be verified");
 

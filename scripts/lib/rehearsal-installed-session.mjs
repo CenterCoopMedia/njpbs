@@ -26,8 +26,9 @@ import { captureRehearsalAuditBaseline, readRehearsalOperationAudit, readRehears
 import { openRehearsalControlObserver, readRehearsalControlEvidence } from './rehearsal-installed-controls.mjs';
 import { prepareRehearsalAcceptedRecovery, advanceRehearsalAcceptedRecovery } from './rehearsal-accepted-recovery.mjs';
 import { waitForRehearsalReplay } from './rehearsal-replay-catch-up.mjs';
+import releaseWait from '../../functions/lib/release-wait.js';
 
-const { waitFor: waitForState } = createRequire(import.meta.url)('../../functions/lib/release-wait.js');
+const { waitFor: waitForState } = releaseWait;
 const { require: typedRequire } = createRequire(new URL('../../site/package.json', import.meta.url))('tsx/cjs/api');
 const { advancePublicReleaseSwitchCodeHead } = typedRequire('../../site/scripts/public-release-switch-code-head.ts', import.meta.url);
 const sessions = new WeakMap();

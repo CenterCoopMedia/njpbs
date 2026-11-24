@@ -43,7 +43,7 @@ export async function inspectPrivatePreviewPair({ provider, prepared, versionId 
  * effect is journaled before dispatch, and ambiguous retries observe only the
  * original attempt. This operator never selects NEW or pauses/stops OLD. */
 export async function installPrivatePreviewPair({ firestore, prepared, request: raw, readToken, readSecret,
-  fetchImpl = fetch, signal, clock = Date.now, dryRun = true, readbackClock }) {
+  fetchImpl = fetch, signal, clock = Date.now, dryRun = true }) {
   const request = parseRequest(raw, prepared);
   // Resource ownership survives unrelated live releases. Runtime, candidate
   // and bootstrap authority are renewable requests, never provider identity.
@@ -72,7 +72,7 @@ export async function installPrivatePreviewPair({ firestore, prepared, request: 
     await current(); signal?.throwIfAborted();
     return ledger.once({ attemptId: request.operationId, worker: prepared.applicationName, planDigest, action, ...callbacks });
   };
-  const workerStep = (action, effect, observe) => step(action, workerReadbackAfterWrite(effect, observe, readbackClock));
+  const workerStep = (action, effect, observe) => step(action, workerReadbackAfterWrite(effect, observe));
   // Do not adopt an existing Worker, Container or namespace merely by name.
   // A prior immutable ownership claim is required before recovery is possible.
   const ownerKey = publicPairs.publicReleaseDigest({ worker: prepared.applicationName });

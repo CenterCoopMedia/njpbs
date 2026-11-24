@@ -292,7 +292,7 @@ test(`trusted gates resolve workspace dependencies from a separate temporary dir
   try {
     const gate = join(directory, ".cms-smoke-gate");
     await copyImportClosure(root, gate, ["scripts/cms-component-receipt.mjs", ".github/scripts/ensure-panel-browser-deps.mjs"], {
-      assets: ["config/functions-configuration.json", "functions/lib/release-wait.js"],
+      assets: ["config/functions-configuration.json"],
     });
     symlinkSync(join(root, "node_modules"), join(directory, "node_modules"));
     const workflow = parse(readFileSync(join(root, ".github/workflows/cms-staging-deploy.yml"), "utf8"));
@@ -368,8 +368,8 @@ test("preserves placeholder sentinels and configures an unrendered trusted smoke
     } });
     // The first probe imports the retry rule, whose only source dependency is the wait module.
     const helper = "scripts/lib/provider-call.mjs";
-    await copyImportClosure(root, directory, [helper], { boundary: { rule: "the retry rule's independence", files: [helper] },
-      assets: ["functions/lib/release-wait.js"] });
+    await copyImportClosure(root, directory, [helper], { boundary: { rule: "the retry rule's independence",
+      files: [helper, "functions/lib/release-wait.js"] } });
     const program = `import assert from "node:assert/strict";
       import {parseApiOrigin} from ${JSON.stringify(pathToFileURL(join(root, "agents/vmix/configuration.mjs")).href)};
       import {runCmsFunctionSmoke} from ${JSON.stringify(pathToFileURL(join(directory, smoke)).href)};

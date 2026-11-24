@@ -4,7 +4,6 @@ import { isolatedFirestore } from "../helpers/emulator-firestore.js";
 import { deploymentId, previewProviderFixture, versionId } from "../helpers/private-preview-provider-fixture.js";
 import { releasePair, pairReference } from "../helpers/private-public-release-pair.js";
 import { installPrivatePreviewPair, qualifyPrivatePreviewPair } from "../../scripts/lib/install-private-preview-pair.mjs";
-import { workerReadbackClock } from "../helpers/worker-readback-clock.mjs";
 const require = createRequire(import.meta.url), preview = require("../../functions/lib/cms-preview-pair.js"), p = require("../../functions/lib/public-release-pair.js");
 let sequence = 0;
 async function fixture(overrides) {
@@ -17,7 +16,7 @@ async function fixture(overrides) {
     bootstrapPublicPair: pairReference(releasePair()), candidate: { sourceSha: f.descriptor.rendererSha, trustedWorkflowSha: "e".repeat(40),
       runId: String(100 + sequence), runAttempt: 1, inputFingerprint: f.prepared.bundleDigest, configurationFingerprint: f.prepared.configurationDigest } };
   const input = { firestore: db, prepared: f.prepared, request, readToken: () => "synthetic-api", readSecret: () => "synthetic-binding",
-    fetchImpl: f.request, dryRun: false, readbackClock: workerReadbackClock() };
+    fetchImpl: f.request, dryRun: false };
   const key = p.publicReleaseDigest({ worker: f.prepared.applicationName });
   f.state.beforeWrite = async action => {
     const value = (await db.doc(`system/publicReleasePrivateInstalls/attempts/${request.operationId}/steps/${key}-${action}`).get()).data();

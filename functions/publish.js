@@ -148,8 +148,6 @@ async function assertPublishReady(fields = {}, deps = {}) {
     getDevCredentials = readDevAppCredentials,
     getTransport = defaultPublishTransport,
     isWritebackConfigured = defaultWritebackConfigured,
-    log = logger,
-    now = () => Date.now(),
   } = deps;
 
   const transport = resolvePublishTransport(getTransport);

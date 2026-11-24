@@ -4,9 +4,9 @@
 //   until <what> <status> <curl args...>  wait until the URL answers that status
 // A request with no answer is asked again; any HTTP status is an answer.
 import { execFile } from "node:child_process";
-import { createRequire } from "node:module";
+import releaseWait from "../functions/lib/release-wait.js";
 
-const { callOutside, waitFor } = createRequire(import.meta.url)("../functions/lib/release-wait.js");
+const { callOutside, waitFor } = releaseWait;
 
 function curlStatus(args) {
   return new Promise((resolve, reject) => {

@@ -71,7 +71,7 @@ export async function originalInstall(firestore, packet, original, id, provider,
   const exposure = await provider.subdomain(original.name, signal);
   if (exposure.enabled !== false || exposure.previews_enabled !== false) refuse();
 }
-export async function enableOldPublicReleaseIngress({ firestore, packet: raw, readToken, fetchImpl, signal, readback = false, readbackClock }) {
+export async function enableOldPublicReleaseIngress({ firestore, packet: raw, readToken, fetchImpl, signal, readback = false }) {
   const { packet, attempt, original, config } = oldIngressConfiguration(raw);
   work.assertPublicReleasePairDatabase(firestore, attempt.currentPair);
   const source = await compilePrivateWorker(config.main);
@@ -144,7 +144,7 @@ export async function enableOldPublicReleaseIngress({ firestore, packet: raw, re
   }
   await guard(); await ledger.bindAttempt(packet.operationId, id.planDigest);
   const step = (action, callbacks) => ledger.once({ attemptId: packet.operationId, worker: id.worker, planDigest: id.planDigest, action, ...callbacks });
-  const workerStep = (action, effect, observe) => step(action, workerReadbackAfterWrite(effect, observe, readbackClock));
+  const workerStep = (action, effect, observe) => step(action, workerReadbackAfterWrite(effect, observe));
   await guard();
   const version = await workerStep("enable-upload", () => provider.upload(name, privateWorkerMetadata(config, id.tag), source, signal), uploaded);
   await guard();

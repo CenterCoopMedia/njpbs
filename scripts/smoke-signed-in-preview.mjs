@@ -3,7 +3,8 @@ import { pathToFileURL } from "node:url";
 import { launchCmsBrowser, parseBrowserCredential, submitCmsSignIn } from "./cms-debug-browser.mjs";
 import { developmentInstallAccess } from "./lib/development-install-credentials.mjs";
 import { developmentValues } from "./render-development-config.mjs";
-const { waitFor } = createRequire(import.meta.url)("../functions/lib/release-wait.js");
+import releaseWait from "../functions/lib/release-wait.js";
+const { waitFor } = releaseWait;
 
 const production = { admin: "https://admin.njpbs.org", preview: "https://preview.njpbs.org" };
 const editorPath = /^\/content\/(?:pages|post)\/[A-Za-z0-9][A-Za-z0-9_-]{0,127}\/edit$/;

@@ -1,20 +1,20 @@
 import { devAccessOrigin, deploymentEmail } from "./deployment-settings.mjs";
 import { execFile } from "node:child_process";
 import { createReadStream, fstatSync } from "node:fs";
-import { createRequire } from "node:module";
 import { Readable } from "node:stream";
 import { promisify } from "node:util";
 import {
   launchCmsBrowser,
   readBrowserCredential,
 } from "../cms-debug-browser.mjs";
+import releaseWait from "../../functions/lib/release-wait.js";
+const { waitFor } = releaseWait;
 
 export const ADMIN_ORIGIN = "https://dev-admin.example.org";
 export const PUBLIC_ORIGIN = "https://dev-public.example.org";
 
 const EMAIL = (process.env.CMS_DEV_EDITOR_EMAIL ?? "").toLowerCase();
 const run = promisify(execFile);
-const { waitFor } = createRequire(import.meta.url)("../../functions/lib/release-wait.js");
 
 export function openCredentialPipe(fd) {
   // The Python launcher captures identity before Node can reuse a missing FD.

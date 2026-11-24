@@ -8,8 +8,9 @@ import { explicitCloudWakeDecision } from "./lib/cms-release-plan.mjs";
 import { assertNoFunctionDeletions, loadFunctionDeployManifest, readFunctionsDeployInventory, requestDeploymentInventory } from "./lib/functions-deploy-inventory.mjs";
 import { cmsTarget } from "./lib/cms-target.mjs";
 import { lastProviderLine, permanentFailure } from "./lib/provider-call.mjs";
+import releaseWait from "../functions/lib/release-wait.js";
 
-const { callOutside } = createRequire(import.meta.url)("../functions/lib/release-wait.js");
+const { callOutside } = releaseWait;
 
 const PROJECT = cmsTarget().projectId;
 const REGION = "us-central1";

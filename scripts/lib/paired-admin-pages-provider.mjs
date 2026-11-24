@@ -5,9 +5,10 @@ import { functionsInventoryIdentity } from './cms-component-receipt.mjs';
 import { listPages } from '../deploy-cms-function-batches.mjs';
 import { pairedAdminArtifactContents } from './paired-admin-pages-artifact.mjs';
 import { ADMIN_PROVIDER_OPERATIONS, createPairedAdminOperationJournal, refuseAdminProvider, isAdminProviderId } from './paired-admin-provider-operation.mjs';
+import releaseWait from '../../functions/lib/release-wait.js';
+const { waitFor } = releaseWait;
 
 const api = createRequire(import.meta.url)('../../functions/lib/cms-preview-pair.js');
-const { waitFor } = createRequire(import.meta.url)('../../functions/lib/release-wait.js');
 const HEX = /^[a-f0-9]{64}$/;
 const SHA = /^[a-f0-9]{40}$/;
 const token = value => typeof value === 'string' && /^[\x21-\x7e]{1,32768}$/.test(value);

@@ -8,10 +8,10 @@
 // refusal of ours is never repeated. A write whose repeat is not idempotent
 // passes `readBack`, which answers undefined when the write did not land.
 import { execFileSync, spawnSync } from "node:child_process";
-import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
+import releaseWait from "../../functions/lib/release-wait.js";
 
-const { callOutside, setJournal } = createRequire(import.meta.url)("../../functions/lib/release-wait.js");
+const { callOutside, setJournal } = releaseWait;
 
 // The promise-free form below still counts and sleeps by itself: its callers
 // (gcloud reads in configure-cms-functions.mjs and check-cms-secret-iam.mjs,

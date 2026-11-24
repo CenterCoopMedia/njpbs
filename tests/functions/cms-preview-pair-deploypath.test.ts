@@ -7,7 +7,6 @@ import { startCandidateReceipt, verifyCandidateReceipt, commitLiveReaderReceipt,
 import { assertLegacyCmsWorkflow } from "../../scripts/lib/cms-release-plan.mjs";
 import { planPairedCmsRelease, assertPairedAdminManifest, publishPairedAdminManifest } from "../../scripts/lib/cms-preview-pair-release.mjs";
 import { deployPreviewPairRuntime, previewPairConfiguration } from "../../site/scripts/deploy-cms-preview-pair.js";
-import { workerReadbackClock } from "../helpers/worker-readback-clock.mjs";
 
 const api = createRequire(import.meta.url)("../../functions/lib/cms-preview-pair.js");
 const db = isolatedFirestore("cms-preview-pair-deploypath");
@@ -357,7 +356,7 @@ it.each([2])("requires the paired preview Worker version after %s stale reads", 
   const adapter = privateAdapter();
   let reads = 0;
   adapter.readback.mockImplementation(async () => candidate(reads++ < staleReads ? old : next, now).mutation.providerIdentities);
-  const request = privateRequest(adapter, { readbackClock: workerReadbackClock() });
+  const request = privateRequest(adapter);
   expect((await deployPreviewPairRuntime(request)).proofDigest).toMatch(/^[a-f0-9]{64}$/);
   expect(reads).toBe(3);
   expect((await current("cmsDeploymentCandidates/renderer-100-1")).mutation.providerIdentities.workerVersion).toBe(next.workerVersion);

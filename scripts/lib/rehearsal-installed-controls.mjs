@@ -1,12 +1,12 @@
-import { createRequire } from 'node:module';
 import protocol from '../../functions/lib/public-release-pair.js';
 import { readRehearsalInstalledControl } from './rehearsal-installed-state.mjs';
 import { assertRehearsalAuditScope } from './rehearsal-installed-audit.mjs';
 import { rehearsalOperationId, rehearsalSteps } from './public-release-rehearsal.mjs';
 import admission from '../../functions/lib/public-release-admission.js';
 import { assertNativeRehearsalDatabase } from './rehearsal-sdk-identity.mjs';
+import releaseWait from '../../functions/lib/release-wait.js';
 
-const { waitFor } = createRequire(import.meta.url)('../../functions/lib/release-wait.js');
+const { waitFor } = releaseWait;
 const MAX_SAMPLES = 3600;
 const refuse = () => { throw new Error('Installed rehearsal continuous controls refused'); };
 const same = (a, b) => protocol.publicReleaseDigest(a) === protocol.publicReleaseDigest(b);

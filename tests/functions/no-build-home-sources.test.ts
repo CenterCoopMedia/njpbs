@@ -88,7 +88,7 @@ describe("Home retained sources in a fresh authority transaction", () => {
     expect(result.homeRefresh).toEqual(state.homeRefresh);
     expect(result.publicContextRevision).toBe(9);
     expect(result.externalInputs).toBeNull();
-    expect(getBytes).toHaveBeenCalledWith(retainedSource.file.key, { signal: expect.any(AbortSignal) });
+    expect(getBytes).toHaveBeenCalledWith(retainedSource.file.key);
     expect(result.homeSources.publication).toEqual(sources.publication);
   });
 

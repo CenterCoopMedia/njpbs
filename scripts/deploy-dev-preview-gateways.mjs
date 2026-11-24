@@ -4,14 +4,14 @@ import { devDeploySourceSha } from "./lib/dev-deploy-source.mjs";
 import { activeWorkerDeploymentQuery, isActiveWorkerDeploymentPage } from './lib/cloudflare-active-worker-deployment.mjs';
 import { waitForWorkerReadback, WorkerReadbackMismatch, wranglerVersion } from './lib/cloudflare-worker-readback.mjs';
 import { spawnSync } from 'node:child_process';
-import { createRequire } from 'node:module';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
+import releaseWait from '../functions/lib/release-wait.js';
 
-const { waitFor } = createRequire(import.meta.url)('../functions/lib/release-wait.js');
+const { waitFor } = releaseWait;
 const ACCOUNT = (process.env.CMS_DEV_CLOUDFLARE_ACCOUNT_ID ?? "");
 const HOST = 'dev-preview.example.org';
 const PRIVATE = 'template-dev-cms-preview';
