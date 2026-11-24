@@ -44,6 +44,7 @@ const OPERATOR_AUDIT_WRITERS = Object.freeze([
   "backfill-media-bin.mjs",
   "backfill-video-previews.mjs",
   "lib/dev-public-predecessor.cjs",
+  "lib/dev-runtime-repin.cjs",
 ]);
 
 // The read side of the same stream. It names actors and targets too, so it looks
