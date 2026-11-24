@@ -10,7 +10,7 @@ function transport(overrides = {}) {
   const answers = { ...ready, ...overrides }, calls = [];
   const request = async (url, init = {}) => {
     calls.push({ url, method: init.method ?? "GET" });
-    const answer = url.includes("storage.googleapis.com") ? answers.bucket : answers.testIamPermissions;
+    const answer = new URL(url).hostname === "storage.googleapis.com" ? answers.bucket : answers.testIamPermissions;
     if (answer instanceof Error) throw answer;
     return answer;
   };
