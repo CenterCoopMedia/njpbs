@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
-import { expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 const require = createRequire(import.meta.url);
 const { verifyOwnedPostRoutes } = require("../../functions/lib/no-build-post-recovery.js");
@@ -22,17 +22,21 @@ function answer(renderer, status = 200, extra = {}) {
   } });
 }
 
-function verify(answers, backstopMs = 60_000) {
-  let clock = 0, reads = 0;
+beforeEach(() => { vi.useFakeTimers(); });
+afterEach(() => { vi.useRealTimers(); });
+
+function verify(answers) {
+  let reads = 0;
   const fetchPublic = async () => answers[Math.min(reads++, answers.length - 1)]();
-  const rollout = { backstopMs, now: () => clock, wait: async () => { clock += 1_000; } };
   const run = verifyOwnedPostRoutes({ state, candidate, admission, fetchPublic, target: publicationTarget("production"),
-    headers: {}, previousRendererSha: previous, rollout });
-  return { run, reads: () => reads, clock: () => clock };
+    headers: {}, previousRendererSha: previous });
+  run.catch(() => {});
+  return { run, reads: () => reads };
 }
 
 it("reads again while the previous renderer answers, then judges the candidate once", async () => {
   const check = verify([() => answer(previous), () => answer(previous), () => answer(candidateSha)]);
+  await vi.advanceTimersByTimeAsync(60_000);
   await expect(check.run).resolves.toBeUndefined();
   expect(check.reads()).toBe(3);
 });
@@ -47,13 +51,6 @@ it("refuses an answer without the candidate renderer at once", async () => {
   const check = verify([() => answer(null, 503), () => answer(candidateSha)]);
   await expect(check.run).rejects.toThrow("did not preserve its instant Post routes");
   expect(check.reads()).toBe(1);
-});
-
-it("stops at the backstop when the candidate version never arrives", async () => {
-  const check = verify([() => answer(previous)], 5_000);
-  await expect(check.run).rejects.toThrow("still answers from the previous renderer");
-  expect(check.clock()).toBe(5_000);
-  expect(check.reads()).toBe(6);
 });
 
 it("accepts the dev staff gateway's private, no-store answer", async () => {

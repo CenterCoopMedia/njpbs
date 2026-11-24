@@ -457,15 +457,15 @@ async function seedSchedulerOwners() {
   return { pageOperation, postOperation };
 }
 
-it.each(["page", "post", "record"])("recovers other owners while %s recovery reaches the scheduler deadline", async slow => {
+it.each(["page", "post", "record"])("recovers other owners while %s recovery still waits for its public answer", async slow => {
   await prepare(await accept());
   const { pageOperation, postOperation } = await seedSchedulerOwners();
   const scheduler = (await import("../../functions/no-build-post-confirmation.js")).default;
-  const start = Date.now(); let clock = start, slowStarted = false;
+  let slowStarted = false;
   let release!: () => void;
   const gate = new Promise<void>(resolve => { release = resolve; });
   const waitAtBoundary = async () => { slowStarted = true; await gate; throw new Error("Slow public response"); };
-  const running = scheduler.recoverNoBuildPublications({ firestore: db, now: () => clock,
+  const running = scheduler.recoverNoBuildPublications({ firestore: db,
     config: () => ({ zoneId: "f".repeat(32), token: "fixture-purge-token" }), readback: () => ({ target, headers }), artifacts,
     fetchPurge: async () => slow === "post" ? waitAtBoundary() : Response.json({ success: true }),
     fetchPublic: async (url: string) => {
@@ -493,7 +493,6 @@ it.each(["page", "post", "record"])("recovers other owners while %s recovery rea
     await expect.poll(async () => (await db.doc("cmsDatasetRefreshJobs/scheduler-dataset").get()).data()?.status,
       { timeout: 2_000 }).toBe("success");
   } finally {
-    clock = start + 45_000;
     release();
     error = await running;
   }

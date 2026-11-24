@@ -1,9 +1,9 @@
 import { createRequire } from "node:module";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const require = createRequire(import.meta.url);
 const ownership = require("../../functions/lib/no-build-page-ownership.js");
 const recovery = require("../../functions/lib/no-build-page-recovery.js");
-const { withinDeadline, withinPublicRead, readPublicPostAfterRefresh } = require("../../functions/lib/no-build-post-recovery.js");
+const { readPublicAnswer, readPublicPostAfterRefresh, REFRESH_PENDING } = require("../../functions/lib/no-build-post-recovery.js");
 const compatibility = require("../../functions/lib/data-figure-compatibility.js");
 const sha = "a".repeat(40);
 const operationId = "A".repeat(20);
@@ -12,47 +12,44 @@ const owner = overrides => ({ schemaVersion: 1, pageId: "contact", rendererSha: 
   path: "/contact/", ownedPaths: ["/contact/", "/contact-us/"], visible: true,
   snapshotDigest: "b".repeat(64), runtime: { owner: "cloudflare", release: sha }, ...overrides });
 
-it.each(["r2-last-good", "assets"])("bounds a permanently pending %s Page by the proof deadline", async source => {
+it.each(["r2-last-good", "assets"])("reports a pending %s Page once and releases its body for the next wake", async source => {
   let reads = 0, cancelled = false;
-  await expect(withinDeadline(30, signal => recovery.readPublicPageReceipt({ state: owner({ ownedPaths: ["/contact/"] }),
-    target: { origin: "https://example.test" }, headers: new Headers(), signal, fetchPublic: async () => {
+  await expect(readPublicAnswer("test page", signal => recovery.readPublicPageReceipt({ state: owner({ ownedPaths: ["/contact/"] }),
+    target: { origin: "https://example.test" }, headers: new Headers(), signal, once: true, fetchPublic: async () => {
       reads++;
       return new Response(new ReadableStream({ cancel() { cancelled = true; } }), { headers: {
         "x-njpbs-content-source": source, "x-njpbs-publication-refresh": "pending", "retry-after": "1" } });
-    } }))).rejects.toThrow("Public Post confirmation timed out");
+    } }))).rejects.toMatchObject({ code: REFRESH_PENDING });
   expect(reads).toBe(1);
   expect(cancelled).toBe(true);
 });
 
 describe("public read progress", () => {
+  beforeEach(() => { vi.useFakeTimers(); });
+  afterEach(() => { vi.useRealTimers(); });
   const pending = () => new Response("Pending", { headers: { "x-njpbs-publication-refresh": "pending", "retry-after": "1" } });
   const updating = () => new Response("Content is being updated.", { status: 503, headers: { "retry-after": "1" } });
-  const read = (answers, milliseconds, options) => withinPublicRead(milliseconds, signal =>
-    readPublicPostAfterRefresh("https://example.test/", async () => (answers.shift() ?? pending)(), signal, {}, options));
-  const timed = async work => {
-    vi.useFakeTimers();
-    try { return await work(); } finally { vi.useRealTimers(); }
+  const network = () => { throw Object.assign(new TypeError("fetch failed"), { cause: { code: "ECONNRESET" } }); };
+  const read = async (answers, options) => {
+    const result = readPublicAnswer("test route", signal =>
+      readPublicPostAfterRefresh("https://example.test/", async () => answers.shift()(), signal, {}, options));
+    result.catch(() => {});
+    await vi.runAllTimersAsync();
+    return result;
   };
-  it("counts each pending answer as progress past the stall limit", () => timed(async () => {
-    const result = read([...Array(14).fill(pending), () => new Response("ready")], 45_000);
-    await vi.advanceTimersByTimeAsync(14_000);
-    expect((await result).status).toBe(200);
-  }));
-  it("separates a stalled GET from a route still refreshing at the deadline", () => timed(async () => {
-    const stalled = withinPublicRead(45_000, () => new Promise(() => {})).catch(error => error);
-    const refreshing = read([], 12_000).catch(error => error);
-    await vi.advanceTimersByTimeAsync(12_000);
-    expect(await stalled).toMatchObject({ message: "Public Post confirmation timed out" });
-    expect((await stalled).code).toBeUndefined();
-    expect(await refreshing).toMatchObject({ code: "public_refresh_pending" });
-  }));
-  it("waits through the reader's own updating answer unless 503 is a final answer", () => timed(async () => {
-    const waited = read([updating, () => new Response("ready")], 45_000);
-    await vi.advanceTimersByTimeAsync(1_000);
-    expect((await waited).status).toBe(200);
-    expect((await read([updating], 45_000, { updatingIsPending: false })).status).toBe(503);
-    expect((await read([() => new Response("", { status: 503, headers: { "retry-after": "1", "x-njpbs-content-source": "assets" } })], 45_000)).status).toBe(503);
-  }));
+  it("waits through every refreshing, updating or missing answer until the route answers", async () => {
+    const answers = [...Array(60).fill(pending), ...Array(60).fill(updating), ...Array(3).fill(network), () => new Response("ready")];
+    const response = await read(answers);
+    expect(await response.text()).toBe("ready");
+    expect(answers).toHaveLength(0);
+  });
+  it("takes a 503 as the answer when it carries a receipt or the caller judges it", async () => {
+    expect((await read([updating], { updatingIsPending: false })).status).toBe(503);
+    expect((await read([() => new Response("", { status: 503, headers: { "retry-after": "1", "x-njpbs-content-source": "assets" } })])).status).toBe(503);
+  });
+  it("does not read again after an error that is not a missing answer", async () => {
+    await expect(read([() => { throw new Error("Not a network failure"); }])).rejects.toThrow("Not a network failure");
+  });
 });
 
 describe("retained Page owner contract", () => {

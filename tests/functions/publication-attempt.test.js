@@ -1,40 +1,46 @@
 import { expect, it } from "vitest";
 import policy from "../../functions/lib/background-output-attempt.js";
 
-// Characterization of the retained queue/child contracts at bc0e4d36.
 const families = [
   ["post", { transport: "post-no-build-v1" }, "pending", "Public Post confirmation is unavailable"],
   ["page", { transport: "page-no-build-v1" }, "pending", "Public Page confirmation is unavailable"],
   ["home", { owner: "page-no-build-v1" }, "pending", "Public Home refresh confirmation is unavailable"],
   ["postProof", {}, "failed", "Public Post check is unavailable"],
-  ["background", {}, "failed", "background_generation_failed"],
 ];
+const refused = Object.assign(new Error("Public Post receipt does not match"), { code: "public_receipt_refused" });
 
-it.each(families)("preserves %s attempt budgets, lease and failure feedback", (family, identity, failedStatus, error) => {
+it.each(families)("%s waits without an attempt cap and ends only on a refused public answer", (family, identity, waiting, error) => {
   const original = { ...identity, status: "pending", attempts: 0, nextAttemptAt: 1_000, claim: null };
   expect(policy.publicationAttempt(original, family, 999)).toBeNull();
-  expect(policy.publicationAttempt(original, family, 1_000)).toBe("claim");
-  // Each failure's due time comes from the existing 1m/2m/4m contract.
-  for (const [attempts, due] of [[1, 61_000], [2, 121_000], [3, 241_000], [4, null]]) {
-    const row = { ...original, attempts: attempts - 1 };
-    const claimed = { ...row, ...policy.publicationClaim(row, "claim", 1_000) };
-    expect(claimed).toMatchObject({ attempts, claim: "claim", nextAttemptAt: 61_000 });
-    expect(policy.publicationAttempt(claimed, family, 60_999)).toBeNull();
-    expect(policy.publicationAttempt(claimed, family, 61_000)).toBe(attempts === 4 ? "exhaust" : "claim");
-    expect(policy.publicationFailure(claimed, family, 1_000)).toEqual({
-      status: attempts === 4 ? "failed" : failedStatus, claim: null, nextAttemptAt: due, error,
-    });
+  let row = original;
+  for (let wake = 0; wake < 8; wake++) {
+    const due = row.nextAttemptAt;
+    expect(policy.publicationAttempt(row, family, due)).toBe("claim");
+    const claimed = { ...row, ...policy.publicationClaim(row, "claim", due) };
+    // Row readers know 4 as the end, so a waiting row stays below it.
+    expect(claimed).toMatchObject({ attempts: Math.min(wake + 1, 3), claim: "claim" });
+    expect(policy.publicationAttempt(claimed, family, due + 60_000)).toBeNull();
+    expect(policy.publicationFailure(claimed, family, due, refused)).toEqual({
+      status: "failed", attempts: 4, claim: null, nextAttemptAt: null, error });
+    row = { ...claimed, ...policy.publicationFailure(claimed, family, due, new Error("The state moved")) };
+    expect(row).toMatchObject({ status: waiting, claim: null, nextAttemptAt: due + 60_000, error });
   }
   expect(original).toEqual({ ...identity, status: "pending", attempts: 0, nextAttemptAt: 1_000, claim: null });
 });
 
-it("retains Home's initial child shape and the separate proof's exhausted status", () => {
+it("retains Home's initial child shape and refuses a malformed row", () => {
   expect(policy.publicationAttempt({ owner: "page-no-build-v1", status: "pending" }, "home", 0)).toBe("claim");
   expect(policy.publicationAttempt({ transport: "page-no-build-v1", status: "pending" }, "page", 0)).toBeNull();
-  const row = { status: "pending", attempts: 4, nextAttemptAt: 0, claim: null };
-  expect(policy.publicationAttempt(row, "postProof", 0)).toBe("exhaust");
-  expect(policy.publicationAttempt({ ...row, status: "failed" }, "postProof", 0)).toBeNull();
-  expect(policy.publicationAttempt({ ...row, transport: "post-no-build-v1" }, "post", 0)).toBeNull();
+  const row = { status: "failed", attempts: 4, nextAttemptAt: null, claim: null };
+  expect(policy.publicationAttempt(row, "postProof", 0)).toBeNull();
+  expect(policy.publicationAttempt({ ...row, transport: "post-no-build-v1", nextAttemptAt: 0, attempts: -1 }, "post", 0)).toBeNull();
+});
+
+it("keeps the background owner's attempt contract", () => {
+  const row = { status: "failed", attempts: 3, nextAttemptAt: 1_000, claim: null };
+  expect(policy.publicationAttempt({ ...row, attempts: 4 }, "background", 1_000)).toBe("exhaust");
+  expect(policy.publicationFailure(row, "background", 1_000)).toMatchObject({ status: "failed", nextAttemptAt: 241_000 });
+  expect(policy.publicationFailure({ ...row, attempts: 4 }, "background", 1_000)).toMatchObject({ status: "failed", nextAttemptAt: null });
 });
 
 it.each(families.slice(0, 3))("keeps %s manual retry behind its own owner and an unclaimed failure", (family, identity) => {
@@ -54,14 +60,4 @@ it("limits slow transient retries and longer leases to their original background
   expect(policy.publicationAttempt({ ...row, lastAttempt: { retryable: false, failureClass: "validation" } }, "background", 600_000)).toBeNull();
   expect(policy.publicationAttempt(row, "postProof", 600_000)).toBeNull();
   expect(policy.publicationAttempt({ ...row, transport: "post-no-build-v1" }, "post", 600_000)).toBeNull();
-});
-
-it("spends no attempt while a route reports its own refresh, within the queue's bound", () => {
-  const now = 10_000_000, row = { status: "pending", attempts: 4 };
-  const error = Object.assign(new Error("Public Post confirmation timed out"), { code: "public_refresh_pending" });
-  const at = age => ({ toMillis: () => now - age });
-  expect(policy.publicationFailure(row, "post", now, { error, since: at(60_000) })).toMatchObject({ status: "pending", attempts: 3, nextAttemptAt: now + 60_000 });
-  expect(policy.publicationFailure(row, "post", now, { error, since: at(30 * 60_000) })).toMatchObject({ status: "failed", nextAttemptAt: null });
-  expect(policy.publicationFailure(row, "post", now, { error, since: undefined })).toMatchObject({ status: "failed" });
-  expect(policy.publicationFailure(row, "post", now, { error: new Error("receipt"), since: at(0) })).toMatchObject({ status: "failed" });
 });

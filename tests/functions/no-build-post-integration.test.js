@@ -1621,33 +1621,29 @@ describe("one-Post acceptance, ownership and public receipt contracts", () => {
     expect(readPublicContentStatus(inventory, after).some(route => route.path === "/notice/")).toBe(true);
     expect((await db.collection("cmsPublishQueue").get()).size).toBe(1);
   });
-  it("exhausts an interrupted final Post confirmation through minute recovery", async () => {
+  it("takes over an interrupted Post confirmation after the platform limit, until its purge is refused", async () => {
     expect((await publish()).code).toBe(200);
     const owned = await state();
     const ref = db.doc(`cmsPublishQueue/${owned.operationId}`);
     await ref.update({ attempts: 3, nextAttemptAt: 0 });
-    const fetchPublic = vi.fn(async () => { throw new Error("No IO after crash"); });
-    const fetchPurge = vi.fn(async () => { throw new Error("No IO after crash"); });
+    const fetchPublic = vi.fn(async () => { throw new Error("No public read before a purge"); });
+    const fetchPurge = vi.fn(async () => Response.json({ success: false }, { status: 403 }));
     const recover = (firestore, time, operationId) => recovery.recoverNoBuildPostDetail({
-      firestore, operationId, fetchPublic, fetchPurge, now: () => time });
+      firestore, operationId, purgeConfig, fetchPublic, fetchPurge, now: () => time });
     await expect(recover(interruptConfirmation(db, ref), 1_000, ref.id))
       .rejects.toThrow("Process lost after final confirmation claim");
     const claimed = (await ref.get()).data();
-    expect(claimed).toMatchObject({ status: "pending", attempts: 4, claim: expect.any(String), nextAttemptAt: 61_000 });
-    await recover(db, 60_999);
+    expect(claimed).toMatchObject({ status: "pending", attempts: 3, claim: expect.any(String), nextAttemptAt: 1_801_000 });
+    await recover(db, 1_800_999);
     expect((await ref.get()).data()).toEqual(claimed);
-    await ref.update({ "noBuildPost.sourceVersion": 99 });
-    const mismatched = (await ref.get()).data();
-    await recover(db, 61_000);
-    expect((await ref.get()).data()).toEqual(mismatched);
-    await ref.update({ "noBuildPost.sourceVersion": owned.sourceVersion });
-    await recover(db, 61_000);
+    expect(fetchPurge).not.toHaveBeenCalled();
+    await recover(db, 1_801_000);
     expect((await ref.get()).data()).toMatchObject({ status: "failed", attempts: 4, claim: null, nextAttemptAt: null });
     expect(await current()).toMatchObject({ publishBuildPending: true, publishBuildQueueId: ref.id });
     expect(fetchPublic).not.toHaveBeenCalled();
-    expect(fetchPurge).not.toHaveBeenCalled();
+    expect(fetchPurge).toHaveBeenCalledTimes(1);
     const failed = (await ref.get()).data();
-    await recover(db, 121_000);
+    await recover(db, 1_861_000);
     expect((await ref.get()).data()).toEqual(failed);
     const recheck = require("../../functions/lib/publication-recheck.js");
     expect(await recheck.recheckPublication({ firestore: db, queueId: ref.id, actor, fetchPublic }))
@@ -1720,7 +1716,7 @@ describe("one-Post acceptance, ownership and public receipt contracts", () => {
     expect(saved.code).toBe(200);
     expect(await current()).toMatchObject({ title: "Keep my draft edit", publicPostProof: { status: "verified", retryPending: false } });
   });
-  it("bounds proof retries without another purge or a failed publication", async () => {
+  it("repeats its proof without a cap, another purge or a failed publication until a public answer refuses it", async () => {
     await publish();
     const owned = await state();
     const queueRef = db.doc(`cmsPublishQueue/${owned.operationId}`);
@@ -1734,7 +1730,7 @@ describe("one-Post acceptance, ownership and public receipt contracts", () => {
         now: () => time, fetchPublic });
     await recover();
     const retry = { operationId: owned.operationId };
-    for (let attempt = 2; attempt <= 4; attempt += 1) {
+    for (let attempt = 2; attempt <= 6; attempt += 1) {
       time += 10 * 60_000;
       if (attempt === 2) {
         // Keep the race to acquire a due proof lease in the emulator.
@@ -1757,17 +1753,21 @@ describe("one-Post acceptance, ownership and public receipt contracts", () => {
         await recover(retry);
         expect(reads).toBe(attempt - 1);
         expect((await queueRef.get()).data().postProof).toMatchObject({
-          status: "pending", attempts: attempt, claim: expect.any(String),
+          status: "pending", attempts: Math.min(attempt, 3), claim: expect.any(String),
         });
       } finally {
         release.resolve();
         await active;
       }
     }
+    expect((await queueRef.get()).data().postProof).toMatchObject({ status: "failed", attempts: 3, claim: null, nextAttemptAt: time + 60_000 });
+    expect((await current()).publicPostProof).toMatchObject({ status: "failed", retryPending: true });
+    time += 60_000;
+    await recover({ fetchPublic: async () => { reads += 1; return new Response("Not found", { status: 404 }); } });
     time += 10 * 60_000;
     await recover();
     expect(purges).toBe(1);
-    expect(reads).toBe(4);
+    expect(reads).toBe(7);
     expect((await queueRef.get()).data()).toMatchObject({
       status: "success", postProof: { status: "failed", attempts: 4, claim: null, nextAttemptAt: null } });
     expect(await current()).toMatchObject({ publishBuildPending: false, publicSourceVersion: 2,
@@ -1791,18 +1791,20 @@ describe("one-Post acceptance, ownership and public receipt contracts", () => {
     const status = await invoke(endpoint, { collection: "cmsPosts", id: config.postId, publicationOnly: true });
     expect(status.body.publication.postProofWarning).toBeUndefined();
   });
-  it("settles a lost final proof lease as exhausted without another public read", async () => {
+  it("takes over a lost proof claim and reads the public route again", async () => {
     await publish();
     const owned = await state();
     await recovery.recoverNoBuildPostDetail({ firestore: db, purgeConfig, fetchPurge,
       fetchPublic: async () => { throw new Error("Synthetic outage"); } });
     await db.doc(`cmsPublishQueue/${owned.operationId}`).update({ "postProof.status": "pending",
-      "postProof.attempts": 4, "postProof.claim": "lost-process", "postProof.nextAttemptAt": 1_000 });
+      "postProof.attempts": 3, "postProof.claim": "lost-process", "postProof.nextAttemptAt": 1_000 });
+    let reads = 0;
     await recovery.recoverNoBuildPostDetail({ firestore: db, now: () => 2_000,
-      fetchPublic: async () => { throw new Error("An exhausted proof must not read again"); } });
+      fetchPublic: async () => { reads += 1; throw new Error("Synthetic outage"); } });
+    expect(reads).toBe(1);
     expect((await db.doc(`cmsPublishQueue/${owned.operationId}`).get()).data()).toMatchObject({
-      status: "success", postProof: { status: "failed", claim: null, nextAttemptAt: null, attempts: 4 } });
-    expect((await current()).publicPostProof).toMatchObject({ status: "failed", retryPending: false });
+      status: "success", postProof: { status: "failed", claim: null, nextAttemptAt: 62_000, attempts: 3 } });
+    expect((await current()).publicPostProof).toMatchObject({ status: "failed", retryPending: true });
   });
   it.each(["owner", "renderer", "admission"])("refuses early success when %s changes before purge completes", async change => {
     await publish();
@@ -1903,55 +1905,23 @@ describe("one-Post acceptance, ownership and public receipt contracts", () => {
     expect((await current()).publishBuildPending).toBe(false);
     expect((await db.doc(`cmsPublishQueue/${owned.operationId}/backgroundPreparation/fixture`).get()).data().status).toBe("building");
   });
-  it.each(["missing", "http", "body", "timeout"])("retains pending publication when purge fails: %s", async failure => {
+  it.each(["missing", "http", "body"])("retains the accepted publication when purge fails: %s", async failure => {
     await publish();
     const owned = await state();
     let readback = false;
     await recovery.recoverNoBuildPostDetail({ firestore: db, purgeConfig: failure === "missing" ? undefined : purgeConfig,
       fetchPurge: async () => {
-        if (failure === "timeout") return new Response(new ReadableStream({ start() {} }));
-        return Response.json({ success: false }, { status: failure === "http" ? 429 : 200 });
+        return Response.json({ success: false }, { status: failure === "http" ? 403 : 200 });
       }, fetchPublic: async () => { readback = true; throw new Error("Readback must follow successful purge"); } });
     expect(readback).toBe(false);
     const queue = (await db.doc(`cmsPublishQueue/${owned.operationId}`).get()).data();
-    expect(queue.status).toBe("pending");
+    expect(queue).toMatchObject(failure === "missing" ? { status: "pending", attempts: 1 }
+      : { status: "failed", attempts: 4, nextAttemptAt: null });
     expect(queue.claim).toBeNull();
     expect(queue.publicReceipt).toBeUndefined();
     expect(queue.purgeReceipt).toBeUndefined();
     expect((await current()).publishBuildPending).toBe(true);
     expect((await decision("/posts/pilot-story/")).receipt.operationId).toBe(owned.operationId);
-  });
-  it("bounds the later HTML proof to ten seconds while retaining successful publication", async () => {
-    await publish();
-    const owned = await state();
-    const timer = vi.spyOn(globalThis, "setTimeout");
-    let registeredDelay, initiallyAborted, abortedAtDeadline, bodyRead = false;
-    try {
-      await recovery.recoverNoBuildPostDetail({ firestore: db, purgeConfig, fetchPurge,
-        fetchPublic: async (_url, { signal }) => {
-          const [expire, milliseconds] = timer.mock.calls.at(-1) ?? [];
-          registeredDelay = milliseconds;
-          initiallyAborted = signal.aborted;
-          return new Response(new ReadableStream({ pull() {
-            bodyRead = true;
-            expire();
-            abortedAtDeadline = signal.aborted;
-          } }, { highWaterMark: 0 }), { headers: {
-            "cache-control": "no-store", "x-njpbs-content-source": "cms-no-build",
-            "x-njpbs-publication-operation": owned.operationId, "x-njpbs-source-version": "2",
-            "x-njpbs-admission-revision": "1", "x-njpbs-html-sha256": "f".repeat(64),
-          } });
-        } });
-    } finally { timer.mockRestore(); }
-    expect(registeredDelay).toBe(10_000);
-    expect(bodyRead).toBe(true);
-    expect(initiallyAborted).toBe(false);
-    expect(abortedAtDeadline).toBe(true);
-    const queue = (await db.doc(`cmsPublishQueue/${owned.operationId}`).get()).data();
-    expect(queue.status).toBe("success");
-    expect(queue.postProof).toMatchObject({ status: "failed", attempts: 1 });
-    expect(queue.publicReceipt).toBeUndefined();
-    expect((await current()).publishBuildPending).toBe(false);
   });
   it("settles an accepted withdrawal while instant publication admission is paused", async () => {
     expect((await publish()).code).toBe(200);

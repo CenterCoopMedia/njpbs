@@ -11,7 +11,7 @@ const { readRecordManifest } = require("./post-background-record-manifest");
 const { createPostBackgroundStorage } = require("./post-background-storage");
 const { PUBLIC_CONTEXT_PATH, publicContextDigest } = require("./public-context-revision");
 const { pagePublicationTarget } = require("./no-build-page-target");
-const { assertReadbackTarget, publicReadbackHeaders, readPublicPostAfterRefresh } = require("./no-build-post-recovery");
+const { assertReadbackTarget, publicReadbackHeaders, readPublicPostAfterRefresh, REFRESH_PENDING } = require("./no-build-post-recovery");
 const { readSettingsProofs } = require("./no-build-post-settings-confirmation");
 function refuse() { throw Object.assign(new Error("The public record receipt is unavailable."), { status: 409 }); }
 
@@ -130,7 +130,7 @@ async function recoverNoBuildRecordPublication({ firestore, operationId, target,
         const result = await recoverNoBuildRecordPublication({ firestore, operationId: id, target, headers, fetchPublic, artifacts,
           currentCodeRequest, now, once: true });
         confirmed ||= result.confirmed;
-      } catch (error) { errors.push(error); }
+      } catch (error) { if (error?.code !== REFRESH_PENDING) errors.push(error); }
       // Rotate unfinished entries so a stalled or damaged operation cannot
       // hold the bounded first page forever. Never recreate a cleared marker.
       try {

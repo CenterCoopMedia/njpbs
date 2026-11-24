@@ -9,7 +9,7 @@ export function interruptConfirmation(firestore, ref) {
     return async (...args) => {
       const result = await target.runTransaction(...args);
       const row = (await ref.get()).data();
-      if (row?.attempts === 4 && row.claim) throw new Error("Process lost after final confirmation claim");
+      if (row?.attempts >= 3 && row.claim) throw new Error("Process lost after final confirmation claim");
       return result;
     };
   } });

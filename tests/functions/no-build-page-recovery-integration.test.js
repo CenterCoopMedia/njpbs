@@ -23,6 +23,7 @@ import postOwnership from "../../functions/lib/no-build-post-ownership.js";
 import { retainedHomeSources, pageDocument } from "../../site/tests/fixtures/published-pages/fixtures";
 import settingsConfirmation from "../../functions/lib/no-build-page-settings-confirmation.js";
 import pageProof from "../../functions/lib/page-consumer-proof.js";
+import postRecovery from "../../functions/lib/no-build-post-recovery.js";
 import postSettingsConfirmation from "../../functions/lib/no-build-post-settings-confirmation.js";
 import postPublication from "../../functions/lib/no-build-post-publication.js";
 import { createNoBuildPostWorker } from "../../workers/src/no-build-post-worker";
@@ -164,7 +165,7 @@ it("deduplicates duplicate wakes with the durable queue claim", async () => {
 it("refuses a stale alias even when the canonical route is exact", async () => {
   const real = fetchPublic(worker());
   await recover({ fetchPublic: async (url, options) => url.includes("old-proof") ? new Response(null, { status: 404 }) : real(url, options) });
-  expect((await queueRef().get()).data().status).toBe("pending");
+  expect((await queueRef().get()).data()).toMatchObject({ status: "failed", attempts: 4, claim: null, nextAttemptAt: null });
   expect((await firestore.doc(`cmsPages/${pageId}`).get()).data().publicSourceVersion).toBeUndefined();
 });
 it("rerenders current authority and refuses recovery when it changes after the last route receipt", async () => {
@@ -203,7 +204,7 @@ it("keeps every accepted Page route readable from Assets during an authority out
       expect(await response.text()).toBe(method === "HEAD" ? "" : "Static active Page fixture");
     }
   }
-  await recover({ fetchPublic: fetchPublic(outage), deadline: Date.now() + 2_000 });
+  await recover({ fetchPublic: fetchPublic(outage), once: true });
   expect((await queueRef().get()).data()).toMatchObject({ status: "pending", attempts: 1 });
   expect((await firestore.doc(`cmsPages/${pageId}`).get()).data().publicSourceVersion).toBeUndefined();
 });
@@ -229,9 +230,10 @@ it("withdraws every canonical and retained path with invalid admission or a disa
 it("does not complete a Page withdrawal until its exact durable marker has reached the reader", async () => {
   await seed(false);
   await recover({ fetchPublic: fetchPublic(worker({ readWithdrawal: async () => null })) });
-  expect((await queueRef().get()).data()).toMatchObject({ status: "pending", attempts: 1 });
+  expect((await queueRef().get()).data()).toMatchObject({ status: "failed", attempts: 4, claim: null, nextAttemptAt: null });
   expect((await firestore.doc(`cmsPages/${pageId}`).get()).data().publicSourceVersion).toBeUndefined();
-  await recover({ now: () => Date.now() + 120_000 });
+  await queueRef().update({ status: "pending", attempts: 0, nextAttemptAt: 0 });
+  await recover();
   expect((await queueRef().get()).data().status).toBe("success");
 });
 it.each(["deploying", "mismatch", "missing claim", "timeout"])("a confirmed Page withdrawal cannot resurface during %s", async reason => {
@@ -263,9 +265,12 @@ it("serves a newer Page republish without deleting the durable withdrawal and re
   expect((await instance.fetch(new Request(`${target.origin}/proof-page/`))).status).toBe(410);
   expect((await firestore.doc(`cmsPages/${pageId}`).get()).data().title).toBe("Private later draft");
 });
-it("bounds failed attempts, and an authorized retry resumes only the exact original operation", async () => {
-  for (let attempt = 0; attempt < 4; attempt++) await recover({ now: () => Date.now() + attempt * 600_000,
-    fetchPublic: async () => new Response(null, { status: 503 }) });
+it("waits through every updating answer, ends on a refused one, and an authorized retry resumes only the exact original operation", async () => {
+  for (let wake = 0; wake < 6; wake++) {
+    await recover({ now: () => Date.now() + wake * 60_001, once: true, fetchPublic: async () => new Response(null, { status: 503 }) });
+    expect((await queueRef().get()).data()).toMatchObject({ status: "pending", attempts: Math.min(wake + 1, 3), claim: null });
+  }
+  await recover({ now: () => Date.now() + 6 * 60_001, fetchPublic: async () => new Response(null, { status: 404 }) });
   expect((await queueRef().get()).data()).toMatchObject({ status: "failed", attempts: 4, nextAttemptAt: null });
   const request = { firestore, actor, retry: true, baseVersion: 8, changes: [{ collection: "cmsPages", id: pageId, sourceVersion: 7 }] };
   await expect(recovery.existingNoBuildPagePublication({ ...request, baseVersion: 7 })).rejects.toThrow("Publication changed");
@@ -330,32 +335,31 @@ async function seedHomeRefresh(custom = false) {
     ? { schemaVersion: 1, ...sources.publication } : sources);
   return { homeState, fetchAsset, postId, postOperationId };
 }
-it.each(["Page", "Home"])("exhausts an interrupted final %s confirmation through minute recovery", async family => {
+it.each(["Page", "Home"])("takes over an interrupted %s confirmation after the platform limit, until a public answer refuses it", async family => {
   const home = family === "Home" ? await seedHomeRefresh() : null;
   const ref = home ? firestore.doc(home.homeState.homeRefresh.taskPath) : queueRef();
   await ref.update({ attempts: 3, nextAttemptAt: 0 });
-  const fetchPublic = vi.fn(async () => { throw new Error("No IO after crash"); });
+  const fetchPublic = vi.fn(async () => new Response(null, { status: 404 }));
   const options = { firestore: interruptConfirmation(firestore, ref), target, headers, fetchPublic, now: () => 1_000 };
   await expect(home ? recovery.recoverNoBuildHomeRefresh(options) : recover(options))
     .rejects.toThrow("Process lost after final confirmation claim");
-  expect((await ref.get()).data()).toMatchObject({ status: "pending", attempts: 4, claim: expect.any(String), nextAttemptAt: 61_000 });
+  expect((await ref.get()).data()).toMatchObject({ status: "pending", attempts: 3, claim: expect.any(String), nextAttemptAt: 1_801_000 });
+  expect(fetchPublic).not.toHaveBeenCalled();
   const claimed = (await ref.get()).data();
-  await recovery.recoverNoBuildPageDetail({ firestore, target, headers, fetchPublic, now: () => 60_999 });
+  await recovery.recoverNoBuildPageDetail({ firestore, target, headers, fetchPublic, now: () => 1_800_999 });
   expect((await ref.get()).data()).toEqual(claimed);
   const sourceField = home ? "input.sourceVersion" : "noBuildPage.sourceVersion";
   await ref.update({ [sourceField]: 99 });
   const mismatched = (await ref.get()).data();
-  await recovery.recoverNoBuildPageDetail({ firestore, target, headers, fetchPublic, now: () => 61_000 });
+  await recovery.recoverNoBuildPageDetail({ firestore, target, headers, fetchPublic, now: () => 1_801_000 });
   expect((await ref.get()).data()).toEqual(mismatched);
   await ref.update({ [sourceField]: home ? 4 : 7 });
-  await recovery.recoverNoBuildPageDetail({ firestore, target, headers, fetchPublic, now: () => 61_000 });
+  await recovery.recoverNoBuildPageDetail({ firestore, target, headers, fetchPublic, now: () => 1_801_000 });
   expect((await ref.get()).data()).toMatchObject({ status: "failed", attempts: 4, claim: null, nextAttemptAt: null });
   if (home) expect((await firestore.doc(`${ownership.PAGE_OWNER_COLLECTION}/home`).get()).data().homeRefresh.status).toBe("pending");
   else expect((await firestore.doc(`cmsPages/${pageId}`).get()).data().publishBuildPending).toBe(true);
-  // The Home sweep also checks its independently owned public catalog.
-  if (!home) expect(fetchPublic).not.toHaveBeenCalled();
   const failed = (await ref.get()).data();
-  await recovery.recoverNoBuildPageDetail({ firestore, target, headers, fetchPublic, now: () => 121_000 });
+  await recovery.recoverNoBuildPageDetail({ firestore, target, headers, fetchPublic, now: () => 1_861_000 });
   expect((await ref.get()).data()).toEqual(failed);
   if (home) {
     await homeConfirmation.retryNoBuildHomePostRefresh({ firestore, postId: home.postId,
@@ -914,17 +918,17 @@ it("refuses repeated stale-context Page sweeps before CODE or public reads", asy
   expect((await firestore.doc(`cmsPublishQueue/${settingsOperationId}`).get()).data().consumerReceipts).toBeUndefined();
 });
 
-it("shares a durable Page proof lease, backs off four failures and stops until staff retry", async () => {
+it("shares a durable Page proof claim, waits without a cap and stops on a refused answer until staff retry", async () => {
   const { home, settingsOperationId } = await seedFullPageCoverage();
   const queueRef = firestore.doc(`cmsPublishQueue/${settingsOperationId}`);
   const proofRef = queueRef.collection("confirmation").doc("page-consumers");
   const log = { warn: vi.fn(), error: vi.fn() };
-  let offset = 0, calls = 0, release, entered;
+  let calls = 0, release, entered, answer = 503;
   const started = new Promise(resolve => { entered = resolve; });
   const held = new Promise(resolve => { release = resolve; });
-  const options = { firestore, operationId: settingsOperationId, target, headers, log,
-    currentCodeRequest: scheduleFixture.request, now: () => Date.now() + offset,
-    fetchPublic: async () => { calls++; entered(); await held; return new Response("Unavailable", { status: 503 }); } };
+  const options = { firestore, operationId: settingsOperationId, target, headers, log, once: true,
+    currentCodeRequest: scheduleFixture.request,
+    fetchPublic: async () => { calls++; entered(); await held; return new Response("Unavailable", { status: answer }); } };
   const first = settingsConfirmation.confirmNoBuildPageSettings(options);
   await started;
   const inFlight = calls;
@@ -932,35 +936,33 @@ it("shares a durable Page proof lease, backs off four failures and stops until s
   expect(calls).toBe(inFlight);
   release();
   expect((await first).confirmed).toBe(false);
-  for (let attempt = 1; attempt <= 4; attempt++) {
+  for (let tries = 1; tries <= 6; tries++) {
     const prior = (await proofRef.get()).data();
-    expect(prior).toMatchObject({ attempts: attempt, status: "failed", claim: null });
+    expect(prior).toMatchObject({ tries, attempts: Math.min(tries, 4), status: "waiting", claim: null,
+      leaseUntil: null, nextAttemptAt: null });
+    expect(prior.peakRssMb).toBeGreaterThan(0);
     const before = calls;
-    expect(await settingsConfirmation.confirmNoBuildPageSettings(options)).toEqual({ confirmed: false });
-    expect(calls).toBe(before);
-    if (attempt < 4) {
-      expect(prior.nextAttemptAt - options.now()).toBeGreaterThan(60_000 * 2 ** (attempt - 1) - 5_000);
-      offset += 60_000 * 2 ** (attempt - 1) + 1;
-      expect((await settingsConfirmation.confirmNoBuildPageSettings(options)).confirmed).toBe(false);
-    }
+    expect((await settingsConfirmation.confirmNoBuildPageSettings(options)).confirmed).toBe(false);
+    expect(calls).toBeGreaterThan(before);
   }
-  expect((await proofRef.get()).data().nextAttemptAt).toBeNull();
-  const exhausted = calls;
-  offset += 24 * 60 * 60_000;
+  expect(log.error).not.toHaveBeenCalled();
+  answer = 404;
+  expect((await settingsConfirmation.confirmNoBuildPageSettings(options)).confirmed).toBe(false);
+  expect((await proofRef.get()).data()).toMatchObject({ tries: 8, status: "failed", claim: null, nextAttemptAt: null });
+  const ended = calls;
   expect(await settingsConfirmation.confirmNoBuildPageSettings(options)).toEqual({ confirmed: false });
-  expect(calls).toBe(exhausted);
+  expect(calls).toBe(ended);
   expect(log.error).toHaveBeenCalledTimes(1);
   expect((await queueRef.get()).data().consumerReceipts).toBeUndefined();
   await queueRef.update({ settingsRetryAt: Timestamp.now() });
-  offset = 0;
   expect(await settingsConfirmation.confirmNoBuildPageSettings({ ...options, fetchPublic: settingsPublicFetch(home) }))
     .toEqual({ confirmed: true });
   const verified = (await proofRef.get()).data();
-  expect(verified).toMatchObject({ attempts: 1, status: "verified" });
+  expect(verified).toMatchObject({ attempts: 1, tries: 1, status: "verified" });
   expect(verified.failureReason).toBeUndefined();
 }, 45_000);
 
-it("retains the delay after a crashed Page proof and fences its late receipt", async () => {
+it("takes over a killed Page proof after the platform limit, names its end and fences its late receipt", async () => {
   const { settingsOperationId } = await seedFullPageCoverage();
   const ref = firestore.doc(`cmsPublishQueue/${settingsOperationId}`);
   const proofRef = ref.collection("confirmation").doc("page-consumers");
@@ -968,56 +970,37 @@ it("retains the delay after a crashed Page proof and fences its late receipt", a
   let time = Date.now();
   const log = { warn: vi.fn(), error: vi.fn() };
   const claim = () => pageProof.claimPageConsumerProof({ firestore, operationId: settingsOperationId,
-    identity, now: () => time, deadline: time + 45_000, log });
+    identity, now: () => time, platformSeconds: 540, log });
   const first = await claim();
   const stored = (await proofRef.get()).data();
-  time = stored.leaseUntil + 1;
+  expect(stored).toMatchObject({ status: "running", tries: 1, startedAt: time, leaseUntil: time + 540_000 });
+  time = stored.leaseUntil - 1;
   expect(await claim()).toBeNull();
-  time = stored.nextAttemptAt;
+  time = stored.leaseUntil;
   const successor = await claim();
   expect(successor).not.toBeNull();
+  expect((await proofRef.get()).data()).toMatchObject({ tries: 2, lostAttempt: { tries: 1, waitingOn: "start" } });
+  expect(log.warn).toHaveBeenCalledWith("Page consumer confirmation attempt ended without a record",
+    expect.objectContaining({ operationId: settingsOperationId, tries: 1 }));
   await expect(firestore.runTransaction(transaction => first.assertCurrent(transaction, queue),
-    { readOnly: true })).rejects.toThrow("Page consumer confirmation lease expired");
-  await first.finish(false);
+    { readOnly: true })).rejects.toMatchObject({ message: "Page consumer confirmation claim moved", status: 409, code: "proof_claim_moved" });
+  await first.finish("failed");
   await firestore.runTransaction(transaction => successor.assertCurrent(transaction, { settingsPublication: identity }), { readOnly: true });
-  await successor.finish(false);
-  expect((await proofRef.get()).data()).toMatchObject({ attempts: 2, status: "failed" });
-  for (let attempt = 3; attempt <= 4; attempt++) {
-    const prior = (await proofRef.get()).data();
-    time = prior.nextAttemptAt;
-    const crashed = await claim();
-    expect(crashed).not.toBeNull();
-    if (attempt === 3) await crashed.finish(false);
+  await successor.finish("waiting");
+  expect((await proofRef.get()).data()).toMatchObject({ tries: 2, status: "waiting", claim: null });
+  for (let tries = 3; tries <= 6; tries++) {
+    const killed = await claim();
+    expect(killed).not.toBeNull();
+    expect((await proofRef.get()).data()).toMatchObject({ tries, attempts: Math.min(tries, 4), status: "running" });
+    time += 540_000;
   }
-  time = (await proofRef.get()).data().leaseUntil;
-  expect(await claim()).toBeNull();
-  expect(await claim()).toBeNull();
-  expect(log.error).toHaveBeenCalledTimes(1);
-  expect((await proofRef.get()).data()).toMatchObject({ attempts: 4, status: "failed", nextAttemptAt: null,
-    failureReason: { code: "lease_expired" } });
+  expect(log.error).not.toHaveBeenCalled();
 
   await firestore.doc(context.PUBLIC_CONTEXT_PATH).update({ revision: identity.contextRevision + 1 });
   expect(await claim()).toBeNull();
   const stale = (await proofRef.get()).data();
   expect(stale).toMatchObject({ attempts: 4, status: "stale" });
   expect(stale.failureReason).toBeUndefined();
-});
-
-it("does not spend the Page proof budget on wakes with too little shared deadline left", async () => {
-  const { settingsOperationId } = await seedFullPageCoverage();
-  const ref = firestore.doc(`cmsPublishQueue/${settingsOperationId}`);
-  const identity = (await ref.get()).data().settingsPublication;
-  const time = Date.now(), log = { warn: vi.fn(), error: vi.fn() };
-  for (let wake = 0; wake < 6; wake++) {
-    expect(await pageProof.claimPageConsumerProof({ firestore, operationId: settingsOperationId,
-      identity, now: () => time, deadline: time + 29_999, log })).toBeNull();
-  }
-  expect((await ref.collection("confirmation").doc("page-consumers").get()).exists).toBe(false);
-  const ready = await pageProof.claimPageConsumerProof({ firestore, operationId: settingsOperationId,
-    identity, now: () => time, deadline: time + 45_000, log });
-  expect(ready).not.toBeNull();
-  expect((await ref.collection("confirmation").doc("page-consumers").get()).data().attempts).toBe(1);
-  await ready.finish(false);
 });
 
 it("refuses a Page receipt if its shared proof lease changes during public reads", async () => {
@@ -1033,7 +1016,7 @@ it("refuses a Page receipt if its shared proof lease changes during public reads
         await ref.collection("confirmation").doc("page-consumers").update({ claim: "replacement-fixture-claim" });
       }
       return fetchPublic(url, options);
-    } })).rejects.toThrow("Page consumer confirmation lease expired");
+    } })).rejects.toThrow("Page consumer confirmation claim moved");
   expect(log.warn).toHaveBeenCalledWith("Page consumer confirmation refused", expect.objectContaining({
     operationId: settingsOperationId, causes: expect.arrayContaining([expect.objectContaining({ status: 409 })]) }));
   expect((await ref.get()).data().consumerReceipts).toBeUndefined();
@@ -1061,38 +1044,30 @@ it("proves all 62 canonical Post details with Page/Home in one settings receipt,
   expect((await firestore.doc("cmsPosts/settings-post-0").get()).data()).toEqual(before);
 }, 45_000);
 
-it.each(["unchanged", "changed Post roster", "staff retry", "in-flight staff retry"])("resumes a bounded settings proof with %s inputs", async change => {
+it.each(["unchanged", "changed Post roster", "staff retry", "in-flight staff retry"])("resumes an interrupted settings proof with %s inputs", async change => {
   const { home, settingsOperationId } = await seedFullPageCoverage();
   await seedSettingsPosts(10);
   const queueRef = firestore.doc(`cmsPublishQueue/${settingsOperationId}`);
   const proofRef = queueRef.collection("confirmation").doc("page-consumers");
   const publicFetch = settingsPublicFetch(home);
   const visited = new Set();
-  let time = Date.now(), firstWake = true;
-  const options = { firestore, operationId: settingsOperationId, target, headers, now: () => time,
+  let firstWake = true;
+  const options = { firestore, operationId: settingsOperationId, target, headers, once: true,
     currentCodeRequest: scheduleFixture.request, fetchPublic: async (url, options) => {
       const path = new URL(url).pathname;
       if (path.startsWith("/posts/")) {
-        const firstPost = !visited.size;
+        if (firstWake && !visited.size && change === "in-flight staff retry") await queueRef.update({ settingsRetryAt: Timestamp.now() });
         visited.add(path);
-        if (firstPost && firstWake) {
-          time += 36_000;
-          if (change === "in-flight staff retry") await queueRef.update({ settingsRetryAt: Timestamp.now() });
-        }
+        // The roster is ordered by ID, so the last two details hold the prefix at eight.
+        if (firstWake && /settings-story-[89]\//.test(path)) return new Response("Updating", { status: 503, headers: { "retry-after": "1" } });
       }
       return publicFetch(url, options);
     } };
-  expect(await settingsConfirmation.confirmNoBuildPageSettings(options)).toEqual({ confirmed: false });
-  const firstBatch = [...visited];
+  await expect(settingsConfirmation.confirmNoBuildPageSettings(options)).rejects.toMatchObject({ code: "public_refresh_pending" });
+  const firstBatch = [...visited].filter(path => !/settings-story-[89]\//.test(path));
   expect(firstBatch).toHaveLength(8);
   const checkpoint = (await proofRef.get()).data();
-  if (change === "in-flight staff retry") {
-    expect(checkpoint).toMatchObject({ attempts: 1, status: "failed", claim: null,
-      failureReason: { code: "confirmation_incomplete" } });
-    expect(checkpoint.postCheckpoint).toBeUndefined();
-  } else {
-    expect(checkpoint).toMatchObject({ attempts: 0, status: "waiting", postCheckpoint: { verified: 8 } });
-  }
+  expect(checkpoint).toMatchObject({ tries: 1, status: "waiting", claim: null, postCheckpoint: { verified: 8 } });
   expect((await queueRef.get()).data().consumerReceipts).toBeUndefined();
 
   if (change === "changed Post roster") {
@@ -1104,7 +1079,6 @@ it.each(["unchanged", "changed Post roster", "staff retry", "in-flight staff ret
   }
   if (change === "staff retry") await queueRef.update({ settingsRetryAt: Timestamp.now() });
   firstWake = false;
-  time += 9_000;
   visited.clear();
   expect(await settingsConfirmation.confirmNoBuildPageSettings(options)).toEqual({ confirmed: true });
   expect(visited.size).toBe(change === "unchanged" ? 2 : 10);
@@ -1226,65 +1200,26 @@ it.each(["new Post", "withdrawal", "snapshot", "owner"])("refuses %s movement af
   expect((await firestore.doc(`cmsPublishQueue/${settingsOperationId}`).get()).data().consumerReceipts).toBeUndefined();
 });
 
-it.each([[20, 22_800], [52, 42_800]])("models CODE IO and shared public-readback time for 20 Pages and %i cold Posts", async (posts, elapsed) => {
-  vi.useFakeTimers();
-  try {
-    let active = 0, maximum = 0;
-    const start = Date.now();
-    // Coordinator production evidence, 2026-10-14: four CODE reads at 0.7 s,
-    // 20 Page reads at up to 2.5 s (Home 2 s). A settings change makes
-    // every Post a render-cache MISS: allow 5 s for each complete response.
-    // Authority work is excluded. At 52 Posts the IO-only margin is 2.2 s;
-    // that count is not a claim that the full confirmation can complete.
-    await vi.advanceTimersByTimeAsync(4 * 700);
-    const requests = [...Array.from({ length: 20 }, (_, id) => ({ id, latency: id === 0 ? 2_000 : 2_500 })),
-      ...Array.from({ length: posts }, (_, id) => ({ id: id + 20, latency: 5_000 }))];
-    const proof = postSettingsConfirmation.readSettingsProofs(requests, ({ id, latency }) =>
-      new Promise(resolve => {
-        maximum = Math.max(maximum, ++active);
-        setTimeout(() => { active--; resolve(id); }, latency);
-      }), { now: Date.now, deadline: start + 45_000 });
-    await vi.advanceTimersByTimeAsync(elapsed - 2_800);
-    expect(await proof).toEqual(Array.from({ length: posts + 20 }, (_, id) => id));
-    expect(maximum).toBe(8); expect(Date.now() - start).toBe(elapsed);
-  } finally { vi.useRealTimers(); }
-});
-
-it("refuses when the shared public readback reaches its deadline", async () => {
-  vi.useFakeTimers();
-  try {
-    const start = Date.now();
-    const proof = postSettingsConfirmation.readSettingsProofs(["last-post"], (_post, signal) =>
-      new Promise((_resolve, reject) => signal.addEventListener("abort", () => reject(new Error("Aborted public read")))),
-    { now: Date.now, deadline: start + 200 });
-    const refused = expect(proof).rejects.toThrow();
-    await vi.advanceTimersByTimeAsync(200);
-    await refused;
-    expect(Date.now() - start).toBe(200);
-  } finally { vi.useRealTimers(); }
-});
-
-it("waits for a refreshing Page beside the next settings proof batch and reports it as pending", async () => {
+it("waits for a refreshing Page beside the rest of the settings proofs", async () => {
   vi.useFakeTimers();
   try {
     const entries = Array.from({ length: 9 }, (_, index) => ({ pageId: index === 0 ? "schedule" : `page-${index}` }));
     const visited = [], failures = [];
-    const proof = postSettingsConfirmation.readSettingsProofs(entries, (entry, signal) => {
+    let ready = false;
+    const proof = postSettingsConfirmation.readSettingsProofs(entries, async (entry, signal) => {
       visited.push(entry.pageId);
-      if (entry.pageId !== "schedule") return Promise.resolve({ kind: "page" });
-      return recovery.readPublicPageReceipt({ state: { ...state, ownedPaths: [state.path] }, target, headers, signal,
-        fetchPublic: async () => new Response("Pending Schedule", { headers: {
-          "x-njpbs-content-source": "assets", "x-njpbs-publication-refresh": "pending", "retry-after": "1" } }) });
-    }, { now: Date.now, deadline: Date.now() + 45_000, onFailure(entry, error) {
-      failures.push({ pageId: entry.pageId, message: error.message, ...(error.code ? { code: error.code } : {}) });
-      return { kind: "missing" };
-    } });
-    await vi.advanceTimersByTimeAsync(12_000);
+      if (entry.pageId !== "schedule") return { kind: "page" };
+      const response = await postRecovery.readPublicPostAfterRefresh(`${target.origin}/schedule/`, async () => ready
+        ? new Response("Schedule") : new Response("Pending Schedule", { headers: {
+          "x-njpbs-content-source": "assets", "x-njpbs-publication-refresh": "pending", "retry-after": "1" } }), signal, {});
+      return { kind: "schedule", status: response.status };
+    }, { onFailure(entry) { failures.push(entry.pageId); } });
+    await vi.advanceTimersByTimeAsync(60 * 60_000);
     expect(visited).toContain("page-8");
+    ready = true;
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(await proof).toEqual([{ kind: "schedule", status: 200 }, ...Array.from({ length: 8 }, () => ({ kind: "page" }))]);
     expect(failures).toEqual([]);
-    await vi.advanceTimersByTimeAsync(33_000);
-    expect(await proof).toEqual([{ kind: "missing" }, ...Array.from({ length: 8 }, () => ({ kind: "page" }))]);
-    expect(failures).toEqual([{ pageId: "schedule", message: "Public Post confirmation timed out", code: "public_refresh_pending" }]);
   } finally { vi.useRealTimers(); }
 });
 
@@ -1320,7 +1255,7 @@ it("repairs the owned Home picker while a missing Schedule packet leaves setting
   expect((await firestore.doc(`cmsPublishQueue/${settingsOperationId}`).get()).data()).toEqual(queueBefore);
 });
 
-it("keeps cheap missing-input waits outside the Page proof budget and confirms when the packet arrives", async () => {
+it("waits cheaply for a missing input and confirms when the packet arrives", async () => {
   const { home, settingsOperationId } = await seedFullPageCoverage();
   const { FieldValue } = await import("firebase-admin/firestore");
   const contextRef = firestore.doc(context.PUBLIC_CONTEXT_PATH);
@@ -1334,14 +1269,14 @@ it("keeps cheap missing-input waits outside the Page proof budget and confirms w
   for (let wake = 0; wake < 6; wake++) {
     expect(await settingsConfirmation.confirmNoBuildPageSettings(options))
       .toEqual({ confirmed: false, missingPages: ["live", "schedule"] });
-    expect((await proofRef.get()).data()).toMatchObject({ status: "waiting", attempts: 0, nextAttemptAt: null });
+    expect((await proofRef.get()).data()).toMatchObject({ status: "waiting", tries: wake + 1, nextAttemptAt: null });
     offset += 5 * 60_000;
   }
   expect(scheduleFixture.codeRequests()).toBe(0);
   await contextRef.update({ "externalInputs.schedulePacket": packet });
   offset = 0;
   expect(await settingsConfirmation.confirmNoBuildPageSettings(options)).toEqual({ confirmed: true });
-  expect((await proofRef.get()).data()).toMatchObject({ status: "verified", attempts: 1 });
+  expect((await proofRef.get()).data()).toMatchObject({ status: "verified", tries: 7 });
 });
 
 it("confirms full Page/Home settings through the actual settings owner reader", async () => {
@@ -1691,23 +1626,19 @@ it("reports the refusing Schedule owner and continues later Page proofs in a pro
       headers: { location: `${target.origin}/meeting-notices/` } });
     // October 26 production GET: Assets has no publication, snapshot, renderer
     // or context receipt. A readable static Schedule cannot confirm its owner.
-    // Fail the repeat GET to keep this diagnostic test below half its timeout;
-    // the fake-clock case above covers a permanently pending fallback.
-    if (path === "/schedule/") return visited.filter(path => path === "/schedule/").length % 2 === 0
-      ? new Response("Unavailable", { status: 503 })
-      : new Response("<!doctype html><html>Static Schedule</html>", { headers: {
+    if (path === "/schedule/") return new Response("<!doctype html><html>Static Schedule</html>", { headers: {
         "cache-control": "no-store", "content-type": "text/html", "x-njpbs-content-source": "assets",
         "x-njpbs-publication-refresh": "pending", "retry-after": "1" } });
     return publicFetch(url, options);
   };
   expect(await settingsConfirmation.confirmNoBuildPageSettings({ firestore, operationId: settingsOperationId,
-    target, headers, currentCodeRequest: scheduleFixture.request, fetchPublic: fetchObserved,
+    target, headers, currentCodeRequest: scheduleFixture.request, fetchPublic: fetchObserved, once: true,
     log: { warn(message, fields) { warnings.push({ message, ...fields }); } } }))
     .toEqual({ confirmed: false, missingPages: ["schedule"] });
   expect(warnings).toEqual([{ message: "Page consumer confirmation is unavailable", missingPages: ["schedule"], missingPageCount: 1,
-    failures: [{ pageId: "schedule", causes: [{ name: "Error", source: expect.stringMatching(/^lib\/no-build-page-recovery\.js:\d+:\d+$/) }] }] },
+    failures: [{ pageId: "schedule", causes: [{ name: "Error", code: "public_refresh_pending", source: expect.stringMatching(/^lib\/[a-z-]+\.js:\d+:\d+$/) }] }] },
     { message: "Page consumer confirmation incomplete", operationId: settingsOperationId, missingPageCount: 1, missingPostCount: 0 }]);
-  expect((await proofRef.get()).data().failureReason).toEqual({ code: "page_readback_failed", causes: [{ name: "Error" }] });
+  expect((await proofRef.get()).data().failureReason).toEqual({ code: "page_readback_failed", causes: [{ name: "Error", code: "public_refresh_pending" }] });
   expect(visited).toContain("/watch/");
   await expect(confirmation.recoverNoBuildPublications({ firestore, readback: () => ({ target, headers }),
     config: () => ({ zoneId: "f".repeat(32), token: "fixture-token" }), currentCodeRequest: scheduleFixture.request,
@@ -1717,7 +1648,7 @@ it("reports the refusing Schedule owner and continues later Page proofs in a pro
   await seedSettingsPosts(1);
   warnings.length = 0;
   await expect(settingsConfirmation.confirmNoBuildPageSettings({ firestore, operationId: settingsOperationId,
-    target, headers, currentCodeRequest: scheduleFixture.request, now: () => Date.now() + 60_001,
+    target, headers, currentCodeRequest: scheduleFixture.request, once: true,
     log: { warn(message, fields) { warnings.push({ message, ...fields }); } },
     fetchPublic: (url, options) => {
       if (new URL(url).pathname.startsWith("/posts/")) throw Object.assign(new Error("Unreported private network detail"), {
@@ -1743,7 +1674,7 @@ it.each([2 * 1024 * 1024 + 1, 4 * 1024 * 1024, 4 * 1024 * 1024 + 1])(
     const html = pageHtmlOfSize(size);
     const read = fetchPublic(worker({ html }));
     let oversizedFallback = false;
-    await recover({ ...(size > 4 * 1024 * 1024 ? { deadline: Date.now() + 2_000 } : {}),
+    await recover({ once: true,
       fetchPublic: async (url, options) => {
         const response = await read(url, options);
         if (size > 4 * 1024 * 1024 && new URL(url).pathname === state.path) {
@@ -1774,12 +1705,10 @@ it.each([4 * 1024 * 1024, 4 * 1024 * 1024 + 1])(
       content.target.documentId === "schedule" ? html : "<!doctype html><html>Other context</html>" }));
     let scheduleReads = 0;
     const result = await settingsConfirmation.confirmNoBuildPageSettings({ firestore, operationId: settingsOperationId,
-      target, headers, currentCodeRequest: scheduleFixture.request,
+      target, headers, currentCodeRequest: scheduleFixture.request, once: true,
       fetchPublic: async (url, options) => {
         const schedule = new URL(url).pathname === "/schedule/";
-        // After observing the real oversized fallback, fail the repeat network
-        // read. The short-deadline tests cover a permanently pending response.
-        if (schedule && ++scheduleReads > 1) throw new Error("Schedule refresh unavailable");
+        if (schedule) scheduleReads++;
         const response = await read(url, options);
         if (schedule && size > 4 * 1024 * 1024) {
           expect(response.headers.get("x-njpbs-content-source")).toBe("assets");
@@ -1792,7 +1721,7 @@ it.each([4 * 1024 * 1024, 4 * 1024 * 1024 + 1])(
       expect((await firestore.doc(`cmsPublishQueue/${settingsOperationId}`).get()).data().consumerReceipts.pages).toBeDefined();
     } else {
       expect(result).toEqual({ confirmed: false, missingPages: ["schedule"] });
-      expect(scheduleReads).toBe(2);
+      expect(scheduleReads).toBe(1);
       expect((await firestore.doc(`cmsPublishQueue/${settingsOperationId}`).get()).data().consumerReceipts).toBeUndefined();
     }
   });

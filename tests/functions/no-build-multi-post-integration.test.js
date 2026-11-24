@@ -635,26 +635,15 @@ describe("independent public routes, catalog and confirmation", () => {
     expect((await db.doc("cmsPosts/first").get()).data().publishBuildPending).toBe(false);
     expect((await db.collection("cmsPublishQueue").get()).size).toBe(1);
   });
-  it("ends a recovery pass before its scheduler limit and serves remaining due operations on the next pass", async () => {
+  it("serves every due operation in one recovery pass", async () => {
     const ids = ["first", "second", "third", "fourth", "fifth"];
     for (const id of ids) {
       if (!["first", "second"].includes(id)) await db.doc(`cmsPosts/${id}`).set(document(id));
       expect((await publish(id)).code).toBe(200);
     }
     const site = worker();
-    let clock = Date.now();
-    let reads = 0;
-    const input = { firestore: db, now: () => clock, purgeConfig: { zoneId: "f".repeat(32), token: "fixture-token" },
-      fetchPurge: async () => Response.json({ success: true }), fetchPublic: async request => {
-        const result = await site.fetch(new Request(request));
-        if (++reads === 4) clock += 45_001;
-        return result;
-      } };
-    await recovery.recoverNoBuildPostDetail(input);
-    const after = (await db.collection("cmsPublishQueue").get()).docs.map(row => row.data());
-    expect(after.filter(queue => queue.status === "success")).toHaveLength(4);
-    expect(after.filter(queue => queue.status === "pending" && queue.attempts === 0)).toHaveLength(1);
-    await recovery.recoverNoBuildPostDetail(input);
+    await recovery.recoverNoBuildPostDetail({ firestore: db, purgeConfig: { zoneId: "f".repeat(32), token: "fixture-token" },
+      fetchPurge: async () => Response.json({ success: true }), fetchPublic: request => site.fetch(new Request(request)) });
     expect((await db.collection("cmsPublishQueue").get()).docs.every(row => row.data().status === "success")).toBe(true);
   });
   it("binds dev readback and Access headers to the explicit target, refusing mixed target values before network", async () => {
