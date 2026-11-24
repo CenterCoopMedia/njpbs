@@ -12,12 +12,13 @@ const candidate = { commitSha: candidateSha, workerVersionId: "version-2", noBui
 const admission = { valid: true, admissionRevision: 1 };
 const html = "<!doctype html><html><body>Owned</body></html>";
 
-function answer(renderer, status = 200) {
+function answer(renderer, status = 200, extra = {}) {
   return new Response(status === 200 ? html : "Post unavailable", { status, headers: {
     "cache-control": "no-store", "x-njpbs-content-source": "cms-no-build", "x-njpbs-publication-operation": "op-1",
     "x-njpbs-source-version": "2", "x-njpbs-admission-revision": "1",
     ...(renderer ? { "x-njpbs-renderer-sha": renderer } : {}),
     ...(status === 200 ? { "x-njpbs-html-sha256": createHash("sha256").update(html).digest("hex") } : {}),
+    ...extra,
   } });
 }
 
@@ -38,7 +39,7 @@ it("reads again while the previous renderer answers, then judges the candidate o
 
 it("refuses a candidate failure at once", async () => {
   const check = verify([() => answer(candidateSha, 500), () => answer(candidateSha)]);
-  await expect(check.run).rejects.toThrow("did not preserve its instant Post routes");
+  await expect(check.run).rejects.toThrow("(/posts/owned-story/): status expected 200, found 500");
   expect(check.reads()).toBe(1);
 });
 
@@ -53,4 +54,19 @@ it("stops at the backstop when the candidate version never arrives", async () =>
   await expect(check.run).rejects.toThrow("still answers from the previous renderer");
   expect(check.clock()).toBe(5_000);
   expect(check.reads()).toBe(6);
+});
+
+it("accepts the dev staff gateway's private, no-store answer", async () => {
+  const check = verify([() => answer(candidateSha, 200, { "cache-control": "private, no-store" })]);
+  await expect(check.run).resolves.toBeUndefined();
+});
+
+it("refuses a cacheable answer and names the field", async () => {
+  const check = verify([() => answer(candidateSha, 200, { "cache-control": "public, max-age=60" })]);
+  await expect(check.run).rejects.toThrow("cache-control expected a no-store directive, found public, max-age=60");
+});
+
+it("names the first differing field with its expected and found values", async () => {
+  const check = verify([() => answer(candidateSha, 200, { "x-njpbs-publication-operation": "op-2" })]);
+  await expect(check.run).rejects.toThrow("x-njpbs-publication-operation expected op-1, found op-2");
 });

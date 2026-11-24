@@ -407,6 +407,25 @@ const OWNED_ROUTE_ROLLOUT_INTERVAL_MS = 1_000;
 const CANDIDATE_ROLLOUT = Object.freeze({ backstopMs: OWNED_ROUTE_ROLLOUT_BACKSTOP_MS, now: Date.now,
   wait: () => delay(OWNED_ROUTE_ROLLOUT_INTERVAL_MS) });
 
+// The dev staff gateway in front of dev.njpbs.org rebuilds every answer with
+// "private, no-store" (workers/src/staff-site-worker.ts:24,145); production
+// njpbs.org has no gateway and answers "no-store". Both forbid storage. The
+// rule still refuses an answer a cache may keep, such as the Assets fallback,
+// which is what the exact "no-store" comparison was stopping.
+function forbidsStorage(value) {
+  return (value ?? "").split(",").some(part => part.split("=")[0].trim().toLowerCase() === "no-store");
+}
+
+// Refuses with the first compared field that differs, naming what was
+// expected and what the answer carried.
+async function refuseFirstMismatch(response, message, checks) {
+  for (const [field, expected, found, ok = found === expected] of checks) {
+    if (ok) continue;
+    await response.body?.cancel();
+    throw new Error(`${message}: ${field} expected ${expected}, found ${found ?? "absent"}`);
+  }
+}
+
 // Reads one public path until an answer comes from a renderer other than the
 // previous one, then lets judge decide that answer once.
 async function judgeCandidateAnswer({ url, fetchPublic, headers, candidate, previousRendererSha, rollout = CANDIDATE_ROLLOUT }, judge) {
@@ -438,17 +457,20 @@ async function verifyOwnedPostRoutes({ state, staticProof, contentRedirectUrl, c
     const enabled = !!staticProof || !state.visible || (candidate.noBuildPost.enabled &&
       admission.valid);
     const expected = !enabled ? 503 : !(staticProof?.visible ?? state.visible) ? 410 : slug === (staticProof?.slug ?? state.slug) ? contentRedirectUrl ? 302 : 200 : 308;
-    if (response.status !== expected || response.headers.get("cache-control") !== "no-store" ||
-        (enabled && (response.headers.get("x-njpbs-content-source") !== (staticProof ? "cms-static-return" : "cms-no-build") ||
-          response.headers.get("x-njpbs-publication-operation") !== state.operationId ||
-          response.headers.get("x-njpbs-source-version") !== String(staticProof?.sourceVersion ?? state.sourceVersion) ||
-          response.headers.get("x-njpbs-renderer-sha") !== candidate.commitSha)) ||
-        (enabled && !staticProof && response.headers.get("x-njpbs-admission-revision") !== String(admission.admissionRevision ?? "unavailable")) ||
-        (expected === 308 && response.headers.get("location") !== postRoutePath(staticProof?.slug ?? state.slug)) ||
-        (expected === 302 && (response.headers.get("location") !== contentRedirectUrl || response.headers.get("x-robots-tag") !== "noindex, nofollow"))) {
-      await response.body?.cancel();
-      throw new Error("The public candidate did not preserve its instant Post routes");
-    }
+    const header = name => response.headers.get(name);
+    await refuseFirstMismatch(response, `The public candidate did not preserve its instant Post routes (${postRoutePath(slug)})`, [
+      ["status", expected, response.status],
+      ["cache-control", "a no-store directive", header("cache-control"), forbidsStorage(header("cache-control"))],
+      ...enabled ? [
+        ["x-njpbs-content-source", staticProof ? "cms-static-return" : "cms-no-build", header("x-njpbs-content-source")],
+        ["x-njpbs-publication-operation", state.operationId, header("x-njpbs-publication-operation")],
+        ["x-njpbs-source-version", String(staticProof?.sourceVersion ?? state.sourceVersion), header("x-njpbs-source-version")],
+        ["x-njpbs-renderer-sha", candidate.commitSha, header("x-njpbs-renderer-sha")],
+      ] : [],
+      ...enabled && !staticProof ? [["x-njpbs-admission-revision", String(admission.admissionRevision ?? "unavailable"), header("x-njpbs-admission-revision")]] : [],
+      ...expected === 308 ? [["location", postRoutePath(staticProof?.slug ?? state.slug), header("location")]] : [],
+      ...expected === 302 ? [["location", contentRedirectUrl, header("location")], ["x-robots-tag", "noindex, nofollow", header("x-robots-tag")]] : [],
+    ]);
     if (expected === 200) await verifyPublicHtml(response);
     else await response.body?.cancel();
     });
@@ -465,13 +487,14 @@ async function verifyStaticPostOutputs({ staticProof, candidate, fetchPublic, ta
     const file = proof.files.find(file => file.path === path);
     await judgeCandidateAnswer({ url: `${target.origin}${path}?cms-code=${candidate.workerVersionId}`,
       fetchPublic, headers, candidate, previousRendererSha, rollout }, async response => {
-    if (response.status !== (file ? 200 : 404) || response.headers.get("cache-control") !== "no-store" ||
-        response.headers.get("x-njpbs-content-source") !== "cms-static-return" ||
-        response.headers.get("x-njpbs-renderer-sha") !== candidate.commitSha ||
-        response.headers.get("x-njpbs-source-version") !== String(proof.sourceVersion)) {
-      await response.body?.cancel();
-      throw new Error("The static Post candidate did not prove its complete public outputs");
-    }
+    const header = name => response.headers.get(name);
+    await refuseFirstMismatch(response, `The static Post candidate did not prove its complete public outputs (${path})`, [
+      ["status", file ? 200 : 404, response.status],
+      ["cache-control", "a no-store directive", header("cache-control"), forbidsStorage(header("cache-control"))],
+      ["x-njpbs-content-source", "cms-static-return", header("x-njpbs-content-source")],
+      ["x-njpbs-renderer-sha", candidate.commitSha, header("x-njpbs-renderer-sha")],
+      ["x-njpbs-source-version", String(proof.sourceVersion), header("x-njpbs-source-version")],
+    ]);
     if (file) {
       if (await verifyPublicHtml(response, file.bytes) !== file.digest) throw new Error("The static Post candidate bytes changed");
     } else await response.body?.cancel();
