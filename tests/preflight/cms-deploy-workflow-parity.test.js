@@ -459,10 +459,22 @@ describe("CMS deploy target", () => {
     expect(deploy).not.toContain("CMS_DEV_RENDERER_SOURCE_SHA");
     const steps = Object.values(workflow.jobs).flatMap(current => current.steps);
     expect(steps.some(row => row.name === "Refuse development steps that still act on production systems")).toBe(false);
-    // The media master steps name production resources and skip dev.
-    const media = steps.filter(row => /CMS_MEDIA_MASTER_R2_BUCKET != ''/.test(row.if ?? ""));
-    expect(media.length).toBeGreaterThan(0);
-    for (const row of media) expect(row.if).toMatch(/^inputs\.target != 'development' && /);
+    // The Studio master steps use the target's own master bucket: dev names its bucket, and only
+    // production reads the repository variable (jawn-ops#1273).
+    expect(workflow.env.CMS_TARGET_STUDIO_BUCKET).toBe("${{ inputs.target == 'development' && vars.CMS_DEV_STUDIO_BUCKET || " +
+      "inputs.target != 'development' && vars.CMS_MEDIA_MASTER_R2_BUCKET || '' }}");
+    const studio = steps.filter(row => /CMS_TARGET_STUDIO_BUCKET/.test(row.if ?? ""));
+    expect(studio.map(row => [row.name, row.if])).toEqual([
+      ["Report unavailable Studio connector storage", "env.CMS_TARGET_STUDIO_BUCKET == ''"],
+      ...["Build the exact-source Studio connector package", "Retain the Studio connector package for deployment",
+        "Download the exact-source Studio connector package", "Store the Studio connector in private media storage"]
+        .map(name => [name, "env.CMS_TARGET_STUDIO_BUCKET != ''"])]);
+    expect(steps.some(row => /CMS_MEDIA_MASTER_R2_BUCKET/.test(row.if ?? ""))).toBe(false);
+    const byName = Object.fromEntries(steps.filter(row => row.name).map(row => [row.name, row]));
+    expect(byName["Build the exact-source Studio connector package"].env.CMS_STUDIO_API_ORIGIN)
+      .toBe("${{ inputs.target == 'development' && env.CMS_TARGET_API_ORIGIN || vars.CMS_STUDIO_API_ORIGIN }}");
+    expect(byName["Store the Studio connector in private media storage"].env.CMS_MEDIA_MASTER_R2_BUCKET)
+      .toBe("${{ env.CMS_TARGET_STUDIO_BUCKET }}");
     // The renderer and Containers steps run on both targets. Production keeps its exact condition:
     // `(target == 'development' || E)` is E there, as `target != 'development' && E` was.
     const guard = "(inputs.target == 'development' || vars.CMS_PREVIEW_CLOUD_ENABLED == 'true')";

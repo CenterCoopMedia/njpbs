@@ -56,8 +56,9 @@ test("the production origin pin refuses missing or wrong configuration at the sh
 test("the Studio and Admin builds receive their configured suppliers", () => {
   const workflow = readCmsDeployWorkflow();
   const step = workflow.split('      - name: Build the exact-source Studio connector package\n')[1]?.split('\n      - name:')[0];
-  assert.ok(step?.includes('CMS_STUDIO_API_ORIGIN: ${{ vars.CMS_STUDIO_API_ORIGIN }}'));
-  assert.ok(step?.includes('node agents/vmix/build-windows.mjs'));
+  // Production keeps its configured supplier; development builds against the dev CMS API (jawn-ops#1273).
+  assert.ok(step?.includes("CMS_STUDIO_API_ORIGIN: ${{ inputs.target == 'development' && env.CMS_TARGET_API_ORIGIN || vars.CMS_STUDIO_API_ORIGIN }}"));
+  assert.ok(step?.includes('node "$RUNNER_TEMP/studio-source/agents/vmix/build-windows.mjs"'));
   const admin = workflow.split('      - name: Build admin app\n')[1]?.split('\n      - name:')[0];
   assert.ok(admin?.includes("VITE_CMS_STUDIO_CONFIGURATION: ${{ inputs.target != 'development' && secrets.VITE_CMS_STUDIO_CONFIGURATION || '' }}"));
   const policy = JSON.parse(readFileSync(new URL('../../.github/deploy-environments.json', import.meta.url), 'utf8'));
