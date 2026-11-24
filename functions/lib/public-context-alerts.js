@@ -51,7 +51,7 @@ async function checkPublicContextAlerts({ firestore, send, now = Date.now, log =
       if (!task || !ownsPublication(task, runtime) || task.revision !== state.revision || task.output !== selected[index].id) continue;
       const id = taskPath.exec(state.taskPath)[1];
       const identity = `${state.taskPath}:${task.revision}:${alertEpoch(task.alertEpoch)}`;
-      for (const reason of ["failed", "multiple_attempts", "attempt_over_half_budget"]) {
+      for (const reason of ["failed", "multiple_attempts"]) {
         selectedIdentities.add(identityDigest(`${identity}:${reason}`));
       }
       selectedIdentities.add(identityDigest(`${identity}:failed:actionable`));
@@ -63,9 +63,6 @@ async function checkPublicContextAlerts({ firestore, send, now = Date.now, log =
       if (exhausted) add("failed", task.claim ? "lease_lost" : failureClass(task.lastAttempt?.failureClass));
       if (task.attempts > 1) add("multiple_attempts", task.lastAttempt?.failureClass == null && task.status === "verified"
         ? "none" : failureClass(task.lastAttempt?.failureClass));
-      if (task.lastAttempt?.durationMs > task.lastAttempt?.budgetMs / 2) {
-        add("attempt_over_half_budget", task.lastAttempt.failureClass == null ? "none" : failureClass(task.lastAttempt.failureClass));
-      }
     }
     if (job?.transport === "public-context-no-build-v1" && ownsPublication(job, runtime) &&
         job.publicContext?.contextDigest === anchor.contextDigest) {

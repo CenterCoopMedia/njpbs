@@ -198,9 +198,9 @@ it("exhausts an interrupted fourth background claim before slow retrying the sam
   }
   await owner(interruptConfirmation(db, taskRef())).recover();
   const claimed = (await taskRef().get()).data();
-  expect(claimed).toMatchObject({ attempts: 4, claim: expect.any(String), nextAttemptAt: time + 60_000 });
+  expect(claimed).toMatchObject({ attempts: 4, claim: expect.any(String), nextAttemptAt: time + 3_640_000 });
   expect(builds).toBe(3);
-  time += 59_999;
+  time += 3_639_999;
   await owner().recover();
   expect((await taskRef().get()).data()).toEqual(claimed);
   time++;
@@ -248,23 +248,21 @@ it("alerts output and aggregate exhaustion on the next minute pass, deduplicates
   expect(messages[0]).not.toContain("private");
 });
 
-it("logs a successful slow attempt and a second attempt without Telegram", async () => {
-  duringBuild = async () => { time += 10_001; };
+it("logs a second attempt without Telegram", async () => {
   await owner().recover();
   const messages = [];
   await check(async message => { messages.push(message); });
   expect(messages).toEqual([]);
-  expect(observations).toContainEqual({ output: "search", jobId: operationId, reason: "attempt_over_half_budget", failureClass: "none" });
-  await taskRef().update({ attempts: 2, lastAttempt: { durationMs: 1, budgetMs: 20_000, failureClass: null } });
+  await taskRef().update({ attempts: 2, lastAttempt: { durationMs: 1, failureClass: null } });
   await check(async message => { messages.push(message); });
   expect(messages).toEqual([]);
   expect(observations).toContainEqual({ output: "search", jobId: operationId, reason: "multiple_attempts", failureClass: "none" });
-  await taskRef().update({ attempts: 3, lastAttempt: { durationMs: 1, budgetMs: 20_000, failureClass: null } });
+  await taskRef().update({ attempts: 3, lastAttempt: { durationMs: 1, failureClass: null } });
   await check(async message => { messages.push(message); });
-  await taskRef().update({ attempts: 4, lastAttempt: { durationMs: 15_000, budgetMs: 20_000, failureClass: null } });
+  await taskRef().update({ attempts: 4, lastAttempt: { durationMs: 15_000, failureClass: null } });
   await check(async message => { messages.push(message); });
   expect(messages).toEqual([]);
-  expect(observations).toHaveLength(2);
+  expect(observations).toHaveLength(1);
 });
 
 it("logs scheduled slow recovery and alerts if it later becomes terminal", async () => {
@@ -360,7 +358,7 @@ it("bounds terminal Telegram delivery and records every diagnostic once", async 
   for (const output of ["home", ...Object.keys(paths), "programs", "events"]) {
     const taskPath = `cmsPublishQueue/${jobId}/backgroundOutputs/${output}`;
     const task = { runtime, owner: "post-background-v1", output, revision: 1, attempts: 4, status: "failed", nextAttemptAt: null,
-      lastAttempt: { failureClass: "timeout", durationMs: 20_000, budgetMs: 20_000 } };
+      lastAttempt: { failureClass: "timeout", durationMs: 20_000 } };
     await db.doc(taskPath).set(task);
     await db.doc(`cmsBackgroundOutputs/${output}`).set({ ...task, taskPath });
   }
@@ -372,8 +370,8 @@ it("bounds terminal Telegram delivery and records every diagnostic once", async 
   expect(lines).toHaveLength(9);
   expect(new Set(lines).size).toBe(9);
   expect(lines.every(line => line.includes(": failed;"))).toBe(true);
-  expect(observations).toHaveLength(27);
-  expect(new Set(observations.map(value => `${value.output}:${value.reason}`)).size).toBe(27);
+  expect(observations).toHaveLength(18);
+  expect(new Set(observations.map(value => `${value.output}:${value.reason}`)).size).toBe(18);
 });
 
 it("allows only one slow claimant while the first worker is building", async () => {

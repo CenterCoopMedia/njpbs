@@ -2,6 +2,7 @@
 
 const { runtimeFields, ownsPublication, samePublicationOwner, publicationRuntime } = require("./publication-runtime-owner");
 const { createHash, randomUUID } = require("node:crypto");
+const { platformLimit } = require("./release-wait");
 const { isDeepStrictEqual } = require("node:util");
 const { isPostRouteSlug, postRoutePath } = require("./post-slug-contract");
 const { collectPublishedMediaUsage, MediaUsageError } = require("./media-usage");
@@ -16,7 +17,6 @@ const SUPPORTED_OUTPUTS = [...OUTPUTS, ...CHECKPOINT_FAMILIES];
 const { storeRecordManifest, readRecordManifest } = require("./post-background-record-manifest");
 const OWNER = "post-background-v1";
 const LEASE_MS = 60_000;
-const ATTEMPT_MS = 20_000;
 const MAX_STALE_MS = 24 * 60 * 60_000;
 const WITHDRAWAL_STALE_MS = 60_000;
 const ALERT_AFTER_MS = 5 * 60_000;
@@ -139,15 +139,9 @@ function validateGeneration(generation, task) {
   if (task.output === "sitemap") requireValue(paths.has("/sitemap-index.xml") || paths.has("/sitemap.xml"));
   return { files, homeSource, hasAssets: Array.isArray(generation.assets), rendererSha: input.rendererSha, contextDigest: input.contextDigest, routeSetDigest: digest([...input.routes].sort((a, b) => a.path.localeCompare(b.path))) };
 }
-function bounded(work, signal) {
-  signal.throwIfAborted();
-  let abort;
-  const timeout = new Promise((_, reject) => {
-    abort = () => reject(new Error("Background output deadline"));
-    signal.addEventListener("abort", abort, { once: true });
-  });
-  return Promise.race([Promise.resolve().then(work), timeout]).finally(() => signal.removeEventListener("abort", abort));
-}
+// Readers take a signal; nothing of ours aborts it. The platform ends a
+// process that runs past its own limit.
+const UNLIMITED = new AbortController().signal;
 function unavailable() {
   return new Response("Content is being updated.", { status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "60" } });
 }
@@ -310,11 +304,8 @@ function createPostBackgroundOutputs({ firestore, enabled = false, accepting = e
   }
 
   async function attempt(output) {
-    // The frozen preparation supplies the count before retained-byte reads.
-    // Budget one second per bounded batch plus manifest overhead; keep the
-    // existing minimum and 40-second claim settlement margin.
-    const attemptMs = output === "search" ? Math.max(ATTEMPT_MS, 2_000 + Math.ceil(searchFileCount / 8) * 1_000) : ATTEMPT_MS;
-    const leaseMs = Math.max(LEASE_MS, attemptMs + 40_000);
+    // The claim is a lock: it outlives the longest Function that can hold it.
+    const leaseMs = Math.max(LEASE_MS, (platformLimit("cloudFunctionsHttpSeconds") + 40) * 1_000);
     const claimed = await firestore.runTransaction(async transaction => {
       if (await cloudBillingPaused({ runtime,
         read: async path => (await transaction.get(firestore.doc(path))).data() ?? null })) return null;
@@ -365,7 +356,7 @@ function createPostBackgroundOutputs({ firestore, enabled = false, accepting = e
         // retry. Do not let an expired lease become a permanent silent stop.
         const interrupted = typeof task.claim === "string";
         const lastAttempt = { attempt: task.attempts, startedAt: task.startedAt ?? now() - leaseMs,
-          durationMs: Math.max(0, now() - (task.startedAt ?? now() - leaseMs)), budgetMs: attemptMs,
+          durationMs: Math.max(0, now() - (task.startedAt ?? now() - leaseMs)),
           failureClass: interrupted ? "lease_lost" : "validation", retryable: interrupted };
         transaction.update(ref, { ...publicationFailure(task, "background", now()), error: "background_retry_exhausted",
           lastAttempt, slowRetryAt: interrupted ? now() + SLOW_RETRY_MS : null });
@@ -390,11 +381,11 @@ function createPostBackgroundOutputs({ firestore, enabled = false, accepting = e
     if (!claimed) return;
     let receipt = null;
     let homeSource = null;
-    const signal = AbortSignal.timeout(attemptMs);
+    const signal = UNLIMITED;
     let stage = "validation";
     let failure = { failureClass: "validation", retryable: false };
     try {
-      receipt = await bounded(async () => {
+      receipt = await (async () => {
         const generation = await build(claimed, { signal });
         const input = validateGenerationInput(generation, claimed);
         let prepared;
@@ -437,7 +428,7 @@ function createPostBackgroundOutputs({ firestore, enabled = false, accepting = e
           ...(homeSource ? { homeSourceReceipt: homeSource.receipt } : {}),
           digest: digest(manifest), verifiedAt: now(), ...(claimed.sourceReadAt === undefined ? {} : { sourceReadAt: claimed.sourceReadAt }),
           withdrawalRevision: claimed.withdrawalRevision, homeRevision: claimed.homeRevision };
-      }, signal);
+      })();
     } catch (error) { failure = backgroundFailure(error, signal, stage); }
     await firestore.runTransaction(async transaction => {
       const state = (await transaction.get(stateRef(output))).data();
@@ -447,7 +438,7 @@ function createPostBackgroundOutputs({ firestore, enabled = false, accepting = e
       const context = await currentContext(transaction, output);
       const contextDigest = context.digest;
       const attempt = { attempt: claimed.attempts, startedAt: claimed.startedAt,
-        durationMs: Math.max(0, now() - claimed.startedAt), budgetMs: attemptMs };
+        durationMs: Math.max(0, now() - claimed.startedAt) };
       if (!state || !current || !owns(state) || !owns(current) || state?.taskPath !== claimed.taskPath || state.revision !== claimed.revision || current?.claim !== claimed.claim) {
         transaction.set(ref.collection("attempts").doc(claimed.claim), { ...attempt, failureClass: "lease_lost", retryable: true });
         return;
@@ -521,11 +512,11 @@ function createPostBackgroundOutputs({ firestore, enabled = false, accepting = e
     const { state, source, context } = authority;
     if (assetPath) {
       const good = lastGood(state);
-      const selected = good && await receiptFiles(good.receipt, output, AbortSignal.timeout(ATTEMPT_MS));
+      const selected = good && await receiptFiles(good.receipt, output, UNLIMITED);
       if (!selected?.some(file => file.path === assetPath)) {
         const previous = state.previousAssets;
         if (!previous?.good || previous.expiresAt <= now()) return null;
-        const files = await receiptFiles(previous.good.receipt, output, AbortSignal.timeout(ATTEMPT_MS));
+        const files = await receiptFiles(previous.good.receipt, output, UNLIMITED);
         if (!files.some(file => file.path === assetPath)) return null;
         const prior = selectServingState({ ...state, status: "pending", receipt: null, lastGood: previous.good,
           withdrawalDeadline: previous.withdrawalDeadline, withdrawalDeadlineRevision: previous.withdrawalDeadlineRevision }, source, context, now());
@@ -579,12 +570,12 @@ function createPostBackgroundOutputs({ firestore, enabled = false, accepting = e
       if (!state) return null;
       const lookupPath = path.endsWith("/index.html") ? path.slice(0, -10)
         : /^\/(posts|programs|shows|events)$/.test(path) || output === VIDEO_CATALOG_OUTPUT && !path.endsWith("/") ? `${path}/` : path;
-      const signal = AbortSignal.timeout(ATTEMPT_MS);
+      const signal = UNLIMITED;
       for (let attempt = 0; attempt < 2; attempt++) {
         const files = await receiptFiles(state.receipt, output, signal);
         const file = files.find(value => value.path === lookupPath);
         if (!file) return new Response(null, { status: 404, headers: { "Cache-Control": "no-store" } });
-        const bytes = await bounded(() => artifacts.get(file.key, { signal }), signal);
+        const bytes = await artifacts.get(file.key, { signal });
         requireValue(bytes instanceof Uint8Array && bytes.length === file.size && hash(bytes) === file.digest);
         const current = await authorizedState(output, isBackgroundAssetPath(path) ? path : null);
         requireValue(current);

@@ -90,9 +90,12 @@ export const CODE_CONSTRUCTS = [
   ["AbortSignal.timeout", /AbortSignal\.timeout\s*\(/],
   ["timeoutSeconds", /\btimeoutSeconds\b(?!\s*:\s*platformLimit\()/],
   ["timeout option", /\btimeout(?:Ms|MS|Millis|Seconds|Minutes)?\s*[:=]\s*[\d(]/],
-  ["duration constant", /\b[A-Z][A-Z0-9_]*(?:_MS|_SECONDS|_MINUTES|TIMEOUT|DEADLINE|STALL|BUDGET|LEASE|_TTL|BACKSTOP)\b[A-Z0-9_]*\s*=/],
-  ["attempt cap", /\b[A-Z][A-Z0-9_]*(?:ATTEMPTS|RETRIES|ROUNDS|POLLS)\b[A-Z0-9_]*\s*=|\bmax(?:Attempts|Retries|Rounds|Polls)\b/],
-  ["deadline", /\bdeadline\b/i],
+  // Not wait limits: lock leases, credential, cache and session expiry, clock
+  // skew, retention and media lengths. Their names say which.
+  ["duration constant", /\b(?![A-Z0-9_]*(?:LEASE|TTL|SKEW|RETENTION|LIFETIME|SESSION|DURATION|TIMESTAMP|PASSAGE|AUDIO_SECONDS|_AGE))[A-Z][A-Z0-9_]*(?:_MS|_SECONDS|_MINUTES|TIMEOUT|DEADLINE|STALL|BUDGET|BACKSTOP)\b[A-Z0-9_]*\s*=/],
+  ["attempt cap", /\b[A-Z][A-Z0-9_]*(?:ATTEMPTS|RETRIES|ROUNDS|POLLS)\b[A-Z0-9_]*\s*=\s*[\d(]|\bmax(?:Attempts|Retries|Rounds|Polls)\b/],
+  // "deadline-exceeded" is a gRPC status name, not a limit.
+  ["deadline", /\bdeadline\b(?!-exceeded)/i],
 ];
 export const SHELL_CONSTRUCTS = [
   ["timeout-minutes", /\btimeout-minutes\s*:/],

@@ -107,49 +107,6 @@ it("refuses the entire receipt if any concurrent readback has the wrong digest",
   expect(f.rows.get(f.taskPath)).toMatchObject({ error: "background_generation_failed", attempts: 1 });
 });
 
-it("keeps the shared abort deadline and never starts a later batch after expiry", async () => {
-  const f = fixture({ latency: () => 10_001 });
-  const recovery = f.owner.recover();
-  await vi.advanceTimersByTimeAsync(20_000);
-  await recovery;
-  expect(AbortSignal.timeout).toHaveBeenCalledWith(20_000);
-  expect(f.operations).toHaveLength(16);
-  expect(f.operations.every(operation => operation.signal.aborted)).toBe(true);
-  expect(f.state()).toMatchObject({ status: "failed", receipt: null });
-  await vi.advanceTimersByTimeAsync(20_000);
-  expect(f.operations).toHaveLength(16);
-  expect(f.state()).toMatchObject({ status: "failed", receipt: null });
-});
-
-it("scales a 512-file search attempt and its claim beyond the former 60 s lease", async () => {
-  const f = fixture({ count: 512, latency: () => 500 });
-  const recovery = f.owner.recover();
-  await vi.advanceTimersByTimeAsync(60_001);
-  expect(f.rows.get(f.taskPath)).toMatchObject({ attempts: 1, nextAttemptAt: start + 106_000 });
-  await f.owner.recover();
-  expect(f.rows.get(f.taskPath).attempts).toBe(1);
-  await vi.advanceTimersByTimeAsync(5_999);
-  await recovery;
-  expect(f.state().status).toBe("verified");
-  expect(f.state().receipt.verifiedAt - start).toBe(65_000);
-  expect(f.manifest()).toHaveLength(512);
-  expect(f.operations).toHaveLength(1026);
-  expect(f.peak()).toBe(8);
-});
-
-it("aborts an oversized search attempt at its count-scaled deadline without starting another batch", async () => {
-  const f = fixture({ count: 512, latency: () => 10_001 });
-  const recovery = f.owner.recover();
-  await vi.advanceTimersByTimeAsync(66_000);
-  await recovery;
-  expect(AbortSignal.timeout).toHaveBeenCalledWith(66_000);
-  expect(f.state()).toMatchObject({ status: "failed", receipt: null });
-  const operations = f.operations.length;
-  await vi.advanceTimersByTimeAsync(30_000);
-  expect(f.operations).toHaveLength(operations);
-  expect(f.rows.get(f.taskPath)).toMatchObject({ attempts: 1, error: "background_generation_failed" });
-});
-
 it("refuses an understated count before uploading search bytes", async () => {
   const f = fixture({ count: 512, countHint: 110 });
   const recovery = f.owner.recover();

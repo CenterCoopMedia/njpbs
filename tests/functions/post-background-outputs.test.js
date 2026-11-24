@@ -1159,7 +1159,7 @@ describe("Post background publication at the database, artifact and HTTP boundar
     };
     const first = owner().recover();
     await waiting;
-    time += 60_001;
+    time += 3_640_001; // Past the claim lock, which outlives the longest holder.
     await owner().recover();
     const recovered = await task("publish-1", "listings");
     expect(recovered).toMatchObject({ status: "verified", attempts: 2 });
