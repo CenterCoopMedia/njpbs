@@ -23,7 +23,10 @@ const PublicContentStatusControlContext = createContext<{
 type MetadataResult = { data: ContentPublicationMetadata | null; unavailable: boolean;
   publicPage?: PublicPageStatus; publicPageChecking?: boolean;
   lastRecheck?: PublicationRecheckResult; lastRecheckSourceVersion?: number | null };
-interface WatchedRecord { collection: SaveCollection; id: string; count: number; loading: boolean; poll: boolean; pageRetried?: boolean }
+interface WatchedRecord { collection: SaveCollection; id: string; count: number; loading: boolean; poll: boolean;
+  pageRetried?: boolean; pageCheckedAt?: number; probing?: boolean; queued?: boolean }
+// The public projection of an unowned Page can change without a CMS or inventory change.
+const PAGE_RECHECK_MS = 60_000;
 const PublicationMetadataContext = createContext<{
   records: Record<string, MetadataResult>;
   watch: (collection: SaveCollection, id: string) => () => void;
@@ -52,7 +55,8 @@ export function PublicContentStatusProvider({ children, getIdToken }: {
     };
   }, []);
   const control = useMemo(() => ({ subscribe }), [subscribe]);
-  const readMetadata = useCallback(async (record: WatchedRecord) => {
+  const readMetadata = useCallback(async function read(record: WatchedRecord, queue = record.probing): Promise<void> {
+    if (record.loading && queue) record.queued = true;
     if (!getIdToken || record.loading || document.visibilityState === "hidden") return;
     const identity = `${record.collection}/${record.id}`;
     record.loading = true;
@@ -67,6 +71,7 @@ export function PublicContentStatusProvider({ children, getIdToken }: {
       const publication = response.publication;
       const pagePath = record.collection === "cmsPages" && publication.publicationTransport !== "page-no-build-v1"
         ? publication.pagePublicPath : undefined;
+      if (!pagePath) record.pageCheckedAt = undefined;
       record.poll = response.publication.postProofPending === true ||
         response.publication.recordPublication?.status === "pending" ||
         ["reserved", "pending", "publishing", "unavailable"].includes(response.publication.queueStatus ?? "");
@@ -86,8 +91,10 @@ export function PublicContentStatusProvider({ children, getIdToken }: {
         });
       }
       if (pagePath && watched.current.get(identity) === record) {
+        record.probing = true;
         timeout = window.setTimeout(() => controller.abort(), PUBLIC_PAGE_STATUS_TIMEOUT_MS);
         const publicPage = await loadPublicPageStatus(pagePath, record.id, controller.signal);
+        record.pageCheckedAt = Date.now();
         if (publicPage) record.pageRetried = false;
         else if (!record.poll && !record.pageRetried) {
           record.pageRetried = true;
@@ -107,6 +114,11 @@ export function PublicContentStatusProvider({ children, getIdToken }: {
     } finally {
       window.clearTimeout(timeout);
       record.loading = false;
+      record.probing = false;
+    }
+    if (record.queued && watched.current.get(identity) === record) {
+      record.queued = false;
+      await read(record);
     }
   }, [getIdToken]);
   const watch = useCallback((collection: SaveCollection, id: string) => {
@@ -136,7 +148,8 @@ export function PublicContentStatusProvider({ children, getIdToken }: {
       if (document.visibilityState === "hidden") return;
       for (const record of watched.current.values()) {
         if (!pendingOnly) record.pageRetried = false;
-        if (!pendingOnly || record.poll) void readMetadata(record);
+        const pageStale = record.pageCheckedAt !== undefined && Date.now() - record.pageCheckedAt >= PAGE_RECHECK_MS;
+        if (!pendingOnly || record.poll || pageStale) void readMetadata(record, pendingOnly ? false : undefined);
       }
     };
     let interval = startInterval(() => refresh(true));
@@ -165,7 +178,7 @@ export function PublicContentStatusProvider({ children, getIdToken }: {
     if (!getIdToken) throw new Error("Sign in before retrying publication.");
     await cmsRetryPublication(await getIdToken(), request);
     const record = watched.current.get(`${request.collection}/${request.id}`);
-    if (record) await readMetadata(record);
+    if (record) await readMetadata(record, true);
   }, [getIdToken, readMetadata]);
   const recheck = useCallback(async (queueId: string, collection: SaveCollection, id: string) => {
     if (!getIdToken) throw new Error("Sign in before checking publication.");
@@ -175,7 +188,7 @@ export function PublicContentStatusProvider({ children, getIdToken }: {
       [identity]: { ...previous[identity], lastRecheck: result,
         lastRecheckSourceVersion: previous[identity]?.data?.publishedSourceVersion } }));
     const record = watched.current.get(identity);
-    if (record) await readMetadata(record);
+    if (record) await readMetadata(record, true);
     return result;
   }, [getIdToken, readMetadata]);
   const metadata = useMemo(() => ({ records, watch, retry, recheck }), [records, watch, retry, recheck]);
