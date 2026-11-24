@@ -11,6 +11,7 @@ import {
 import adminPkg from "../helpers/firebase-admin.js";
 import scheduledPublish from "../../functions/scheduled-publish.js";
 import runtimePublication from "../../functions/lib/public-runtime-publication.js";
+import deployment from "../../functions/lib/public-deployment.js";
 import { parsePublishInstant } from "../../packages/content-core/src/publish-instant";
 
 const {
@@ -1001,6 +1002,34 @@ describe("scheduled publish snapshot", () => {
     const history = (await db.collection("cmsVersionHistory").get()).docs[0].data();
     expect(history.before.date).toBe("2026-07-24 23:30:00-04:00");
     expect(history.after.date).toBe("2026-07-24");
+  });
+
+  it("retires the reserved batch of a scheduled publish whose enqueue fails (#583)", async () => {
+    await db.collection("cmsPages").doc("contact").set({
+      id: "contact", title: "Retire me", template: "genericPage", status: "scheduled",
+      publishAt: "2026-07-15T11:00:00.000Z", blocks: [divider()], version: 2,
+    });
+    const reservedAt = admin.firestore.Timestamp.fromMillis(Date.parse(NOW));
+    let batchId;
+    const enqueuePublishFn = vi.fn(async ({ queueId }) => {
+      // The batch is reserved before the dispatch that then fails.
+      batchId = `cms-${queueId}`;
+      await db.doc(`system/publicDeployment/buildBatches/${batchId}`).set({
+        schemaVersion: 1, buildBatchId: batchId, generation: 345, status: "reserved", commitSha: "a".repeat(40),
+        reservedAgainstGeneration: 344, reservedAgainstDeploymentId: "deployment-344",
+        reservedAgainstCommitSha: "b".repeat(40), cutoffAt: reservedAt, reservedAt,
+      });
+      throw new Error("GitHub unavailable");
+    });
+    const run = createScheduledPublishRunner({
+      firestore: db, assertPublishReadyFn: vi.fn(async () => ({ token: "configured" })), enqueuePublishFn, now: () => NOW,
+    });
+
+    await expect(run()).rejects.toThrow(/GitHub unavailable/);
+    const batch = (await db.doc(`system/publicDeployment/buildBatches/${batchId}`).get()).data();
+    expect(batch).toMatchObject({ status: "retired", retirementReceipt: {
+      reason: "publish_failed_before_lease", queueId: batchId.slice(4), queueStatus: "failed" } });
+    expect(() => deployment.assertPublicDeploymentFailedPublishRetiredBatch(batch, batchId)).not.toThrow();
   });
 
   it("retries an already-frozen snapshot when enqueue fails", async () => {

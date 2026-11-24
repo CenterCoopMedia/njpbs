@@ -1,12 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 import publishBuildState from "../../functions/lib/publish-build-state.js";
 import homeOwner from "../../functions/lib/no-build-home-ownership.js";
+import publicDeployment from "../../functions/lib/public-deployment.js";
 
 const {
   addressedPublishChanges,
   isPendingPublishChange,
   markBuildEnqueuedInTransaction,
   settleBuildQueue,
+  settleBuildQueueInTransaction,
 } = publishBuildState;
 
 const BANNER_CHANGE = {
@@ -22,14 +24,13 @@ const PAGE_CHANGE = {
 
 function refs() {
   const values = new Map();
+  const doc = (key) => {
+    if (!values.has(key)) values.set(key, { path: key });
+    return values.get(key);
+  };
   const firestore = {
-    collection: vi.fn((collection) => ({
-      doc: vi.fn((id) => {
-        const key = `${collection}/${id}`;
-        if (!values.has(key)) values.set(key, { path: key });
-        return values.get(key);
-      }),
-    })),
+    doc: vi.fn(doc),
+    collection: vi.fn((collection) => ({ doc: vi.fn((id) => doc(`${collection}/${id}`)) })),
   };
   return { firestore, ref: (path) => values.get(path) };
 }
@@ -459,5 +460,69 @@ describe("serializer Post completion after Home Page transfer", () => {
     await upgrade.settle();
     expect(upgrade.rows.get(upgrade.taskPath).input.postChanges).toHaveLength(2);
     expect(upgrade.transaction.create).toHaveBeenCalledOnce();
+  });
+});
+
+// #583: a row that fails before its batch is leased must not leave the batch
+// reserved, or the release pause and the media purge wait on it.
+describe("failed publish rows retire their reserved batch", () => {
+  const QUEUE_ID = "FAILEDqueue000000001";
+  const BATCH_PATH = `system/publicDeployment/buildBatches/cms-${QUEUE_ID}`;
+  const at = (millis) => ({ toMillis: () => millis });
+  const reserved = (overrides = {}) => ({
+    schemaVersion: 1, buildBatchId: `cms-${QUEUE_ID}`, generation: 345, status: "reserved",
+    commitSha: "a".repeat(40), reservedAgainstGeneration: 344, reservedAgainstDeploymentId: "deployment-344",
+    reservedAgainstCommitSha: "b".repeat(40), cutoffAt: at(1000), reservedAt: at(1000), ...overrides,
+  });
+  function fixture(batch) {
+    const rows = new Map([
+      [`cmsPublishQueue/${QUEUE_ID}`, { status: "publishing", changes: [] }],
+      ...(batch ? [[BATCH_PATH, batch]] : []),
+    ]);
+    let writing = false;
+    const transaction = {
+      get: vi.fn(async (ref) => {
+        if (writing) throw new Error("Firestore reads must precede writes");
+        return { exists: rows.has(ref.path), data: () => rows.get(ref.path) };
+      }),
+      update: vi.fn((ref, update) => { writing = true; rows.set(ref.path, { ...rows.get(ref.path), ...update }); }),
+    };
+    const { firestore } = refs();
+    firestore.runTransaction = async (callback) => { writing = false; return callback(transaction); };
+    return { rows, transaction, firestore };
+  }
+
+  it.each(["failed", "cancelled"])("retires a reserved batch when the row is %s", async (status) => {
+    const { rows, firestore } = fixture(reserved());
+    await settleBuildQueue(firestore, { queueId: QUEUE_ID, status, queueUpdate: { status } });
+    const batch = rows.get(BATCH_PATH);
+    expect(batch).toMatchObject({ status: "retired", retirementReceipt: {
+      schemaVersion: 1, reason: "publish_failed_before_lease", queueId: QUEUE_ID, queueStatus: status } });
+    // The pause drain's validator accepts the stored batch once the server sets retiredAt.
+    expect(() => publicDeployment.assertPublicDeploymentFailedPublishRetiredBatch(
+      { ...batch, retiredAt: at(2000) }, `cms-${QUEUE_ID}`)).not.toThrow();
+    expect(() => publicDeployment.assertPublicDeploymentFailedPublishRetiredBatch(
+      { ...batch, retiredAt: at(2000), retirementReceipt: { ...batch.retirementReceipt, queueId: "OTHERqueue0000000001" } },
+      `cms-${QUEUE_ID}`)).toThrow(/retired failed-publish/);
+  });
+
+  it.each([["ready", reserved({ status: "ready", readyAt: at(1500) })], ["absent", null]])(
+    "leaves a %s batch as it is", async (_label, batch) => {
+      const { rows, transaction, firestore } = fixture(batch);
+      await settleBuildQueue(firestore, { queueId: QUEUE_ID, status: "failed", queueUpdate: { status: "failed" } });
+      expect(rows.get(BATCH_PATH)).toEqual(batch ?? undefined);
+      expect(transaction.update.mock.calls.map(([ref]) => ref.path)).toEqual([`cmsPublishQueue/${QUEUE_ID}`]);
+    });
+
+  it("does not read the batch on success or for callers that write the batch themselves", async () => {
+    const success = fixture(reserved());
+    await settleBuildQueue(success.firestore, { queueId: QUEUE_ID, status: "success", queueUpdate: { status: "success" } });
+    const direct = fixture(reserved());
+    await direct.firestore.runTransaction((transaction) => settleBuildQueueInTransaction(direct.firestore, transaction,
+      { queueId: QUEUE_ID, status: "cancelled", queueUpdate: { status: "cancelled" } }));
+    for (const { rows, transaction } of [success, direct]) {
+      expect(rows.get(BATCH_PATH).status).toBe("reserved");
+      expect(transaction.get.mock.calls.map(([ref]) => ref.path)).not.toContain(BATCH_PATH);
+    }
   });
 });
