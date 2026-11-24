@@ -23,12 +23,14 @@ async function fetchDevPublic(request: Request, env: DevStaffSiteBindings): Prom
     const location = upstream.headers.get("location");
     const target = location ? new URL(location, url) : null;
     await upstream.body?.cancel();
+    // Release readers compare Location exactly, so it passes as sent. An
+    // off-site target passes only as a rendered content link; anything else
+    // (an Access challenge) stays refused.
     if (!target || target.username || target.password ||
-        target.origin !== siteOrigin) {
+        (target.origin !== siteOrigin && !upstream.headers.has("x-njpbs-content-source"))) {
       throw new Error("Dev origin redirect refused");
     }
     const redirectedHeaders = new Headers(upstream.headers);
-    redirectedHeaders.set("location", target.href);
     redirectedHeaders.delete("content-length");
     redirectedHeaders.delete("content-encoding");
     return new Response(null, { status: upstream.status, headers: redirectedHeaders });

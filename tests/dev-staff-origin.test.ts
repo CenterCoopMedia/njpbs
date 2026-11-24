@@ -104,6 +104,55 @@ describe("isolated dev public Worker origin", () => {
     expect(network).toHaveBeenCalledOnce();
   });
 
+  it.each([
+    [308, "/posts/item/"],
+    [302, "https://news.example.org/story?id=1"],
+  ])("passes a rendered %s Location exactly as the origin sent it", async (status, location) => {
+    vi.stubGlobal("fetch", async () => new Response(null, { status, headers: { location,
+      "cache-control": "no-store", "x-robots-tag": "noindex, nofollow", "x-njpbs-content-source": "cms-no-build" } }));
+    const result = await devWorker.fetch(authenticated("/posts/item/"), originEnv);
+    expect(result.status).toBe(status);
+    expect(result.headers.get("location")).toBe(location);
+    expect(result.headers.get("cache-control")).toBe("no-store");
+    expect(result.headers.get("x-robots-tag")).toBe("noindex, nofollow");
+  });
+
+  it("refuses an off-site rendered redirect that carries credentials", async () => {
+    vi.stubGlobal("fetch", async () => new Response(null, { status: 302, headers: {
+      location: "https://user:pass@news.example.org/", "x-njpbs-content-source": "cms-no-build" } }));
+    expect((await devWorker.fetch(authenticated("/"), originEnv)).status).toBe(503);
+  });
+
+  it("passes origin CORS and Vary headers, keeps no-referrer and grants credentials only to dev Admin", async () => {
+    vi.stubGlobal("fetch", async () => new Response("page", { headers: {
+      "referrer-policy": "strict-origin-when-cross-origin", "x-content-type-options": "nosniff",
+      "access-control-allow-origin": "https://dev-admin.example.org", "access-control-allow-credentials": "true",
+      vary: "Accept-Encoding", "access-control-expose-headers": "x-njpbs-content-source" } }));
+    const admin = await devWorker.fetch(authenticated("/"), originEnv);
+    expect(admin.headers.get("referrer-policy")).toBe("no-referrer");
+    expect(admin.headers.get("access-control-allow-origin")).toBe("https://dev-admin.example.org");
+    expect(admin.headers.get("access-control-allow-credentials")).toBe("true");
+    expect(admin.headers.get("access-control-expose-headers")).toBe("x-njpbs-content-source");
+    expect(admin.headers.get("vary")).toBe("Accept-Encoding, Origin");
+    const other = await devWorker.fetch(new Request("https://dev-public.example.org/", {
+      headers: { cookie: "__Host-njpbs-staff=dev-session", origin: "https://evil.example" } }), originEnv);
+    expect(other.headers.get("access-control-allow-origin")).toBe("https://dev-admin.example.org");
+    expect(other.headers.get("access-control-allow-credentials")).toBeNull();
+    // An origin answer without them still gets the gateway values.
+    vi.stubGlobal("fetch", async () => new Response("page", { headers: { vary: "origin" } }));
+    const bare = await devWorker.fetch(authenticated("/"), originEnv);
+    expect(bare.headers.get("referrer-policy")).toBe("no-referrer");
+    expect(bare.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(bare.headers.get("vary")).toBe("origin");
+  });
+
+  it("keeps an origin retry-after on 429 and adds one when absent", async () => {
+    vi.stubGlobal("fetch", async () => new Response(null, { status: 429, headers: { "retry-after": "30" } }));
+    expect((await devWorker.fetch(authenticated("/"), originEnv)).headers.get("retry-after")).toBe("30");
+    vi.stubGlobal("fetch", async () => new Response(null, { status: 429 }));
+    expect((await devWorker.fetch(authenticated("/"), originEnv)).headers.get("retry-after")).toBe("1");
+  });
+
   it.each([401, 403])("does not relay an origin %s challenge body", async status => {
     vi.stubGlobal("fetch", async () => new Response("private challenge", { status }));
     const result = await devWorker.fetch(authenticated("/"), originEnv);
