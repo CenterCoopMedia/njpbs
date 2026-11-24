@@ -250,6 +250,34 @@ describe("CMS function build queue expiry recovery", () => {
     expect(run.targets()).toEqual([fullSet.map(name => `functions:${name}`).join(",")]);
     expect(run.wait).not.toHaveBeenCalled();
   });
+  // Recorded from dev run 45429859229 (Nov. 24, 2026): Secret Manager answered 503 while Firebase
+  // prepared the deploy, before any function was updated.
+  const providerOutage = "i  functions: Loading and analyzing source code for codebase dev to determine what to deploy\n" +
+    "\u2b22  extensions: Failed to fetch the list of extensions. Assuming for now that there are no existing extensions.\n" +
+    "i  functions: Loaded environment variables from functions/.env.example-project\n\n" +
+    "Error: Request to https://secretmanager.googleapis.com/v1/projects/example-project/secrets/EXAMPLE_SECRET " +
+    "had HTTP Error: 503, Authentication backend unavailable.\n";
+  it("deploys the same targets again after a Google API 5xx before any function result", async () => {
+    const run = deployment([[1, providerOutage], [0, "Deploy complete!\n"]], fullSet);
+    await expect(run.promise).resolves.toBeUndefined();
+    const all = fullSet.map(name => `functions:${name}`).join(",");
+    expect(run.targets()).toEqual([all, all]);
+    expect(run.wait.mock.calls).toEqual([[10_000]]);
+  });
+  it("fails after three provider 5xx attempts and does not retry other provider errors", async () => {
+    const run = deployment(Array.from({ length: 3 }, () => [1, providerOutage]), fullSet);
+    await expect(run.promise).rejects.toThrow("did not confirm completion");
+    expect(run.launch).toHaveBeenCalledTimes(3);
+    for (const output of [providerOutage.replace("HTTP Error: 503", "HTTP Error: 403"),
+      providerOutage.replace("secretmanager.googleapis.com", "secretmanager.example.org"),
+      `${providerOutage}Error: Permission denied\n`,
+      `${recordings[1].replace("EXPIRED", "FAILURE")}${providerOutage}`]) {
+      const once = deployment([[1, output]], fullSet);
+      await expect(once.promise).rejects.toThrow("did not confirm completion");
+      expect(once.launch).toHaveBeenCalledTimes(1);
+      expect(once.wait).not.toHaveBeenCalled();
+    }
+  });
   it("does not retry a non-transient build failure", async () => {
     const run = deployment([[1, recordings[0].replace("EXPIRED", "FAILURE")]], failures[0]);
     await expect(run.promise).rejects.toThrow("did not confirm completion");

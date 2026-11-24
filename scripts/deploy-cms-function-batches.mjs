@@ -185,6 +185,17 @@ function expiredFunctionFailures(output, names, project = PROJECT) {
   return expired.length + refusedPolicy.length === failed.length && diagnostics.every(allowed) ? failed : [];
 }
 
+// A Google API 5xx before any function result (for example Secret Manager's
+// "HTTP Error: 503, Authentication backend unavailable" while Firebase reads the
+// function secrets) deploys nothing, so the same targets are deployed again.
+// Any other error line, or a per-function failure summary, fails closed.
+function transientProviderFailure(output) {
+  if (/^Functions deploy had errors with the following functions:$/m.test(output)) return false;
+  const errors = output.split("\n").filter(line => line.startsWith("Error: "));
+  return errors.length === 1 &&
+    /^Error: Request to https:\/\/[a-z0-9-]+\.googleapis\.com\/\S+ had HTTP Error: 5\d\d(?:, [^\n]*)?$/.test(errors[0]);
+}
+
 function runFunctionDeploy(names, launch, project) {
   return new Promise((resolve, reject) => {
     const { firebaseConfig, codebase } = cmsTarget();
@@ -215,7 +226,7 @@ export async function deployFunctionTargets(names, launch = spawn, project = PRO
     assertNoFunctionDeletions(manifest, await readFunctionsDeployInventory(project, request), { projectId: project, codebase: cmsTarget().codebase, only: pending });
     const { code, output } = await runFunctionDeploy(pending, launch, project);
     if (code === 0 && output.includes("Deploy complete!")) return;
-    const failed = code !== 0 ? expiredFunctionFailures(output, pending, project) : [];
+    const failed = code === 0 ? [] : transientProviderFailure(output) ? pending : expiredFunctionFailures(output, pending, project);
     if (attempt === 3 || !failed.length) throw new ComponentReceiptError("Firebase deployment did not confirm completion");
     pending = failed;
     console.log(`Retrying function deployment, attempt ${attempt + 1} of 3: ${pending.join(", ")}`);
