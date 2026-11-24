@@ -109,7 +109,9 @@ artifact grants no deployment authority.
 `scripts/install-dev-publisher.mjs --sha X --image-run <run> [--check]`
 installs the development publisher at main commit X from that run's
 development artifact. Run it from a clean checkout of main that contains X,
-with the root and site dependencies installed. Supply three credentials on
+with the root and site dependencies installed, `CANONICAL_GITHUB_REPOSITORY`
+and `CANONICAL_GITHUB_REPOSITORY_ID` set, and no Firebase emulator or ambient
+credential settings. Supply three credentials on
 descriptors, each read only when it is used: 3, the development Firestore
 operator credential JSON; 4, the development publisher deploy token; 5, the
 development Cloudflare read token. `--check` makes every read and stops
@@ -117,8 +119,8 @@ before the deploy, so it never opens descriptor 4.
 
 The script installs nothing until all of these pass:
 
-- The run is a successful main `publisher-image.yml` run titled
-  `Publisher image development X`.
+- The run is a successful main `publisher-image.yml` run of the configured
+  repository (name and numeric ID), titled `Publisher image development X`.
 - Its receipt names target `development`, source X and a
   `njpbs-dev-cms-publisher` image.
 - The script renders X with the same GitHub variables the run read (the
@@ -131,9 +133,9 @@ The script installs nothing until all of these pass:
 - `system/publicDeployment` is idle at X.
 - The live Worker carries exactly the development secret names.
 
-There is no target argument, and the Worker name
-`njpbs-dev-cms-publisher` and container application are fixed in the
-script. The deploy token can also write production Workers.
+There is no target argument. The script fixes the Worker name
+`njpbs-dev-cms-publisher` and requires exactly one container application
+with that name. The deploy token can also write production Workers.
 
 The deploy runs `wrangler deploy --name njpbs-dev-cms-publisher
 --containers-rollout immediate --secrets-file <{}>`. Cloudflare's
@@ -146,13 +148,18 @@ existing secret, including a placeholder, stays unchanged. Per Cloudflare's
 "Secrets not included in the file are preserved from the previous version".
 The script handles no secret values.
 
-When the app already runs the receipt image, the script skips the deploy
-and only reads back. The readback waits up to 15 minutes for all of the
+When the Worker already names X and the app already runs the receipt image,
+the script skips the deploy and only reads back. If that image has no
+rollout (a first install), the script refuses, because a deploy without a
+container change creates no rollout. Install a newer commit instead. The readback waits up to 15 minutes for all of the
 following:
 
 - a single new Worker version at 100% with `PUBLICATION_COMMIT_SHA` X;
 - the same secret names;
-- the newest rollout `completed` at the receipt image;
+- the newest rollout `completed` at the receipt image. The rollout is the
+  applied state, because the application record can keep the previous image
+  after the rollout completes. `pending` and `progressing` keep the wait
+  going, and `reverted` or `replaced` refuse;
 - `/health` 200.
 
 It prints one JSON receipt with the previous and new version IDs and the

@@ -37,17 +37,23 @@ function prepared() {
   return { commitSha: sha, directory, source: path.join(directory, "source"), configPath, wrangler: path.join(directory, "wrangler.js") };
 }
 
-// A fake provider: the deploy moves the Worker to a new version at the commit and starts a rollout.
-function harness({ live = oldImage, state = aligned, rollouts = ["progressing", "completed"], health = [503, 200], overrides = {} } = {}) {
+const identity = { repository: "CenterCoopMedia/njpbs", id: "42" };
+const applicationId = "0123abcd-0000-4000-8000-000000000000";
+
+// A fake provider: the deploy moves the Worker to a new version at the commit and, when
+// the image changes, starts one rollout whose statuses follow `rollouts`.
+function harness({ live = oldImage, liveCommit = "f".repeat(40), history = [], lag = false, state = aligned,
+  rollouts = ["pending", "progressing", "completed"], health = [503, 200], applications, overrides = {} } = {}) {
   const calls = [], tokens = [];
-  let deployedAt = live === image ? 0 : undefined, reads = 0, prep;
-  const provider = { version: "v-old", commit: live === image ? sha : "f".repeat(40), image: live, secrets };
+  let reads = 0, prep;
+  const provider = { version: "v-old", commit: liveCommit, image: live, record: live, secrets, rollouts: history };
   const io = {
+    identity: () => identity,
     assertSource: () => calls.push("source"),
-    github: async route => (calls.push(route), imageRun),
-    variables: async environment => environment ? { PUBLISHER_DEVELOPMENT_PUBLIC_VARS_JSON: JSON.stringify(publicVars) }
+    github: async route => (calls.push(route), { ...imageRun, repository: { full_name: "CenterCoopMedia/njpbs", id: 42 } }),
+    variables: async (_repository, environment) => environment ? { PUBLISHER_DEVELOPMENT_PUBLIC_VARS_JSON: JSON.stringify(publicVars) }
       : { CMS_DEV_CLOUDFLARE_ACCOUNT_ID: account, ...Object.fromEntries(Object.keys(developmentInputs).map(k => [k, "v"])) },
-    receipt: async (id, name) => (calls.push(`receipt ${id} ${name}`), structuredClone(receipt)),
+    receipt: async (_repository, id, name) => (calls.push(`receipt ${id} ${name}`), structuredClone(receipt)),
     prepare: () => ({ prepared: (prep = prepared()), inputFingerprint: fingerprint }),
     sourceConfig: () => structuredClone(source),
     credential: fd => (tokens.push(fd), "{}"),
@@ -56,18 +62,18 @@ function harness({ live = oldImage, state = aligned, rollouts = ["progressing", 
     cloudflare: async (_account, route) => {
       if (route.endsWith("/settings")) return { bindings: [...provider.secrets, { type: "plain_text", name: "PUBLICATION_COMMIT_SHA", text: provider.commit }] };
       if (route.endsWith("/deployments")) return { deployments: [{ versions: [{ version_id: provider.version, percentage: 100 }] }] };
-      if (route.endsWith("/rollouts")) {
-        if (deployedAt === undefined) return [];
-        const status = rollouts[Math.min(reads++, rollouts.length - 1)];
-        return [{ id: "r-1", created_at: "2026-11-24T00:00:00Z", status, target_configuration: { image } }];
+      if (route === `containers/applications/${applicationId}/rollouts`) {
+        return provider.rollouts.map(r => r.id === "r-new" ? { ...r, status: rollouts[Math.min(reads++, rollouts.length - 1)] } : r);
       }
-      return { name: "njpbs-dev-cms-publisher", configuration: { image: provider.image } };
+      if (route === "containers/applications") return applications ?? [{ id: applicationId, name: "njpbs-dev-cms-publisher", configuration: { image: provider.record } },
+        { id: "ffffffff-0000-4000-8000-000000000000", name: "njpbs-cms-publisher", configuration: { image: "other" } }];
+      throw new Error(`unexpected route ${route}`);
     },
     health: async () => health.length > 1 ? health.shift() : health[0],
     deploy: (command, cwd) => {
       calls.push({ command, cwd, config: JSON.parse(readFileSync(command.args[6], "utf8")), keep: readFileSync(command.args[10], "utf8") });
-      Object.assign(provider, { version: "v-new", commit: sha, image });
-      deployedAt = 0;
+      if (provider.image !== image) provider.rollouts = [...provider.rollouts, { id: "r-new", created_at: "2026-11-24T01:00:00Z", target_configuration: { image } }];
+      Object.assign(provider, { version: "v-new", commit: sha, image, record: lag ? provider.record : image });
     },
     sleep: async () => {},
     ...overrides,
@@ -83,10 +89,12 @@ test("arguments name only a commit, an image run and the check flag", () => {
 });
 
 test("the image run must be the successful development publisher-image run for the commit", () => {
-  assert.equal(assertImageRun(imageRun, sha), `publisher-image-development-${sha}-2`);
+  const ok = { ...imageRun, repository: { full_name: "CenterCoopMedia/njpbs", id: 42 } };
+  assert.equal(assertImageRun(ok, sha, identity), `publisher-image-development-${sha}-2`);
   for (const change of [{ display_title: "Publisher image" }, { conclusion: "failure" }, { head_branch: "feature" },
-    { path: ".github/workflows/other.yml" }, { repository: { full_name: "someone/njpbs" } }, { display_title: `Publisher image development ${"b".repeat(40)}` }]) {
-    assert.throws(() => assertImageRun({ ...imageRun, ...change }, sha), /not a successful development/);
+    { path: ".github/workflows/other.yml" }, { repository: { full_name: "someone/njpbs", id: 42 } }, { repository: { full_name: "CenterCoopMedia/njpbs", id: 43 } },
+    { display_title: `Publisher image development ${"b".repeat(40)}` }]) {
+    assert.throws(() => assertImageRun({ ...ok, ...change }, sha, identity), /not a successful development/);
   }
 });
 
@@ -109,7 +117,7 @@ test("install deploys the receipt image at the commit and reads back version, ro
   const h = harness();
   const result = await install({ sha, run, check: false }, h.io);
   assert.deepEqual(result, { schema: 1, target: "development", worker: "njpbs-dev-cms-publisher", source_sha: sha, image,
-    previous_version: "v-old", version: "v-new", rollout: "r-1", health: 200, deployed: true });
+    previous_version: "v-old", version: "v-new", rollout: "r-new", health: 200, deployed: true });
   const deploy = h.calls.find(call => call.command);
   assert.equal(deploy.keep, "{}\n");
   assert.equal(deploy.config.name, "njpbs-dev-cms-publisher");
@@ -154,15 +162,47 @@ test("variables naming production refuse", async () => {
   await assert.rejects(install({ sha, run, check: false }, h.io), /do not name the development target/);
 });
 
-test("an image already live takes no deploy and still reads back", async () => {
-  const h = harness({ live: image });
+test("emulator or ambient credential settings refuse", () => {
+  for (const key of ["FIRESTORE_EMULATOR_HOST", "GOOGLE_APPLICATION_CREDENTIALS"]) {
+    assert.throws(() => parseArguments(["--sha", sha, "--image-run", run], { [key]: "x" }), /emulator/);
+  }
+});
+
+test("an installed Worker and image with its rollout take no deploy and still read back", async () => {
+  const h = harness({ live: image, liveCommit: sha, history: [{ id: "r-old", created_at: "2026-11-24T00:00:00Z", status: "completed", target_configuration: { image } }] });
   const result = await install({ sha, run, check: false }, h.io);
   assert.equal(result.deployed, false);
+  assert.equal(result.rollout, "r-old");
   assert.deepEqual(h.tokens, [3, 5]);
 });
 
-test("a failed rollout, a changed secret set or no health refuses", async () => {
-  await assert.rejects(install({ sha, run, check: false }, harness({ rollouts: ["failed"] }).io), /rollout failed/);
+test("Worker-only drift at the installed image deploys again", async () => {
+  const history = [{ id: "r-old", created_at: "2026-11-24T00:00:00Z", status: "completed", target_configuration: { image } }];
+  const h = harness({ live: image, liveCommit: "f".repeat(40), history });
+  const result = await install({ sha, run, check: false }, h.io);
+  assert.equal(result.deployed, true);
+  assert.equal(result.rollout, "r-old");
+});
+
+test("a first-install application at the image with no rollout refuses before any deploy", async () => {
+  const h = harness({ live: image, liveCommit: sha });
+  await assert.rejects(install({ sha, run, check: false }, h.io), /without its rollout/);
+  assert.deepEqual(h.tokens, [3, 5]);
+});
+
+test("a completed rollout is the applied state while the application record lags", async () => {
+  const result = await install({ sha, run, check: false }, harness({ lag: true }).io);
+  assert.equal(result.rollout, "r-new");
+});
+
+test("a missing or duplicated development application refuses", async () => {
+  for (const applications of [[], [{ id: applicationId, name: "njpbs-dev-cms-publisher" }, { id: "ffffffff-0000-4000-8000-000000000000", name: "njpbs-dev-cms-publisher" }]]) {
+    await assert.rejects(install({ sha, run, check: false }, harness({ applications }).io), /not unique/);
+  }
+});
+
+test("a reverted rollout, a changed secret set or no health refuses", async () => {
+  await assert.rejects(install({ sha, run, check: false }, harness({ rollouts: ["progressing", "reverted"] }).io), /reverted or replaced/);
   const missing = harness();
   missing.provider.secrets = secrets.slice(1);
   await assert.rejects(install({ sha, run, check: false }, missing.io), /secret names differ/);
@@ -173,4 +213,3 @@ test("a failed rollout, a changed secret set or no health refuses", async () => 
   await assert.rejects(install({ sha, run, check: false }, harness({ health: [503] }).io), /readback did not complete/);
   assert.equal(WAIT.attempts * WAIT.intervalMs, 900_000);
 });
-

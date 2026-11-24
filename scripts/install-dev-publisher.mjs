@@ -1,13 +1,15 @@
 #!/usr/bin/env node
 // Install the development cloud publisher at an exact main commit outside a release run.
-// Usage, from a clean checkout of main that contains the commit:
+// Usage, from a clean checkout of main that contains the commit, with CANONICAL_GITHUB_REPOSITORY and
+// CANONICAL_GITHUB_REPOSITORY_ID naming the repository:
 //   node scripts/install-dev-publisher.mjs --sha <X> --image-run <publisher-image development run id> [--check] \
 //     3< <(<print the dev Firestore operator credential JSON>) \
 //     4< <(<print the dev publisher deploy token>) \
 //     5< <(<print the dev Cloudflare read token>)
 // Each descriptor is read only when its credential is used, kept in memory and never written.
 // --check performs every read and stops before the deploy; it never opens descriptor 4.
-// Development only: every name is fixed below and there is no target argument. The deploy
+// Development only: every name is fixed below and there is no target argument; the container
+// application is the single one named for the development Worker. The deploy
 // token can also write production Workers, so no call falls back to a default name.
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -17,13 +19,11 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { prepareTarget, productionConfig, publisherTarget, targetSource } from "../.github/scripts/publisher-image.mjs";
 import { developmentInputs } from "./render-development-config.mjs";
+import { repositoryIdentity } from "./lib/repository-identity.mjs";
 
 const require = createRequire(import.meta.url);
 const repository = fileURLToPath(new URL("..", import.meta.url));
-export const REPOSITORY = "CenterCoopMedia/njpbs";
 export const target = publisherTarget("development");
-// The development container application (jawn-ops release_target_settings.go).
-export const APPLICATION = "a038b1c8-63cb-49b8-9ec1-f2145a01164d";
 const WORKER = "njpbs-dev-cms-publisher";
 const SHA = /^[a-f0-9]{40}$/;
 const TOKEN = /^[A-Za-z0-9_-]{20,4096}$/;
@@ -32,23 +32,27 @@ const DIGEST = /^sha256:[a-f0-9]{64}$/;
 export const SECRETS = ["ACTIVATION_TOKEN", "CMS_DEV_ACCESS_CLIENT_ID", "CMS_DEV_ACCESS_CLIENT_SECRET", "FIREBASE_SERVICE_ACCOUNT",
   "MEDIA_MANAGER_CREDENTIAL", "PUBLICATION_WAKE_TOKEN", "R2_PREVIEW_CREDENTIAL", "R2_PUBLICATION_CREDENTIAL"];
 export const WAIT = { attempts: 60, intervalMs: 15_000 };
+// Emulator settings take precedence over the credential in the Firebase SDK.
+// config-input: FIREBASE_AUTH_EMULATOR_HOST, FIREBASE_CONFIG, FIRESTORE_EMULATOR_HOST, GOOGLE_APPLICATION_CREDENTIALS
+const AMBIENT = ["FIRESTORE_EMULATOR_HOST", "FIREBASE_AUTH_EMULATOR_HOST", "GOOGLE_APPLICATION_CREDENTIALS", "FIREBASE_CONFIG"];
 
 export class InstallRefusal extends Error {}
 const refuse = message => { throw new InstallRefusal(message); };
 if (target.publisherWorker !== WORKER || target.projectId !== "njpbs-site-dev") refuse("Development target names differ");
 
-export function parseArguments(args) {
+export function parseArguments(args, env = process.env) {
   const check = args.at(-1) === "--check";
   const [flag0, sha, flag1, run, ...rest] = check ? args.slice(0, -1) : args;
   if (flag0 !== "--sha" || !SHA.test(sha ?? "") || flag1 !== "--image-run" || !/^[1-9][0-9]{0,19}$/.test(run ?? "") || rest.length) {
     refuse("Usage: install-dev-publisher --sha <40-hex main commit> --image-run <run id> [--check]");
   }
+  if (AMBIENT.some(key => env[key] !== undefined)) refuse("Unset Firebase emulator and ambient credential settings");
   return { sha, run, check };
 }
 
 // The run must be the main publisher-image workflow that built this exact development source.
-export function assertImageRun(run, sha) {
-  if (run?.repository?.full_name !== REPOSITORY || run.path !== ".github/workflows/publisher-image.yml" ||
+export function assertImageRun(run, sha, identity) {
+  if (run?.repository?.full_name?.toLowerCase() !== identity.repository.toLowerCase() || String(run.repository.id) !== identity.id || run.path !== ".github/workflows/publisher-image.yml" ||
       run.head_branch !== "main" || run.event !== "workflow_dispatch" || run.status !== "completed" ||
       run.conclusion !== "success" || run.display_title !== `Publisher image development ${sha}` ||
       !Number.isSafeInteger(run.run_attempt) || run.run_attempt < 1) refuse("Image run is not a successful development publisher-image run for this commit");
@@ -119,14 +123,18 @@ export function deployCommand({ wrangler, config, secretsFile, sha, token, accou
 const secretNames = settings => (settings?.bindings ?? []).filter(b => b.type === "secret_text").map(b => b.name).sort();
 const plain = (settings, name) => settings?.bindings?.find(b => b.type === "plain_text" && b.name === name)?.text;
 
+// The container application is found by its fixed development name; exactly one must exist.
 export async function readPublisher(cloudflare) {
-  const [settings, app, deployments] = await Promise.all([
-    cloudflare(`workers/scripts/${WORKER}/settings`), cloudflare(`containers/applications/${APPLICATION}`), cloudflare(`workers/scripts/${WORKER}/deployments`)]);
-  if (app?.name !== WORKER) refuse("Container application is not the development publisher");
+  const [settings, applications, deployments] = await Promise.all([
+    cloudflare(`workers/scripts/${WORKER}/settings`), cloudflare("containers/applications"), cloudflare(`workers/scripts/${WORKER}/deployments`)]);
+  const named = Array.isArray(applications) ? applications.filter(app => app?.name === WORKER) : [];
+  if (named.length !== 1 || !/^[a-f0-9-]{36}$/.test(named[0].id ?? "")) refuse("The development publisher container application is not unique");
   const versions = deployments?.deployments?.[0]?.versions ?? [];
-  return { secrets: secretNames(settings), commit: plain(settings, "PUBLICATION_COMMIT_SHA"), image: app.configuration?.image,
-    version: versions.length === 1 && versions[0].percentage === 100 ? versions[0].version_id : undefined };
+  return { secrets: secretNames(settings), commit: plain(settings, "PUBLICATION_COMMIT_SHA"), application: named[0].id,
+    image: named[0].configuration?.image, version: versions.length === 1 && versions[0].percentage === 100 ? versions[0].version_id : undefined };
 }
+
+const newestRollout = rollouts => rollouts.reduce((a, b) => (Date.parse(b.created_at) > Date.parse(a.created_at) ? b : a));
 
 export function assertBefore(before) {
   if (JSON.stringify(before.secrets) !== JSON.stringify(SECRETS)) refuse("Live publisher secret names differ from the development contract");
@@ -138,13 +146,15 @@ export async function readBack({ cloudflare, health, sleep, before, sha, image, 
     if (attempt) await sleep(WAIT.intervalMs);
     const after = await readPublisher(cloudflare);
     if (JSON.stringify(after.secrets) !== JSON.stringify(before.secrets)) refuse("Publisher secret names changed");
+    if (after.application !== before.application) refuse("Publisher container application changed");
     if (after.commit !== sha || !after.version || (deployed && after.version === before.version)) continue;
-    const rollouts = await cloudflare(`containers/applications/${APPLICATION}/rollouts`);
+    const rollouts = await cloudflare(`containers/applications/${after.application}/rollouts`);
     if (!Array.isArray(rollouts) || !rollouts.length) continue;
-    const newest = rollouts.reduce((a, b) => (Date.parse(b.created_at) > Date.parse(a.created_at) ? b : a));
+    const newest = newestRollout(rollouts);
     if (newest.target_configuration?.image !== image) continue;
-    if (!["progressing", "completed"].includes(newest.status)) refuse("Publisher rollout failed");
-    if (newest.status !== "completed" || after.image !== image) continue;
+    // The application record can keep the previous image after a rollout completes; the rollout is the applied state.
+    if (!["pending", "progressing", "completed"].includes(newest.status)) refuse("Publisher rollout was reverted or replaced");
+    if (newest.status !== "completed") continue;
     if (await health() !== 200) continue;
     return { schema: 1, target: "development", worker: WORKER, source_sha: sha, image, previous_version: before.version ?? null,
       version: after.version, rollout: newest.id, health: 200, deployed };
@@ -154,11 +164,12 @@ export async function readBack({ cloudflare, health, sleep, before, sha, image, 
 
 export async function install({ sha, run, check }, io) {
   io.assertSource(sha);
-  const imageRun = await io.github(`repos/${REPOSITORY}/actions/runs/${run}`);
-  const artifact = assertImageRun(imageRun, sha);
-  const { variables, inputs } = deploymentVariables(await io.variables(), await io.variables("publisher-image"));
+  const identity = io.identity();
+  const imageRun = await io.github(`repos/${identity.repository}/actions/runs/${run}`);
+  const artifact = assertImageRun(imageRun, sha, identity);
+  const { variables, inputs } = deploymentVariables(await io.variables(identity.repository), await io.variables(identity.repository, "publisher-image"));
   const account = variables.CLOUDFLARE_ACCOUNT_ID;
-  const receipt = assertReceipt(await io.receipt(run, artifact), { sha, run, account });
+  const receipt = assertReceipt(await io.receipt(identity.repository, run, artifact), { sha, run, account });
   const { prepared, inputFingerprint } = io.prepare({ sha, variables, inputs });
   try {
     if (inputFingerprint !== receipt.deployment_input_sha256) refuse("Rendered inputs differ from the image's inputs");
@@ -169,8 +180,15 @@ export async function install({ sha, run, check }, io) {
     const cloudflare = route => io.cloudflare(account, route, readToken);
     const before = await readPublisher(cloudflare);
     assertBefore(before);
-    // A live app already at the image takes no rollout; only the readback runs.
-    const deployed = before.image !== receipt.image;
+    // A live Worker at the commit whose app already runs the image needs only the readback.
+    const deployed = before.image !== receipt.image || before.commit !== sha;
+    if (!deployed) {
+      const rollouts = await cloudflare(`containers/applications/${before.application}/rollouts`);
+      // A deploy with no container change starts no rollout, so none can be created for this image.
+      if (!Array.isArray(rollouts) || !rollouts.length || newestRollout(rollouts).target_configuration?.image !== receipt.image) {
+        refuse("The live application already runs this image without its rollout; install a newer commit");
+      }
+    }
     if (check) return { schema: 1, check: true, source_sha: sha, image: receipt.image, live: before, deploy_needed: deployed };
     if (deployed) {
       const configPath = path.join(prepared.directory, "deploy.json"), secretsFile = path.join(prepared.directory, "keep-secrets.json");
@@ -209,17 +227,18 @@ export function collectVariables(page) {
 const variablesOf = route => collectVariables(number => JSON.parse(gh([`${route}?per_page=30&page=${number}`])));
 
 export const liveIo = {
+  identity: () => { try { return repositoryIdentity(process.env); } catch { return refuse("Configure CANONICAL_GITHUB_REPOSITORY and CANONICAL_GITHUB_REPOSITORY_ID"); } },
   assertSource(sha) {
     let clean = false;
     try { clean = git(["status", "--porcelain"]) === "" && onMain(git(["rev-parse", "HEAD"])) && onMain(sha); } catch { /* Refuse below. */ }
     if (!clean) refuse("Run from a clean checkout of main that contains the commit");
   },
   github: async route => JSON.parse(gh([route])),
-  variables: async environment => variablesOf(environment ? `repos/${REPOSITORY}/environments/${environment}/variables` : `repos/${REPOSITORY}/actions/variables`),
-  async receipt(run, artifact) {
+  variables: async (repository, environment) => variablesOf(environment ? `repos/${repository}/environments/${environment}/variables` : `repos/${repository}/actions/variables`),
+  async receipt(repository, run, artifact) {
     const directory = mkdtempSync(path.join(tmpdir(), "njpbs-dev-publisher-receipt-"));
     try {
-      execFileSync("gh", ["run", "download", run, "--repo", REPOSITORY, "--name", artifact, "--dir", directory], { stdio: "ignore" });
+      execFileSync("gh", ["run", "download", run, "--repo", repository, "--name", artifact, "--dir", directory], { stdio: "ignore" });
       if (JSON.stringify(readdirSync(directory)) !== JSON.stringify(["receipt.json"])) refuse("Development image artifact contents differ");
       return JSON.parse(readFileSync(path.join(directory, "receipt.json"), "utf8"));
     } catch (error) {
