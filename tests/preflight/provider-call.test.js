@@ -111,6 +111,23 @@ describe("provider call rule", () => {
     expect(run("echo 'PERMISSION_DENIED' >&2; echo partial; exit 1")).toMatchObject({ status: 1, stdout: "" });
   });
 
+  it("names the call each minute while its command is silent", async () => {
+    vi.useFakeTimers();
+    const lines = [];
+    releaseWait.setJournal(line => lines.push(line));
+    try {
+      let answer;
+      const call = main(["silent read", "--", "gh"], () => new Promise(resolve => { answer = resolve; }));
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(lines).toEqual([expect.objectContaining({ event: "waiting", what: "silent read" })]);
+      answer({ status: 0, stdout: "answer", stderr: "" });
+      expect(await call).toBe("answer");
+    } finally {
+      vi.useRealTimers();
+      releaseWait.setJournal(line => console.error(JSON.stringify({ severity: "INFO", ...line })));
+    }
+  });
+
   it("does not read a rate limit as a permanent request fault", () => {
     expect(permanentFailure("gh: API rate limit exceeded (HTTP 403)")).toBeNull();
     expect(permanentFailure("gh: Resource not accessible by integration (HTTP 403)")).toBe("request");

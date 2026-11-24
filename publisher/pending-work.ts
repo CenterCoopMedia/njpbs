@@ -433,7 +433,7 @@ export async function readNoBuildPublicationWork(options: {
     journalSettlement = ["deployed", "failed", "superseded", "cancelled"].includes(batch?.status);
     const retained = await read(`cmsPublicationSerializerJournals/${options.serializerId}/releases/${journal.job.queueId}`);
     // A release retries with no attempt limit, so the shared bounded retryDue does not apply.
-    retainedDue = ["pending", "failed"].includes(retained?.status) && Number.isSafeInteger(retained.attempts) &&
+    retainedDue = retained !== null && ["pending", "failed"].includes(retained.status) && Number.isSafeInteger(retained.attempts) &&
       retained.attempts >= 0 && Number.isFinite(retained.nextAttemptAt) && retained.nextAttemptAt <= Date.now();
   }
   let work = { maintenance: false, reconcile: false };

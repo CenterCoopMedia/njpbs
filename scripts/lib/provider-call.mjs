@@ -7,7 +7,7 @@
 // Wrap only the idempotent transport. Checks of the answer stay outside, so a
 // refusal of ours is never repeated. A write whose repeat is not idempotent
 // passes `readBack`, which answers undefined when the write did not land.
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import releaseWait from "../../functions/lib/release-wait.js";
 
@@ -170,10 +170,22 @@ export function providerGcloud(args, childOptions, execute = execFileSync, optio
 // stdout is written only after success, so a command substitution gets one answer.
 // Exit 4 names an absent resource, which a caller can accept as an answer.
 export const ABSENT_EXIT = 4;
-export function main([label, separator, command, ...args], launch = spawnSync, options = {}) {
+// Asynchronous, so the wait's minute line prints while the command is silent.
+function runCommand(command, args) {
+  return new Promise(resolve => {
+    const child = spawn(command, args, { stdio: ["ignore", "pipe", "pipe"] });
+    let stdout = "", stderr = "";
+    child.stdout.setEncoding("utf8").on("data", text => { stdout += text; });
+    child.stderr.setEncoding("utf8").on("data", text => { stderr += text; });
+    child.once("error", error => resolve({ status: null, error, stdout, stderr }));
+    child.once("close", status => resolve({ status, stdout, stderr }));
+  });
+}
+
+export function main([label, separator, command, ...args], launch = runCommand, options = {}) {
   if (!label || separator !== "--" || !command) throw new Error("Usage: provider-call <label> -- <command> [arguments]");
-  return providerCall(label, () => {
-    const result = launch(command, args, { stdio: ["ignore", "pipe", "pipe"], encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+  return providerCall(label, async () => {
+    const result = await launch(command, args);
     process.stderr.write(result.stderr ?? "");
     if (result.error || result.status !== 0) {
       throw Object.assign(new Error(`${command} did not succeed`), { code: result.error?.code, stdout: result.stdout, stderr: result.stderr });
