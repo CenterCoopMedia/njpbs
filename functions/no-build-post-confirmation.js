@@ -22,9 +22,9 @@ const ZONE_ID = defineString("CMS_MEDIA_CLOUDFLARE_ZONE_ID", { default: "" });
 const DEV_ACCESS_ID = DEVELOPMENT ? defineSecret("CMS_DEV_ACCESS_CLIENT_ID") : null;
 const DEV_ACCESS_SECRET = DEVELOPMENT ? defineSecret("CMS_DEV_ACCESS_CLIENT_SECRET") : null;
 const confirmationSecrets = [PURGE_TOKEN, CMS_EDGE_ORIGIN_SECRET, ...(DEVELOPMENT ? [DEV_ACCESS_ID, DEV_ACCESS_SECRET] : [])];
-// Coverage, 32 Pages and 109 Posts measured 77 to 110 s on development, before
-// the final transaction repeats coverage. Work ends before this limit, with
-// time left to record the attempt.
+// One complete settings proof takes longer than a minute, and its final
+// transaction repeats coverage. Work ends before this limit, with time left to
+// record the attempt.
 const CONFIRMATION_TIMEOUT_SECONDS = 300;
 const CONFIRMATION_RESERVE_MS = 15_000;
 const confirmationDeadline = startedAt => startedAt + CONFIRMATION_TIMEOUT_SECONDS * 1_000 - CONFIRMATION_RESERVE_MS;
