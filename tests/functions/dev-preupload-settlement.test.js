@@ -164,6 +164,23 @@ it("readback cannot write a missing receipt", async () => {
   expect(await snapshots()).toEqual(before);
 });
 
+it.each([["dev_refresh_frozen_build_failed", "Dev refresh frozen build failed before upload"],
+  ["dev_refresh_content_check_failed", "Dev refresh content check failed before upload"]])(
+  "settles a refresh that failed at %s with its own queue error, and the pause census accepts it", async (code, error) => {
+  const value = structuredClone(request); value.failure.code = code;
+  const receipt = await settle(value);
+  expect(receipt).toMatchObject({ reason: "dev_publish_failed_before_upload", outcome: "failed_not_published", request: value });
+  expect(await read(paths.queue)).toMatchObject({ status: "failed", error, completedAt: receipt.retiredAt });
+  expect(await settle(value, { readOnly: true })).toEqual(receipt);
+  // The receipt binds the failure code: the other code cannot read it back.
+  const other = structuredClone(value); other.failure.code = "retained_dev_renderer_source_differs";
+  await expect(settle(other, { readOnly: true })).rejects.toThrow();
+  const attempt = { oldRuntime: { commitSha: identity.commitSha, serializerId: "original-primary",
+    cloud: { serializerId: "cloudflare-dev-publisher" } } };
+  expect(await db.runTransaction(transaction => pause.recoveryInternals.drain(db, transaction, attempt, true), { readOnly: true }))
+    .toMatchObject({ queues: 1, batches: 1, retiredBatches: 1 });
+});
+
 it("the existing dev pause/history census recognizes the native retirement and rejects a forged receipt", async () => {
   await settle();
   const attempt = { oldRuntime: { commitSha: identity.commitSha, serializerId: "original-primary",

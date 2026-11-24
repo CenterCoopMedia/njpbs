@@ -132,7 +132,7 @@ async function settleDevPreuploadFailure(db, request, { readOnly = false } = {})
       const { preUploadFailureReceiptDigest, ...originalQueue } = queue;
       if (!isDeepStrictEqual(receipt.request, request) || !receiptRow.exists ||
           !isDeepStrictEqual(receiptRow.data(), { ...receipt, retiredAt: batch.retiredAt }) ||
-          queue.status !== "failed" || queue.error !== preupload.FAILURE ||
+          queue.status !== "failed" || queue.error !== preupload.failureMessage(failure.code) ||
           !isDeepStrictEqual(queue.completedAt, batch.retiredAt) || preUploadFailureReceiptDigest !== publicReleaseDigest(receipt) ||
           receipt.originalQueueDigest !== publicReleaseDigest({ ...originalQueue, status: "pending", error: null, completedAt: null }) ||
           receipt.originalInputDigest !== publicReleaseDigest(input)) preupload.refuse();
@@ -158,7 +158,7 @@ async function settleDevPreuploadFailure(db, request, { readOnly = false } = {})
     const retiredAt = FieldValue.serverTimestamp();
     transaction.create(receiptRef, { ...receipt, retiredAt });
     transaction.update(batchRef, { status: "retired", retiredAt, retirementReceipt: receipt });
-    transaction.update(queueRef, { status: "failed", error: preupload.FAILURE, completedAt: retiredAt,
+    transaction.update(queueRef, { status: "failed", error: preupload.failureMessage(failure.code), completedAt: retiredAt,
       preUploadFailureReceiptDigest: publicReleaseDigest(receipt) });
   }, readOnly ? { readOnly: true } : {});
   return (await receiptRef.get()).data();

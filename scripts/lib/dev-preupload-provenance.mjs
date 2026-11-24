@@ -21,15 +21,32 @@ const sources = [{
   "site/scripts/cms-dev-publication.mjs": "848555f2baf30a031ea4130c81fc03e7e92e5f5b",
   ".github/workflows/cms-dev-publish.yml": "7ced4c2d20866733f82732cbd648cdfb28c8c325",
 }];
+// Refresh runs that failed in the build job before any artifact existed. In these reviewed
+// workflow versions every finalize download, verify and upload step requires needs.build success.
+const buildSources = [{
+  "site/scripts/cms-dev-publication.mjs": "9f6d8c2a0f8e53f27647109cd6d3e074ff61074b",
+  ".github/workflows/cms-dev-publish.yml": "35e39d959d997e3f9f9a0005a47fccae191fc5d3",
+}, {
+  "site/scripts/cms-dev-publication.mjs": "d85f46bd056d054d2128f55b5fa6d34b3074fcf0",
+  ".github/workflows/cms-dev-publish.yml": "35e39d959d997e3f9f9a0005a47fccae191fc5d3",
+}, {
+  "site/scripts/cms-dev-publication.mjs": "d85f46bd056d054d2128f55b5fa6d34b3074fcf0",
+  ".github/workflows/cms-dev-publish.yml": "3d1a870c7c135bd4189bfcff9fa2ac871a3c9825",
+}];
+const BUILD_FAILURES = {
+  dev_refresh_frozen_build_failed: { number: 20, name: "Build from frozen input without network or credentials" },
+  dev_refresh_content_check_failed: { number: 21, name: "Check built content" },
+};
+const isBuildFailure = code => Object.hasOwn(BUILD_FAILURES, code);
 function readGitSourceBlob(commitSha, filename) {
   return execFileSync("git", ["--no-optional-locks", "rev-parse", `${commitSha}:${filename}`], {
       cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
       env: { PATH: process.env.PATH, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" },
   }).trim();
 }
-export function assertDevPreuploadFailureSource(commitSha, readSourceBlob = readGitSourceBlob) {
+export function assertDevPreuploadFailureSource(commitSha, readSourceBlob = readGitSourceBlob, code = "retained_dev_renderer_source_differs") {
   const actual = Object.fromEntries(Object.keys(sources[0]).map(filename => [filename, readSourceBlob(commitSha, filename)]));
-  if (!sources.some(source => Object.entries(source).every(([filename, blob]) => actual[filename] === blob))) contract.refuse();
+  if (!(isBuildFailure(code) ? buildSources : sources).some(source => Object.entries(source).every(([filename, blob]) => actual[filename] === blob))) contract.refuse();
 }
 
 // Only a first execution on attempt 2 is admitted. Even a failed prepare/build
@@ -79,8 +96,9 @@ export function devSettlementGithub(token, request = fetch, env = process.env) {
 export async function verifyDevPreuploadFailure(request, github, readSourceBlob) {
   const { repository: repo } = repositoryIdentity();
   contract.parseDevPreuploadSettlement(request);
-  assertDevPreuploadFailureSource(request.identity.commitSha, readSourceBlob);
   const { failure, identity } = request;
+  const build = isBuildFailure(failure.code) ? BUILD_FAILURES[failure.code] : null;
+  assertDevPreuploadFailureSource(identity.commitSha, readSourceBlob, failure.code);
   const trusted = dispatch.trustedPublishActors();
   if (!trusted.length) contract.refuse();
   const [run, jobs, hold, override, ...active] = await Promise.all([
@@ -92,7 +110,7 @@ export async function verifyDevPreuploadFailure(request, github, readSourceBlob)
   ]);
   if (String(run.id) !== failure.runId || run.run_attempt !== failure.runAttempt || run.status !== "completed" || run.conclusion !== "failure" ||
       run.path !== ".github/workflows/cms-dev-publish.yml" || run.head_branch !== "main" || run.head_sha !== identity.commitSha ||
-      run.event !== "push" || !trusted.includes(run.actor?.login) || !trusted.includes(run.triggering_actor?.login) ||
+      run.event !== (build ? "workflow_dispatch" : "push") || !trusted.includes(run.actor?.login) || !trusted.includes(run.triggering_actor?.login) ||
       run.repository?.full_name !== repo || run.head_repository?.full_name !== repo ||
       hold?.value !== "false" || override !== null || active.some(result => result.total_count !== 0) ||
       !Array.isArray(jobs.jobs) || jobs.total_count !== jobs.jobs.length) contract.refuse();
@@ -100,6 +118,14 @@ export async function verifyDevPreuploadFailure(request, github, readSourceBlob)
     assertSkippedFirstAttempt(await github(`actions/runs/${failure.runId}/attempts/1/jobs?per_page=100`), request);
   }
   const job = jobs.jobs.find(value => String(value.id) === failure.jobId);
+  if (build) {
+    assertBuildFailure(jobs, job, request, build);
+    const log = await github(`actions/jobs/${failure.jobId}/logs`, { log: true });
+    if (createHash("sha256").update(log).digest("hex") !== failure.logDigest ||
+        log.toString("utf8").split(/\r?\n/).filter(line =>
+          /^\d{4}-\d\d-\d\dT[0-9:.]+Z ##\[error\]Process completed with exit code [1-9][0-9]*\.$/.test(line)).length !== 1) contract.refuse();
+    return assertUnchangedAttempt(github, failure);
+  }
   if (!job || String(job.run_id) !== failure.runId || job.run_attempt !== failure.runAttempt || job.head_sha !== identity.commitSha ||
       job.name !== "finalize" || job.status !== "completed" || job.conclusion !== "failure" || job.completed_at !== failure.completedAt ||
       !Array.isArray(job.steps) || job.steps.filter(step => step.conclusion === "failure").length !== 1 ||
@@ -109,7 +135,29 @@ export async function verifyDevPreuploadFailure(request, github, readSourceBlob)
   if (createHash("sha256").update(log).digest("hex") !== failure.logDigest ||
       log.toString("utf8").split(/\r?\n/).filter(line =>
         /^\d{4}-\d\d-\d\dT[0-9:.]+Z Retained dev renderer source differs$/.test(line)).length !== 1) contract.refuse();
-  // Recheck the attempt after reading logs: a rerun invalidates this proof.
+  return assertUnchangedAttempt(github, failure);
+}
+
+// Recheck the attempt after reading logs: a rerun invalidates this proof.
+async function assertUnchangedAttempt(github, failure) {
   const latest = await github(`actions/runs/${failure.runId}`);
   if (latest.run_attempt !== failure.runAttempt || latest.status !== "completed" || latest.conclusion !== "failure") contract.refuse();
+}
+
+// The build job failed at the named step and retained no artifact, and finalize
+// skipped every artifact read and upload in the same attempt.
+function assertBuildFailure(jobs, job, { failure, identity }, build) {
+  const finalize = jobs.jobs.filter(value => value.name === "finalize");
+  const step = (value, number, name, conclusion) =>
+    value.steps.some(item => item.number === number && item.name === name && item.conclusion === conclusion);
+  const skipped = (value, name) => value.steps.filter(item => item.name === name).length === 1 &&
+    value.steps.some(item => item.name === name && item.conclusion === "skipped");
+  if (!job || String(job.run_id) !== failure.runId || job.run_attempt !== failure.runAttempt || job.head_sha !== identity.commitSha ||
+      job.name !== "build" || job.status !== "completed" || job.conclusion !== "failure" || job.completed_at !== failure.completedAt ||
+      !Array.isArray(job.steps) || job.steps.filter(item => item.conclusion === "failure").length !== 1 ||
+      !step(job, build.number, build.name, "failure") || !skipped(job, "Retain artifact and private receipts") ||
+      finalize.length !== 1 || String(finalize[0].run_id) !== failure.runId || finalize[0].run_attempt !== failure.runAttempt ||
+      finalize[0].head_sha !== identity.commitSha || finalize[0].status !== "completed" || !Array.isArray(finalize[0].steps) ||
+      !skipped(finalize[0], "Verify retained Post renderer files") ||
+      !skipped(finalize[0], "Upload only to dev, verify receipts, and settle dev queue")) contract.refuse();
 }
