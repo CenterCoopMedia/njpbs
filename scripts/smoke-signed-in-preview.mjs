@@ -116,7 +116,7 @@ function urlHost(value) {
 }
 
 function failureName(text) {
-  return typeof text === "string" && /^net::ERR_[A-Z_]{1,60}$/.test(text) ? text : "failed";
+  return typeof text === "string" && /^net::ERR_[A-Z0-9_]{1,60}$/.test(text) ? text : "failed";
 }
 
 // Admin writes its preview state on the progress page it opens before navigation.

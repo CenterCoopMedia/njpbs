@@ -146,9 +146,9 @@ test("names the missing wait and what the preview tab showed", async () => {
     session: { status: 204, host: "preview.njpbs.org" }, document: null, popup: { host: "about:blank", progress: "error" },
   });
   assert.deepEqual(await checkSignedInPreview(fixtureBrowser(settings, {
-    sessionFailure: "net::ERR_FAILED", noDocument: true, progress: "session-slow" }), settings), {
+    sessionFailure: "net::ERR_HTTP2_PROTOCOL_ERROR", noDocument: true, progress: "session-slow" }), settings), {
     ok: false, code: "private_preview_unavailable", missing: ["document"],
-    session: { failed: "net::ERR_FAILED" }, document: null, popup: { host: "about:blank", progress: "session-slow" },
+    session: { failed: "net::ERR_HTTP2_PROTOCOL_ERROR" }, document: null, popup: { host: "about:blank", progress: "session-slow" },
   });
   // Unknown progress values and raw failure text never reach the receipt.
   const receipt = await checkSignedInPreview(fixtureBrowser(settings, {
