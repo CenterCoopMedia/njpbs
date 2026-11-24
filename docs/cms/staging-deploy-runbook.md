@@ -327,6 +327,20 @@ created or verified. Then verify:
 sh -c "$SEED_WRITER_COMMAND" | $SEED verify $PAIR --manifest "$MANIFEST" | tee "$STATE/verify.json"
 ```
 
+Then publish the seeded rows through Boardwalk. Seeded rows bypass their
+publication owners, so without this step dev Posts have no instant owner, the
+public Worker serves them without a receipt, and the settings receipts never
+complete. From a checkout rendered by `scripts/render-development-config.mjs`,
+with the dev Boardwalk sign-in on fd 3 and the Access headers on fd 4:
+
+```bash
+node scripts/publish-dev-seed.mjs "$MANIFEST" 3< <(sh -c "$DEV_SIGN_IN_COMMAND") 4< <(sh -c "$DEV_ACCESS_COMMAND") | tee -a "$STATE/publish.json"
+```
+
+It publishes each seeded Post, then the settings, and waits for the
+`public-site-chrome` receipt. Rerun it to resume. Run `verify` before it: a
+published row is a dev edit for the next refresh, which lists it as `restored`.
+
 If the snapshot references a Sponsor or Newsletter card, export also needs
 `--context` with the retained public context of that publication and refuses
 without it. Production's Nov. 23, 2026 snapshot references none.
