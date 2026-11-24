@@ -103,6 +103,8 @@ env:
   CMS_TARGET_PUBLIC_ORIGIN: ${{ inputs.target == 'development' && 'https://dev.njpbs.org' || 'https://njpbs.org' }}
   CMS_TARGET_MEDIA_ORIGIN: ${{ inputs.target == 'development' && 'https://dev-media.njpbs.org' || 'https://media.njpbs.org' }}
   CMS_TARGET_MEDIA_BUCKET: ${{ inputs.target == 'development' && 'njpbs-dev-media' || vars.CMS_MEDIA_R2_BUCKET }}
+  # Repository vars hold the production master bucket; development names its own (jawn-ops#1273).
+  CMS_TARGET_STUDIO_BUCKET: ${{ inputs.target == 'development' && 'njpbs-dev-cms-media-masters' || vars.CMS_MEDIA_MASTER_R2_BUCKET }}
   CMS_TARGET_ADMIN_PAGES: ${{ inputs.target == 'development' && 'njpbs-dev-admin' || 'njpbs-admin' }}
   CMS_TARGET_RENDER_SCOPE: ${{ inputs.target == 'development' && '--development' || '--production' }}
   CMS_TARGET_FIREBASE_CONFIG: ${{ inputs.target == 'development' && 'firebase.dev.json' || 'firebase.json' }}
@@ -428,13 +430,13 @@ jobs:
           })"
           printf 'ADMIN_STATUS_MANIFEST_BASE64=%s\n' "$manifest" >> "$GITHUB_ENV"
       - name: Report unavailable Studio connector storage
-        if: inputs.target == 'development' || vars.CMS_MEDIA_MASTER_R2_BUCKET == ''
+        if: env.CMS_TARGET_STUDIO_BUCKET == ''
         run: echo "Studio connector download is unavailable because private master-media storage is not configured."
       - name: Build the exact-source Studio connector package
-        if: inputs.target != 'development' && vars.CMS_MEDIA_MASTER_R2_BUCKET != ''
+        if: env.CMS_TARGET_STUDIO_BUCKET != ''
         env:
           # Supplier layer for the source readers in PR #20; see docs/config/studio-build-suppliers.md.
-          CMS_STUDIO_API_ORIGIN: ${{ vars.CMS_STUDIO_API_ORIGIN }}
+          CMS_STUDIO_API_ORIGIN: ${{ inputs.target == 'development' && env.CMS_TARGET_API_ORIGIN || vars.CMS_STUDIO_API_ORIGIN }}
           VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY || inputs.target != 'development' && secrets.VITE_FIREBASE_API_KEY || '' }}
           DEPLOY_SHA: ${{ steps.reviewed_ref.outputs.deploy_sha }}
         run: |
@@ -442,7 +444,7 @@ jobs:
           npm ci --ignore-scripts --prefix agents/vmix
           node agents/vmix/build-windows.mjs --source-sha "$DEPLOY_SHA" --output "$RUNNER_TEMP/studio-connector"
       - name: Retain the Studio connector package for deployment
-        if: inputs.target != 'development' && vars.CMS_MEDIA_MASTER_R2_BUCKET != ''
+        if: env.CMS_TARGET_STUDIO_BUCKET != ''
         uses: actions/upload-artifact@v7
         with:
           name: cms-studio-connector
@@ -925,17 +927,17 @@ jobs:
         if: always()
         run: rm -f "$RUNNER_TEMP/firebase-auth-config.json"
       - name: Download the exact-source Studio connector package
-        if: inputs.target != 'development' && vars.CMS_MEDIA_MASTER_R2_BUCKET != ''
+        if: env.CMS_TARGET_STUDIO_BUCKET != ''
         uses: actions/download-artifact@v8
         with:
           name: cms-studio-connector
           path: ${{ runner.temp }}/studio-connector/
       - name: Store the Studio connector in private media storage
-        if: inputs.target != 'development' && vars.CMS_MEDIA_MASTER_R2_BUCKET != ''
+        if: env.CMS_TARGET_STUDIO_BUCKET != ''
         env:
           DEPLOY_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CMS_MEDIA_MASTER_R2_BUCKET: ${{ vars.CMS_MEDIA_MASTER_R2_BUCKET }}
+          CMS_MEDIA_MASTER_R2_BUCKET: ${{ env.CMS_TARGET_STUDIO_BUCKET }}
         run: |
           set -euo pipefail
           id=$(npx --no-install firebase --non-interactive functions:secrets:access CMS_MEDIA_R2_ACCESS_KEY_ID --project "$CMS_TARGET_FIREBASE_PROJECT")
