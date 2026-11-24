@@ -44,7 +44,8 @@ const DEV_ORIGIN = 'https://dev-media.example.org';
 // The CMS deploy's page seed backfill writes these records in every project and
 // refuses any other shape, so the refresh leaves them to it. They are repository
 // assets: verify requires each referenced one in dev but, by design, does not
-// compare it with production's editable fields.
+// compare it with production's editable fields. Its alt text is an Admin
+// suggestion; pages render their blocks' own alt text.
 const PAGE_SEED_IDS = new Set(PAGE_SEED_MEDIA.map(seed => seed.id));
 const MAX_OBJECT_BYTES = 25 * 1024 * 1024;
 const MAX_VIDEO_BYTES = 1024 * 1024 * 1024;

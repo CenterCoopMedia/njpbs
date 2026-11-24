@@ -306,6 +306,11 @@ describe('isolated published-content seed', () => {
   it('exports seven launch assets and leaves their dev records to the CMS deploy page seed backfill', async () => {
     const ids = ['launch-contact', 'launch-give', 'launch-passport', 'launch-politics', 'launch-support', 'launch-under-the-dome', 'launch-watch'];
     await backfillPageSeedMedia({ firestore: source, nowIso: when });
+    // Production staff edit page seed alt text; dev keeps the backfill's own record.
+    for (const id of ids) {
+      await source.doc(`media_assets/${id}`).update({ altText: `Staff alt ${id}` });
+      await source.doc(`media_assets_public/${id}`).update({ altText: `Staff alt ${id}` });
+    }
     await source.doc('cmsPages/contact').update({ 'published.blocks': [page().published.blocks[0], ...ids.map((assetId, index) => ({
       id: `launch-image-${index}`, type: 'image', order: index + 1, visible: true, data: { assetId, alt: assetId, decorative: false },
     }))] });
@@ -357,10 +362,19 @@ describe('isolated published-content seed', () => {
       assets.set(id, imported);
       if (id !== 'image-1') expect(imported.url).toBe(`https://njpbs.org/brand/spotlight/${id.slice(7)}.jpg`);
     }
+    const now = new Date();
     const rendered = publicProjection.projectPublicPageDocument({ pageId: 'contact',
-      document: (await dev.doc('cmsPages/contact').get()).data(), assets, now: new Date() });
+      document: (await dev.doc('cmsPages/contact').get()).data(), assets, now });
     expect(rendered.state).toBe('live');
     for (const id of ids) expect(rendered.page.assets[id].url).toBe(assets.get(id).url);
+    // Asset alt text is an Admin suggestion; the dev page renders as production's does.
+    const sourceAssets = new Map();
+    for (const id of ['image-1', ...ids]) sourceAssets.set(id, (await source.doc(`media_assets_public/${id}`).get()).data());
+    expect(sourceAssets.get(ids[0]).altText).not.toBe(assets.get(ids[0]).altText);
+    const sourceRendered = publicProjection.projectPublicPageDocument({ pageId: 'contact',
+      document: (await source.doc('cmsPages/contact').get()).data(), assets: sourceAssets, now });
+    expect(rendered.page.blocks).toEqual(sourceRendered.page.blocks);
+    expect(rendered.page.assets).toEqual(sourceRendered.page.assets);
   });
   it.each([
     'http://njpbs.org/brand/spotlight/contact.jpg',
