@@ -74,6 +74,7 @@ function everyMinute(what, start, last) {
 // returns its result; a thrown network error or an error marked { retry: true }
 // is retried. Any other result or error is the answer. A stop signal is the
 // caller's own cancellation.
+/** @param {string} what @param {() => any} request @param {{ signal?: AbortSignal }} [options] */
 async function callOutside(what, request, { signal } = {}) {
   const start = Date.now();
   let attempts = 0, lastProblem = null, wait = FIRST_PAUSE_MS;
@@ -103,6 +104,7 @@ async function callOutside(what, request, { signal } = {}) {
 // error } when the thing itself reports failure, or { pending: state } while it
 // works. Only done or failed end the wait. A changed pending state reads again
 // soon; an unchanged one reads less often, never stopping.
+/** @param {string} what @param {() => any} read @param {{ signal?: AbortSignal }} [options] */
 async function waitFor(what, read, { signal } = {}) {
   const start = Date.now();
   let reads = 0, last = null, wait = FIRST_PAUSE_MS;
@@ -123,6 +125,7 @@ async function waitFor(what, read, { signal } = {}) {
   } finally { stop(); }
 }
 
+/** @param {keyof typeof PLATFORM_LIMITS} name @returns {number} */
 function platformLimit(name) {
   if (!Object.hasOwn(PLATFORM_LIMITS, name)) throw new Error(`Unknown platform limit ${name}`);
   return PLATFORM_LIMITS[name];

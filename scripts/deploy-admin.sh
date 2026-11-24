@@ -388,7 +388,9 @@ gate_staff_admission_backend() {
 
   for endpoint in registerStaffProfile submitStaffAccessRequest cmsSetNavigationPreferences; do
     status="$(
-      node "$repo_root/scripts/release-wait-status.mjs" answer "$endpoint" \
+      curl --silent --show-error \
+        --output /dev/null \
+        --write-out '%{http_code}' \
         --request POST \
         --header 'Content-Type: application/json' \
         --data '{}' \
@@ -413,7 +415,9 @@ gate_staff_admission_backend() {
   # so a present edge route cannot hide a missing navigation Function.
   navigation_origin="https://us-central1-${FIREBASE_PROJECT}.cloudfunctions.net/cmsSetNavigationPreferences"
   status="$(
-    node "$repo_root/scripts/release-wait-status.mjs" answer "cmsSetNavigationPreferences origin" \
+    curl --silent --show-error \
+      --output /dev/null \
+      --write-out '%{http_code}' \
       --request POST \
       --header 'Content-Type: application/json' \
       --data '{}' \

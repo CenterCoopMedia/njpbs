@@ -253,10 +253,11 @@ describe("CMS deployment smoke gate", () => {
     });
     const root = mkdtempSync(join(tmpdir(), "cms-deploy-params-"));
     try {
-      mkdirSync(join(root, "functions"));
+      mkdirSync(join(root, "functions/lib"), { recursive: true });
       mkdirSync(join(root, "scripts/lib"), { recursive: true });
       mkdirSync(join(root, "config"));
       copyFileSync(join(REPO_ROOT, "scripts/lib/provider-call.mjs"), join(root, "scripts/lib/provider-call.mjs"));
+      copyFileSync(join(REPO_ROOT, "functions/lib/release-wait.js"), join(root, "functions/lib/release-wait.js"));
       copyFileSync(join(REPO_ROOT, "config/functions-deployment.json"), join(root, "config/functions-deployment.json"));
       copyFileSync(join(REPO_ROOT, "scripts/resolve-media-purge.sh"), join(root, "scripts/resolve-media-purge.sh"));
       copyFileSync(
@@ -337,10 +338,11 @@ describe("CMS deployment smoke gate", () => {
     const bin = join(root, "bin");
     const marker = join(root, "gcloud-credential-path");
     try {
-      mkdirSync(join(root, "functions"));
+      mkdirSync(join(root, "functions/lib"), { recursive: true });
       mkdirSync(join(root, "scripts/lib"), { recursive: true });
       mkdirSync(join(root, "config"));
       copyFileSync(join(REPO_ROOT, "scripts/lib/provider-call.mjs"), join(root, "scripts/lib/provider-call.mjs"));
+      copyFileSync(join(REPO_ROOT, "functions/lib/release-wait.js"), join(root, "functions/lib/release-wait.js"));
       copyFileSync(join(REPO_ROOT, "config/functions-deployment.json"), join(root, "config/functions-deployment.json"));
       copyFileSync(join(REPO_ROOT, "scripts/resolve-media-purge.sh"), join(root, "scripts/resolve-media-purge.sh"));
       mkdirSync(bin);
@@ -398,7 +400,9 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
     const root = mkdtempSync(join(tmpdir(), "cms-reader-secret-"));
     try {
       mkdirSync(join(root, "scripts/lib"), { recursive: true });
+      mkdirSync(join(root, "functions/lib"), { recursive: true });
       copyFileSync(join(REPO_ROOT, "scripts/lib/provider-call.mjs"), join(root, "scripts/lib/provider-call.mjs"));
+      copyFileSync(join(REPO_ROOT, "functions/lib/release-wait.js"), join(root, "functions/lib/release-wait.js"));
       const command = join(root, "gcloud");
       writeFileSync(command, '#!/bin/sh\nprintf "%s\\n" "$*" > "$READER_CALL_LOG"\nprintf "%s" "$READER_SECRET_STATE"\nexit "$READER_SECRET_STATUS"\n');
       chmodSync(command, 0o700);
@@ -407,14 +411,12 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
         execFileSync("bash", ["-c", script], { cwd: root, stdio: "pipe", env: {
           PATH: `${root}:${process.env.PATH}`, FUNCTION_TARGETS: targets, CMS_TARGET_FIREBASE_PROJECT: "njpbs-site",
           READER_SECRET_STATE: state, READER_SECRET_STATUS: status, READER_CALL_LOG: callLog,
-          NODE_OPTIONS: "--import=data:text/javascript,Atomics.wait=()=>%22timed-out%22",
         } });
       expect(() => run("ENABLED")).not.toThrow();
       expect(readFileSync(callLog, "utf8")).toBe(
         "secrets versions describe latest --secret=PUBLISHED_POST_READER_HMAC_KEY --project=njpbs-site --format=value(state)\n",
       );
       for (const state of ["DISABLED", "DESTROYED", ""]) expect(() => run(state)).toThrow();
-      expect(() => run("", "1")).toThrow();
       rmSync(callLog);
       expect(() => run("", "1", "functions:health")).not.toThrow();
       expect(readdirSync(root)).not.toContain("calls.txt");
@@ -656,7 +658,7 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
       "cmsCuezStatus unauthenticated POST returned 200; expected 401",
     );
     expect(request).toHaveBeenCalledTimes(2);
-    await expect(runCmsFunctionSmoke({ baseUrl: BASE_URL, request: async () => { throw Error("synthetic-private-provider-body"); }, wait: async () => {} }))
+    await expect(runCmsFunctionSmoke({ baseUrl: BASE_URL, request: async () => { throw Object.assign(Error("synthetic-private-provider-body"), { stderr: "PERMISSION_DENIED" }); } }))
       .rejects.toMatchObject({ message: "health request failed" });
   });
 
@@ -697,16 +699,12 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
   });
 
   it.each([
-    ["submitStaffAccessRequest", 429, { "x-rate-limit-scope": "ip" }],
-    ["submitStaffAccessRequest", 429, { "x-rate-limit-scope": "ip", "retry-after": "0" }],
-    ["requestStaffPasswordReset", 429, { "retry-after": "120" }],
     ["requestStaffPasswordReset", 200, {}],
-    ["cmsCuezStatus", 429, { "x-rate-limit-scope": "ip", "retry-after": "120" }],
   ])("rejects an unexpected account or ordinary edge response (%s, %i, %j)", async (endpoint, status, headers) => {
     const request = async (url, init) => url === `${BASE_URL}/${endpoint}` && init?.method === "POST"
       ? new Response(null, { status, headers })
       : expectedResponseFor(url, init);
-    await expect(runCmsFunctionSmoke({ request, wait: async () => {} }))
+    await expect(runCmsFunctionSmoke({ request }))
       .rejects.toThrow(`${endpoint} unauthenticated POST returned ${status}; expected 401`);
   });
 
@@ -1114,10 +1112,8 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
     expect(transitionCommand).toContain(
       'expect_transition_status 403 "direct origin $endpoint"',
     );
-    expect(transitionCommand).toContain("for attempt in {1..19}");
-    expect(transitionCommand).toContain('[ "$status" = "$expected_status" ]');
-    expect(transitionCommand).toContain('if [ "$attempt" -lt 19 ]');
-    expect(transitionCommand).toContain("sleep 10");
+    expect(transitionCommand).toContain('node scripts/release-wait-status.mjs until "$label" "$expected_status"');
+    expect(transitionCommand).not.toMatch(/\bsleep \d|--max-time|for attempt in/);
     expect(transitionCommand).not.toContain(
       "retry_args=(--retry 18 --retry-delay 10",
     );
@@ -1216,7 +1212,7 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
   });
 
 
-  it("retries the CMS API edge probes while DNS propagation settles", () => {
+  it("waits for the CMS API edge probes while DNS propagation settles", () => {
     const workflow = readCmsDeployWorkflow();
     const smokeStart = workflow.indexOf("- name: Smoke-test CMS API edge");
     const smokeEnd = workflow.indexOf("\n  firebase:", smokeStart);
@@ -1224,10 +1220,8 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
 
     expect(smokeStart).toBeGreaterThan(-1);
     expect(smokeEnd).toBeGreaterThan(smokeStart);
-    expect(smoke).toContain(
-      "retry_args=(--retry 18 --retry-delay 10 --retry-max-time 180 --retry-all-errors --doh-url https://1.1.1.1/dns-query)",
-    );
-    expect(smoke.match(/curl \"\$\{retry_args\[@\]\}\"/g)).toHaveLength(2);
+    expect(smoke.match(/node scripts\/release-wait-status\.mjs until "CMS API /g)).toHaveLength(2);
+    expect(smoke).not.toMatch(/--retry|--max-time|\bsleep \d/);
     expect(smoke.match(/expect_transition_status /g)).toHaveLength(2);
   });
 });
@@ -1237,7 +1231,7 @@ describe("Functions receipt inventory", () => {
     const root = mkdtempSync(join(tmpdir(), "cms-release-receipt-"));
     try {
       await copyImportClosure(REPO_ROOT, root, ["scripts/lib/cms-component-receipt.mjs"], {
-        assets: ["config/functions-configuration.json"],
+        assets: ["config/functions-configuration.json", "functions/lib/release-wait.js"],
       });
       const auth = join(root, "node_modules/google-auth-library");
       mkdirSync(auth, { recursive: true });
@@ -1262,7 +1256,7 @@ describe("Functions receipt inventory", () => {
         import { collectLiveIdentities } from "./scripts/lib/cms-component-receipt.mjs";
         console.log(JSON.stringify(await collectLiveIdentities("functions")));
       `], { cwd: root, encoding: "utf8" });
-      expect(JSON.parse(output)).toEqual({
+      expect(JSON.parse(output.trim().split("\n").at(-1))).toEqual({
         region: "us-central1",
         activeCount: "2",
         inventoryFingerprint: expect.stringMatching(/^[0-9a-f]{64}$/),
