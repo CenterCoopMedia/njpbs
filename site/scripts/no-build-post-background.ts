@@ -393,7 +393,7 @@ export function noBuildPostMaintenance({ firestore, firebaseApp, commitSha, stat
     const selected = (await transaction.get(firestore.doc(CURRENT_PATH))).data();
     return !selected || !ownsPublication(selected, runtime) || selected.preparationOperationId !== queueId || selected.contextDigest !== contextDigest;
   }
-  // A preparation that failed first and whose context or release moved after it.
+  // A preparation that failed first and whose context moved after it.
   async function supersedeStalePreparations() {
     const outputs = await firestore.getAll(...families.map(output => firestore.doc(`cmsBackgroundOutputs/${output}`)));
     const queueIds = outputs.map(row => row.data()).filter(output => output && output.contextOnly !== true)
@@ -404,8 +404,8 @@ export function noBuildPostMaintenance({ firestore, firebaseApp, commitSha, stat
       if (pointer?.state !== "idle" || pointer.activeCommitSha !== commitSha) return;
       const contextDigest = await readPublicContextInTransaction(transaction, firestore);
       const write = await prepareSupersededPreparationsInTransaction({ firestore, transaction, queueIds,
-        keep: (row: { id: string; data(): unknown }) => row.id === contextDigest &&
-          (ownsPublication(row.data(), runtime) || !samePublicationOwner(row.data(), runtime)) });
+        // Any release can still select a preparation at the current context.
+        keep: (row: { id: string }) => row.id === contextDigest });
       write();
     });
   }
