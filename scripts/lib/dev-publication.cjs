@@ -368,8 +368,19 @@ function neverLeased(current, identity) {
     current.pointer?.newestEligibleBuildBatchId !== identity.buildBatchId;
 }
 
+// The settle transaction reads the queue, batch, candidate and pointer again and
+// refuses unless the row is still never leased, so a rerun or reconciliation
+// that records a candidate or takes a lease after the first read wins.
 async function settleNeverLeased(db, identity) {
-  await settleBuildQueue(db, { queueId: identity.queueId, status: "failed",
+  const preflight = async ({ transaction, queue }) => {
+    const [batch, candidate, pointer] = await transaction.getAll(publicBuildBatchRef(db, identity.buildBatchId),
+      publicWorkerCandidateRef(db, identity.buildBatchId), publicDeploymentRef(db));
+    if (!neverLeased({ queue, batch: batch.data(), candidate: candidate.exists,
+      pointer: pointer.exists ? pointer.data() : null }, identity)) {
+      throw new Error("The development refresh row is not pending with a never-leased reserved batch");
+    }
+  };
+  await settleBuildQueue(db, { queueId: identity.queueId, status: "failed", preflight,
     queueUpdate: { status: "failed", completedAt: FieldValue.serverTimestamp(), error: DEV_BUILD_FAILED_ERROR } });
   return "failed";
 }

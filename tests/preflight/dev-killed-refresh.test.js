@@ -42,8 +42,16 @@ it.each(["kind", "run id", "commit", "extra field"])("refuses a packet with a wr
   expect(() => parseKilledRefreshPacket(value)).toThrow();
 });
 
-it.each(["skipped", "failure", "cancelled"])("accepts a completed run whose upload step concluded %s", async upload => {
-  await expect(verifyKilledDevRefresh("1001", fixture(upload).github)).resolves.toBeUndefined();
+it("accepts a completed run whose upload step was skipped or never listed", async () => {
+  await expect(verifyKilledDevRefresh("1001", fixture("skipped").github)).resolves.toBeUndefined();
+  const { state, github } = fixture();
+  state.jobs.jobs[1].steps = [];
+  await expect(verifyKilledDevRefresh("1001", github)).resolves.toBeUndefined();
+});
+
+// A failed or cancelled upload may have reached the provider; it keeps retained reconciliation.
+it.each(["failure", "cancelled", "success", null])("refuses an upload step that concluded %s", async upload => {
+  await expect(verifyKilledDevRefresh("1001", fixture(upload).github)).rejects.toThrow("refused");
 });
 
 it.each(["upload succeeded", "running", "other workflow", "other repo", "truncated jobs", "job running", "rerun started",

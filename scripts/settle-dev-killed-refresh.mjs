@@ -33,9 +33,11 @@ export function parseKilledRefreshPacket(packet) {
   return { packet, sdk, identity: { queueId, buildBatchId: `cms-${queueId}`, commitSha } };
 }
 
-// Actions API proof: the run is a completed development refresh run, and no
-// job step named UPLOAD succeeded in any attempt. The Firestore owner then
-// requires the batch to be reserved and never leased.
+// Actions API proof: the run is a completed development refresh run, and the
+// upload step never started in any attempt (absent or skipped). A failed or
+// cancelled upload may have reached the provider; that run keeps its row for
+// retained reconciliation. The Firestore owner then requires the batch to be
+// reserved and never leased.
 export async function verifyKilledDevRefresh(runId, github) {
   const { repository: repo } = repositoryIdentity();
   const run = await github(`actions/runs/${runId}`);
@@ -47,8 +49,7 @@ export async function verifyKilledDevRefresh(runId, github) {
     const jobs = await github(`actions/runs/${runId}/attempts/${n}/jobs?per_page=100`);
     if (!Array.isArray(jobs?.jobs) || jobs.total_count !== jobs.jobs.length ||
         jobs.jobs.some(job => String(job.run_id) !== runId || job.status !== "completed" || !Array.isArray(job.steps) ||
-          job.steps.some(step => step.name === UPLOAD && step.conclusion !== "skipped" && step.conclusion !== "failure" &&
-            step.conclusion !== "cancelled"))) operatorRefused();
+          job.steps.some(step => step.name === UPLOAD && step.conclusion !== "skipped"))) operatorRefused();
   }
   // A rerun started during these reads invalidates the proof.
   const latest = await github(`actions/runs/${runId}`);
