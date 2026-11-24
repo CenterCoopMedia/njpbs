@@ -36,10 +36,10 @@ describe("Menu", () => {
     expect(screen.getByRole("button", { name: "Download" })).toHaveFocus();
   });
   it("does not let the reduced-motion rule animate the menu's visibility, so the first item can take focus once placed", () => {
-    // The global reduced-motion rule gives every property a 0.01ms transition. The menu is
-    // hidden until placed, so a transitioned visibility is still hidden when focus moves in.
-    const css = readFileSync(resolve(process.cwd(), "src/components/ui/Menu.css"), "utf8");
-    expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\) \{\s*\.ui-menu,\s*\.ui-menu \* \{\s*transition-property: none;/);
+    // The menu is hidden until placed. A nonzero reduced-motion transition would keep its
+    // visibility hidden for a frame when focus moves in, so the global rule starts none.
+    const css = readFileSync(resolve(process.cwd(), "src/styles.css"), "utf8");
+    expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\) \{\s*\*,\s*\*::before,\s*\*::after \{[^}]*transition-duration: 0s !important;/);
   });
 
   it("moves with wrapping arrows, Home and End", () => {
