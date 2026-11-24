@@ -585,6 +585,7 @@ jobs:
     permissions:
       contents: read
       actions: read
+      checks: read
     environment: ${{ inputs.target == 'development' && 'development' || 'production' }}
     if: >-
       (vars.CANONICAL_GITHUB_REPOSITORY != '' && vars.CANONICAL_GITHUB_REPOSITORY_ID != '' && github.repository == vars.CANONICAL_GITHUB_REPOSITORY && github.repository_id == vars.CANONICAL_GITHUB_REPOSITORY_ID) &&
@@ -612,6 +613,22 @@ jobs:
       release_reason: ${{ steps.release_plan.outputs.release_reason }}
       reader_binding: ${{ steps.reader_binding.outputs.binding }}
     steps:
+      - name: Stop on a job output GitHub dropped
+        # GitHub skips a job output that contains a masked value and only warns; a later job then reads it
+        # as empty and runs on (CenterCoopMedia/njpbs#561: the reader binding; dev run 6: a fingerprint).
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -o pipefail
+          dropped=$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT/jobs" \
+            --jq '.jobs[] | select(.status == "completed") | [.id, .name] | @tsv' | while IFS=$'\t' read -r job name; do
+              gh api --paginate "repos/$GITHUB_REPOSITORY/check-runs/$job/annotations" --jq '.[].message' |
+                sed -n "s/^Skip output '\([^']*\)' since it may contain secret.*/$name.\1/p"
+            done | sort -u | paste -sd, -)
+          if [ -n "$dropped" ]; then
+            echo "::error::GitHub dropped job output $dropped because it contains a masked value; fix the value and dispatch a new run"
+            exit 1
+          fi
       - uses: actions/checkout@v7
         with:
           ref: ${{ needs.admin-build.outputs.deploy_sha }}
@@ -1211,7 +1228,27 @@ jobs:
     runs-on: ubuntu-24.04
     # Measured Nov. 2026: 34m55s, 40m0s, 26m54s (45191230409, 44613342087, dev 45310500950).
     timeout-minutes: 107 # Runaway guard: 3x max 35m25s (14d, 2026-10-26; #2657).
+    permissions:
+      contents: read
+      actions: read
+      checks: read
     steps:
+      - name: Stop on a job output GitHub dropped
+        # GitHub skips a job output that contains a masked value and only warns; a later job then reads it
+        # as empty and runs on (CenterCoopMedia/njpbs#561: the reader binding; dev run 6: a fingerprint).
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -o pipefail
+          dropped=$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT/jobs" \
+            --jq '.jobs[] | select(.status == "completed") | [.id, .name] | @tsv' | while IFS=$'\t' read -r job name; do
+              gh api --paginate "repos/$GITHUB_REPOSITORY/check-runs/$job/annotations" --jq '.[].message' |
+                sed -n "s/^Skip output '\([^']*\)' since it may contain secret.*/$name.\1/p"
+            done | sort -u | paste -sd, -)
+          if [ -n "$dropped" ]; then
+            echo "::error::GitHub dropped job output $dropped because it contains a masked value; fix the value and dispatch a new run"
+            exit 1
+          fi
       - uses: actions/checkout@v7
         with:
           ref: ${{ needs.admin-build.outputs.deploy_sha }}
@@ -1913,7 +1950,27 @@ jobs:
     runs-on: ubuntu-24.04
     # Measured Nov. 2026: 70 s, 66 s, 43 s (45191230409, 44613342087, dev 45310500950).
     timeout-minutes: 20 # Runaway guard: 3x max rounds to 8m; retain 20m floor (#2657).
+    permissions:
+      contents: read
+      actions: read
+      checks: read
     steps:
+      - name: Stop on a job output GitHub dropped
+        # GitHub skips a job output that contains a masked value and only warns; a later job then reads it
+        # as empty and runs on (CenterCoopMedia/njpbs#561: the reader binding; dev run 6: a fingerprint).
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -o pipefail
+          dropped=$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT/jobs" \
+            --jq '.jobs[] | select(.status == "completed") | [.id, .name] | @tsv' | while IFS=$'\t' read -r job name; do
+              gh api --paginate "repos/$GITHUB_REPOSITORY/check-runs/$job/annotations" --jq '.[].message' |
+                sed -n "s/^Skip output '\([^']*\)' since it may contain secret.*/$name.\1/p"
+            done | sort -u | paste -sd, -)
+          if [ -n "$dropped" ]; then
+            echo "::error::GitHub dropped job output $dropped because it contains a masked value; fix the value and dispatch a new run"
+            exit 1
+          fi
       - uses: actions/checkout@v7
         with:
           ref: ${{ needs.admin-build.outputs.deploy_sha }}
@@ -2217,7 +2274,27 @@ jobs:
     runs-on: ubuntu-24.04
     # Measured 68 s in 44337773774, the only run where it ran.
     timeout-minutes: 20 # Runaway guard: two bounded four-minute captures plus setup.
+    permissions:
+      contents: read
+      actions: read
+      checks: read
     steps:
+      - name: Stop on a job output GitHub dropped
+        # GitHub skips a job output that contains a masked value and only warns; a later job then reads it
+        # as empty and runs on (CenterCoopMedia/njpbs#561: the reader binding; dev run 6: a fingerprint).
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -o pipefail
+          dropped=$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT/jobs" \
+            --jq '.jobs[] | select(.status == "completed") | [.id, .name] | @tsv' | while IFS=$'\t' read -r job name; do
+              gh api --paginate "repos/$GITHUB_REPOSITORY/check-runs/$job/annotations" --jq '.[].message' |
+                sed -n "s/^Skip output '\([^']*\)' since it may contain secret.*/$name.\1/p"
+            done | sort -u | paste -sd, -)
+          if [ -n "$dropped" ]; then
+            echo "::error::GitHub dropped job output $dropped because it contains a masked value; fix the value and dispatch a new run"
+            exit 1
+          fi
       - uses: actions/checkout@v7
         with:
           ref: ${{ needs.admin-build.outputs.deploy_sha }}
