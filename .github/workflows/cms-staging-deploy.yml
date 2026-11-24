@@ -577,6 +577,7 @@ jobs:
       renderer_target_sha: ${{ steps.release_plan.outputs.renderer_target_sha }}
       configuration_requires_release: ${{ steps.release_plan.outputs.configuration_requires_release }}
       release_reason: ${{ steps.release_plan.outputs.release_reason }}
+      reader_binding: ${{ steps.reader_binding.outputs.binding }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -672,6 +673,17 @@ jobs:
         with:
           credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           project_id: ${{ env.CMS_TARGET_FIREBASE_PROJECT }}
+      - name: Select the CMS reader binding
+        # An ordinary deploy carries no reader binding (CenterCoopMedia/njpbs#561): dev binds every run,
+        # production carries a live binding without an installed proof (none today).
+        id: reader_binding
+        if: ${{ !inputs.install_reader_bridge }}
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CMS_DEV_PUBLISH_ENABLED: ${{ inputs.target == 'development' && vars.CMS_DEV_PUBLISH_ENABLED || '' }}
+        # Trusted main code decides, so an older release source never fails this read.
+        run: node "$RUNNER_TEMP/cms-smoke-gate/scripts/cms-reader-binding.mjs" select
       - name: Require the legacy preview protocol before provider mutations
         run: node scripts/component-runner.mjs functions protocol
       - name: Verify the singleton public contract at preflight
@@ -692,7 +704,7 @@ jobs:
           CMS_BUG_REPORT_TELEGRAM_WEBHOOK_SECRET: ${{ secrets.CMS_BUG_REPORT_TELEGRAM_WEBHOOK_SECRET }}
           CMS_BUG_REPORT_GITHUB_TOKEN: ${{ secrets.CMS_BUG_REPORT_GITHUB_TOKEN }}
           CMS_BUG_REPORT_GITHUB_WEBHOOK_SECRET: ${{ secrets.CMS_BUG_REPORT_GITHUB_WEBHOOK_SECRET }}
-          FORCE_FIREBASE: ${{ inputs.force_firebase }}
+          FORCE_FIREBASE: ${{ inputs.force_firebase || steps.reader_binding.outputs.binding != '' }}
           CMS_DEPLOY_MIGRATIONS: ${{ inputs.migrations }}
           CMS_EDGE_ORIGIN_SECRET: ${{ secrets.CMS_EDGE_ORIGIN_SECRET }}
           CLOUD_PUBLICATION_WAKE_ENVIRONMENT: ${{ env.CMS_TARGET }}
@@ -838,7 +850,8 @@ jobs:
           CMS_BUG_REPORT_TELEGRAM_WEBHOOK_SECRET: ${{ secrets.CMS_BUG_REPORT_TELEGRAM_WEBHOOK_SECRET }}
           CMS_BUG_REPORT_GITHUB_TOKEN: ${{ secrets.CMS_BUG_REPORT_GITHUB_TOKEN }}
           CMS_BUG_REPORT_GITHUB_WEBHOOK_SECRET: ${{ secrets.CMS_BUG_REPORT_GITHUB_WEBHOOK_SECRET }}
-          FORCE_FIREBASE: ${{ inputs.force_firebase }}
+          # A bound run redeploys Functions so they carry this run's reader candidates.
+          FORCE_FIREBASE: ${{ inputs.force_firebase || steps.reader_binding.outputs.binding != '' }}
           CMS_DEPLOY_MIGRATIONS: ${{ inputs.migrations }}
           CMS_EDGE_ORIGIN_SECRET: ${{ secrets.CMS_EDGE_ORIGIN_SECRET }}
           CLOUD_PUBLICATION_WAKE_ENVIRONMENT: ${{ env.CMS_TARGET }}
@@ -1011,7 +1024,7 @@ jobs:
           CMS_PREVIEW_FIREBASE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
         run: node scripts/production-reader-deployment.mjs start cmsApi
       - name: Mark the CMS API receipt in progress
-        if: steps.cms_api_plan.outputs.mutated != 'false' && !inputs.install_reader_bridge
+        if: (steps.cms_api_plan.outputs.mutated != 'false' || needs.firebase-preflight.outputs.reader_binding != '') && !inputs.install_reader_bridge
         env:
           CMS_PREVIEW_FIREBASE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           DEPLOY_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
@@ -1021,34 +1034,14 @@ jobs:
             --trusted-workflow-sha "$GITHUB_SHA" \
             --run-id "$GITHUB_RUN_ID" \
             --run-attempt "$GITHUB_RUN_ATTEMPT"
-      - name: Report the live reader binding this deploy turns off
-        # An ordinary deploy does not carry the reader bridge binding (CenterCoopMedia/njpbs#561).
-        if: steps.cms_api_plan.outputs.mutated != 'false' && !inputs.install_reader_bridge
+      - name: Bind the CMS readers into the CMS API config
+        if: needs.firebase-preflight.outputs.reader_binding != ''
         env:
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        run: |
-          node --input-type=module -e '
-            const { appendFile } = await import("node:fs/promises");
-            const { cmsTarget } = await import("./scripts/lib/cms-target.mjs");
-            const base = `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/workers/scripts/${cmsTarget().cmsApiWorker}`;
-            const read = async path => {
-              const response = await fetch(`${base}/${path}`, { redirect: "error",
-                headers: { authorization: `Bearer ${process.env.CLOUDFLARE_API_TOKEN}` } });
-              const body = await response.json();
-              if (!response.ok || body?.success !== true) throw new Error();
-              return body.result;
-            };
-            try {
-              const version = (await read("deployments"))?.deployments?.[0]?.versions?.[0]?.version_id;
-              if (!version) throw new Error();
-              const live = Object.fromEntries(((await read(`versions/${version}`))?.resources?.bindings ?? [])
-                .filter(row => row.type === "plain_text" && row.name.startsWith("CMS_READER_BRIDGE_")).map(row => [row.name, row.text]));
-              if (live.CMS_READER_BRIDGE_ENABLED === "true") await appendFile(process.env.GITHUB_STEP_SUMMARY,
-                `This deploy turns the CMS readers off for operation ${live.CMS_READER_BRIDGE_OPERATION_ID}: an ordinary deploy does not carry the reader binding (CenterCoopMedia/njpbs#561). A reader install restores them.\n`);
-            } catch { console.log("::warning::The live CMS API reader binding could not be read"); }'
+          CMS_READER_BINDING: ${{ needs.firebase-preflight.outputs.reader_binding }}
+        run: node scripts/cms-reader-binding.mjs bind cmsApi
       - name: Deploy CMS API Worker
-        if: steps.cms_api_plan.outputs.mutated != 'false'
+        # A bound run deploys the Worker with this run's reader binding.
+        if: steps.cms_api_plan.outputs.mutated != 'false' || needs.firebase-preflight.outputs.reader_binding != ''
         id: deploy_cms_api
         env:
           DEPLOY_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
@@ -1104,7 +1097,7 @@ jobs:
               "https://us-central1-$CMS_TARGET_FIREBASE_PROJECT.cloudfunctions.net/$endpoint"
           done
       - name: Record the completed CMS API receipt
-        if: steps.cms_api_plan.outputs.mutated != 'false' && !inputs.install_reader_bridge
+        if: (steps.cms_api_plan.outputs.mutated != 'false' || needs.firebase-preflight.outputs.reader_binding != '') && !inputs.install_reader_bridge
         env:
           CMS_PREVIEW_FIREBASE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           DEPLOY_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
@@ -1119,6 +1112,25 @@ jobs:
             --configuration-fingerprint-file "$RUNNER_TEMP/cms-api-configuration.sha256" \
             --expected-worker-version "$DEPLOYED_WORKER_VERSION" \
             --live
+      - name: Record and verify this run's CMS reader candidates
+        if: needs.firebase-preflight.outputs.reader_binding != '' && !inputs.install_reader_bridge
+        env:
+          CMS_READER_BINDING: ${{ needs.firebase-preflight.outputs.reader_binding }}
+          CMS_PREVIEW_FIREBASE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-service-account.json
+          DEPLOY_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
+          DEPLOYED_WORKER_VERSION: ${{ steps.deploy_cms_api.outputs.version_id }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CMS_DEV_CLOUDFLARE_ACCOUNT_ID: ${{ inputs.target == 'development' && vars.CMS_DEV_CLOUDFLARE_ACCOUNT_ID || '' }}
+        run: |
+          set -euo pipefail
+          # The Functions readback uses ADC; keep its file inside this step.
+          trap 'rm -f "$GOOGLE_APPLICATION_CREDENTIALS"' EXIT
+          umask 077
+          printf '%s' "$SA" > "$GOOGLE_APPLICATION_CREDENTIALS"
+          node scripts/cms-reader-binding.mjs record
       - name: Verify and record the original production API reader and complete mount
         if: inputs.install_reader_bridge
         env:
@@ -1141,7 +1153,7 @@ jobs:
           path: ${{ runner.temp }}/production-reader-deployment-receipt.json
           if-no-files-found: error
       - name: Confirm the live CMS API identity
-        if: steps.cms_api_plan.outputs.mutated == 'false'
+        if: steps.cms_api_plan.outputs.mutated == 'false' && needs.firebase-preflight.outputs.reader_binding == ''
         env:
           CMS_PREVIEW_FIREBASE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -1331,6 +1343,11 @@ jobs:
           CMS_BUG_REPORT_TELEGRAM_CHAT_ID: ${{ secrets.CMS_BUG_REPORT_TELEGRAM_CHAT_ID }}
           CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP: ${{ secrets.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP }}
         run: node scripts/component-runner.mjs functions configure
+      - name: Bind the CMS readers into the Functions configuration
+        if: needs.firebase-preflight.outputs.functions_mutated == 'true' && needs.firebase-preflight.outputs.reader_binding != ''
+        env:
+          CMS_READER_BINDING: ${{ needs.firebase-preflight.outputs.reader_binding }}
+        run: node scripts/cms-reader-binding.mjs bind functions
       - name: Bind and start the original production Functions reader candidate
         if: inputs.install_reader_bridge
         env:
@@ -2112,7 +2129,7 @@ jobs:
           CMS_BUG_REPORT_TELEGRAM_WEBHOOK_SECRET: ${{ secrets.CMS_BUG_REPORT_TELEGRAM_WEBHOOK_SECRET }}
           CMS_BUG_REPORT_GITHUB_TOKEN: ${{ secrets.CMS_BUG_REPORT_GITHUB_TOKEN }}
           CMS_BUG_REPORT_GITHUB_WEBHOOK_SECRET: ${{ secrets.CMS_BUG_REPORT_GITHUB_WEBHOOK_SECRET }}
-          FORCE_FIREBASE: ${{ inputs.force_firebase }}
+          FORCE_FIREBASE: ${{ inputs.force_firebase || needs.firebase-preflight.outputs.reader_binding != '' }}
           CMS_DEPLOY_MIGRATIONS: ${{ inputs.migrations }}
           CMS_EDGE_ORIGIN_SECRET: ${{ secrets.CMS_EDGE_ORIGIN_SECRET }}
           CLOUD_PUBLICATION_WAKE_ENVIRONMENT: ${{ env.CMS_TARGET }}
@@ -2147,7 +2164,7 @@ jobs:
   contract-settlement:
     env:
       CMS_DEPLOY_OWNER: ${{ vars.CMS_DEPLOY_OWNER }}
-    needs: [admin-build, admin-contract, live-smoke]
+    needs: [admin-build, admin-contract, live-smoke, firebase-preflight]
     environment: ${{ inputs.target == 'development' && 'development' || 'production' }}
     if: >-
       (vars.CANONICAL_GITHUB_REPOSITORY != '' && vars.CANONICAL_GITHUB_REPOSITORY_ID != '' && github.repository == vars.CANONICAL_GITHUB_REPOSITORY && github.repository_id == vars.CANONICAL_GITHUB_REPOSITORY_ID) &&
@@ -2237,7 +2254,7 @@ jobs:
           CMS_BUG_REPORT_TELEGRAM_WEBHOOK_SECRET: ${{ secrets.CMS_BUG_REPORT_TELEGRAM_WEBHOOK_SECRET }}
           CMS_BUG_REPORT_GITHUB_TOKEN: ${{ secrets.CMS_BUG_REPORT_GITHUB_TOKEN }}
           CMS_BUG_REPORT_GITHUB_WEBHOOK_SECRET: ${{ secrets.CMS_BUG_REPORT_GITHUB_WEBHOOK_SECRET }}
-          FORCE_FIREBASE: ${{ inputs.force_firebase }}
+          FORCE_FIREBASE: ${{ inputs.force_firebase || needs.firebase-preflight.outputs.reader_binding != '' }}
           CMS_DEPLOY_MIGRATIONS: ${{ inputs.migrations }}
           CMS_EDGE_ORIGIN_SECRET: ${{ secrets.CMS_EDGE_ORIGIN_SECRET }}
           CLOUD_PUBLICATION_WAKE_ENVIRONMENT: ${{ env.CMS_TARGET }}

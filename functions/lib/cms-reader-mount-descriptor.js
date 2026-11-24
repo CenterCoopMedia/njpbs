@@ -59,4 +59,4 @@ async function readCmsReaderMountDescriptor({ firestore, environment = process.e
     })]);
   } finally { clearTimeout(timer); }
 }
-module.exports = { mountConfiguration, readCmsReaderMountDescriptor };
+module.exports = { SUPPORT, mountConfiguration, readCmsReaderMountDescriptor };

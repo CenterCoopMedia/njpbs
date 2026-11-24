@@ -54,7 +54,8 @@ export function requireCmsReleaseSources({ releaseSha, trustedWorkflowSha, relea
     cwd: releaseRoot, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"],
   }).trim();
   const releaseFiles = [...CMS_RELEASE_CHECK_FILES, ...(hasContractRecipe ? CMS_FUNCTION_CONTRACT_FILES : []),
-    ...(target === "development" ? ["scripts/lib/cms-target.mjs", "config/functions-deployment.development.json"] : [])];
+    ...(target === "development" ? ["scripts/lib/cms-target.mjs", "config/functions-deployment.development.json",
+      "scripts/cms-reader-binding.mjs"] : [])];
   execFileSync("git", ["ls-files", "--error-unmatch", "--", ".github/cms-deploy-compatibility.json", "admin/package.json", ...releaseFiles], {
     cwd: releaseRoot, stdio: ["ignore", "pipe", "pipe"],
   });

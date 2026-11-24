@@ -893,7 +893,7 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
     expect(functionsRecord).toContain('--configuration-fingerprint "$FUNCTIONS_CONFIGURATION_FINGERPRINT"');
     for (const step of ["Mark the CMS API receipt in progress", "Deploy CMS API Worker", "Record the completed CMS API receipt"]) {
       const body = workerJob.slice(workerJob.indexOf(`- name: ${step}`));
-      expect(body.split("\n")[1]).toContain("if: steps.cms_api_plan.outputs.mutated != 'false'");
+      expect(body.split("\n").find(line => line.trim().startsWith("if:"))).toContain("steps.cms_api_plan.outputs.mutated != 'false'");
     }
     const record = workerJob.slice(workerJob.indexOf("- name: Record the completed CMS API receipt"));
     expect(record.slice(0, record.indexOf("- name:", 10))).toContain("--configuration-fingerprint-file");
