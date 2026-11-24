@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { describe, expect, it, vi } from "vitest";
 import { parse } from "yaml";
-import { assertFirstApiAttempt, bindApiConfig, bindFunctionsDotenv, decodeBinding, encodeBinding, recordReaderCandidates,
+import { assertFirstAttempt, bindApiConfig, bindFunctionsDotenv, decodeBinding, encodeBinding, recordReaderCandidates,
   selectReaderBinding } from "../../scripts/cms-reader-binding.mjs";
 import { cmsTarget } from "../../scripts/lib/cms-target.mjs";
 
@@ -97,9 +97,15 @@ describe("CMS reader binding for an ordinary deploy", () => {
     expect(decodeBinding("")).toBeNull();
   });
 
-  it("refuses a failed-job rerun of a bound run's CMS API job", () => {
-    expect(() => assertFirstApiAttempt({ GITHUB_RUN_ATTEMPT: "1" })).not.toThrow();
-    expect(() => assertFirstApiAttempt({ GITHUB_RUN_ATTEMPT: "2" })).toThrow("dispatch a new run");
+  it("refuses a rerun of a bound run before selection and before each bind", () => {
+    expect(() => assertFirstAttempt({ GITHUB_RUN_ATTEMPT: "1" })).not.toThrow();
+    expect(() => assertFirstAttempt({ GITHUB_RUN_ATTEMPT: "2" })).toThrow("dispatch a new run");
+    const source = readFileSync(new URL("../../scripts/cms-reader-binding.mjs", import.meta.url), "utf8");
+    expect(source).toContain("if (selected) assertFirstAttempt(process.env);");
+    for (const write of ["writeFileSync(path, bindFunctionsDotenv(", "writeFileSync(path, `${JSON.stringify(bindApiConfig("]) {
+      const at = source.indexOf(write);
+      expect(source.lastIndexOf("assertFirstAttempt(process.env);", at)).toBeGreaterThan(source.lastIndexOf("} else if", at));
+    }
   });
 
   it("binds only a run whose binding is set and keeps production's force and Worker conditions", () => {

@@ -53,12 +53,14 @@ export function bindFunctionsDotenv(text, binding) {
   return `${[...lines, ...Object.entries(binding).map(([key, value]) => `${key}=${value}`)].join("\n")}\n`;
 }
 
-// A failed-job rerun of a bound run's cms-api job cannot finish consistently: review of #561 found
-// that the forced paired release redeployed the Worker under verified candidates, that a skipped
-// deploy left the CMS API receipt open, and that completion then used the new run attempt. A new
-// dispatch recovers cleanly (startReceipt takes over the open receipt; the run binds anew).
-export function assertFirstApiAttempt(env) {
-  if (env.GITHUB_RUN_ATTEMPT !== "1") fail("A bound run cannot resume its CMS API job; dispatch a new run");
+// A rerun of a bound run cannot finish consistently: review of #561 found that the forced paired
+// release redeployed the Worker under verified candidates, that a skipped deploy left the CMS API
+// receipt open, and that completion then used the new run attempt; a rerun that deploys Functions
+// and then stops leaves them bound to candidates no record step writes. Selection and both bind
+// steps refuse before their mutation. A new dispatch recovers cleanly (startReceipt takes over the
+// open receipt; the run binds anew).
+export function assertFirstAttempt(env) {
+  if (env.GITHUB_RUN_ATTEMPT !== "1") fail("A bound run cannot be rerun; dispatch a new run");
 }
 
 export function bindApiConfig(config, binding) {
@@ -127,14 +129,16 @@ async function main([command, component]) {
         [component, (await firestore.doc(`cmsReaderCompatibilityReceipts/${component}`).get()).data()]))),
     }));
     // The bind and record steps run from the release source; refuse before any mutation if it predates them.
+    if (selected) assertFirstAttempt(process.env);
     if (selected && !existsSync("scripts/cms-reader-binding.mjs")) fail("This release source cannot keep the readers bound; deploy a source with scripts/cms-reader-binding.mjs");
     appendFileSync(process.env.GITHUB_OUTPUT, `binding=${selected ? encodeBinding(selected) : ""}\n`);
     console.log(selected ? `Readers bound to operation ${selected.CMS_READER_BRIDGE_OPERATION_ID}` : "No reader binding for this run");
   } else if (command === "bind" && component === "functions") {
+    assertFirstAttempt(process.env);
     const path = `functions/.env.${target.projectId}`;
     writeFileSync(path, bindFunctionsDotenv(readFileSync(path, "utf8"), binding()));
   } else if (command === "bind" && component === "cmsApi") {
-    assertFirstApiAttempt(process.env);
+    assertFirstAttempt(process.env);
     const path = target.environment === "development" ? "cms-api/wrangler.dev.jsonc" : "cms-api/wrangler.jsonc";
     writeFileSync(path, `${JSON.stringify(bindApiConfig(JSON.parse(readFileSync(path, "utf8")), binding()), null, 2)}\n`);
   } else if (command === "record") {

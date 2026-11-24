@@ -45,5 +45,13 @@ describe("job outputs GitHub drops for a masked value", () => {
     expect(dropped.stdout).toContain("GitHub dropped job output firebase-preflight.reader_binding");
     expect(runCheck(`case "$*" in *"/jobs"*) printf '7\\tverify\\n';; *) printf 'Node 20 is deprecated\\n';; esac`).status).toBe(0);
     expect(runCheck(`case "$*" in *"/jobs"*) printf '7\\tverify\\n';; *) exit 1;; esac`).status).not.toBe(0);
+    // A failed read for one job is not hidden by a later job's successful read.
+    expect(runCheck(`case "$*" in *"/jobs"*) printf '7\\tverify\\n8\\tadmin-build\\n';; *"check-runs/7/"*) exit 1;;
+      *) printf 'Node 20 is deprecated\\n';; esac`).status).not.toBe(0);
+    // A drop from an earlier attempt still stops a rerun of failed jobs.
+    const retained = runCheck(`case "$*" in *"/jobs?filter=all"*) printf '7\\tfirebase-preflight\\n';; *"/jobs"*) exit 1;;
+      *) printf "Skip output 'reader_binding' since it may contain secret.\\n";; esac`);
+    expect(retained.status).toBe(1);
+    expect(retained.stdout).toContain("firebase-preflight.reader_binding");
   });
 });
