@@ -47,6 +47,8 @@ class PreviewSmokeFailure extends Error {}
 
 export async function checkSignedInPreview(browser, { admin, preview, credential, editor, heading, access }) {
   let phase = "admin_unavailable";
+  let popup;
+  const saw = {};
   try {
     const context = await browser.newContext({ serviceWorkers: "block", acceptDownloads: false });
     for (const [origin, headers] of access) await routePreviewSmokeAccess(context, origin, headers);
@@ -68,12 +70,17 @@ export async function checkSignedInPreview(browser, { admin, preview, credential
     await button.waitFor({ state: "visible" });
 
     phase = "private_preview_unavailable";
+    const session = `${preview}/__cms-session`;
+    const isSession = request => request.url() === session && request.method() === "POST";
+    page.on("requestfailed", request => {
+      if (isSession(request) && !saw.session) saw.session = { failed: failureName(request.failure()?.errorText) };
+    });
     // The initial document must render directly with the new staff cookie.
     // Following a sign-in redirect and then succeeding would miss the race.
-    const [popup, , document] = await Promise.all([
-      context.waitForEvent("page", { timeout: 60_000 }),
-      page.waitForResponse(reply => reply.url() === `${preview}/__cms-session` &&
-        reply.request().method() === "POST", { timeout: 60_000 }).then(reply => {
+    const [, , document] = await Promise.all([
+      context.waitForEvent("page", { timeout: 60_000 }).then(value => { popup = value; saw.popup = true; return value; }),
+      page.waitForResponse(reply => isSession(reply.request()), { timeout: 60_000 }).then(reply => {
+        saw.session = { status: reply.status(), host: urlHost(reply.url()) };
         if (reply.status() !== 204) throw new PreviewSmokeFailure("preview_session_failed");
       }),
       context.waitForEvent("response", { timeout: 60_000, predicate: reply => {
@@ -81,6 +88,7 @@ export async function checkSignedInPreview(browser, { admin, preview, credential
         return url.origin === preview && previewPath.test(url.pathname) &&
           reply.request().isNavigationRequest() && reply.request().resourceType() === "document";
       }}).then(reply => {
+        saw.document = { status: reply.status(), host: urlHost(reply.url()) };
         if (reply.status() !== 200) throw new PreviewSmokeFailure("preview_document_failed");
         return reply;
       }),
@@ -92,8 +100,35 @@ export async function checkSignedInPreview(browser, { admin, preview, credential
     await popup.getByRole("heading", { name: heading, exact: true }).first().waitFor({ state: "visible", timeout: 15_000 });
     return { ok: true, code: "signed_in_private_preview" };
   } catch (error) {
-    return { ok: false, code: error instanceof PreviewSmokeFailure ? error.message : phase };
+    const code = error instanceof PreviewSmokeFailure ? error.message : phase;
+    if (phase !== "private_preview_unavailable" && phase !== "preview_heading_missing") return { ok: false, code };
+    return { ok: false, code, missing: ["popup", "session", "document"].filter(key => !saw[key]),
+      session: saw.session ?? null, document: saw.document ?? null, popup: await describePopup(popup) };
   }
+}
+
+// Receipts carry hosts, statuses and Admin progress state names only: never paths, bodies or page text.
+function urlHost(value) {
+  try {
+    const url = new URL(value);
+    return url.protocol === "about:" ? url.href : url.host;
+  } catch { return "invalid"; }
+}
+
+function failureName(text) {
+  return typeof text === "string" && /^net::ERR_[A-Z_]{1,60}$/.test(text) ? text : "failed";
+}
+
+// Admin writes its preview state on the progress page it opens before navigation.
+const progressStates = new Set(["preparing", "requesting", "waiting", "pending", "building", "refreshing",
+  "refresh-failed", "opening", "error", "session-slow", "updating"]);
+
+async function describePopup(popup) {
+  if (!popup) return null;
+  const host = urlHost(popup.url());
+  const state = await popup.locator("main.cms-preview-progress").first()
+    .getAttribute("data-progress", { timeout: 2_000 }).catch(() => null);
+  return { host, progress: progressStates.has(state) ? state : null };
 }
 
 async function main() {

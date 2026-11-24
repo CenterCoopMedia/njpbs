@@ -108,6 +108,8 @@ export function createPreviewProgressDocument(popup: Window) {
     const message = messages[state];
     const failed = message.step < 0;
     main.dataset.state = failed ? "error" : state;
+    // The signed-in preview smoke reports this exact state when the tab never navigates.
+    main.dataset.progress = state;
     document.title = `${message.heading} | Boardwalk`;
     heading.textContent = message.heading;
     detail.textContent = message.detail;
