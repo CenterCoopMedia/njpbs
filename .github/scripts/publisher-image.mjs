@@ -199,7 +199,7 @@ export function stderrTail(stderr) {
 
 // Each target reads only its own variables; an empty one never falls back to production's.
 export function publicVariables(target, env) {
-  const selected = env[target.environment === "development" ? "PUBLISHER_DEVELOPMENT_PUBLIC_VARS_JSON" : "PUBLISHER_PUBLIC_VARS_JSON"];
+  const selected = target.environment === "development" ? env.PUBLISHER_DEVELOPMENT_PUBLIC_VARS_JSON : env.PUBLISHER_PUBLIC_VARS_JSON;
   if (!selected) throw new ImageRefusal(`Publisher public variables for ${target.environment} are empty`);
   return JSON.parse(selected);
 }
