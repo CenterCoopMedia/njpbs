@@ -44,26 +44,26 @@ it("plan mode validates the opaque seal but makes no network, credential or data
   const f = await fixture(); const result = await installPrivatePreviewPair({ ...f.input, dryRun: true });
   expect(result.dryRun).toBe(true); expect(f.state.requests).toHaveLength(0); await f.unchanged();
 });
-it.each([2, Infinity])("waits for native preview metadata after %s stale reads", async staleReads => {
+it("waits for native preview metadata after stale reads", async () => {
   const f = await fixture();
   f.state.staleVersionReads = 2;
-  f.state.staleDeploymentReads = staleReads;
-  const resource = f.db.doc(`cmsPreviewPrivateInstalls/${f.request.operationId}`);
-  if (Number.isFinite(staleReads)) {
-    await installPrivatePreviewPair(f.input);
-    expect((await resource.get()).data().providerEvidence.deployment).toEqual({ deploymentId, versionId });
-    expect(f.state.writes).toEqual(["identity", "version", "deployment", "container", "schedule"]);
-  } else {
-    await expect(installPrivatePreviewPair(f.input)).rejects.toThrow("deploymentId");
-    expect((await resource.get()).exists).toBe(false);
-    expect(f.state.writes).toEqual(["identity", "version", "deployment"]);
-  }
+  f.state.staleDeploymentReads = 2;
+  await installPrivatePreviewPair(f.input);
+  expect((await f.db.doc(`cmsPreviewPrivateInstalls/${f.request.operationId}`).get()).data().providerEvidence.deployment).toEqual({ deploymentId, versionId });
+  expect(f.state.writes).toEqual(["identity", "version", "deployment", "container", "schedule"]);
 });
-it.each(["identity", "version", "deployment", "container", "schedule"])("failure at %s consumes its send and leaves OLD rows and receipts intact", async action => {
+it("a newer deployment that is not ours ends the deployment readback as superseded", async () => {
+  const f = await fixture(); f.state.newerDeployment = true;
+  await expect(installPrivatePreviewPair(f.input)).rejects.toThrow(`deployment ${deploymentId} was superseded`);
+  expect((await f.db.doc(`cmsPreviewPrivateInstalls/${f.request.operationId}`).get()).exists).toBe(false);
+  expect(f.state.writes).toEqual(["identity", "version", "deployment"]);
+});
+it.each(["identity", "version", "deployment", "container", "schedule"])("a refused %s write consumes its send and leaves OLD rows and receipts intact", async action => {
   const f = await fixture(); f.state.failAction = action;
-  await expect(installPrivatePreviewPair(f.input)).rejects.toThrow(); const writes = [...f.state.writes];
+  await expect(installPrivatePreviewPair(f.input)).rejects.toThrow("Cloudflare refused"); const writes = [...f.state.writes];
   f.state.failAction = null;
-  await expect(installPrivatePreviewPair(f.input)).rejects.toThrow(); expect(f.state.writes).toEqual(writes); await f.unchanged();
+  await expect(installPrivatePreviewPair(f.input)).rejects.toThrow(`Cloudflare refused this attempt's ${action} write`);
+  expect(f.state.writes).toEqual(writes); await f.unchanged();
 });
 it.each(["version", "deployment"])("lost %s reply reconciles the original observed resources without redispatch", async action => {
   const f = await fixture(); f.state.lostAction = action;
@@ -139,7 +139,16 @@ it.each(["identity", "version", "deployment", "container", "schedule"])("cancell
   f.state.beforeWrite = async current => { if (current === action) { abort.abort(); throw new Error("synthetic cancellation"); } };
   await expect(installPrivatePreviewPair({ ...f.input, signal: abort.signal })).rejects.toThrow();
   const sent = [...f.state.writes]; f.state.beforeWrite = async () => {};
-  await expect(installPrivatePreviewPair(f.input)).rejects.toThrow(); expect(f.state.writes).toEqual(sent); await f.unchanged();
+  // Cloudflare shows nothing from the cancelled send and has not settled it,
+  // so a Worker readback keeps reading until its own caller cancels.
+  const readback = { identity: `/workers/workers/${f.prepared.applicationName}`, version: "/versions", deployment: "/deployments" }[action];
+  const retry = new AbortController();
+  if (readback) {
+    let reads = 0;
+    f.state.afterRequest = ({ path, method }) => { if (method === "GET" && path.endsWith(readback) && ++reads === 3) retry.abort(); };
+  }
+  await expect(installPrivatePreviewPair({ ...f.input, signal: retry.signal })).rejects.toThrow();
+  expect(retry.signal.aborted).toBe(Boolean(readback)); expect(f.state.writes).toEqual(sent); await f.unchanged();
 });
 it.each(["FIREBASE_SERVICE_ACCOUNT", "R2_PREVIEW_CREDENTIAL", "CMS_EDGE_ORIGIN_SECRET"])("an unreadable %s stream releases only its confirmed unsent original step", async secretName => {
   const f = await fixture();

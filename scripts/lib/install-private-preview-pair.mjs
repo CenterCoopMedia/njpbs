@@ -72,7 +72,7 @@ export async function installPrivatePreviewPair({ firestore, prepared, request: 
     await current(); signal?.throwIfAborted();
     return ledger.once({ attemptId: request.operationId, worker: prepared.applicationName, planDigest, action, ...callbacks });
   };
-  const workerStep = (action, effect, observe) => step(action, workerReadbackAfterWrite(effect, observe));
+  const workerStep = (action, effect, observe) => step(action, workerReadbackAfterWrite(effect, observe, signal));
   // Do not adopt an existing Worker, Container or namespace merely by name.
   // A prior immutable ownership claim is required before recovery is possible.
   const ownerKey = publicPairs.publicReleaseDigest({ worker: prepared.applicationName });
@@ -88,7 +88,7 @@ export async function installPrivatePreviewPair({ firestore, prepared, request: 
     });
   const uploaded = await workerStep("version", () => provider.upload(), response => provider.recoverVersion(response?.versionId));
   const deployed = await workerStep("deployment", () => provider.deploy(uploaded.versionId),
-    response => provider.deployment(uploaded.versionId, response?.id));
+    response => provider.deployment(uploaded.versionId, response?.id, response?.created_on));
   const namespace = await provider.namespace(uploaded.versionId);
   await step("container", { effect: () => provider.createContainer(namespace.namespaceId), observe: () => provider.container(namespace.namespaceId) });
   await step("schedule", { effect: () => provider.createSchedules(), observe: () => provider.schedules() });

@@ -1,4 +1,5 @@
 import { PrivateProviderNotSent } from "./public-release-private-provider.mjs";
+import { WorkerWriteRefused } from "./cloudflare-worker-readback.mjs";
 import protocol from "../../functions/lib/public-release-pair.js";
 import rollout from "../../functions/lib/public-release-pair-rollout.js";
 const refuse = () => { throw new Error("Private provider attempt requires original-attempt reconciliation"); };
@@ -21,9 +22,10 @@ export function privateInstallLedger(firestore) {
       const [owner, step] = await tx.getAll(ownerRef, stepRef);
       if (owner.exists && protocol.publicReleaseDigest(owner.data()) !== protocol.publicReleaseDigest(seal)) refuse();
       if (step.exists) {
-        if (protocol.publicReleaseDigest(step.data()) !== protocol.publicReleaseDigest({ ...seal, action }) &&
-            protocol.publicReleaseDigest(step.data()) !== protocol.publicReleaseDigest({ ...seal, action, notSent: true })) refuse();
+        if (![{ ...seal, action }, { ...seal, action, notSent: true }, { ...seal, action, refused: true }]
+          .some(value => protocol.publicReleaseDigest(step.data()) === protocol.publicReleaseDigest(value))) refuse();
         if (step.data().notSent === true) { tx.set(stepRef, { ...seal, action }); return true; }
+        if (step.data().refused === true) throw new WorkerWriteRefused(`Cloudflare refused this attempt's ${action} write`);
         return false;
       }
       if (!owner.exists) tx.create(ownerRef, seal);
@@ -43,7 +45,16 @@ export function privateInstallLedger(firestore) {
           });
           refuse();
         }
-        // Network/provider failures retain the immutable claim; observe only.
+        // The provider's refusal settles the step: record it so no later
+        // caller waits for a readback of a write that was refused.
+        if (error instanceof WorkerWriteRefused) {
+          await firestore.runTransaction(async tx => { const row = await tx.get(stepRef);
+            if (protocol.publicReleaseDigest(row.data()) !== protocol.publicReleaseDigest({ ...seal, action })) refuse();
+            tx.set(stepRef, { ...seal, action, refused: true });
+          });
+          throw error;
+        }
+        // Network failures and other provider answers retain the immutable claim; observe only.
       }
     }
     const result = await observe();

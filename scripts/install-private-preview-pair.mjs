@@ -5,7 +5,7 @@ import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
 const fail = () => { throw new Error("Private preview operator refused"); };
-let mismatch;
+let mismatch, settled;
 async function main() {
   const [mode, filename, ...extra] = process.argv.slice(2);
   if (!["plan", "apply", "qualify", "receipt"].includes(mode) || !filename || extra.length) fail();
@@ -17,7 +17,7 @@ async function main() {
   const git = args => execFileSync("git", args, { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
   if (typeof sourceSha !== "string" || !/^[a-f0-9]{40}$/.test(sourceSha) || git(["rev-parse", "HEAD"]) !== sourceSha ||
       !assertDevelopmentSource(root)) fail();
-  ({ WorkerReadbackMismatch: mismatch } = await import("./lib/cloudflare-worker-readback.mjs"));
+  ({ WorkerReadbackMismatch: mismatch, WorkerReadbackFinal: settled } = await import("./lib/cloudflare-worker-readback.mjs"));
   const { loadPrivatePreviewPacket, privatePreviewPacketReadback } = await import("./lib/private-preview-packet.mjs");
   const loaded = await loadPrivatePreviewPacket(filename, root, mode);
   const { packet, prepared } = loaded;
@@ -62,7 +62,7 @@ async function main() {
   } finally { await deleteApp(app); }
 }
 main().catch(error => {
-  const detail = mismatch && error instanceof mismatch ? `: ${error.message}` : "";
+  const detail = mismatch && (error instanceof mismatch || error instanceof settled) ? `: ${error.message}` : "";
   process.stderr.write(`Private preview pair operation was not confirmed${detail}; preserve and reconcile the original attempt\n`);
   process.exitCode = 1;
 });

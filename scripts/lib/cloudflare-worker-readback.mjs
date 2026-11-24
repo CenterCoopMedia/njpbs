@@ -18,20 +18,40 @@ export function requireWorkerReadback(condition, field) {
   if (!condition) throw new WorkerReadbackMismatch(field, 'confirmed write', 'different or missing');
 }
 
+// Cloudflare's own record settled the readback against us: a newer deployment
+// that is not ours replaced it, or the write call itself answered with a final
+// error. Neither clears on a later read.
+export class WorkerReadbackFinal extends Error {}
+
+// The provider answered a write with a refusal (HTTP 4xx other than 408 and
+// 429), so nothing from that call will appear in a readback.
+export class WorkerWriteRefused extends WorkerReadbackFinal {}
+
+// Deployments are listed newest first. Ours below the top, or a top row created
+// after ours, means a newer deployment that is not ours replaced it.
+export function requireNotSuperseded(rows, ours, field) {
+  if (!Array.isArray(rows) || !rows.length || typeof ours?.id !== 'string' || rows[0]?.id === ours.id) return;
+  if (rows.findIndex(row => row?.id === ours.id) > 0 || Date.parse(rows[0]?.created_on) > Date.parse(ours.created_on)) {
+    throw new WorkerReadbackFinal(`${field}: deployment ${ours.id} was superseded by ${String(rows[0]?.id).slice(0, 80)}`);
+  }
+}
+
 export class CmsApiReadbackError extends Error {}
 
 // Cloudflare documents that deployment propagation takes a few seconds; a
-// mismatch is read again until the confirmed write shows.
+// mismatch is read again until the confirmed write shows or Cloudflare's record
+// settles it (WorkerReadbackFinal). The wait names its check once a minute.
 // https://developers.cloudflare.com/workers/versions-and-deployments/version-skew/
-export async function waitForWorkerReadback(collect) {
+export async function waitForWorkerReadback(collect, { signal } = {}) {
   return waitFor('Cloudflare Worker readback', async () => {
     try {
       return { done: await collect() };
     } catch (error) {
+      if (error instanceof WorkerReadbackFinal) return { failed: error };
       if (!(error instanceof WorkerReadbackMismatch)) throw error;
       return { pending: error.message };
     }
-  });
+  }, { signal });
 }
 
 export async function readCmsApiDeployment(script, readDeployment, expected) {

@@ -140,11 +140,11 @@ export function checkPrivateWorkerDeployment(row, versionId, tag, expectedDeploy
 
 // The ledger still calls observe without arguments. Capture only this
 // invocation's confirmed response for its own readback.
-export function workerReadbackAfterWrite(effect, collect) {
+export function workerReadbackAfterWrite(effect, collect, signal) {
   let response;
   return {
     effect: async () => { response = await effect(); },
-    observe: () => waitForWorkerReadback(() => collect(response)),
+    observe: () => waitForWorkerReadback(() => collect(response), { signal }),
   };
 }
 

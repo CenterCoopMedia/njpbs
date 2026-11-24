@@ -2,6 +2,7 @@ import { preparePrivatePreviewPair, privatePreviewPairConfiguration } from "../.
 import { pair } from "./cms-preview-pairs.js";
 const account = process.env.CLOUDFLARE_ACCOUNT_ID;
 export const versionId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", deploymentId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+const deployedOn = "2026-11-24T20:00:00.000000Z", newerDeploymentId = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 export const namespaceId = "d".repeat(32), applicationId = "e".repeat(32), workerId = "f".repeat(32);
 export async function previewProviderFixture(overrides = {}) {
   const { pair: suppliedPair = pair("new", "b"), ...configuration } = overrides;
@@ -23,9 +24,10 @@ export async function previewProviderFixture(overrides = {}) {
   const prepared = await prepare();
   const state = { identity: false, version: false, deployed: false, container: false, schedules: false,
     writes: /** @type {string[]} */ ([]), requests: /** @type {{path: string, method: string}[]} */ ([]),
-    beforeWrite: async () => {}, failAction: /** @type {string|null} */ (null), lostAction: /** @type {string|null} */ (null),
+    beforeWrite: async () => {}, afterRequest: (/** @type {{path: string, method: string}} */ _request) => {},
+    failAction: /** @type {string|null} */ (null), lostAction: /** @type {string|null} */ (null),
     healthLost: false, healthReady: true, corrupt: /** @type {string|null} */ (null), tags: /** @type {string[]} */ ([]), domains: [],
-    staleVersionReads: 0, staleDeploymentReads: 0 };
+    staleVersionReads: 0, staleDeploymentReads: 0, newerDeployment: false };
   const ok = (result, info) => Response.json({ success: true, result, ...(info === undefined ? {} : { result_info: info }) });
   const withNamespace = () => metadata.bindings.map(b => b.type === "inherit" ? { name: b.name, type: "secret_text" }
     : b.name === "RENDERER" && state.deployed ? { ...b, namespace_id: namespaceId, script_name: config.name } : b);
@@ -39,12 +41,12 @@ export async function previewProviderFixture(overrides = {}) {
     durable_objects: { namespace_id: namespaceId }, configuration: { image: state.corrupt === "image" ? image + "changed" : image, instance_type: "standard-2" } });
   const effect = async (action, run) => {
     state.writes.push(action); await state.beforeWrite(action);
-    if (state.failAction === action) throw new Error("synthetic private boundary");
+    if (state.failAction === action) return Response.json({ success: false, errors: [{ code: 10000, message: "synthetic refusal" }], result: null }, { status: 400 });
     run(); if (state.lostAction === action) throw new Error("synthetic lost reply"); return ok({});
   };
   const request = async (url, init = {}) => {
     const u = new URL(url), p = u.pathname, method = init.method ?? "GET";
-    state.requests.push({ path: p, method });
+    state.requests.push({ path: p, method }); state.afterRequest({ path: p, method });
     if (u.hostname.endsWith(".workers.dev")) {
       if (state.healthLost) throw new Error("synthetic lost health reply");
       return Response.json({ ready: state.healthReady, pairId: descriptor.pairId, rendererSha: descriptor.rendererSha,
@@ -58,10 +60,10 @@ export async function previewProviderFixture(overrides = {}) {
     if (method === "POST" && p.endsWith("/versions")) {
       const form = init.body; const uploaded = JSON.parse(form.get("metadata"));
       if (uploaded.bindings.filter(b => b.type === "secret_text").length !== config.secrets.required.length) throw new Error("missing actual secret bindings");
-      await effect("version", () => { state.version = true; }); return ok({ id: versionId });
+      const answer = await effect("version", () => { state.version = true; }); return answer.ok ? ok({ id: versionId }) : answer;
     }
     if (method === "POST" && p.endsWith("/deployments")) {
-      await effect("deployment", () => { state.deployed = true; }); return ok({ id: deploymentId });
+      const answer = await effect("deployment", () => { state.deployed = true; }); return answer.ok ? ok({ id: deploymentId, created_on: deployedOn }) : answer;
     }
     if (method === "POST" && p.endsWith("/containers/applications")) return effect("container", () => { state.container = true; });
     if (method === "PUT" && p.endsWith("/schedules")) return effect("schedule", () => { state.schedules = true; });
@@ -72,7 +74,9 @@ export async function previewProviderFixture(overrides = {}) {
     }
     if (p.endsWith("/versions")) return ok({ items: state.version ? [{ id: versionId }] : [] });
     if (p.endsWith("/deployments")) {
-      const active = { id: deploymentId, strategy: "percentage", versions: [{ version_id: versionId, percentage: 100 }] };
+      const active = { id: deploymentId, created_on: deployedOn, strategy: "percentage", versions: [{ version_id: versionId, percentage: 100 }] };
+      if (state.deployed && state.newerDeployment) return ok({ deployments: [{ id: newerDeploymentId, created_on: "2026-11-24T20:05:00.000000Z",
+        strategy: "percentage", versions: [{ version_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", percentage: 100 }] }, active] });
       if (state.deployed && state.staleDeploymentReads > 0) {
         state.staleDeploymentReads--;
         return ok({ deployments: [{ ...active, id: versionId }] });

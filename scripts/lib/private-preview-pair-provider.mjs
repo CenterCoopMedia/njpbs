@@ -2,7 +2,7 @@ import { previewRendererBindings } from "./deployment-settings.mjs";
 import { createHash } from "node:crypto";
 import path from "node:path";
 import { PrivateProviderNotSent } from "./public-release-private-provider.mjs";
-import { requireWorkerReadback } from "./cloudflare-worker-readback.mjs";
+import { requireNotSuperseded, requireWorkerReadback, WorkerWriteRefused } from "./cloudflare-worker-readback.mjs";
 
 const ACCOUNT = (process.env.CLOUDFLARE_ACCOUNT_ID ?? "");
 const API = "https://api.cloudflare.com/client/v4";
@@ -113,7 +113,7 @@ export function createPrivatePreviewPairProvider({ prepared, operationDigest, re
   const { config, metadata, modules } = state, prefix = `/accounts/${ACCOUNT}`, script = `${prefix}/workers/scripts/${prepared.applicationName}`,
     resource = `${prefix}/workers/workers/${prepared.applicationName}`;
   async function http(endpoint, { method = "GET", body, missing = false } = {}) {
-    let sent = false;
+    let sent = false, refusedStatus = null;
     try {
       if (fetchImpl === fetch && (process.env.FIRESTORE_EMULATOR_HOST || process.env.FIREBASE_AUTH_EMULATOR_HOST)) reject("emulator-provider-refused");
       signal?.throwIfAborted(); const token = await readToken(); signal?.throwIfAborted();
@@ -123,13 +123,18 @@ export function createPrivatePreviewPairProvider({ prepared, operationDigest, re
       const response = await fetchImpl(API + endpoint, { method, headers, body: body instanceof FormData ? body : body === undefined ? undefined : JSON.stringify(body),
         redirect: "error", signal });
       if (missing && method === "GET" && response.status === 404) { await response.body?.cancel(); return null; }
-      if (!response.ok || response.redirected || !response.body) { await response.body?.cancel(); reject(); }
+      if (!response.ok || response.redirected || !response.body) {
+        await response.body?.cancel();
+        if (method !== "GET" && response.status >= 400 && response.status < 500 && ![408, 429].includes(response.status)) refusedStatus = response.status;
+        reject();
+      }
       const chunks = []; let size = 0;
       for await (const chunk of response.body) { size += chunk.byteLength; if (size > 48 * 1024 * 1024) reject(); chunks.push(chunk); }
       const result = JSON.parse(Buffer.concat(chunks).toString("utf8"));
       if (result.success !== true || !Object.hasOwn(result, "result") || result.errors?.length) reject();
       return result;
     } catch {
+      if (refusedStatus !== null) throw new WorkerWriteRefused(`Cloudflare refused ${method} ${endpoint.split("?")[0]} with HTTP ${refusedStatus}`);
       if (!sent && method !== "GET") throw new PrivateProviderNotSent();
       reject("provider-request-failed", sent && method !== "GET");
     }
@@ -245,8 +250,9 @@ export function createPrivatePreviewPairProvider({ prepared, operationDigest, re
     if (matching.length !== 1 || matching[0].id !== observed.namespaceId || matching[0].use_sqlite !== true || matching[0].preview !== undefined || matching[0].dispatch_namespace !== undefined) reject("namespace-identity");
     return { namespaceId: observed.namespaceId, versionId };
   }
-  async function deployment(versionId, expectedDeploymentId) {
+  async function deployment(versionId, expectedDeploymentId, expectedCreatedOn) {
     const rows = (await http(`${script}/deployments`)).result?.deployments, current = rows?.[0];
+    if (expectedDeploymentId !== undefined) requireNotSuperseded(rows, { id: expectedDeploymentId, created_on: expectedCreatedOn }, "Preview deploymentId");
     requireWorkerReadback(Array.isArray(rows) && UUID.test(current?.id) &&
       (expectedDeploymentId === undefined || current.id === expectedDeploymentId), "Preview deploymentId");
     requireWorkerReadback(current.strategy === "percentage", "Preview deployment strategy");
