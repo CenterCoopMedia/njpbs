@@ -31,8 +31,10 @@ function validate(firestore, request) {
 async function state(firestore, tx, request) {
   const [saved, pins, pointer, ...capabilities] = await tx.getAll(
     ...[`${ROOT}/${request.operationId}`, runtime.RUNTIME_DOCUMENT_PATH, POINTER, ...CAPABILITIES].map(path => firestore.doc(path)));
-  const publishing = await tx.get(firestore.collection("cmsPublishQueue").where("status", "==", "publishing").limit(1));
-  return { saved, pins, pointer, capabilities, publishing };
+  // Accepted work claims with the runtime commit it was queued under, so it must drain first.
+  const queued = await tx.get(firestore.collection("cmsPublishQueue")
+    .where("status", "in", ["pending", "reserved", "publishing"]).limit(1));
+  return { saved, pins, pointer, capabilities, queued };
 }
 
 // The pointer and every capability must already name the target commit at one settled generation.
@@ -40,7 +42,7 @@ function assertBaseline(s, request) {
   const pointer = assertPublicDeploymentPointer(s.pointer.data());
   if (pointer.state !== "idle" || pointer.activeCommitSha !== request.toCommitSha ||
       pointer.lastReservedGeneration !== pointer.activeGeneration ||
-      pointer.newestEligibleGeneration !== pointer.activeGeneration || !s.publishing.empty ||
+      pointer.newestEligibleGeneration !== pointer.activeGeneration || !s.queued.empty ||
       s.capabilities.some(row => !row.exists || row.data().rendererSha !== request.toCommitSha ||
         row.data().generation !== pointer.activeGeneration || row.data().servingEnabled !== true)) refuse();
   return pointer;

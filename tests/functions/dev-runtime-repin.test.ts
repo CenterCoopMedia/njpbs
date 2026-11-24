@@ -1,6 +1,8 @@
 import { afterAll, beforeEach, expect, it } from "vitest";
 import { initializeApp, deleteApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
+import { spawnSync } from "node:child_process";
+import { join } from "node:path";
 import { clearEmulatorFirestore } from "../helpers/emulator-firestore.js";
 import owner from "../../scripts/lib/dev-runtime-repin.cjs";
 import pointers from "../../functions/lib/public-deployment-pointer.js";
@@ -57,9 +59,9 @@ it.each([
   expect((await db.collection("system/devRuntimeRepins/operations").get()).size).toBe(0);
 });
 
-it("refuses while a publication is in flight", async () => {
+it.each(["pending", "reserved", "publishing"])("refuses while accepted publication work is %s", async (status) => {
   await seed();
-  await db.collection("cmsPublishQueue").doc("in-flight").set({ status: "publishing" });
+  await db.collection("cmsPublishQueue").doc("accepted").set({ status, commitSha: from });
   await expect(owner.repinDevRuntime({ firestore: db, request })).rejects.toThrow();
   expect(await pins()).toEqual(runtime(from));
 });
@@ -71,9 +73,20 @@ it("refuses any project other than development", async () => {
 });
 
 it("accepts only explicit arguments with the credential on stdin", () => {
-  const args = ["--operation-id", "repin-20261124", "--from", from, "--to", to, "--apply"];
-  expect(parseRepinArguments(args, {}, false)).toEqual({ apply: true, request });
+  const operator = "c".repeat(40);
+  const args = ["--operator-commit", operator, "--operation-id", "repin-20261124", "--from", from, "--to", to, "--apply"];
+  expect(parseRepinArguments(args, {}, false)).toEqual({ apply: true, operatorCommitSha: operator, request });
+  expect(() => parseRepinArguments(args.slice(2), {}, false)).toThrow("dev_repin_arguments_required");
   expect(() => parseRepinArguments(args, {}, true)).toThrow("dev_repin_explicit_stdin_required");
   expect(() => parseRepinArguments(args, { GOOGLE_APPLICATION_CREDENTIALS: "/tmp/key.json" }, false)).toThrow("dev_repin_explicit_stdin_required");
-  expect(() => parseRepinArguments(args.slice(0, 6), {}, false)).toThrow("dev_repin_arguments_required");
+  expect(() => parseRepinArguments(args.slice(0, 8), {}, false)).toThrow("dev_repin_arguments_required");
+});
+
+it("refuses a checkout that is not the clean reviewed operator commit before reading a credential", () => {
+  const result = spawnSync(process.execPath, ["scripts/repin-dev-runtime.mjs", "--operator-commit", "c".repeat(40),
+    "--operation-id", "repin-20261124", "--from", from, "--to", to, "--read"],
+    { cwd: join(import.meta.dirname, "../.."), input: "not a credential", encoding: "utf8",
+      env: { PATH: process.env.PATH } });
+  expect(result.status).toBe(1);
+  expect(result.stderr.trim()).toBe("dev_repin_operator_source_refused");
 });
