@@ -87,11 +87,11 @@ jobs:
   promote-development:
     if: >-
       github.event_name == 'workflow_dispatch' &&
-      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/release-run-site') &&
+      github.ref == 'refs/heads/main' &&
       vars.CANONICAL_GITHUB_REPOSITORY != '' &&
       vars.CANONICAL_GITHUB_REPOSITORY_ID != '' &&
       github.repository_id == vars.CANONICAL_GITHUB_REPOSITORY_ID &&
-      github.workflow_ref == format('{0}/.github/workflows/promote.yml@{1}', vars.CANONICAL_GITHUB_REPOSITORY, github.ref) &&
+      github.workflow_ref == format('{0}/.github/workflows/promote.yml@refs/heads/main', vars.CANONICAL_GITHUB_REPOSITORY) &&
       vars.CMS_DEPLOY_OWNER != '' && github.triggering_actor == vars.CMS_DEPLOY_OWNER &&
       inputs.target == 'development'
     environment: development
@@ -103,7 +103,7 @@ jobs:
           SELECTED_SHA: ${{ inputs.sha }}
         run: |
           set -euo pipefail
-          [[ "$SELECTED_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'A full lowercase commit SHA is required'; exit 1; }
+          [[ "$SELECTED_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'A full lowercase main SHA is required'; exit 1; }
       - name: Create repository-scoped promotion token
         id: app
         uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3
@@ -120,20 +120,20 @@ jobs:
           token: ${{ steps.app.outputs.token }}
           ref: ${{ github.sha }}
           fetch-depth: 0
-      # Development takes any commit of this repository: no main history, no
-      # main CI and no forward rule (the release run records those facts).
-      - name: Require the commit and an existing development branch
+      - name: Require main ancestry and an existing development branch
         env:
           SELECTED_SHA: ${{ inputs.sha }}
         run: |
           set -euo pipefail
-          git fetch --no-tags origin +refs/heads/development:refs/remotes/origin/development
-          git fetch --no-tags origin "$SELECTED_SHA"
-          git cat-file -e "$SELECTED_SHA^{commit}"
-      - name: Move development
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main +refs/heads/development:refs/remotes/origin/development
+          git merge-base --is-ancestor "$SELECTED_SHA" origin/main
+          git merge-base --is-ancestor origin/development "$SELECTED_SHA"
+      - name: Require successful main CI for this SHA
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPLOY_SHA: ${{ inputs.sha }}
+        run: node .github/scripts/require-main-ci.mjs
+      - name: Fast-forward development
         env:
           SELECTED_SHA: ${{ inputs.sha }}
-        run: |
-          set -euo pipefail
-          tip=$(git rev-parse refs/remotes/origin/development)
-          git push --force-with-lease="refs/heads/development:$tip" origin "$SELECTED_SHA:refs/heads/development"
+        run: git push origin "$SELECTED_SHA:refs/heads/development"

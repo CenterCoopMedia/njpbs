@@ -138,7 +138,7 @@ jobs:
     # re-run does not re-evaluate jobs that already succeeded.
     if: >-
       (vars.CANONICAL_GITHUB_REPOSITORY != '' && vars.CANONICAL_GITHUB_REPOSITORY_ID != '' && github.repository == vars.CANONICAL_GITHUB_REPOSITORY && github.repository_id == vars.CANONICAL_GITHUB_REPOSITORY_ID) &&
-      (vars.CMS_DEPLOY_OWNER != '' && github.triggering_actor == vars.CMS_DEPLOY_OWNER) && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/release-run-site' && inputs.target == 'development')
+      (vars.CMS_DEPLOY_OWNER != '' && github.triggering_actor == vars.CMS_DEPLOY_OWNER) && github.ref == 'refs/heads/main'
     permissions:
       contents: read
       issues: read
@@ -507,7 +507,7 @@ jobs:
     environment: ${{ inputs.target == 'development' && 'development' || 'production' }}
     if: >-
       (vars.CANONICAL_GITHUB_REPOSITORY != '' && vars.CANONICAL_GITHUB_REPOSITORY_ID != '' && github.repository == vars.CANONICAL_GITHUB_REPOSITORY && github.repository_id == vars.CANONICAL_GITHUB_REPOSITORY_ID) &&
-      (vars.CMS_DEPLOY_OWNER != '' && github.triggering_actor == vars.CMS_DEPLOY_OWNER) && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/release-run-site' && inputs.target == 'development')
+      (vars.CMS_DEPLOY_OWNER != '' && github.triggering_actor == vars.CMS_DEPLOY_OWNER) && github.ref == 'refs/heads/main'
     permissions:
       contents: read
     outputs:
@@ -594,7 +594,7 @@ jobs:
     environment: ${{ inputs.target == 'development' && 'development' || 'production' }}
     if: >-
       (vars.CANONICAL_GITHUB_REPOSITORY != '' && vars.CANONICAL_GITHUB_REPOSITORY_ID != '' && github.repository == vars.CANONICAL_GITHUB_REPOSITORY && github.repository_id == vars.CANONICAL_GITHUB_REPOSITORY_ID) &&
-      (vars.CMS_DEPLOY_OWNER != '' && github.triggering_actor == vars.CMS_DEPLOY_OWNER) && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/release-run-site' && inputs.target == 'development')
+      (vars.CMS_DEPLOY_OWNER != '' && github.triggering_actor == vars.CMS_DEPLOY_OWNER) && github.ref == 'refs/heads/main'
     # Deploy credentials must not share PR slots or their writable disk.
     runs-on: ubuntu-24.04
     # Measured Nov. 2026: 168 s, 155 s, 165 s (45191230409, 44613342087, dev 45310500950).
@@ -972,7 +972,7 @@ jobs:
     environment: ${{ inputs.target == 'development' && 'development' || 'production' }}
     if: >-
       (vars.CANONICAL_GITHUB_REPOSITORY != '' && vars.CANONICAL_GITHUB_REPOSITORY_ID != '' && github.repository == vars.CANONICAL_GITHUB_REPOSITORY && github.repository_id == vars.CANONICAL_GITHUB_REPOSITORY_ID) &&
-      (vars.CMS_DEPLOY_OWNER != '' && github.triggering_actor == vars.CMS_DEPLOY_OWNER) && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/release-run-site' && inputs.target == 'development')
+      (vars.CMS_DEPLOY_OWNER != '' && github.triggering_actor == vars.CMS_DEPLOY_OWNER) && github.ref == 'refs/heads/main'
     # Deploy credentials must not share PR slots or their writable disk.
     runs-on: ubuntu-24.04
     # Measured Nov. 2026: 68 s, 53 s, 67 s (45191230409, 44613342087, dev 45310500950).
@@ -1227,7 +1227,7 @@ jobs:
     environment: ${{ inputs.target == 'development' && 'development' || 'production' }}
     if: >-
       (vars.CANONICAL_GITHUB_REPOSITORY != '' && vars.CANONICAL_GITHUB_REPOSITORY_ID != '' && github.repository == vars.CANONICAL_GITHUB_REPOSITORY && github.repository_id == vars.CANONICAL_GITHUB_REPOSITORY_ID) &&
-      (vars.CMS_DEPLOY_OWNER != '' && github.triggering_actor == vars.CMS_DEPLOY_OWNER) && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/release-run-site' && inputs.target == 'development')
+      (vars.CMS_DEPLOY_OWNER != '' && github.triggering_actor == vars.CMS_DEPLOY_OWNER) && github.ref == 'refs/heads/main'
     # Deploy credentials must not share PR slots or their writable disk.
     runs-on: ubuntu-24.04
     # Measured Nov. 2026: 34m55s, 40m0s, 26m54s (45191230409, 44613342087, dev 45310500950).
@@ -1764,7 +1764,7 @@ jobs:
     environment: ${{ inputs.target == 'development' && 'development' || 'production' }}
     if: >-
       (vars.CANONICAL_GITHUB_REPOSITORY != '' && vars.CANONICAL_GITHUB_REPOSITORY_ID != '' && github.repository == vars.CANONICAL_GITHUB_REPOSITORY && github.repository_id == vars.CANONICAL_GITHUB_REPOSITORY_ID) &&
-      (vars.CMS_DEPLOY_OWNER != '' && github.triggering_actor == vars.CMS_DEPLOY_OWNER) && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/release-run-site' && inputs.target == 'development')
+      (vars.CMS_DEPLOY_OWNER != '' && github.triggering_actor == vars.CMS_DEPLOY_OWNER) && github.ref == 'refs/heads/main'
     # Wrangler builds the renderer container image and needs a Docker engine.
     runs-on: ubuntu-24.04
     # Allow all three wait limits plus setup and image deployment.
@@ -1879,7 +1879,7 @@ jobs:
     environment: ${{ inputs.target == 'development' && 'development' || 'production' }}
     if: >-
       (vars.CANONICAL_GITHUB_REPOSITORY != '' && vars.CANONICAL_GITHUB_REPOSITORY_ID != '' && github.repository == vars.CANONICAL_GITHUB_REPOSITORY && github.repository_id == vars.CANONICAL_GITHUB_REPOSITORY_ID) &&
-      (vars.CMS_DEPLOY_OWNER != '' && github.triggering_actor == vars.CMS_DEPLOY_OWNER) && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/release-run-site' && inputs.target == 'development')
+      (vars.CMS_DEPLOY_OWNER != '' && github.triggering_actor == vars.CMS_DEPLOY_OWNER) && github.ref == 'refs/heads/main'
     # Older release boot configs select installed Chrome on hosted runners.
     runs-on: ubuntu-24.04
     # Measured Nov. 2026: 266 s, 218 s, 119 s (45191230409, 44613342087, dev 45310500950).
@@ -1965,7 +1965,7 @@ jobs:
     environment: ${{ inputs.target == 'development' && 'development' || 'production' }}
     if: >-
       (vars.CANONICAL_GITHUB_REPOSITORY != '' && vars.CANONICAL_GITHUB_REPOSITORY_ID != '' && github.repository == vars.CANONICAL_GITHUB_REPOSITORY && github.repository_id == vars.CANONICAL_GITHUB_REPOSITORY_ID) &&
-      (vars.CMS_DEPLOY_OWNER != '' && github.triggering_actor == vars.CMS_DEPLOY_OWNER) && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/release-run-site' && inputs.target == 'development')
+      (vars.CMS_DEPLOY_OWNER != '' && github.triggering_actor == vars.CMS_DEPLOY_OWNER) && github.ref == 'refs/heads/main'
     # Deploy credentials must not share PR slots or their writable disk.
     runs-on: ubuntu-24.04
     # Measured Nov. 2026: 70 s, 66 s, 43 s (45191230409, 44613342087, dev 45310500950).
@@ -2153,7 +2153,7 @@ jobs:
     environment: ${{ inputs.target == 'development' && 'development' || 'production' }}
     if: >-
       (vars.CANONICAL_GITHUB_REPOSITORY != '' && vars.CANONICAL_GITHUB_REPOSITORY_ID != '' && github.repository == vars.CANONICAL_GITHUB_REPOSITORY && github.repository_id == vars.CANONICAL_GITHUB_REPOSITORY_ID) &&
-      (vars.CMS_DEPLOY_OWNER != '' && github.triggering_actor == vars.CMS_DEPLOY_OWNER) && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/release-run-site' && inputs.target == 'development')
+      (vars.CMS_DEPLOY_OWNER != '' && github.triggering_actor == vars.CMS_DEPLOY_OWNER) && github.ref == 'refs/heads/main'
     # The before-upload proof needs job ADC, so it runs apart from the Admin upload's Cloudflare tools.
     runs-on: ubuntu-24.04
     # Measured Nov. 2026: 60 s, 60 s, 65 s (45191230409, 44613342087, dev 45310500950).
@@ -2300,7 +2300,7 @@ jobs:
     environment: ${{ inputs.target == 'development' && 'development' || 'production' }}
     if: >-
       (vars.CANONICAL_GITHUB_REPOSITORY != '' && vars.CANONICAL_GITHUB_REPOSITORY_ID != '' && github.repository == vars.CANONICAL_GITHUB_REPOSITORY && github.repository_id == vars.CANONICAL_GITHUB_REPOSITORY_ID) &&
-      (vars.CMS_DEPLOY_OWNER != '' && github.triggering_actor == vars.CMS_DEPLOY_OWNER) && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/release-run-site' && inputs.target == 'development') &&
+      (vars.CMS_DEPLOY_OWNER != '' && github.triggering_actor == vars.CMS_DEPLOY_OWNER) && github.ref == 'refs/heads/main' &&
       needs.admin-contract.outputs.independent != 'false'
     # Keep job ADC apart from smoke-gate code. Only an explicit public-first result skips settlement.
     runs-on: ubuntu-24.04

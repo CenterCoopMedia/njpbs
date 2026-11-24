@@ -117,16 +117,11 @@ describe("deploy credential environments", () => {
     // Exactly one job runs for each target.
     expect([admits(production, "production"), admits(development, "production")]).toEqual([true, false]);
     expect([admits(production, "development"), admits(development, "development")]).toEqual([false, true]);
-    // The release-run-site exception covers development only. Remove it when #632 merges.
-    expect(production.if).not.toContain("release-run-site");
     expect(development.permissions).toBeUndefined();
     const step = (job: Job, prefix: string) => job.steps.find(s => s.uses?.startsWith(prefix));
     expect(step(development, "actions/create-github-app-token@")?.with).toEqual(step(production, "actions/create-github-app-token@")?.with);
     const push = development.steps[development.steps.length - 1];
-    // Development takes any commit of ours: a dev run promotes a release-run-site commit that does not descend
-    // from the development tip. The lease still refuses a tip it did not read. Remove when #632 merges.
-    expect(push.run).toBe('set -euo pipefail\ntip=$(git rev-parse refs/remotes/origin/development)\n' +
-      'git push --force-with-lease="refs/heads/development:$tip" origin "$SELECTED_SHA:refs/heads/development"\n');
+    expect(push.run).toBe('git push origin "$SELECTED_SHA:refs/heads/development"');
     // Production only moves forward, along main.
     const productionRuns = production.steps.map(s => s.run ?? "").join("\n");
     expect(productionRuns).not.toMatch(/--force|\+(?:\$SELECTED_SHA|"\$SELECTED_SHA)/);
@@ -208,19 +203,7 @@ describe("deploy credential environments", () => {
       production: ["main"], "schedule-bake": ["main"], "publisher-image": ["main"], development: ["main"],
     });
     expect(environmentPolicy()["publisher-image"].secrets).toEqual(["CLOUDFLARE_PUBLISHER_IMAGE_TOKEN"]);
-    const image = workflow("publisher-image").jobs.image;
-    assertConfiguredAdmission(image, "publisher-image");
-    // No target other than development admits the release branch. Remove the exception when #632 merges.
-    const ref = "refs/heads/release-run-site";
-    for (const target of ["production", undefined]) {
-      expect(runInNewContext(image.if, {
-        github: { event_name: "workflow_dispatch", ref, repository_id: "1",
-          workflow_ref: `o/r/.github/workflows/publisher-image.yml@${ref}`, triggering_actor: "a" },
-        vars: { CANONICAL_GITHUB_REPOSITORY: "o/r", CANONICAL_GITHUB_REPOSITORY_ID: "1", CMS_DEPLOY_OWNER: "a" },
-        inputs: target === undefined ? {} : { target },
-        format: (pattern: string, ...values: string[]) => pattern.replace(/\{(\d+)\}/g, (_, index) => values[Number(index)]),
-      })).toBe(false);
-    }
+    assertConfiguredAdmission(workflow("publisher-image").jobs.image, "publisher-image");
   });
 
   for (const file of readdirSync(new URL("../../.github/workflows/", import.meta.url)).filter(file => /\.ya?ml$/.test(file))) {
