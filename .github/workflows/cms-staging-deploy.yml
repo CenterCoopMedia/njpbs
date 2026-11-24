@@ -1274,7 +1274,7 @@ jobs:
       - name: Mark the Functions receipt in progress
         if: needs.firebase-preflight.outputs.functions_mutated == 'true' && !inputs.install_reader_bridge
         env:
-          RENDERER_TARGET_SHA: ${{ needs.firebase-preflight.outputs.renderer_target_sha }}
+          RENDERER_TARGET_SHA: ${{ env.CMS_TARGET_RENDERER_SHA || needs.firebase-preflight.outputs.renderer_target_sha }}
           DEPLOY_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
         run: |
           node scripts/component-runner.mjs functions start \
