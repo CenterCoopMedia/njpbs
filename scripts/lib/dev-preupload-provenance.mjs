@@ -61,11 +61,24 @@ function assertSkippedFirstAttempt(jobs, { failure, identity }) {
         job.conclusion !== "skipped" || !Array.isArray(job.steps) || job.steps.length !== 0)) contract.refuse();
 }
 
-async function boundedBytes(response) {
+// Log cap from measurement (Nov. 23-24, 2026): the six refresh build-job logs were 159,973, 188,207,
+// 188,613, 189,110, 197,524 and 745,298 bytes. The 745,298-byte log (run 45271622201) hit the old shared
+// 256 KiB cap. 4 MiB is 5.6 times the largest. API JSON keeps 256 KiB.
+export const JSON_LIMIT = 256 * 1024, LOG_LIMIT = 4 * 1024 * 1024;
+
+// Names the size and the cap; carries no response content.
+function tooLarge(kind, response, size, limit) {
+  const length = Number(response.headers?.get?.("content-length"));
+  const bytes = Number.isSafeInteger(length) && length > limit ? length : `>${limit}`;
+  throw Object.assign(new Error(`GitHub ${kind} response is ${bytes} bytes; cap is ${limit}`),
+    { refusalDetail: { reason: "github_response_too_large", kind, bytes, capBytes: limit } });
+}
+
+async function boundedBytes(response, limit, kind) {
   const chunks = []; let size = 0;
   for await (const chunk of response.body) {
     size += chunk.length;
-    if (size > 256 * 1024) contract.refuse();
+    if (size > limit) tooLarge(kind, response, size, limit);
     chunks.push(chunk);
   }
   return Buffer.concat(chunks);
@@ -88,7 +101,7 @@ export function devSettlementGithub(token, request = fetch, env = process.env) {
       content = await request(location, { redirect: "error", signal: AbortSignal.timeout(30_000) });
     }
     if (!content.ok) contract.refuse();
-    const bytes = await boundedBytes(content);
+    const bytes = await boundedBytes(content, log ? LOG_LIMIT : JSON_LIMIT, log ? "log" : "api");
     return log ? bytes : JSON.parse(bytes.toString("utf8"));
   };
 }
