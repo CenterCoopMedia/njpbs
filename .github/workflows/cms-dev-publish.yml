@@ -201,7 +201,6 @@ jobs:
           CMS_DEV_ACCESS_CLIENT_SECRET: ${{ secrets.CMS_DEV_ACCESS_CLIENT_SECRET }}
           CMS_DEV_CMS_SOURCE_SHA: ${{ vars.CMS_DEV_CMS_SOURCE_SHA }}
           CMS_DEV_ADMIN_SOURCE_SHA: ${{ vars.CMS_DEV_ADMIN_SOURCE_SHA }}
-          CMS_DEV_RENDERER_SOURCE_SHA: ${{ vars.CMS_DEV_RENDERER_SOURCE_SHA }}
         run: |
           chmod 700 dev-publication
           chmod 600 dev-publication/public-context.json
@@ -598,7 +597,6 @@ jobs:
           CMS_DEV_ACCESS_CLIENT_SECRET: ${{ secrets.CMS_DEV_ACCESS_CLIENT_SECRET }}
           CMS_DEV_CMS_SOURCE_SHA: ${{ vars.CMS_DEV_CMS_SOURCE_SHA }}
           CMS_DEV_ADMIN_SOURCE_SHA: ${{ vars.CMS_DEV_ADMIN_SOURCE_SHA }}
-          CMS_DEV_RENDERER_SOURCE_SHA: ${{ vars.CMS_DEV_RENDERER_SOURCE_SHA }}
         run: |
           chmod 700 dev-publication
           chmod 600 dev-publication/public-context.json

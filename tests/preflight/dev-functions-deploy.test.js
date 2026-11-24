@@ -210,7 +210,6 @@ describe("default-off development reader installation", () => {
       PUBLIC_RELEASE_READERS_ENABLED: "true", PUBLIC_RELEASE_COMPOSED_READERS_ENABLED: "true",
       CMS_READER_BRIDGE_FUNCTIONS_CANDIDATE: "functions-123-1", CMS_READER_BRIDGE_CMS_API_CANDIDATE: "cmsApi-123-1" });
     for (const key of Object.keys(env)) {
-      if (["CMS_DEV_RELEASE_PREVIEW_RENDERER", "CMS_DEV_RENDERER_SOURCE_SHA"].includes(key)) continue;
       expect(() => assertDevReaderContext({ ...env, [key]: undefined }), key).toThrow();
     }
     for (const patch of [{ FIREBASE_PROJECT_ID: "njpbs-site" }, { CMS_API_WORKER: "njpbs-cms-api" },

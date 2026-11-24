@@ -7,9 +7,6 @@ inputs:
   artifact-name:
     description: Distinct identity artifact for this job.
     required: true
-  renderer-only:
-    description: Preserve the exact-source bootstrap restriction.
-    default: 'false'
   install-reader-bridge:
     description: Preserve the exact-source reader installation restriction.
     default: 'false'
@@ -22,7 +19,6 @@ runs:
       run: node .github/scripts/metered-api-scan.mjs
     - name: Require the exact reviewed dev pin
       env:
-        CMS_DEV_RENDERER_ONLY: ${{ inputs.renderer-only }}
         CMS_DEV_INSTALL_READER_BRIDGE: ${{ inputs.install-reader-bridge }}
       shell: bash
       run: node .dev-deploy-gate/.github/scripts/require-dev-deploy-source.mjs

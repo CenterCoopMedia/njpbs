@@ -27,8 +27,10 @@ entry variables contain vault pointers only. Never print credential values.
    `dev-staff-gateway-deploy.yml`, `dev-machine-receipt-proof.yml`,
    `dev-anonymous-refusal.yml` and `cms-dev-publish.yml` must be active.
 3. Read `CMS_DEV_PUBLISH_ENABLED`; it must be `false`. Read the development
-   environment's three source pins. Confirm that all source commits exist in
-   the public repository and have successful CI. Keep production workflows off.
+   environment's two source pins and the `sourceSha` of the development
+   renderer component receipt (`cmsDeploymentReceipts/renderer`). Confirm that
+   all source commits exist in the public repository and have successful CI.
+   Keep production workflows off.
 4. Read development Firestore without changing it. The runtime and its 08a
    initialization receipt must be absent. The deployment pointer must be idle,
    with equal active, last-reserved and newest-eligible generations. No
@@ -45,12 +47,20 @@ an inferred serializer identity or a direct document patch.
 D12 starts after the manual-refresh support is merged with
 `CMS_DEV_PUBLISH_ENABLED=false` and its main CI passes. Keep publishing off at
 merge so that the workflow change does not start an automatic code refresh.
-Then deploy the public development candidate. Set the three development
-source pins through the normal reviewed preparation to public source commits.
-When the renderer pin changes, release it with the deployment:
+Then deploy the public development candidate. Set the two development source
+pins through the normal reviewed preparation to public source commits. Release
+the development renderer with a development run of the CMS staging deploy. That
+run writes the renderer component receipt at the candidate commit:
 
 ```bash
-gh workflow run cms-dev-deploy.yml --repo "$PUB" --ref main -f deploy_ref="$CANDIDATE" -f release_preview_renderer=true
+gh workflow run cms-staging-deploy.yml --repo "$PUB" --ref main -f target=development -f deploy_ref="$CANDIDATE"
+```
+
+Then run the development deploy. It reads the renderer component receipt and
+confirms the live renderer before it deploys Functions:
+
+```bash
+gh workflow run cms-dev-deploy.yml --repo "$PUB" --ref main -f deploy_ref="$CANDIDATE"
 ```
 
 Read the run conclusion and verify the deployed development Functions point to

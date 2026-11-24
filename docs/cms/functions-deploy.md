@@ -35,8 +35,11 @@ failure stop. Provisioning and release remain distinct authorizations.
 ## Development rehearsal
 
 Run the normal development deploy at a green exact main SHA with publishing
-held and no active dev producer. Keep the current renderer pin for a routine
-deploy. The dev job uses its own OIDC identity, Worker token and dev codebase.
+held and no active dev producer. The deploy reads the renderer SHA from the
+complete development renderer component receipt and confirms the live renderer
+before it deploys Functions. The dev renderer deploys through a
+`cms-staging-deploy.yml` run with target `development`. The dev job uses its
+own OIDC identity, Worker token and dev codebase.
 
 The dev and production jobs use the same per-export target selector. Dev
 compares the rendered parameters and a complete live inventory to the prior

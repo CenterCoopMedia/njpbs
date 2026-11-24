@@ -169,10 +169,10 @@ jobs:
       - name: Dev preview release contracts
         run: >-
           npx --no-install vitest run
-          tests/dev-preview-release.test.ts tests/dev-preview-gateways.test.ts
+          tests/dev-preview-gateways.test.ts
           tests/datasets-contract.test.ts tests/data-figure.test.ts
-          tests/dev-renderer-bootstrap-inputs.test.mjs tests/dev-current-code-preflight.test.ts
-          tests/dev-renderer-workflow.test.mjs tests/development-install-command-files.test.ts
+          tests/dev-current-code-preflight.test.ts
+          tests/development-install-command-files.test.ts
           --maxWorkers=1 --no-file-parallelism
       - name: Check build-free Post reader in workerd
         run: node scripts/test-no-build-post-reader-runtime.mjs

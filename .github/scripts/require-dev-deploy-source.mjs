@@ -22,14 +22,14 @@ export function requireDevDeploySource({ env, releaseRoot, trustedRoot }) {
   ].includes(origin)) throw new Error("Dev deploy canonical origin refused");
   requireReleaseSource({ sha: sourceSha, cwd: releaseRoot });
   git(releaseRoot, "merge-base", "--is-ancestor", sourceSha, trustedWorkflowSha);
-  // These modes retain their exact-workflow-source authorization contracts.
-  if ((env.CMS_DEV_RENDERER_ONLY === "true" || env.CMS_DEV_INSTALL_READER_BRIDGE === "true") && sourceSha !== trustedWorkflowSha) {
-    throw new Error("Dev bootstrap and reader installation still require the exact workflow source");
+  // Reader installation retains its exact-workflow-source authorization contract.
+  if (env.CMS_DEV_INSTALL_READER_BRIDGE === "true" && sourceSha !== trustedWorkflowSha) {
+    throw new Error("Dev reader installation still requires the exact workflow source");
   }
   const manifest = JSON.parse(readFileSync(resolve(releaseRoot, ".github/cms-deploy-compatibility.json"), "utf8"));
   if (manifest.contracts?.cmsDevReleaseChecks?.version !== 1) throw new Error("Dev pin lacks cmsDevReleaseChecks version 1");
   const files = ["scripts/smoke-cms-functions.mjs", "scripts/smoke-dev-cms-functions.mjs", "scripts/check-dev-anonymous-refusal.mjs", "scripts/lib/dev-deploy-source.mjs",
-    "scripts/deploy-dev-functions.mjs", "scripts/deploy-dev-reader-mounts.mjs", "scripts/deploy-dev-preview-gateways.mjs", "preview-renderer/deploy-dev.mjs",
+    "scripts/deploy-dev-functions.mjs", "scripts/deploy-dev-reader-mounts.mjs", "scripts/deploy-dev-preview-gateways.mjs",
     "functions/dev-index.js", "functions/dev-manifest.js"];
   git(releaseRoot, "ls-files", "--error-unmatch", "--", ...files);
   for (const file of files) {
