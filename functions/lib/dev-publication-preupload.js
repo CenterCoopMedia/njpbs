@@ -2,7 +2,7 @@
 
 const { isDeepStrictEqual } = require("node:util");
 const p = require("./public-release-pair");
-const { publicationTarget, assertPublicationTarget } = require("./publication-target");
+const { publicationTarget } = require("./publication-target");
 const { assertPublicDeploymentReservedBatch, timestampMillis } = require("./public-deployment");
 
 const REASON = "dev_publish_failed_before_upload";
@@ -14,14 +14,22 @@ const FAILURES = Object.freeze({
 });
 const FAILURE = FAILURES.retained_dev_renderer_source_differs;
 const refuse = () => { throw new Error("Development pre-upload settlement refused"); };
+// Some retired dev rows were sealed by an operator running the unrendered source,
+// so their request holds the template development target, not the rendered one
+// deployed Functions now carry. This file is not in config/development-inputs.json,
+// so the renderer leaves these values as written. The two targets differ only in
+// the names below; every other field must still equal the deployed target.
+const TEMPLATE_DEVELOPMENT_NAMES = Object.freeze({ workerName: "template-dev-public",
+  origin: "https://dev-public.example.org", previewBucket: "template-dev-cms-previews" });
+const sealedTargets = () => [publicationTarget("development"),
+  { ...publicationTarget("development"), ...TEMPLATE_DEVELOPMENT_NAMES }];
 
 function parseDevPreuploadSettlement(value) {
   p.exact(value, ["schemaVersion", "target", "identity", "generation", "inputDigest", "failure"]);
-  assertPublicationTarget(value.target);
   p.exact(value.identity, ["queueId", "buildBatchId", "commitSha"]);
   p.exact(value.failure, ["runId", "runAttempt", "jobId", "completedAt", "code", "logDigest"]);
   const { identity, failure } = value;
-  if (value.schemaVersion !== 1 || !isDeepStrictEqual(value.target, publicationTarget("development")) ||
+  if (value.schemaVersion !== 1 || !sealedTargets().some(target => isDeepStrictEqual(value.target, target)) ||
       !/^[A-Za-z0-9]{20}$/.test(identity.queueId ?? "") || identity.buildBatchId !== `cms-${identity.queueId}` ||
       !/^[a-f0-9]{40}$/.test(identity.commitSha ?? "") || !p.positive(value.generation) || !p.digest(value.inputDigest) ||
       !/^[1-9][0-9]{0,19}$/.test(failure.runId ?? "") || !/^[1-9][0-9]{0,19}$/.test(failure.jobId ?? "") ||

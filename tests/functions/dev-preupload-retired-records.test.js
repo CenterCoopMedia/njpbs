@@ -88,3 +88,17 @@ it("existing records accept only the listed failure codes", () => {
     expect(() => contract.parseDevPreuploadSettlement(value)).toThrow();
   }
 });
+
+it("existing records accept the template development target their operator sealed, and no other target", () => {
+  // Three dev rows were sealed with the unrendered source's target. Deployed
+  // Functions carry the rendered target, so both must parse.
+  const template = { ...target.publicationTarget("development"), workerName: "template-dev-public",
+    origin: "https://dev-public.example.org", previewBucket: "template-dev-cms-previews" };
+  const sealed = { ...structuredClone(request), target: template };
+  expect(contract.parseDevPreuploadSettlement(sealed)).toBe(sealed);
+  for (const changed of [{ projectId: "njpbs-site" }, { workerName: "njpbs-production" }, { serializerId: "cloudflare-publisher" }, { extra: "x" }]) {
+    const value = { ...structuredClone(request), target: { ...template, ...changed } };
+    expect(() => contract.parseDevPreuploadSettlement(value)).toThrow();
+  }
+  expect(() => contract.parseDevPreuploadSettlement({ ...structuredClone(request), target: target.publicationTarget("production") })).toThrow();
+});
