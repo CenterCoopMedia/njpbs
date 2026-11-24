@@ -95,6 +95,7 @@ describe("one Preview action", () => {
     await act(async () => { status.resolve(result({ status: "failed", failureReason: "preview_context_refreshing", previewUrl: null })); });
     expect(screen.getByRole("alert")).toHaveTextContent("Previews are refreshing after a recent publish. Try again in a minute.");
     expect(popup.document.querySelector(".cms-preview-progress")?.getAttribute("data-state")).toBe("error");
+    expect(popup.document.querySelector(".cms-preview-progress")?.getAttribute("data-progress")).toBe("refresh-failed");
     expect((popup.document.querySelector(".preview-footer") as HTMLElement).hidden).toBe(true);
     expect((popup.document.querySelector(".preview-steps") as HTMLElement).hidden).toBe(true);
     expect(popup.location.replace).not.toHaveBeenCalled();

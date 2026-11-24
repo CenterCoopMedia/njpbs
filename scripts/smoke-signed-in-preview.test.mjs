@@ -47,13 +47,19 @@ test("adds Access headers on one origin and refuses to forward them on redirects
   } }, env.CMS_DEV_PREVIEW_ORIGIN, access);
 });
 
-function fixtureBrowser(settings, { sessionStatus = 204, documentStatus = 200, headingVisible = true } = {}) {
+function fixtureBrowser(settings, { sessionStatus = 204, documentStatus = 200, headingVisible = true,
+  sessionFailure, noDocument = false, progress = "building" } = {}) {
   const context = new EventEmitter();
   const page = new EventEmitter();
   const frame = {};
   const artifact = `${settings.preview}/p/abcdefghijklmnopqrst/smoke-fixture/`;
   const staffSession = `${settings.preview}/__cms-session`;
-  const wait = (emitter, event, predicate) => new Promise(resolve => {
+  const wait = (emitter, event, predicate, timeout) => new Promise((resolve, reject) => {
+    // A wait for something the fixture never sends times out at once.
+    if (timeout && ((event === "response" && emitter === context && noDocument) ||
+        (event === "response" && emitter === page && sessionFailure))) {
+      setTimeout(() => reject(new Error("Timeout exceeded")), 5);
+    }
     const receive = value => {
       if (predicate && !predicate(value)) return;
       emitter.off(event, receive);
@@ -61,8 +67,14 @@ function fixtureBrowser(settings, { sessionStatus = 204, documentStatus = 200, h
     };
     emitter.on(event, receive);
   });
+  let popupUrl = "about:blank";
   const popup = {
     mainFrame: () => frame,
+    url: () => popupUrl,
+    locator(selector) {
+      assert.equal(selector, "main.cms-preview-progress");
+      return { first: () => ({ async getAttribute(name) { assert.equal(name, "data-progress"); return progress; } }) };
+    },
     async waitForURL(matches) { assert.equal(matches(new URL(artifact)), true); },
     getByRole(role, options) {
       assert.equal(role, "heading");
@@ -72,7 +84,7 @@ function fixtureBrowser(settings, { sessionStatus = 204, documentStatus = 200, h
   };
   const response = (url, status, method, navigation) => ({
     url: () => url, status: () => status, frame: () => frame,
-    request: () => ({ method: () => method, isNavigationRequest: () => navigation, resourceType: () => navigation ? "document" : "fetch" }),
+    request: () => ({ url: () => url, method: () => method, isNavigationRequest: () => navigation, resourceType: () => navigation ? "document" : "fetch" }),
   });
 
   let location;
@@ -81,7 +93,7 @@ function fixtureBrowser(settings, { sessionStatus = 204, documentStatus = 200, h
     url: () => location,
     async goto(url) { location = url; return { status: () => 200 }; },
     setDefaultTimeout() {},
-    waitForResponse: predicate => wait(page, "response", predicate),
+    waitForResponse: (predicate, options) => wait(page, "response", predicate, options?.timeout),
     locator: selector => selector === "body"
       ? { async ariaSnapshot() { assert.equal(password, ""); } }
       : { getByRole: () => ({ async click() { assert.equal(password, credential.password); } }) },
@@ -97,24 +109,49 @@ function fixtureBrowser(settings, { sessionStatus = 204, documentStatus = 200, h
         assert.equal(name, "Preview");
         assert.equal(password, "");
         context.emit("page", popup);
-        page.emit("response", response(staffSession, sessionStatus, "POST", false));
+        if (sessionFailure) page.emit("requestfailed", { url: () => staffSession, method: () => "POST", failure: () => ({ errorText: sessionFailure }) });
+        else page.emit("response", response(staffSession, sessionStatus, "POST", false));
+        if (noDocument) return;
+        popupUrl = artifact;
         context.emit("response", response(artifact, documentStatus, "GET", true));
         if (documentStatus !== 200) context.emit("response", response(artifact, 200, "GET", true));
       },
     }),
   });
-  Object.assign(context, { newPage: async () => page, waitForEvent: (event, options) => wait(context, event, options.predicate) });
+  Object.assign(context, { newPage: async () => page, waitForEvent: (event, options) => wait(context, event, options.predicate, options.timeout) });
   return { newContext: async () => context };
 }
 
 test("requires staff session, first private document response and fixture heading", async () => {
   const settings = previewSmokeSettings("production", env);
-  for (const [input, ok, code] of [
-    [{}, true, "signed_in_private_preview"],
-    [{ sessionStatus: 403 }, false, "preview_session_failed"],
-    [{ documentStatus: 302 }, false, "preview_document_failed"],
-    [{ headingVisible: false }, false, "preview_heading_missing"],
+  const session = { status: 204, host: "preview.njpbs.org" };
+  const document = { status: 200, host: "preview.njpbs.org" };
+  const atArtifact = { host: "preview.njpbs.org", progress: "building" };
+  assert.deepEqual(await checkSignedInPreview(fixtureBrowser(settings), settings), { ok: true, code: "signed_in_private_preview" });
+  for (const [input, receipt] of [
+    [{ sessionStatus: 403 }, { code: "preview_session_failed", missing: [],
+      session: { status: 403, host: "preview.njpbs.org" }, document, popup: atArtifact }],
+    [{ documentStatus: 302 }, { code: "preview_document_failed", missing: [],
+      session, document: { status: 302, host: "preview.njpbs.org" }, popup: atArtifact }],
+    [{ headingVisible: false }, { code: "preview_heading_missing", missing: [], session, document, popup: atArtifact }],
   ]) {
-    assert.deepEqual(await checkSignedInPreview(fixtureBrowser(settings, input), settings), { ok, code });
+    assert.deepEqual(await checkSignedInPreview(fixtureBrowser(settings, input), settings), { ok: false, ...receipt });
   }
+});
+
+test("names the missing wait and what the preview tab showed", async () => {
+  const settings = previewSmokeSettings("production", env);
+  assert.deepEqual(await checkSignedInPreview(fixtureBrowser(settings, { noDocument: true, progress: "error" }), settings), {
+    ok: false, code: "private_preview_unavailable", missing: ["document"],
+    session: { status: 204, host: "preview.njpbs.org" }, document: null, popup: { host: "about:blank", progress: "error" },
+  });
+  assert.deepEqual(await checkSignedInPreview(fixtureBrowser(settings, {
+    sessionFailure: "net::ERR_FAILED", noDocument: true, progress: "session-slow" }), settings), {
+    ok: false, code: "private_preview_unavailable", missing: ["document"],
+    session: { failed: "net::ERR_FAILED" }, document: null, popup: { host: "about:blank", progress: "session-slow" },
+  });
+  // Unknown progress values and raw failure text never reach the receipt.
+  const receipt = await checkSignedInPreview(fixtureBrowser(settings, {
+    sessionFailure: "net::ERR_FAILED https://secret.example/?token=x", noDocument: true, progress: "<b>draft title</b>" }), settings);
+  assert.deepEqual([receipt.session, receipt.popup], [{ failed: "failed" }, { host: "about:blank", progress: null }]);
 });
