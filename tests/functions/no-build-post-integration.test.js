@@ -816,8 +816,9 @@ describe("one-Post acceptance, ownership and public receipt contracts", () => {
 
     await db.doc("system/cmsPublicationRuntime").set({ schemaVersion: 1, phase: "ready", commitSha: sha,
       serializerId: "node-compute-primary", cloud: { phase: "ready", commitSha: sha, serializerId: "cloudflare-publisher" } });
+    const target = publicationTarget("production");
     const preparationId = "Release0000000000001";
-    const reservation = await preparation.preparePublicRelease({ firestore: db, preparationId, commitSha: candidateSha, oldCommitSha: sha });
+    const reservation = await preparation.preparePublicRelease({ target, firestore: db, preparationId, commitSha: candidateSha, oldCommitSha: sha });
     const mediaManifest = manifestContract.createPublicMediaManifest({ reservation, owners: [],
       artifactInventory: ["cmsPages", "cmsPosts", "cmsSettings", "cmsAuthorProfilesPublic"]
         .map(collection => ({ collection, complete: true, documentIds: [] })) });
@@ -832,11 +833,11 @@ describe("one-Post acceptance, ownership and public receipt contracts", () => {
     const publicBuildValues = { PUBLIC_GA4_MEASUREMENT_ID: "G-TEST123", PUBLIC_REPORT_ENDPOINT: "https://report.example.org/",
       PUBLIC_SHARE_INTAKE_ENDPOINT: "https://intake.example.org/", PUBLIC_TURNSTILE_SITEKEY: "1x00000000000000000000AA" };
     const publicBuildSettings = { schemaVersion: 1, commitSha: candidateSha, values: publicBuildValues, overridesAbsent: true };
-    const sealInput = { firestore: db, preparationId, commitSha: candidateSha,
+    const sealInput = { target, firestore: db, preparationId, commitSha: candidateSha,
       inputSha256: createHash("sha256").update(inputBytes).digest("hex"), artifactCheckpointDigest: "d".repeat(64),
       preparedArtifact: prepared, mediaManifest, publicBuildSettings };
     await preparation.recordPreparedPublicReleaseCheckpoint(sealInput);
-    await preparation.recordPreparedPublicWorkerCandidate({ firestore: db, preparationId, candidate: fullCandidate });
+    await preparation.recordPreparedPublicWorkerCandidate({ target, firestore: db, preparationId, candidate: fullCandidate });
     await db.doc(`cmsPreviewPublicContexts/${reservation.buildBatchId}`).set({ schemaVersion: 1,
       buildBatchId: reservation.buildBatchId, artifactReceiptDigest: fullCandidate.artifactReceiptDigest, sha256: "e".repeat(64),
       byteLength: 100, key: `public-context/${reservation.buildBatchId}/${"e".repeat(64)}.json` });
@@ -863,7 +864,7 @@ describe("one-Post acceptance, ownership and public receipt contracts", () => {
       vi.spyOn(previewContextModule, "retainCloudPreviewPublicContext").mockResolvedValue(),
     ];
     try {
-      const produce = () => sealPreparedCloudRelease({ firestore: db, queueId: preparationId, commitSha: candidateSha,
+      const produce = () => sealPreparedCloudRelease({ target, firestore: db, queueId: preparationId, commitSha: candidateSha,
         stateDirectory: directory, storage: { readInput: async () => inputBytes, restoreArtifact: async () => true },
         cloudflareApiToken: "fixture", previewStorageCredential: {}, buildEnvironment: publicBuildValues });
       spies[0].mockRejectedValueOnce(new Error("Wrong source"));

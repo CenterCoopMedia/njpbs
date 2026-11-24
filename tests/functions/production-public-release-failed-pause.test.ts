@@ -17,6 +17,7 @@ import { publicContextDigest } from '../../functions/lib/public-context-revision
 import { projectPublicReleasePairSourceCensusDocuments } from '../../site/scripts/public-release-pair-source-census';
 import postConfirmation from '../../functions/lib/no-build-post-recovery.js';
 import pageConfirmation from '../../functions/lib/no-build-page-recovery.js';
+import attempts from '../../functions/lib/background-output-attempt.js';
 import pageOwnership from '../../functions/lib/no-build-page-ownership.js';
 
 if (!/^127\.0\.0\.1:\d+$/.test(process.env.FIRESTORE_EMULATOR_HOST ?? '')) throw new Error('Isolated emulator required');
@@ -107,7 +108,7 @@ async function snapshot() {
     .map(path => db.doc(path))));
   return rows.map(row => [row.ref.path, row.data(), row.updateTime]).sort(([a], [b]) => a.localeCompare(b));
 }
-it.each(['post', 'page', 'home'])('records an expired final %s claim admitted before pause as a truthful production STOP', async family => {
+it.each(['post', 'page', 'home'])('waits through a killed %s claim admitted before pause and records a refused answer as a truthful production STOP', async family => {
   const due = Date.now() + 60_000, claim = '11111111-1111-4111-8111-111111111111';
   const post = { schemaVersion: 1, postId: 'interrupted-post', operationId: queueId, sourceVersion: 1, rendererSha: sha,
     generation: 2, visible: true, slug: 'interrupted-post', ownedSlugs: ['interrupted-post'] };
@@ -144,13 +145,23 @@ it.each(['post', 'page', 'home'])('records an expired final %s claim admitted be
   }
   await expect(apply()).rejects.toThrow();
   expect(await pause.readPublicReleasePause({ firestore: db, attempt })).toMatchObject({ pauseCommitted: true, drainCommitted: false, stop: false });
-  const fetchPublic = vi.fn(async () => { throw new Error('Expired claims must not perform public IO'); });
-  const options = { firestore: db, operationId: queueId, now: () => due, fetchPublic };
-  if (family === 'post') await postConfirmation.recoverNoBuildPostDetail(options);
-  else if (family === 'page') await pageConfirmation.recoverNoBuildPageDetail(options);
-  else await pageConfirmation.recoverNoBuildHomeRefresh(options);
+  const fetchPurge = vi.fn(async () => new Response('{}', { status: 403 }));
+  const recover = async (now: number, fetchPublic: () => Promise<Response>) => {
+    const options = { firestore: db, operationId: queueId, now: () => now, fetchPublic, fetchPurge,
+      purgeConfig: { zoneId: '0'.repeat(32), token: 'fixture' } };
+    if (family === 'post') await postConfirmation.recoverNoBuildPostDetail(options);
+    else if (family === 'page') await pageConfirmation.recoverNoBuildPageDetail(options);
+    else await pageConfirmation.recoverNoBuildHomeRefresh(options);
+  };
+  // A killed claim is due again. It is neither drained nor a STOP while it waits.
+  expect(attempts.publicationAttempt((await ref.get()).data(), family, due - 1)).toBeNull();
+  expect(attempts.publicationAttempt((await ref.get()).data(), family, due)).toBe('claim');
+  await expect(apply()).rejects.toThrow();
+  expect((await db.doc(`${root}/drains/${operationId}`).get()).exists).toBe(false);
+  expect((await db.doc(`${root}/failures/${operationId}`).get()).exists).toBe(false);
+  // The purge refuses the Post and Home; the public route refuses the Page.
+  await recover(due, async () => new Response('Another public answer', { headers: { 'content-type': 'text/html' } }));
   expect((await ref.get()).data()).toMatchObject({ status: 'failed', attempts: 4, claim: null, nextAttemptAt: null });
-  expect(fetchPublic).not.toHaveBeenCalled();
   const failed = await apply();
   expect(failed).toMatchObject({ stop: true, drainCommitted: false, recoveryIssue: 4582 });
   expect(failed.failureReceipt.blockers).toContainEqual({ code: family === 'home' ? 'home-refresh-exhausted' : 'queue-failed',

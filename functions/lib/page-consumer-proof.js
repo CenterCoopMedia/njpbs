@@ -93,21 +93,22 @@ async function claimPageConsumerProof({ firestore, operationId, identity, now, l
      * wake reads again; release readers count it as work of its own context). */
     async finish(status, failureReason = { code: "confirmation_incomplete" }) {
       while (writing) await writing;
-      await firestore.runTransaction(async transaction => {
+      const refused = await firestore.runTransaction(async transaction => {
         const [proofRow, deployment, context] = await transaction.getAll(ref,
           firestore.doc("system/publicDeployment"), firestore.doc(PUBLIC_CONTEXT_PATH));
         const prior = proofRow.data();
-        if (prior?.claim !== claim || prior.key !== acquired.key) return;
+        if (prior?.claim !== claim || prior.key !== acquired.key) return false;
         // The next publication's answer is not this publication's refusal.
         if (status === "failed" && contextMoved(deployment.data(), context.data())) {
           transaction.set(ref, staleProof(acquired.key, prior.attempts));
-          return;
+          return false;
         }
         const end = { status, claim: null, leaseUntil: null, nextAttemptAt: null, endedAt: now(), peakRssMb: peakRssMb() };
         if (status === "verified") transaction.update(ref, { ...end, waitingOn: null, ...(prior.postCheckpoint ? { postCheckpoint: null } : {}) });
         else transaction.update(ref, { ...end, failureReason, ...(status === "failed" ? { waitingOn: null } : { waitingOn: failureReason.code }) });
+        return status === "failed";
       });
-      if (status === "failed") log.error("Page consumer confirmation refused by a public answer", { operationId, failureReason });
+      if (refused) log.error("Page consumer confirmation refused by a public answer", { operationId, failureReason });
     },
   };
 }

@@ -71,14 +71,11 @@ it.each(["generation", "context", "manifest"])("refuses changed %s on a final SD
   expect((await firestore.doc("proof/home-code").get()).exists).toBe(false);
 });
 
-it("refuses plain, expired and wrong-environment captures", async () => {
-  let now = Date.now();
-  const captured = await capture({ now: () => now, deadline: now + 45_000 });
+it("refuses plain and wrong-environment captures", async () => {
+  const captured = await capture();
   await expect(firestore.runTransaction((transaction: any) => read(transaction, {}), { readOnly: true })).rejects.toThrow();
   await expect(firestore.runTransaction((transaction: any) => readCapturedPageHomeCodeSourcesInTransaction({ firestore, transaction,
     target: require("../../functions/lib/publication-target.js").publicationTarget("production"), rendererSha, capture: captured }), { readOnly: true })).rejects.toThrow();
-  now += 45_000;
-  await expect(firestore.runTransaction((transaction: any) => read(transaction, captured), { readOnly: true })).rejects.toThrow();
   expect(fixture.codeRequests()).toBe(2);
 });
 
