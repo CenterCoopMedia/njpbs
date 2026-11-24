@@ -57,43 +57,12 @@ function idList(value: unknown): string[] | null {
   return result;
 }
 
-// Broadcast schedule left the Content group for Workflow. Version 2's default catalog, and
-// insertAtDefaultPosition for a missing schedule against that catalog, placed it immediately
-// after Home — or first when Home was not stored. Exact custom intent cannot be inferred from a
-// saved id list, so only those two default-derived slots migrate. Any other saved index,
-// including a later Content-group position, is treated as an explicit customization and kept.
-function isDefaultDerivedSchedulePlacement(order: readonly string[]): boolean {
-  const scheduleIndex = order.indexOf("schedule");
-  if (scheduleIndex < 0) return false;
-  const homeIndex = order.indexOf("home");
-  if (homeIndex < 0) return scheduleIndex === 0;
-  return scheduleIndex === homeIndex + 1;
-}
-
-function repositionScheduleWithWorkflow(order: string[]): string[] {
-  if (!isDefaultDerivedSchedulePlacement(order)) return order;
-  const next = order.filter((id) => id !== "schedule");
-  const workflowIndex = Math.max(
-    next.indexOf("editorial-queue"),
-    next.indexOf("activity"),
-  );
-  // Editorial queue and Activity are permission-gated. With neither saved, keep the original
-  // schedule position rather than appending below Administration.
-  if (workflowIndex < 0) return order;
-  next.splice(workflowIndex + 1, 0, "schedule");
-  return next;
-}
-
 /**
  * Read a stored record leniently, but fail whole rather than in part. A missing record, a
  * malformed one, and one written by an unsupported schema version all resolve to `null`, which every
  * caller treats as "use the approved default". A record of the right shape keeps only its string
  * entries, de-duplicated; reconciliation against the live catalog happens later, in
  * `resolveNavigation`. Version 1 arrangements migrate the retired Voiceover destination into Media.
- * Version 2 arrangements move Broadcast schedule after Editorial queue and Activity only when the
- * saved order still has the old default-derived slot (immediately after Home, or first when Home is
- * absent) and either Workflow anchor is present. An explicit custom schedule position, hidden ids,
- * unrelated relative order, and current-schema records stay as stored.
  */
 export function parseNavigationPreferences(
   value: unknown,
@@ -120,9 +89,6 @@ export function parseNavigationPreferences(
     const hideMedia = hidden.includes("media") && hidden.includes("voiceovers");
     nextOrder = order.filter((id) => id !== "voiceovers");
     nextHidden = hidden.filter((id) => id !== "voiceovers" && (id !== "media" || hideMedia));
-  }
-  if (value.version === 1 || value.version === 2) {
-    nextOrder = repositionScheduleWithWorkflow(nextOrder);
   }
   const parsed = { version: NAVIGATION_PREFERENCES_VERSION, order: nextOrder, hidden: nextHidden, custom };
   if (value.version === NAVIGATION_PREFERENCES_VERSION && value.shared !== undefined) return { ...parsed, shared };

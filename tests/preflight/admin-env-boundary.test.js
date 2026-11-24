@@ -88,7 +88,7 @@ gate_staff_admission_backend
       expect(result.status, result.stderr).toBe(expected);
       const requests = readFileSync(receipts, "utf8").trim().split("\n");
       expect(requests).toEqual([
-        ...["registerStaffProfile", "submitStaffAccessRequest", "cmsGetBroadcastSchedule", "cmsSetNavigationPreferences"]
+        ...["registerStaffProfile", "submitStaffAccessRequest", "cmsSetNavigationPreferences"]
           .map(endpoint => `https://cms-api.example.test/${endpoint}`),
         ...(edgeStatus === "401" ? ["https://us-central1-njpbs-site.cloudfunctions.net/cmsSetNavigationPreferences"] : []),
       ]);

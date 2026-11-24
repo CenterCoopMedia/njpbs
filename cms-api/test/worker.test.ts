@@ -876,8 +876,6 @@ describe("CMS API edge", () => {
       return ALLOWED;
     });
 
-    await expect(worker.fetch(request("cmsGetBroadcastSchedule"), env))
-      .resolves.toMatchObject({ status: 200 });
     await expect(worker.fetch(request("cmsGetNewsroomBanner"), env))
       .resolves.toMatchObject({ status: 200 });
     await expect(worker.fetch(request("cmsGetSettings"), env))
@@ -887,7 +885,6 @@ describe("CMS API edge", () => {
     await expect(worker.fetch(request("cmsSaveSettings"), env))
       .resolves.toMatchObject({ status: 200 });
 
-    expect(ENDPOINTS.cmsGetBroadcastSchedule.rateClass).toBe("read");
     expect(ENDPOINTS.cmsGetNewsroomBanner.rateClass).toBe("read");
     expect(ENDPOINTS.cmsGetSettings.rateClass).toBe("read");
     expect(ENDPOINTS.cmsPublishSettings.rateClass).toBe("publish");

@@ -39,7 +39,6 @@ function preloaders(): {
     guide: vi.fn(async () => undefined),
     whatsNew: vi.fn(async () => undefined),
     resources: vi.fn(async () => undefined),
-    schedule: vi.fn(async () => undefined),
     liveProduction: vi.fn(async () => undefined),
     staff: vi.fn(async () => undefined),
   };
@@ -101,7 +100,6 @@ describe("initial Admin route preload", () => {
     ["/whats-new", "whatsNew"],
     ["/resources/nj-politics", "resources"],
     ["/resources/nj-politics/", "resources"],
-    ["/schedule", "schedule"],
     ["/admin/settings", "adminSettings"],
     ["/admin/settings/costs", "costs"],
     ["/account/settings", "accountSettings"],

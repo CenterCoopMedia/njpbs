@@ -15,7 +15,7 @@ export function isSafeNavigationUrl(value: unknown): value is string {
   if (typeof value !== "string" || !value || value.length > MAX_NAVIGATION_URL_LENGTH || /[^\x21-\x7e]|\\/.test(value)) return false;
   if (/%(?:2e|2f|5c)/i.test(value) || /(?:^|\/)\.{1,2}(?:\/|[?#]|$)/.test(value)) return false;
   if (value.startsWith("/")) {
-    return /^\/(?:[?#].*)?$/.test(value) || /^\/(?:content|media|voiceovers|dashboard|activity|analytics|publish-queue|reports|guide|resources|schedule|staff-access|staff-profiles|admin|account|post-templates|premiere|live-production|cuez-storydesk)(?:[/?#].*)?$/.test(value);
+    return /^\/(?:[?#].*)?$/.test(value) || /^\/(?:content|media|voiceovers|dashboard|activity|analytics|publish-queue|reports|guide|resources|staff-access|staff-profiles|admin|account|post-templates|premiere|live-production|cuez-storydesk)(?:[/?#].*)?$/.test(value);
   }
   if (!/^https:\/\/[A-Za-z0-9.-]+(?::[0-9]+)?(?:[/?#].*)?$/.test(value)) return false;
   try { const url = new URL(value); return url.protocol === "https:" && !url.username && !url.password; } catch { return false; }
@@ -34,6 +34,15 @@ const validLabel = (value: unknown): value is string => typeof value === "string
 export function customNavigationCount(items: readonly CustomNavItem[]): number {
   return items.reduce((count, item) => count + 1 + (item.kind === "section" ? item.links.length : 0), 0);
 }
+// A stored link to a local workspace Boardwalk has since removed is well formed apart from its
+// first path segment. Reads drop it so the rest of the account's rail survives.
+function retiredLocalLink(entry: unknown): boolean {
+  if (!record(entry) || entry.kind !== "link" || !record(entry.destination) || entry.destination.kind !== "url") return false;
+  const url = entry.destination.url;
+  if (typeof url !== "string" || !/^\/[a-z0-9-]+(?:[/?#].*)?$/.test(url)) return false;
+  return isSafeNavigationUrl(url.replace(/^\/[a-z0-9-]+/, "/content")) && !isSafeNavigationUrl(url);
+}
+/** Read stored custom items. A link to a removed workspace is dropped; any other invalid entry rejects the list. */
 export function parseCustomNavigation(value: unknown): CustomNavItem[] | null {
   if (!Array.isArray(value) || value.length > MAX_CUSTOM_NAVIGATION_ITEMS) return null;
   const ids = new Set<string>();
@@ -48,11 +57,17 @@ export function parseCustomNavigation(value: unknown): CustomNavItem[] | null {
     if (entry.icon !== undefined && (typeof entry.icon !== "string" || !ICON_NAMES.includes(entry.icon as IconName))) return false;
     ids.add(entry.id); return true;
   }
+  const items: CustomNavItem[] = [];
   for (const item of value) {
     if (record(item) && item.kind === "section") {
-      if (!identity(item) || !Array.isArray(item.links) || !item.links.every(link)) return null;
-    } else if (!link(item)) return null;
+      if (!identity(item) || !Array.isArray(item.links)) return null;
+      const links = item.links.filter((entry) => !retiredLocalLink(entry));
+      if (!links.every(link)) return null;
+      items.push(links.length === item.links.length ? item as unknown as CustomNavSection : { ...item, links } as unknown as CustomNavSection);
+    } else if (!retiredLocalLink(item)) {
+      if (!link(item)) return null;
+      items.push(item);
+    }
   }
-  const items = value as CustomNavItem[];
   return customNavigationCount(items) <= MAX_CUSTOM_NAVIGATION_ITEMS ? items : null;
 }

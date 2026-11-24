@@ -103,7 +103,6 @@ describe("primary navigation with per-account preferences", () => {
     expect(railLabels()).toEqual([
       "Media library",
       "StoryDesk",
-      "Broadcast schedule",
       "Resources",
       "Reports",
       "Around NJ",
@@ -126,7 +125,7 @@ describe("primary navigation with per-account preferences", () => {
 
     expect(railLabels()).toEqual([
       "Home", "Pages", "Posts", "All content", "Media library",
-      "Editorial queue", "StoryDesk", "Activity", "Broadcast schedule", "Resources", "Staff profiles", "Staff access",
+      "Editorial queue", "StoryDesk", "Activity", "Resources", "Staff profiles", "Staff access",
       "Analytics", "Reports", "Admin settings", "Around NJ",
     ]);
     const around = screen.getByRole("link", { name: "Open Around NJ in a new tab" });
@@ -204,7 +203,7 @@ describe("primary navigation with per-account preferences", () => {
     );
 
     expect(railLabels()).toContain("Media library");
-    expect(railLabels()).toHaveLength(16);
+    expect(railLabels()).toHaveLength(15);
   });
 
   it("still opens a hidden destination at its own address", () => {

@@ -18,7 +18,6 @@ import {
   statusClassFor,
 } from "./perf-receipts";
 import type { LibrarySelection } from "./content-library";
-import type { BroadcastSchedule } from "../data/broadcast-schedule";
 import type { AccessTier, Role } from "../../../packages/content-core/src/rbac";
 import type { NavigationPreferences } from "./navigation-preferences";
 import { PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID, PUBLIC_SITE_CHROME_SETTINGS_ID,
@@ -94,10 +93,6 @@ export interface NewsroomBannerResponse {
   milestoneNumber: number;
   source: "default" | "saved";
   version: number | null;
-}
-
-export interface BroadcastScheduleResponse extends BroadcastSchedule {
-  success: true;
 }
 
 export interface RoleResponse {
@@ -782,16 +777,6 @@ export function cmsGetNewsroomBanner(
 ): Promise<NewsroomBannerResponse> {
   return postFunction<NewsroomBannerResponse>(
     "cmsGetNewsroomBanner",
-    idToken,
-    {},
-  );
-}
-
-export function cmsGetBroadcastSchedule(
-  idToken: string,
-): Promise<BroadcastScheduleResponse> {
-  return postFunction<BroadcastScheduleResponse>(
-    "cmsGetBroadcastSchedule",
     idToken,
     {},
   );

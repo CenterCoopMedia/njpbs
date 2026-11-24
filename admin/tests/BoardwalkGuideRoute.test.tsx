@@ -322,27 +322,27 @@ describe("BoardwalkGuideRoute", () => {
       if (String(path).endsWith(".mp4")) return new Response(new Blob(["video"]));
       return new Response([
         '<figure class="admin-docs-video">',
-        '<video autoplay preload="auto" src="/guide-content/videos/broadcast-schedule.mp4" aria-label="Read the broadcast schedule"></video>',
+        '<video autoplay preload="auto" src="/guide-content/videos/analytics.mp4" aria-label="Read site analytics"></video>',
         "</figure>",
         "",
-        "<details><summary>Transcript: Read the broadcast schedule</summary><p>Coverage dates</p></details>",
+        "<details><summary>Transcript: Read site analytics</summary><p>Coverage dates</p></details>",
       ].join("\n"));
     });
     vi.stubGlobal("fetch", fetch);
     renderGuide("/guide/overview");
 
-    const button = await screen.findByRole("button", { name: "Play Read the broadcast schedule" });
+    const button = await screen.findByRole("button", { name: "Play Read site analytics" });
     await waitFor(() => expect(button).toBeEnabled());
     const video = document.querySelector("video");
     expect(video).toHaveAttribute("preload", "none");
     expect(video).not.toHaveAttribute("autoplay");
     expect(video).not.toHaveAttribute("src");
     expect(play).not.toHaveBeenCalled();
-    expect(screen.getByText("Transcript: Read the broadcast schedule")).toBeVisible();
+    expect(screen.getByText("Transcript: Read site analytics")).toBeVisible();
 
     fireEvent.click(button);
     await waitFor(() => expect(fetch).toHaveBeenCalledWith(
-      "/guide-content/videos/broadcast-schedule.mp4",
+      "/guide-content/videos/analytics.mp4",
       expect.objectContaining({
         cache: "no-store",
         headers: { authorization: "Bearer id-token" },
@@ -382,36 +382,36 @@ describe("BoardwalkGuideRoute", () => {
       if (String(path).endsWith("manifest.json")) return new Response(JSON.stringify(manifest));
       return new Response([
         '<figure class="admin-docs-video">',
-        '<video src="/guide-content/videos/broadcast-schedule.mp4" aria-label="Read the broadcast schedule"></video>',
+        '<video src="/guide-content/videos/analytics.mp4" aria-label="Read site analytics"></video>',
         "</figure>",
       ].join("\n"));
     });
     vi.stubGlobal("fetch", fetch);
     renderGuide("/guide/overview");
 
-    const video = await screen.findByLabelText("Read the broadcast schedule");
+    const video = await screen.findByLabelText("Read site analytics");
     await waitFor(() => expect(video).toHaveAttribute(
       "src",
-      "/guide-content/videos/broadcast-schedule.mp4",
+      "/guide-content/videos/analytics.mp4",
     ));
     expect(video).toHaveAttribute("preload", "none");
     expect(video).toHaveAttribute("controls");
     expect(navigator.serviceWorker.register).toHaveBeenCalledWith("/guide-video-sw.js", { scope: "/guide" });
     expect(video).not.toHaveAttribute("autoplay");
     expect(play).not.toHaveBeenCalled();
-    expect(screen.queryByRole("button", { name: "Play Read the broadcast schedule" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Play Read site analytics" })).not.toBeInTheDocument();
     expect(fetch).not.toHaveBeenCalledWith(
-      "/guide-content/videos/broadcast-schedule.mp4",
+      "/guide-content/videos/analytics.mp4",
       expect.anything(),
     );
 
     fireEvent.error(video);
-    const button = await screen.findByRole("button", { name: "Play Read the broadcast schedule" });
+    const button = await screen.findByRole("button", { name: "Play Read site analytics" });
     expect(screen.getByRole("alert")).toHaveTextContent("could not stream");
     vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:guide-video");
     fireEvent.click(button);
     await waitFor(() => expect(fetch).toHaveBeenCalledWith(
-      "/guide-content/videos/broadcast-schedule.mp4",
+      "/guide-content/videos/analytics.mp4",
       expect.objectContaining({
         headers: { authorization: "Bearer id-token" },
       }),

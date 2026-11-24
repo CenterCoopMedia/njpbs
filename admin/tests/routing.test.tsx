@@ -65,7 +65,6 @@ const functionMocks = vi.hoisted(() => ({
   cmsGetAuthorProfile: vi.fn(),
   cmsListAuthorProfiles: vi.fn(),
   cmsGetContent: vi.fn(),
-  cmsGetBroadcastSchedule: vi.fn(),
   cmsGetNewsroomBanner: vi.fn(),
   cmsGetSettings: vi.fn(),
   cmsListAudit: vi.fn(),
@@ -129,7 +128,6 @@ vi.mock("../src/lib/functions", async (importOriginal) => ({
   cmsGetAuthorProfile: functionMocks.cmsGetAuthorProfile,
   cmsListAuthorProfiles: functionMocks.cmsListAuthorProfiles,
   cmsGetContent: functionMocks.cmsGetContent,
-  cmsGetBroadcastSchedule: functionMocks.cmsGetBroadcastSchedule,
   cmsGetNewsroomBanner: functionMocks.cmsGetNewsroomBanner,
   cmsGetSettings: functionMocks.cmsGetSettings,
   cmsListAudit: functionMocks.cmsListAudit,
@@ -273,17 +271,6 @@ beforeEach(() => {
     success: true,
     found: false,
     document: null,
-  });
-  functionMocks.cmsGetBroadcastSchedule.mockResolvedValue({
-    success: true,
-    source: {
-      coverageStart: "2026-10-01",
-      coverageEnd: "2026-11-05",
-      label: "Synthetic broadcast packet A",
-      received: "2026-09-01",
-      timezone: "America/New_York",
-    },
-    airings: [],
   });
   functionMocks.cmsGetNewsroomBanner.mockResolvedValue({
     success: true,
@@ -1225,38 +1212,6 @@ describe("admin routing shell", () => {
     const nav = screen.getByRole("navigation", { name: "Primary" });
     expect(
       within(nav).getByRole("link", { name: "Editorial queue" }),
-    ).toHaveAttribute("aria-current", "page");
-  });
-
-  it("opens the verified broadcast schedule for a guide-only account", async () => {
-    renderRouted(
-      shellFor({ id: "new-staff", grants: [{ role: "staff" }] }),
-      ["/schedule?week=2026-09-28"],
-    );
-
-    expect(
-      await screen.findByRole("heading", { level: 1, name: "Broadcast schedule" }),
-    ).toBeInTheDocument();
-    expect(await screen.findByText("Source packet · Read only")).toBeVisible();
-    expect(screen.getByRole("heading", { name: "Oct 1 to Nov 5, 2026" })).toBeVisible();
-    fireEvent.click(screen.getByText("Source details and update limits"));
-    expect(
-      screen.getByText(
-        /Synthetic broadcast packet A\. Received Sep 1, 2026\./,
-      ),
-    ).toBeVisible();
-    const dayNav = screen.getByRole("group", { name: "Choose a day" });
-    expect(within(dayNav).getAllByRole("button")).toHaveLength(8);
-    expect(within(dayNav).getAllByText("Not covered")).toHaveLength(3);
-    expect(
-      screen.getByText("No broadcast times are listed for this week."),
-    ).toBeVisible();
-    expect(functionMocks.cmsGetBroadcastSchedule).toHaveBeenCalledWith("id-token");
-    expect(
-      within(screen.getByRole("navigation", { name: "Primary" })).getByRole(
-        "link",
-        { name: "Broadcast schedule" },
-      ),
     ).toHaveAttribute("aria-current", "page");
   });
 

@@ -47,7 +47,6 @@ export const ROUTE_PATHS = {
   guide: "/guide",
   whatsNew: "/whats-new",
   politicsResource: "/resources/nj-politics",
-  schedule: "/schedule",
   liveProduction: "/live-production",
   liveProductionStudio: "/live-production/studio",
   staffAccess: "/staff-access",
@@ -78,7 +77,6 @@ export function routeCategoryForPath(pathname: string): RouteCategory {
     return "guide";
   if (path === ROUTE_PATHS.whatsNew) return "whats-new";
   if (path === ROUTE_PATHS.politicsResource) return "resources";
-  if (path === ROUTE_PATHS.schedule) return "schedule";
   if (path === ROUTE_PATHS.liveProduction || path === ROUTE_PATHS.liveProductionStudio) return "live-production";
   if (path === ROUTE_PATHS.accountSettings) return "account-settings";
   if (path === ROUTE_PATHS.premiereConnect) return "premiere-connect";
@@ -262,10 +260,6 @@ export function guidePath(slug?: string): string {
 
 export function politicsResourcePath(): string {
   return ROUTE_PATHS.politicsResource;
-}
-
-export function schedulePath(): string {
-  return ROUTE_PATHS.schedule;
 }
 
 export function staffAccessPath(): string {

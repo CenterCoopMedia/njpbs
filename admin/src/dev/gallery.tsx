@@ -56,8 +56,6 @@ import { ImageViewerSpecimen } from "./ImageViewerSpecimen";
 import { MediaFullViewerSpecimen } from "./MediaFullViewerSpecimen";
 import { MediaRefinementSpecimen } from "./MediaRefinementSpecimen";
 import { MediaDropOverlayGallery, MediaUploadSheetGallery, MediaUploadTrayGallery } from "./GalleryUploadSpecimens";
-import { ScheduleSurface } from "../routes/ScheduleRoute";
-import type { BroadcastSchedule } from "../data/broadcast-schedule";
 import { analyticsFixture } from "./analytics-fixture";
 const loadAnalyticsFixture = async () => analyticsFixture;
 const loadAnalyticsPartial = async () => ({ ...analyticsFixture, ga4: { status: "not_configured" as const, message: "GA4 reporting access is pending.", data: null } });
@@ -115,39 +113,6 @@ function AnalyticsRecoverySpecimen({ failFirst = false }: { failFirst?: boolean 
   });
   return <AnalyticsSurface load={load} initialDays={30} fixedPeriod preview />;
 }
-const scheduleFixture: BroadcastSchedule = {
-  source: {
-    coverageStart: "2026-10-01",
-    coverageEnd: "2026-10-07",
-    label: "Local broadcast schedule specimen",
-    received: "2026-09-16",
-    timezone: "America/New_York",
-  },
-  airings: [
-    {
-      date: "2026-10-01",
-      detailsStatus: "provided",
-      episode: "101",
-      premiere: true,
-      program: "Program one",
-      station: "NJ PBS",
-      status: "scheduled",
-      time: "7 p.m.",
-      title: "Guest details provided",
-    },
-    {
-      date: "2026-10-02",
-      detailsStatus: "pending",
-      episode: "102",
-      premiere: false,
-      program: "Program two",
-      station: "Thirteen",
-      status: "preempted",
-      time: "8:30 a.m.",
-      title: "Details pending",
-    },
-  ],
-};
 import { HomeHeroLayoutPreview } from "../components/HomeHeroLayoutPreview";
 import { HomeHeroModal } from "../components/HomeHeroModal";
 import { HomePreviewFrame } from "../components/HomePreviewFrame";
@@ -2672,16 +2637,6 @@ export const SHOTS: Shot[] = [
     render: () => <EditorStructureSpecimen kind="page" state="readonly" />,
   },
   {
-    id: "broadcast-schedule",
-    title: "Broadcast schedule",
-    note: "A local synthetic one-week schedule specimen using the production weekly surface.",
-    render: () => (
-      <MemoryRouter initialEntries={["/schedule?week=2026-09-28"]}>
-        <ScheduleSurface schedule={scheduleFixture} today="2026-09-16" />
-      </MemoryRouter>
-    ),
-  },
-  {
     id: "premiere-connect",
     title: "Connect Premiere",
     note: "The real Premiere connection panel with a browser-local approval fixture. Enter any valid code to review the Premiere Pro 26.5.2 request, then approve or deny it. WXYZ-2345 shows the expired-code error. No CMS request leaves the page.",
@@ -2865,7 +2820,7 @@ export const SHOTS: Shot[] = [
   {
     id: "shell-home-required-nav",
     title: "Admin shell — contributor required navigation",
-    note: "A contributor who hides every optional destination keeps Home and Broadcast schedule in the rail, so the short mobile footer and account panel can be checked against the smallest real navigation configuration.",
+    note: "A contributor who hides every optional destination keeps Home in the rail, so the short mobile footer and account panel can be checked against the smallest real navigation configuration.",
     render: () => (
       <ShellSpecimen
         navigation={CONTRIBUTOR_REQUIRED_NAVIGATION}
@@ -4473,7 +4428,7 @@ export const SHOTS: Shot[] = [
   {
     id: "navigation-preferences",
     title: "Your rail — arrange the rail",
-    note: "The per-account arrangement surface from account settings, for a super admin who can see every destination. Move a destination with the up and down controls, hide one that is rarely opened, and reset. Home, Broadcast schedule, and Admin settings carry no hide control because they are always shown; a hidden destination stays open at its address.",
+    note: "The per-account arrangement surface from account settings, for a super admin who can see every destination. Move a destination with the up and down controls, hide one that is rarely opened, and reset. Home and Admin settings carry no hide control because they are always shown; a hidden destination stays open at its address.",
     render: () => (
       <NavigationPreferences
         eligible={eligibleNavDestinations(superAdmin)}

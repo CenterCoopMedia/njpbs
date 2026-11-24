@@ -607,11 +607,8 @@ test("A required-only mobile navigation leaves room for the upward account panel
   await page.getByRole("button", { name: "Open navigation", exact: true }).click();
 
   const navigation = page.getByRole("navigation", { name: "Primary" });
-  await expect(navigation.getByRole("link")).toHaveCount(2);
+  await expect(navigation.getByRole("link")).toHaveCount(1);
   await expect(navigation.getByRole("link", { name: "Home" })).toBeVisible();
-  await expect(
-    navigation.getByRole("link", { name: "Broadcast schedule" }),
-  ).toBeVisible();
   const account = page.getByRole("button", { name: /Account menu for/ });
   const accountPanel = page.getByRole("menu");
   await account.click();

@@ -48,9 +48,6 @@ const lazyGuideRoute: RouteObject["lazy"] = async () => ({
 const lazyResourcesRoute: RouteObject["lazy"] = async () => ({
   Component: (await adminRouteModules.resources()).PoliticsResourceRoute,
 });
-const lazyScheduleRoute: RouteObject["lazy"] = async () => ({
-  Component: (await adminRouteModules.schedule()).ScheduleRoute,
-});
 const lazyAnalyticsRoute: RouteObject["lazy"] = async () => ({
   Component: (await adminRouteModules.analytics()).AnalyticsRoute,
 });
@@ -177,15 +174,6 @@ export function buildRoutes(): RouteObject[] {
               hydrateFallbackElement: <RouteLoading />,
               handle: { title: "Live production", description: "Prepare banners and deliberately control Overlay 1." } satisfies RouteHandle,
             }] : []),
-            {
-              path: segment(ROUTE_PATHS.schedule),
-              lazy: lazyScheduleRoute,
-              hydrateFallbackElement: <RouteLoading />,
-              handle: {
-                title: "Broadcast schedule",
-                description: "Review the verified weekly broadcast plan across partner stations.",
-              } satisfies RouteHandle,
-            },
             {
               path: `${segment(ROUTE_PATHS.content)}/*`,
               lazy: lazyContentLayout,

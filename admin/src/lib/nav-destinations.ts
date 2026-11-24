@@ -39,7 +39,6 @@ import {
   publishQueuePath,
   reportsPath,
   recordListPath,
-  schedulePath,
   liveProductionPath,
   staffAccessPath,
   stripTrailingSlash,
@@ -195,15 +194,6 @@ export const NAV_DESTINATIONS: readonly NavDestinationDef[] = [
     icon: "history",
     to: activityPath(),
     visible: canViewAudit,
-  },
-  {
-    id: "schedule",
-    group: "Workflow",
-    label: "Broadcast schedule",
-    icon: "calendar",
-    to: schedulePath(),
-    required: true,
-    visible: () => true,
   },
   {
     id: "live-production", group: "Workflow", label: "Live production",

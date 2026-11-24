@@ -729,6 +729,29 @@ describe("navigation share writes on the Firestore emulator", () => {
     expect(await readShare("custom:child")).toBeNull();
   });
 
+  it("shares from a stored record that still names a removed workspace", async () => {
+    const desk = link("desk");
+    const retired = link("old", { kind: "url", url: "/schedule" });
+    const storedNav = {
+      version: 4,
+      order: ["home", "schedule", "custom:old", "custom:desk"],
+      hidden: [],
+      custom: [retired, desk],
+    };
+    const profile = staffProfile("Profile Name", storedNav);
+    await seedUser(ownerCaller.uid, profile);
+
+    const shared = await submitOwned({ action: "share", itemId: "custom:desk", shared: true });
+    expect(shared.statusCode).toBe(200);
+    expect(await readUser(ownerCaller.uid)).toEqual(profile);
+    expectShare(await readShare("custom:desk"), {
+      ownerUid: ownerCaller.uid, ownerName: "Auth Name", status: "active", item: desk,
+    });
+    const old = await submitOwned({ action: "share", itemId: "custom:old", shared: true });
+    expect(old.statusCode).toBe(400);
+    expect(await readShare("custom:old")).toBeNull();
+  });
+
   it("toggles one share from the stored record and does not write navigation", async () => {
     const desk = link("desk");
     desk.label = "Stored desk";

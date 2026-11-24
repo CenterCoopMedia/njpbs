@@ -107,39 +107,6 @@ contents to withdraw a correction at the next refresh.
    `generation`. Record those values, the refresh operation and the three route
    observations on issue #143 before retiring the bake inputs.
 
-## Staff broadcast workspace
-
-The signed-in Admin `/schedule` view is read-only partner-packet data from
-`cmsGetBroadcastSchedule`, separate from the public TV feed/PDF. Source packet
-stays in the authenticated response, never the static Admin bundle. Refresh
-loads only that available packet; it imports/writes nothing and cannot establish
-last-minute broadcast changes. Last checked advances only after successful
-validated response, not a source revision or invalid/failed result.
-
-Keep packet/filter state visible during checking and transient failure; explicit
-401/403 discards retained packet. Initial failure offers retry, not empty data.
-Only one refresh request can run. Mount/manual accepted refresh load packets;
-filtering, week/day navigation and minute/visibility date updates make no request
-and add no persistent cache. Use packet timezone for day/week and current marker.
-
-Keep all seven dates, including empty/uncovered with explicit explanations;
-week menu stays in coverage and This week appears only when covered. Search
-matches every entered term, filters retain unavailable selections with clear
-recovery, week changes clear day but keep filters, Back/reload preserve address
-state and unrelated query parameters. Clear filters retains week/day.
-Grouped episodes preserve original labels, recognized chronological times before
-unrecognized labels, textual preemption cues and inclusive listed-slot counts.
-Missing listings never prove a station is off air.
-
-Verify the existing focused `broadcast-schedule`, `schedule-workspace` and
-`schedule-workspace-ui` tests from **admin/**, with the root/site dependency
-setup. Keep original `npm test -- tests/broadcast-schedule.test.ts tests/schedule-workspace.test.ts tests/schedule-workspace-ui.test.tsx`
-and the Admin `npm run build` for an actual workspace-code change. Public schedule
-tests run from site/ instead. Synthetic isolated UI proof is not full signed-in
-integration; verify actual staff admission and deployed endpoint separately.
-Retain labeled native controls, keyboard focus, polite state/count updates,
-text/border status cues, reduced-motion/forced-color behavior and phone overflow.
-
 ## Immutable cloud packet
 
 The background preparation seals corrected JSON and exact PDF bytes as one

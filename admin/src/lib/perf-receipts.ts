@@ -73,7 +73,6 @@ export const ROUTE_CATEGORIES = [
   "guide",
   "whats-new",
   "resources",
-  "schedule",
   "live-production",
   "account-settings",
   "premiere-connect",
@@ -95,7 +94,6 @@ export const OPERATION_CATEGORIES = [
   "content-write",
   "revision-read",
   "revision-write",
-  "schedule-read",
   "media-read",
   "media-write",
   "voiceover-read",
@@ -210,7 +208,6 @@ export function operationCategoryForEndpoint(
   // cmsCostLedger's wrapper supplies its action-aware category. Keep the endpoint named
   // here as a fail-closed default for a future direct transport call.
   if (endpoint === "cmsCostLedger") return "settings-read";
-  if (endpoint === "cmsGetBroadcastSchedule") return "schedule-read";
   if (
     endpoint === "cmsGetSettings" ||
     endpoint === "cmsGetCoverageLabels" ||

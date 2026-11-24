@@ -23,7 +23,6 @@ const loadReportsRoute = loadDeskRoutes;
 const loadGuideResourceRoutes = () => import("./guide-resource-chunk");
 const loadGuideRoute = loadGuideResourceRoutes;
 const loadResourcesRoute = loadGuideResourceRoutes;
-const loadScheduleRoute = loadDeskRoutes;
 const loadStaffRoute = () => import("./StaffRoute");
 
 export const adminRouteModules = {
@@ -48,7 +47,6 @@ export const adminRouteModules = {
   guide: loadGuideRoute,
   whatsNew: () => import("./WhatsNewRoute"),
   resources: loadResourcesRoute,
-  schedule: loadScheduleRoute,
   liveProduction: () => liveProductionEnabled() ? import("./LiveProductionRoute") : loadNotFoundRoute(),
   staff: loadStaffRoute,
 };
@@ -75,7 +73,6 @@ export interface InitialRoutePreloaders {
   guide: () => Promise<unknown>;
   whatsNew: () => Promise<unknown>;
   resources: () => Promise<unknown>;
-  schedule: () => Promise<unknown>;
   liveProduction: () => Promise<unknown>;
   staff: () => Promise<unknown>;
 }
@@ -111,7 +108,6 @@ const MODULE_KEY_FOR_ROUTE_CATEGORY: Record<RouteCategory, RouteModuleKey> = {
   guide: "guide",
   "whats-new": "whatsNew",
   resources: "resources",
-  schedule: "schedule",
   "live-production": "liveProduction",
   "account-settings": "accountSettings",
   "premiere-connect": "premiereConnect",

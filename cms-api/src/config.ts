@@ -189,7 +189,6 @@ export const ENDPOINTS = Object.freeze({
   cmsBulkArchiveContent: { contentType: "json", maxBytes: 64 * KIB, rateClass: "lifecycle" },
   cmsAssignContent: { contentType: "json", maxBytes: 16 * KIB, rateClass: "mutation" },
   cmsListAudit: { contentType: "json", maxBytes: 16 * KIB, rateClass: "read" },
-  cmsGetBroadcastSchedule: { contentType: "json", maxBytes: 2 * KIB, rateClass: "read" },
   cmsGetNewsroomBanner: { contentType: "json", maxBytes: 2 * KIB, rateClass: "read" },
   cmsVoiceoverReview: {
     contentType: "json",

@@ -366,7 +366,7 @@ service cloud.firestore {
       let ids = navigationEntryIds(entries);
       let allowedIds = ids.concat([
         'home', 'pages', 'posts', 'library', 'media', 'editorial-queue', 'cuez-storydesk', 'activity',
-        'schedule', 'live-production', 'resources', 'staff-profiles', 'staff-access', 'analytics',
+        'live-production', 'resources', 'staff-profiles', 'staff-access', 'analytics',
         'reports', 'admin-settings', 'around-nj'
       ]);
       let shareIds = data.keys().hasAny(['shared']) && data.shared is list ? data.shared : [];
