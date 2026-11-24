@@ -1,5 +1,6 @@
 import { renderDevelopmentConfig, productionDeploymentInputs } from "./render-development-config.mjs";
 import { cloudflareAccount, cloudflarePublicWorkerTag } from "../site/scripts/cloudflare-account.mjs";
+import { devCloudflareAccount } from "../site/scripts/dev-cloudflare-account.mjs";
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -22,6 +23,10 @@ export async function prepareCloudPublisher(commitSha, { sourceRepository = repo
   // Image-only preparation also runs without deployment settings. Keep its
   // binding unconfigured; supplied deployment accounts must still validate.
   const account = process.env.CLOUDFLARE_ACCOUNT_ID ? cloudflareAccount() : undefined;
+  // A development deployment carries its account pin into the container, which
+  // checks it before every upload. Production never receives the pin.
+  const devAccountPin = account !== undefined && targetEnvironment === "development"
+    ? devCloudflareAccount(process.env) : undefined;
   const workerTag = process.env.CLOUDFLARE_PUBLIC_WORKER_TAG ? cloudflarePublicWorkerTag() : "";
   const uploadOrigin = process.env.PUBLIC_SHARE_UPLOAD_ORIGIN ?? "";
   if (uploadOrigin) {
@@ -79,6 +84,7 @@ export async function prepareCloudPublisher(commitSha, { sourceRepository = repo
     config.account_id = account;
     config.vars.CLOUDFLARE_ACCOUNT_ID = account;
   }
+  if (devAccountPin !== undefined) config.vars.CMS_DEV_CLOUDFLARE_ACCOUNT_ID = devAccountPin;
   config.vars.CLOUDFLARE_PUBLIC_WORKER_TAG = workerTag;
   config.vars.PUBLIC_SHARE_UPLOAD_ORIGIN = uploadOrigin;
   config.main = path.join(publisherDirectory, "worker.ts");
@@ -103,8 +109,8 @@ if (
   process.argv[1] &&
   path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
 ) {
-  if (process.argv.length !== 3)
-    throw new Error("Usage: prepare-cloud-publisher <exact commit>");
+  if (process.argv.length !== 3 && process.argv.length !== 4)
+    throw new Error("Usage: prepare-cloud-publisher <exact commit> [production|development]");
   cloudflarePublicWorkerTag();
-  console.log(JSON.stringify(await prepareCloudPublisher(process.argv[2])));
+  console.log(JSON.stringify(await prepareCloudPublisher(process.argv[2], { environment: process.argv[3] ?? "production" })));
 }

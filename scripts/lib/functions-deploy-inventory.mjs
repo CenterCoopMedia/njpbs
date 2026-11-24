@@ -83,16 +83,19 @@ export function functionDeployManifest(names, source) {
 export function loadFunctionSource(projectId, root = new URL("../../", import.meta.url)) {
   if (!PROJECTS.has(projectId)) throw new FunctionsDeployInventoryError("Invalid Functions source project");
   const development = projectId === "njpbs-site-dev";
-  const entry = development ? "dev-index.js" : "index.js";
   const pkg = JSON.parse(readFileSync(new URL("functions/package.json", root), "utf8"));
+  // The dev project runs the production entry (cms-staging-deploy) or dev-index.js (cms-dev-deploy).
+  const entry = pkg.main;
   const config = JSON.parse(readFileSync(new URL(development ? "firebase.dev.json" : "firebase.json", root), "utf8"));
-  if (pkg.main !== entry || config.functions?.source !== "functions" ||
+  if (!(development ? ["index.js", "dev-index.js"] : ["index.js"]).includes(entry) || config.functions?.source !== "functions" ||
       config.functions?.codebase !== (development ? "dev" : "default")) {
     throw new FunctionsDeployInventoryError("Functions source entry point or codebase differs");
   }
   // SDK discovery needs the same project tuple as the actual Firebase deploy.
   process.env.GCLOUD_PROJECT = projectId;
   process.env.GOOGLE_CLOUD_PROJECT = projectId;
+  // Firebase discovery reads this from functions/.env.njpbs-site-dev.
+  if (development) process.env.CMS_DEPLOYMENT_ENVIRONMENT = "development";
   return createRequire(import.meta.url)(fileURLToPath(new URL(`functions/${entry}`, root)));
 }
 
@@ -120,7 +123,7 @@ export function assertNoFunctionDeletions(manifest, functions, { projectId, code
         typeof fn.region !== "string" || !/^[a-z]+-[a-z]+\d$/.test(fn.region) || !["gcfv1", "gcfv2"].includes(fn.platform) ||
         (fn.eventType !== undefined && (typeof fn.eventType !== "string" || !fn.eventType))) ||
       !Array.isArray(functions)) throw new FunctionsDeployInventoryError("Invalid Functions deployment manifest");
-  if (only !== undefined && (projectId !== "njpbs-site" || !Array.isArray(only) || !only.length ||
+  if (only !== undefined && (!Array.isArray(only) || !only.length ||
       only.some(name => typeof name !== "string" || !NAME.test(name) ||
         (name !== codebase && !manifest.some(fn => fn.name === name))))) {
     throw new FunctionsDeployInventoryError("Invalid Functions deployment filter");

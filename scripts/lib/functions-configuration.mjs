@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { studioTitleFilesParameter } from "./studio-title-files.mjs";
+import { cmsTarget, isDevelopmentName } from "./cms-target.mjs";
 
 const require = createRequire(import.meta.url);
 
@@ -58,6 +59,32 @@ export const MEDIA_CREDENTIALS = Object.freeze(Object.fromEntries(Object.entries
 export const CMS_RELEASE_SECRET_NAMES = Object.freeze(Object.keys(FUNCTION_SECRETS).filter(key => FUNCTION_SECRETS[key].compare));
 export const FUNCTION_RUNTIME_VARIABLES = Object.freeze([...new Set(Object.values(CONFIGURATION_INPUTS).map(row => row.variable).filter(Boolean))].sort());
 
+// toJSON(vars) merges production repository variables into the development
+// environment, and step settings copy some of them. A dev run therefore takes
+// no variable-backed input from either: it uses this table or the code default.
+// The two zone ids pass through because dev-media.njpbs.org is in the
+// njpbs.org zone; purges name only dev hostnames and dev cache tags. Dev
+// publishes through GitHub with writeback (docs/cms/cloud-publisher.md).
+const DEVELOPMENT_PASS_THROUGH = Object.freeze(["CMS_MEDIA_CLOUDFLARE_ZONE_ID", "CMS_ANALYTICS_CF_ZONE_ID",
+  "CMS_PUBLISH_GITHUB_APP_ID", "CMS_PUBLISH_GITHUB_INSTALLATION_ID", "CMS_PUBLISH_GITHUB_TRUSTED_ACTORS"]);
+function developmentInputs(env, variables) {
+  const target = cmsTarget(env);
+  const bucket = env.CMS_DEV_MEDIA_BUCKET?.trim();
+  if (!isDevelopmentName(bucket)) configurationFailure("CMS_DEV_MEDIA_BUCKET must name a development bucket");
+  return {
+    // config-input: CMS_MEDIA_CLOUDFLARE_ZONE_ID, CMS_ANALYTICS_CF_ZONE_ID, CMS_PUBLISH_GITHUB_APP_ID, CMS_PUBLISH_GITHUB_INSTALLATION_ID, CMS_PUBLISH_GITHUB_TRUSTED_ACTORS
+    ...Object.fromEntries(DEVELOPMENT_PASS_THROUGH.map(key => [key, variables[CONFIGURATION_INPUTS[key].variable]])),
+    CMS_DEPLOYMENT_ENVIRONMENT: "development",
+    CMS_PUBLISH_TRANSPORT: "github",
+    CMS_WRITEBACK_CONFIGURED: "true",
+    CMS_MEDIA_R2_BUCKET: bucket,
+    CMS_ANALYTICS_MAILCHIMP_AUDIENCE_ID: "0000000000",
+    CMS_PREVIEW_SERIALIZER_READY: "true",
+    CMS_STAFF_EMAIL_ADMIN_ORIGIN: target.adminOrigin,
+    CMS_BUG_REPORT_ADMIN_ORIGIN: target.adminOrigin,
+  };
+}
+
 export function configurationInputs(env) {
   let variables = {};
   try {
@@ -65,6 +92,7 @@ export function configurationInputs(env) {
     if (!variables || Array.isArray(variables) || typeof variables !== "object" ||
         Object.values(variables).some(value => typeof value !== "string")) throw new Error();
   } catch { configurationFailure("Deployment variables are invalid"); }
+  const development = cmsTarget(env).environment === "development" ? developmentInputs(env, variables) : null;
   // Process/GitHub environments contain unrelated keys. Only native bindings
   // named by this table enter the strict configuration object.
   return Object.fromEntries(Object.entries(CONFIGURATION_INPUTS).map(([key, row]) =>
@@ -90,10 +118,10 @@ export function configurationInputs(env) {
     // config-input: COST_LEDGER_GITHUB_PULL, GITHUB_REPOSITORY, LIVE_PRODUCTION_ENABLED, NO_BUILD_POST_BACKGROUND_BUCKET, NO_BUILD_POST_ENABLED
     // config-input: NO_BUILD_POST_ID, PREMIERE_DESKTOP_ENABLED, PROXY_EXTRA_ORIGINS, SHADOW_POST_READER_ENABLED, SHADOW_POST_READER_SLUGS
     // config-input: TVSS_CALLSIGN, UGC_R2_BUCKET, VITE_CMS_STUDIO_CONFIGURATION, VITE_LIVE_PRODUCTION_ENABLED
-    [key, env[key] ?? (row.environment ? env[row.environment] : undefined) ?? (row.variable ? variables[row.variable] : undefined) ?? row.default]));
+    [key, development && (row.variable || Object.hasOwn(development, key)) ? development[key] ?? row.default : env[key] ?? (row.environment ? env[row.environment] : undefined) ?? (row.variable ? variables[row.variable] : undefined) ?? row.default]));
 }
 
-export function runtimeParameters(input, discovery = {}) {
+export function runtimeParameters(input, discovery = {}, target = cmsTarget()) {
   if (!input || typeof input !== "object" || Array.isArray(input) ||
       Object.keys(input).some(key => !Object.hasOwn(CONFIGURATION_INPUTS, key))) configurationFailure("Unknown Functions configuration input");
   const values = {};
@@ -104,6 +132,8 @@ export function runtimeParameters(input, discovery = {}) {
         (row.type === "boolean" && value !== "" && !["true", "false"].includes(value))) configurationFailure(`Invalid Functions configuration: ${key}`);
     values[key] = value;
   }
+  // Production publishes through the serializer only; dev through GitHub only.
+  if ((values.CMS_PUBLISH_TRANSPORT === "github") !== (target.environment === "development")) configurationFailure("Invalid Functions configuration: CMS_PUBLISH_TRANSPORT");
   const instant = ["NO_BUILD_POST_ENABLED", "NO_BUILD_POST_ID", "NO_BUILD_POST_BACKGROUND_BUCKET"].some(key => values[key]);
   if (instant && (!["true", "false"].includes(values.NO_BUILD_POST_ENABLED) ||
       Boolean(values.NO_BUILD_POST_ID) !== Boolean(values.NO_BUILD_POST_BACKGROUND_BUCKET) ||
@@ -124,7 +154,8 @@ export function runtimeParameters(input, discovery = {}) {
   return Object.fromEntries(Object.entries(RUNTIME_PARAMETERS).filter(([, row]) => row.group !== "instant" || instant).map(([key, row]) => {
     const value = row.format === "studio" ? titles : row.format === "admin-map" ? adminMap :
       row.format === "r2" ? `https://${values[row.input]}.r2.cloudflarestorage.com` :
-      row.format === "discovery" ? discovery[key] : row.input ? values[row.input] : row.value;
+      row.format === "discovery" ? discovery[key] : row.input ? values[row.input]
+      : key === "CMS_MEDIA_PUBLIC_ORIGIN" ? target.mediaOrigin : row.value;
     if (typeof value !== "string") configurationFailure(`Missing discovery parameter: ${key}`);
     return [key, value];
   }));
@@ -155,16 +186,16 @@ export function runtimeDotenv(parameters) {
   }).join("");
 }
 
-export function validateDeploymentConfiguration(value) {
+export function validateDeploymentConfiguration(value, { projectId, codebase } = cmsTarget()) {
   if (!value || typeof value !== "object" || Array.isArray(value) ||
       Object.keys(value).sort().join(",") !== "codebase,mediaCredentialVersions,projectId,region" ||
-      value.projectId !== "njpbs-site" || value.region !== "us-central1" || value.codebase !== "default" ||
+      value.projectId !== projectId || value.region !== "us-central1" || value.codebase !== codebase ||
       !value.mediaCredentialVersions || typeof value.mediaCredentialVersions !== "object" || Array.isArray(value.mediaCredentialVersions) ||
       Object.keys(value.mediaCredentialVersions).sort().join(",") !== Object.keys(FUNCTION_SECRETS).filter(key => FUNCTION_SECRETS[key].mediaPin).sort().join(",")) {
     configurationFailure("Invalid Functions deployment scope or configuration keys");
   }
   for (const [name, reference] of Object.entries(value.mediaCredentialVersions)) {
-    if (reference !== null && (typeof reference !== "string" || !new RegExp(`^projects/njpbs-site/secrets/${name}/versions/[1-9][0-9]*$`).test(reference))) {
+    if (reference !== null && (typeof reference !== "string" || !new RegExp(`^projects/${projectId}/secrets/${name}/versions/[1-9][0-9]*$`).test(reference))) {
       configurationFailure(`Invalid pinned secret version: ${name}`);
     }
   }

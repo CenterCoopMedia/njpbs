@@ -6,7 +6,13 @@ const { publicationTarget, assertPublicationTarget } = require("./publication-ta
 const { assertPublicDeploymentReservedBatch, timestampMillis } = require("./public-deployment");
 
 const REASON = "dev_publish_failed_before_upload";
-const FAILURE = "Retained dev renderer source differs";
+// Each accepted failure code names a refusal that precedes any upload, and the queue error it records.
+const FAILURES = Object.freeze({
+  retained_dev_renderer_source_differs: "Retained dev renderer source differs",
+  dev_refresh_frozen_build_failed: "Dev refresh frozen build failed before upload",
+  dev_refresh_content_check_failed: "Dev refresh content check failed before upload",
+});
+const FAILURE = FAILURES.retained_dev_renderer_source_differs;
 const refuse = () => { throw new Error("Development pre-upload settlement refused"); };
 
 function parseDevPreuploadSettlement(value) {
@@ -19,7 +25,7 @@ function parseDevPreuploadSettlement(value) {
       !/^[A-Za-z0-9]{20}$/.test(identity.queueId ?? "") || identity.buildBatchId !== `cms-${identity.queueId}` ||
       !/^[a-f0-9]{40}$/.test(identity.commitSha ?? "") || !p.positive(value.generation) || !p.digest(value.inputDigest) ||
       !/^[1-9][0-9]{0,19}$/.test(failure.runId ?? "") || !/^[1-9][0-9]{0,19}$/.test(failure.jobId ?? "") ||
-      ![1, 2].includes(failure.runAttempt) || failure.code !== "retained_dev_renderer_source_differs" ||
+      ![1, 2].includes(failure.runAttempt) || typeof failure.code !== "string" || !Object.hasOwn(FAILURES, failure.code) ||
       typeof failure.completedAt !== "string" || !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/.test(failure.completedAt) ||
       !Number.isFinite(Date.parse(failure.completedAt)) || !p.digest(failure.logDigest)) refuse();
   return value;
@@ -42,4 +48,6 @@ function assertDevPreuploadRetiredBatch(value, buildBatchId) {
   return value;
 }
 
-module.exports = { REASON, FAILURE, refuse, parseDevPreuploadSettlement, assertDevPreuploadRetiredBatch };
+const failureMessage = code => typeof code === "string" && Object.hasOwn(FAILURES, code) ? FAILURES[code] : refuse();
+
+module.exports = { REASON, FAILURE, FAILURES, failureMessage, refuse, parseDevPreuploadSettlement, assertDevPreuploadRetiredBatch };

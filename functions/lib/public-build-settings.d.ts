@@ -7,10 +7,12 @@ export interface PublicBuildValues {
 export interface PublicBuildSettings {
   schemaVersion: 1;
   commitSha: string;
-  values: PublicBuildValues;
+  /** Present only for a development receipt, whose values are empty. */
+  environment?: "development";
+  values: PublicBuildValues | Record<string, never>;
   overridesAbsent: boolean;
 }
 export function createPublicBuildSettings(commitSha: string, compilerEnvironment: Record<string, string | undefined>,
   requestedEnvironment: Record<string, string | undefined>): PublicBuildSettings;
 export function assertPreparedPublicBuildSettings(value: unknown, commitSha: string,
-  expectedValues?: PublicBuildValues): PublicBuildSettings;
+  expectedValues?: PublicBuildSettings["values"]): PublicBuildSettings;

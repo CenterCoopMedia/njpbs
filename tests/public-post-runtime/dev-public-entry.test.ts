@@ -4,12 +4,12 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { expect, it } from "vitest";
 
-// The actual dev entry and compiled graph use service/Assets boundary fixtures.
+// The production entry, run for the development target, and its compiled graph use service/Assets boundary fixtures.
 // The real Firestore suite separately proves the exact candidate lease gate.
 it("attests a leased dev baseline through the actual Worker entry and refuses an unknown candidate", async () => {
   const repo = fileURLToPath(new URL("../../", import.meta.url));
   const { rendererSha } = JSON.parse(await readFile(new URL("../../site/.public-post-renderer/renderer-release.json", import.meta.url), "utf8"));
-  const bundle = await build({ entryPoints: [fileURLToPath(new URL("../../workers/src/dev-public-worker.ts", import.meta.url))],
+  const bundle = await build({ entryPoints: [fileURLToPath(new URL("../../workers/src/public-no-build-entry.ts", import.meta.url))],
     absWorkingDir: repo, bundle: true, write: false, platform: "browser", format: "esm" });
   const body = JSON.stringify({ buildBatchId: "cms-fixture", generation: 7, commitSha: rendererSha });
   const authority = `import { WorkerEntrypoint } from 'cloudflare:workers';
@@ -26,7 +26,7 @@ it("attests a leased dev baseline through the actual Worker entry and refuses an
   const runtime = new Miniflare({ workers: [
     { config: { name: "dev-public-entry", type: "worker", compatibilityDate: "2026-07-09",
       manifest: { mainModule: "index.js", modules: { "index.js": { type: "esm", contents: bundle.outputFiles[0].text } } },
-      env: { NO_BUILD_POST_RENDERER_SHA: { type: "text", value: rendererSha },
+      env: { NO_BUILD_POST_RENDERER_SHA: { type: "text", value: rendererSha }, PUBLICATION_ENVIRONMENT: { type: "text", value: "development" },
         CMS_API: { type: "worker", worker: "authority", exportName: "PublicContentEntrypoint" },
         ASSETS: { type: "fetcher", handler: () => new WorkerResponse(body, { headers: { "content-type": "application/json" } }) } } } },
     { config: { name: "authority", type: "worker", compatibilityDate: "2026-07-09",

@@ -87,7 +87,7 @@ function clipSettingsLabel(clip: VideoClip) {
 const activeTranscript = (state?: string) => state === "queued" || state === "processing";
 const activeClip = (state?: string) => state === "queued" || state === "processing";
 
-export function useVideoProductionTools({ headerControls = false, workspace = false, initialClipRange, commentThreads, commentsIncomplete, onOpenComment, commentsAction, onWorkspacePaneChange, principal, onCredentialsDirtyChange, onCredentialsBusyChange, asset, getIdToken, player, canRequest, disabled: mediaDisabled, onDownloadOriginal, onTranscriptDirtyChange, onTranscriptSavingChange, onBusyChange, onSearchContentChanged, onTranscriptRequested, onTranscriptObserved, onTranscriptReady, onClipRegistered }: {
+export function useVideoProductionTools({ headerControls = false, workspace = false, initialClipRange, commentThreads, commentsIncomplete, onOpenComment, commentsAction, correctionReturnTarget, onWorkspacePaneChange, principal, onCredentialsDirtyChange, onCredentialsBusyChange, asset, getIdToken, player, canRequest, disabled: mediaDisabled, onDownloadOriginal, onTranscriptDirtyChange, onTranscriptSavingChange, onBusyChange, onSearchContentChanged, onTranscriptRequested, onTranscriptObserved, onTranscriptReady, onClipRegistered }: {
   principal?: Principal;
   headerControls?: boolean;
   workspace?: boolean;
@@ -96,6 +96,7 @@ export function useVideoProductionTools({ headerControls = false, workspace = fa
   commentsIncomplete?: boolean;
   onOpenComment?: (comment: MediaComment) => void;
   commentsAction?: ReactNode;
+  correctionReturnTarget?: HTMLElement | null;
   onWorkspacePaneChange?: (pane: "watch" | "transcript") => void;
   onCredentialsDirtyChange?: (dirty: boolean) => void;
   onCredentialsBusyChange?: (busy: boolean) => void;
@@ -588,6 +589,7 @@ export function useVideoProductionTools({ headerControls = false, workspace = fa
   }
   const transcriptContent = transcriptOpen && transcriptState === "ready" && transcript ? <>
     <TranscriptEditor playbackSeconds={workspace ? playbackSeconds : undefined} commentThreads={commentThreads} commentsIncomplete={commentsIncomplete} onOpenComment={onOpenComment} commentsAction={commentsAction} loadMoreAction={workspace && transcript.nextCursor ? <Button disabled={transcriptPageLoading || transcriptBusy || transcriptLocked} onClick={() => void moreTranscript()}>{transcriptPageLoading ? "Loading more transcript" : "Load more transcript"}</Button> : null} pane={workspace} key={transcript.transcript.id} response={transcript} canEdit={canRequest} disabled={mediaDisabled || transcriptBusy || transcriptChecking || byokBusy}
+      correctionReturnTarget={correctionReturnTarget} onReturnToTranscript={() => onWorkspacePaneChange?.("transcript")}
       onSelectPassage={selectPassage} canSelectPassage={canSelectPassage} onSeek={seek} onDirtyChange={setTranscriptDirty} onSavingChange={setTranscriptSaving} onEditingChange={setTranscriptEditing}
       onSave={async edits => {
         const transcriptId = transcript.transcript.id;

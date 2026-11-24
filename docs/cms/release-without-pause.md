@@ -465,9 +465,8 @@ before session-retirement proof; an old success-shaped catalog is insufficient.
 Enabled-reader workflow inputs are `install_reader_bridge=true`, the original
 `reader_operation_id` and the exact `reader_install_authorization` supplied by
 the private operator step; no historical approval phrase is published here.
-Development additionally keeps `CMS_DEV_PUBLISH_ENABLED=false` throughout and
-selects its separately authorized `release_preview_renderer` choice. Production
-requires `force_firebase=true`, first workflow attempt and exact equality of
+Development additionally keeps `CMS_DEV_PUBLISH_ENABLED=false` throughout.
+Production requires `force_firebase=true`, first workflow attempt and exact equality of
 current trusted workflow, checkout and `deploy_ref` SHAs; ordinary ancestor-NEW
 admission does not apply to this opt-in installation. Default dispatch leaves
 mounts off. Check both actor identities, configured repository/environment and

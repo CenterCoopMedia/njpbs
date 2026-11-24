@@ -72,6 +72,7 @@ const EXPECTED_PROBES = [
   ...probeTargets(BASE_URL, "OPTIONS", [
     "deactivateStaff", "submitStaffAccessRequest", "cmsUploadMedia", "cmsSubmitBugReport",
   ]),
+  `HEAD ${FUNCTIONS_ORIGIN}/donationHealth`,
   `GET ${ADMIN_ORIGIN}`,
 ];
 
@@ -81,7 +82,7 @@ function expectedResponseFor(url, init = {}) {
     return { status: 200, headers: new Headers() };
   }
   if (parsedUrl.origin === FUNCTIONS_ORIGIN) {
-    return { status: 403, headers: new Headers() };
+    return { status: parsedUrl.pathname === "/donationHealth" ? 405 : 403, headers: new Headers() };
   }
   const endpoint = parsedUrl.pathname.slice(1);
   if (endpoint === "health") return { status: 200, headers: new Headers() };
@@ -400,7 +401,7 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
       const callLog = join(root, "calls.txt");
       const run = (state, status = "0", targets = "functions:cmsGetPublishedPost") =>
         execFileSync("bash", ["-c", script], { cwd: root, stdio: "pipe", env: {
-          PATH: `${root}:${process.env.PATH}`, FUNCTION_TARGETS: targets,
+          PATH: `${root}:${process.env.PATH}`, FUNCTION_TARGETS: targets, CMS_TARGET_FIREBASE_PROJECT: "njpbs-site",
           READER_SECRET_STATE: state, READER_SECRET_STATUS: status, READER_CALL_LOG: callLog,
         } });
       expect(() => run("ENABLED")).not.toThrow();
@@ -810,7 +811,8 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
     expect(firestoreDeployStart).toBeGreaterThan(targetValidation);
     expect(functionDeployStart).toBeGreaterThan(firestoreDeployStart);
     const firestoreDeployInvocation = deployCommand.slice(firestoreDeployStart, functionDeployStart);
-    expect(firestoreDeployInvocation).toContain('--only "firestore:rules,firestore:indexes,storage"');
+    expect(firestoreDeployInvocation).toContain('--config "$CMS_TARGET_FIREBASE_CONFIG"');
+    expect(firestoreDeployInvocation).toContain('--only "$CMS_TARGET_FIREBASE_RULES"');
     expect(firestoreDeployInvocation).toContain("--non-interactive");
     expect(firestoreDeployInvocation).not.toContain("--force");
     expect(deployCommand).not.toContain("firebase functions:delete");
@@ -818,7 +820,7 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
     expect(workflow).toContain("node scripts/component-runner.mjs functions smoke");
     expect(workflow).not.toContain('if [ "$DEPLOY_SHA" != "$GATE_SHA" ]');
     expect(workflow).toContain(
-      "VITE_FUNCTIONS_BASE_URL: ${{ vars.VITE_FUNCTIONS_BASE_URL || secrets.VITE_FUNCTIONS_BASE_URL }}",
+      "VITE_FUNCTIONS_BASE_URL: ${{ vars.VITE_FUNCTIONS_BASE_URL || inputs.target != 'development' && secrets.VITE_FUNCTIONS_BASE_URL || '' }}",
     );
     expect(workflow).toContain(
       "VITE_CMS_PREVIEW_ENABLED: ${{ vars.VITE_CMS_PREVIEW_ENABLED || 'false' }}",
@@ -856,16 +858,16 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
     expect(CONFIGURATION_INPUTS).toHaveProperty("CMS_PREVIEW_SERIALIZER_READY");
     expect(parse(workflow).env.CMS_PUBLISH_TRANSPORT).toBe("serializer");
     expect(workflow).not.toContain("vars.CMS_PUBLISH_TRANSPORT");
-    expect(CONFIGURATION_INPUTS.CMS_PUBLISH_TRANSPORT).toMatchObject({ default: "serializer", pattern: "^serializer$" });
+    expect(CONFIGURATION_INPUTS.CMS_PUBLISH_TRANSPORT).toMatchObject({ default: "serializer", pattern: "^(?:serializer|github)$" });
     expect(workflow).toContain(
-      "CLOUDFLARE_API_TOKEN: ${{ secrets.CMS_ADMIN_ACCESS_API_TOKEN }}",
+      "CLOUDFLARE_API_TOKEN: ${{ inputs.target != 'development' && secrets.CMS_ADMIN_ACCESS_API_TOKEN || '' }}",
     );
     expect(parse(workflow).jobs.verify.needs).toBeUndefined();
     expect(parse(workflow).jobs["firebase-preflight"].needs).toEqual(["admin-build", "verify"]);
     expect(workflow).toContain("force_firebase:");
     expect(workflow).toContain("node scripts/component-runner.mjs functions plan");
     expect(workflow).toContain("node scripts/component-runner.mjs functions verify");
-    expect(workflow).toContain("CMS_FUNCTION_DEPLOY_TARGETS: ${{ vars.CMS_PREVIEW_CLOUD_ENABLED == 'true' && needs.firebase-preflight.outputs.preview_pause_late == 'true' && needs.firebase-preflight.outputs.functions_during_preview || needs.firebase-preflight.outputs.function_deploy_targets }}");
+    expect(workflow).toContain("CMS_FUNCTION_DEPLOY_TARGETS: ${{ (inputs.target == 'development' || vars.CMS_PREVIEW_CLOUD_ENABLED == 'true') && needs.firebase-preflight.outputs.preview_pause_late == 'true' && needs.firebase-preflight.outputs.functions_during_preview || needs.firebase-preflight.outputs.function_deploy_targets }}");
     expect(workflow).toContain("CMS_PREVIEW_RENDERER_SHA: ${{ needs.firebase-preflight.outputs.renderer_target_sha }}");
     expect(workflow.indexOf("Revalidate the selective release baseline before mutation"))
       .toBeLessThan(workflow.indexOf("Mark the Functions receipt in progress"));
@@ -891,16 +893,16 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
     expect(functionsRecord).toContain('--configuration-fingerprint "$FUNCTIONS_CONFIGURATION_FINGERPRINT"');
     for (const step of ["Mark the CMS API receipt in progress", "Deploy CMS API Worker", "Record the completed CMS API receipt"]) {
       const body = workerJob.slice(workerJob.indexOf(`- name: ${step}`));
-      expect(body.split("\n")[1]).toContain("if: steps.cms_api_plan.outputs.mutated != 'false'");
+      expect(body.slice(0, body.indexOf("run:"))).toContain("steps.cms_api_plan.outputs.mutated != 'false'");
     }
     const record = workerJob.slice(workerJob.indexOf("- name: Record the completed CMS API receipt"));
     expect(record.slice(0, record.indexOf("- name:", 10))).toContain("--configuration-fingerprint-file");
     const confirm = workerJob.slice(workerJob.indexOf("- name: Confirm the live CMS API identity"));
-    expect(confirm).toContain("if: steps.cms_api_plan.outputs.mutated == 'false'");
+    expect(confirm).toContain("steps.cms_api_plan.outputs.mutated == 'false'");
     expect(confirm).toContain("component-runner.mjs cmsApi confirm");
     expect(workflow).not.toContain("cms_api_mutated");
     expect(workflow).toContain("Deploy Firestore and Storage rules without Functions");
-    expect(workflow).toContain("firestore:rules,firestore:indexes,storage");
+    expect(workflow).toContain("'firestore:rules,firestore:indexes,storage' }}");
     expect(workflow).toContain("component-runner.mjs functions confirm");
     expect(workflow).toContain("component-runner.mjs renderer confirm");
     expect(workflow).toContain("node scripts/component-runner.mjs functions plan");
@@ -977,7 +979,7 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
     expect(adminDeploy).toContain("scripts/confirm-admin-revision.mjs");
     expect(adminDeploy).toContain("workingDirectory: admin");
     expect(adminDeploy).toContain(
-      "command: pages deploy dist --project-name=njpbs-admin",
+      "command: pages deploy dist --project-name=${{ env.CMS_TARGET_ADMIN_PAGES }}",
     );
     expect(adminDeploy).toContain(
       "node scripts/check-admin-pages-security.mjs predeploy",
@@ -986,7 +988,7 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
       "node scripts/check-admin-pages-security.mjs postdeploy",
     );
     expect(adminDeploy).toContain(
-      "if: hashFiles('admin/dist/guide-content/manifest.json') != ''",
+      "if: inputs.target != 'development' && hashFiles('admin/dist/guide-content/manifest.json') != ''",
     );
     expect(adminDeploy).toContain(
       "node scripts/check-admin-pages-security.mjs",
@@ -1026,10 +1028,10 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
     expect(firstMutation).toBeGreaterThan(appCheckGate);
     expect(cmsApi).toBeGreaterThan(firstMutation);
     expect(gate).toContain(
-      "FIREBASE_APP_ID: ${{ vars.VITE_FIREBASE_APP_ID || secrets.VITE_FIREBASE_APP_ID }}",
+      "FIREBASE_APP_ID: ${{ vars.VITE_FIREBASE_APP_ID || inputs.target != 'development' && secrets.VITE_FIREBASE_APP_ID || '' }}",
     );
     expect(gate).toContain(
-      "FIREBASE_APPCHECK_SITE_KEY: ${{ vars.VITE_FIREBASE_APPCHECK_SITE_KEY || secrets.VITE_FIREBASE_APPCHECK_SITE_KEY }}",
+      "FIREBASE_APPCHECK_SITE_KEY: ${{ vars.VITE_FIREBASE_APPCHECK_SITE_KEY || inputs.target != 'development' && secrets.VITE_FIREBASE_APPCHECK_SITE_KEY || '' }}",
     );
     expect(gate).toContain(
       "firebaseappcheck.googleapis.com/v1/projects/${project_number}/apps/${FIREBASE_APP_ID}/recaptchaEnterpriseConfig",
@@ -1069,7 +1071,7 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
     );
     expect(secretPreparation).not.toContain("if: needs.firebase-preflight");
     expect(secretPreparation).toContain(
-      "FIREBASE_WEB_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY || secrets.VITE_FIREBASE_API_KEY }}",
+      "FIREBASE_WEB_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY || inputs.target != 'development' && secrets.VITE_FIREBASE_API_KEY || '' }}",
     );
     expect(secretPreparation).toContain("if (!firebaseWebApiKey) throw new Error");
     expect(secretPreparation).toContain("FIREBASE_WEB_API_KEY: firebaseWebApiKey");

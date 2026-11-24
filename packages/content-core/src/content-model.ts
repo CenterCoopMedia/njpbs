@@ -50,6 +50,8 @@ import { isElectionResultsData, type ElectionResultsData } from "./election-resu
 import { isBioCardData, type BioCardData } from "./bio-profiles.ts";
 import { isHomeNewscastData, type HomeNewscastData } from "./home-newscast-data.ts";
 import { isVideoBlockData, type VideoBlockData } from "./video-block.ts";
+import { isScrollStoryData, type ScrollStoryData } from "./scroll-story.ts";
+export { SCROLL_STORY_LIMITS, type ScrollStoryData } from "./scroll-story.ts";
 import type { PostLeadMedia } from "./post-lead-media.ts";
 export type { PublicVideoData, VideoBlockData } from "./video-block.ts";
 export type { BioIdentity, BioCardData } from "./bio-profiles.ts";
@@ -1016,12 +1018,6 @@ export interface ImageGalleryData {
   presentation?: GalleryPresentation;
 }
 
-export const SCROLL_STORY_LIMITS = { steps: 12, text: 1200, alt: 300, caption: 600 } as const;
-
-export interface ScrollStoryData {
-  steps: Array<{ text: string; assetId: string; alt: string; caption: string }>;
-}
-
 /** The mode to render, resolving an absent choice to today's behavior. */
 export function galleryPresentation(data: ImageGalleryData): GalleryPresentation {
   return data.presentation ?? "grid";
@@ -1590,17 +1586,7 @@ function hasValidBlockData(
           || (typeof data.presentation === "string"
             && GALLERY_PRESENTATION_SET.has(data.presentation)));
     case "scroll_story":
-      return Reflect.ownKeys(data).every(key => key === "steps")
-        && Array.isArray(data.steps)
-        && data.steps.length >= (publishable ? 1 : 0)
-        && data.steps.length <= SCROLL_STORY_LIMITS.steps
-        && data.steps.every(step => isRecord(step)
-          && Reflect.ownKeys(step).every(key => key === "text" || key === "assetId" || key === "alt" || key === "caption")
-          && typeof step.text === "string" && step.text.length <= SCROLL_STORY_LIMITS.text
-          && typeof step.assetId === "string" && /^[A-Za-z0-9_-]{0,128}$/.test(step.assetId)
-          && typeof step.alt === "string" && step.alt.length <= SCROLL_STORY_LIMITS.alt
-          && typeof step.caption === "string" && step.caption.length <= SCROLL_STORY_LIMITS.caption
-          && (!publishable || (step.text.trim().length > 0 && (!step.assetId || step.alt.trim().length > 0))));
+      return isScrollStoryData(data, publishable);
     case "support_appeal":
       return Object.keys(data).every(key => ["heading", "copy", "buttonLabel", "href", "style", "backgroundImageAssetId"].includes(key))
         && ([["heading", 120], ["copy", 2000], ["buttonLabel", 60]] as const).every(([key, max]) => {

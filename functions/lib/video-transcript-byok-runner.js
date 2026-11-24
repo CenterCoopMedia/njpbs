@@ -1,6 +1,7 @@
 "use strict";
 
 const { randomUUID } = require("node:crypto");
+const logger = require("firebase-functions/logger");
 const jobs = require("./video-transcript-byok-job");
 const { activeAsset } = require("./video-transcript-job");
 const { sourceMatches } = require("./video-transcript-worker");
@@ -21,6 +22,7 @@ function createByokRunner({
   storage,
   loadCredential,
   transcribe,
+  retrieveTranscript,
   clock = Date.now,
   onlyJobId,
 }) {
@@ -189,6 +191,38 @@ function createByokRunner({
     });
     return { outcome: finished ? "ready" : "lease_lost" };
   }
+  async function retrieveCompleted(owner, claim, response) {
+    const authorized = async credential => (await authCurrent(claim)) && await firestore.runTransaction(async tx => {
+      const job = (await tx.get(queue.doc(claim.id))).data();
+      const currentResponse = jobs.completedResponse(job);
+      return job?.active === true && job.phase === "running" && job.leaseOwner === claim.leaseOwner &&
+        job.leaseUntil > clock() && job.requestedBy === claim.requestedBy && job.requestedAuthTime === claim.requestedAuthTime &&
+        job.submissionIntentAt === claim.submissionIntentAt && currentResponse?.attemptId === response.attemptId &&
+        currentResponse?.transcriptionId === response.transcriptionId && currentResponse?.inputSha256 === response.inputSha256 &&
+        await current(owner, credential)(tx, job, "provider_recovery");
+    });
+    if (!await authorized()) return null;
+    const credential = await loadCredential(claim);
+    try {
+      if (!Buffer.isBuffer(credential?.key) || !await authorized(credential)) return null;
+      let result;
+      try {
+        result = await retrieveTranscript(response, credential.key, {
+          durationSeconds: claim.durationSeconds, maxSpeakers: claim.maxSpeakers,
+        });
+      } catch (error) {
+        if (error?.code === "elevenlabs_result_invalid") return null;
+        throw error;
+      }
+      if (result.transcriptionId !== response.transcriptionId || result.inputSha256 !== response.inputSha256) return null;
+      const receipt = await storage.persistSpool(claim, claim, result);
+      const recovered = await storage.recoverSpool(claim, claim, receipt);
+      if (!recovered) throw Error("byok_spool_unavailable");
+      return recovered;
+    } finally {
+      if (Buffer.isBuffer(credential?.key)) credential.key.fill(0);
+    }
+  }
   async function recover(owner, row) {
     const claim = await jobs.claimRecovery({
       firestore,
@@ -196,18 +230,25 @@ function createByokRunner({
       now: clock(),
     });
     if (!claim) return { outcome: "busy" };
-    let recovered;
+    const response = jobs.completedResponse(claim);
+    const canLookup = response && !claim.spoolReceipt && typeof retrieveTranscript === "function";
+    let recovered, denied;
     let recoveryError = claim.spoolReceipt ? "byok_spool_missing" : undefined;
     try {
       recovered = await storage.recoverSpool(claim, claim, claim.spoolReceipt);
     } catch (error) {
       if (error?.code === "byok_storage_spool_missing") recoveryError = "byok_spool_missing";
+      else if (canLookup && error?.code === "byok_storage_unavailable" && error.unpinnedReadDenied === true) denied = error;
       else {
         if (!["byok_storage_receipt_invalid", "byok_storage_result_invalid", "byok_storage_identity_invalid", "byok_storage_result_too_large"].includes(error?.code)) throw error;
         recoveryError = "byok_spool_invalid";
       }
     }
+    if (!recovered && !recoveryError && canLookup) {
+      recovered = await retrieveCompleted(owner, claim, response);
+    }
     if (recovered) return publish(owner, claim, recovered);
+    if (denied) throw denied;
     const finished = await jobs.finishJob({
       firestore,
       claim,
@@ -263,6 +304,15 @@ function createByokRunner({
       const result = await transcribe(prepared.input, credential.key, {
         languageCode: claim.languageCode,
         maxSpeakers: claim.maxSpeakers,
+      }, {
+        async recordCompleted(response) {
+          try { await jobs.recordCompletedResponse({ firestore, claim: intent, response, now: clock() }); }
+          catch (error) {
+            if (error?.code === "byok_completed_response_changed") throw error;
+            // A usable paid result can still be spooled if its ID write failed.
+            logger.warn("Completed ElevenLabs identity could not be saved");
+          }
+        },
       });
       const receipt = await storage.persistSpool(intent, intent, result);
       const recovered = await storage.recoverSpool(intent, intent, receipt);

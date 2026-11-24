@@ -1,4 +1,5 @@
 import { COVERAGE_LABELS_SETTINGS_ID } from "../../../packages/content-core/src/cms-settings";
+import { withoutPublicVideoData } from "../../../packages/content-core/src/video-block";
 import { STORY_CTAS_SETTINGS_ID } from "../../../packages/content-core/src/cms-settings";
 import { usageActionCollector } from "./boardwalk-usage";
 import { projectCoverageLabels, type CoverageLabelsBuildData } from "../../../packages/content-core/src/coverage-labels";
@@ -1531,18 +1532,6 @@ function legacyPositionalMintedIds(
 // its own; the editor offers reload and, only when the caller had loaded the stored document,
 // an informed overwrite (#563/#567).
 // Branch on `isConflictError`, not on the message text.
-// `public` on a video block is server-owned (#2751); the server strips it too. Kept local
-// so this eagerly loaded module does not pull the content-core validators into a shared chunk.
-function withoutPublicVideoData(blocks: unknown[]): unknown[] {
-  return blocks.map((block) => {
-    if (typeof block !== "object" || block === null) return block;
-    const { type, data } = block as { type?: unknown; data?: unknown };
-    if (type !== "video" || typeof data !== "object" || data === null || !("public" in data)) return block;
-    const { public: _server, ...rest } = data as Record<string, unknown>;
-    return { ...block, data: rest };
-  });
-}
-
 export async function cmsSaveContent(
   idToken: string,
   body: SaveContentRequest,
@@ -2206,6 +2195,7 @@ export interface SettingsPublicationReceipt {
   contextDigest: string;
   status: "pending" | "success" | "failed";
   missingConsumers: string[];
+  waitingForNewerContext?: true;
   warning?: string;
 }
 

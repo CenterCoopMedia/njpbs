@@ -12,11 +12,7 @@
 // This test closes that seam. For every surface the model lists as covered, it
 // exercises that surface's REAL fallback under a simulated PBS outage and asserts it
 // degrades honestly -- an unavailable/cached island with a real next step, never a
-// blank, broken, or access-granting state. Then it checks the two directions the
-// list can drift: a surface added to SURFACES_WITH_FALLBACK without a working
-// fallback has no prover here (so this test fails), and the one PBS-backed surface
-// with no built fallback (the PBS-hosted donate transaction) stays out of coverage
-// and is reported broken in a full lapse.
+// blank, broken, or access-granting state.
 //
 // Scope: it exercises each surface's policy, data, or wired escape hatch at the unit
 // level, the same posture the rest of #189 uses. It is not a live Astro render over
@@ -32,8 +28,9 @@ import {
   PBS_BACKED_SURFACES,
   SURFACES_WITH_FALLBACK,
   assessOutage,
-  type PbsSurface,
 } from "../src/lib/pbs-outage-survivability";
+import { renderDonationDocument } from "./fixtures/donation-fallback-runtime";
+import { donateUrl } from "../src/data/launch-fallback";
 import { resolveScheduleWidgetStatus } from "../src/lib/schedule-widget-health";
 import {
   resolveScheduleAvailability,
@@ -66,7 +63,15 @@ const NOW = new Date("2026-07-09T12:00:00-04:00");
 // real fallback under a simulated outage and asserts an honest, usable degradation.
 // The map's keys are checked against SURFACES_WITH_FALLBACK below, so a surface added
 // to the model's list without a prover here fails the coverage test.
-const PROVERS: Record<(typeof SURFACES_WITH_FALLBACK)[number], () => void> = {
+const PROVERS: Record<(typeof SURFACES_WITH_FALLBACK)[number], () => void | Promise<void>> = {
+  donateTransaction: async () => {
+    const html = `<!doctype html><html><body><header><a href="${donateUrl}">Donate</a></header><main id="main"></main></body></html>`;
+    const signal = await renderDonationDocument(html, { kind: "outage", status: "timeout" });
+    const document = new DOMParser().parseFromString(signal, "text/html");
+    expect(document.querySelector("header a")?.getAttribute("href")).toBe("/contact/");
+    expect(document.querySelector("aside a")?.getAttribute("href")).toBe("/contact/");
+    expect(document.querySelector("aside")?.textContent).toContain("try again shortly");
+  },
   // The player embed is cross-origin, so its failure is unobservable from this
   // origin; its fallback is a persistent escape hatch wired into the page, proven at
   // the source level (the same way player-degradation.test.ts pins it). Exercising
@@ -186,32 +191,19 @@ describe("SURFACES_WITH_FALLBACK is backed by each surface's real fallback (issu
   });
 
   for (const surface of SURFACES_WITH_FALLBACK) {
-    it(`${surface} degrades honestly under a simulated PBS outage`, () => {
-      PROVERS[surface]();
-    });
+    it(`${surface} degrades honestly under a simulated PBS outage`, PROVERS[surface]);
   }
-
-  it("the PBS-hosted donate transaction stays out of coverage and reads as broken in a full lapse", () => {
-    // The one PBS-backed surface with no CCM-hosted fallback. It must be backed but
-    // absent from coverage, so the model does not overstate the site's survivability.
-    expect(PBS_BACKED_SURFACES).toContain<PbsSurface>("donateTransaction");
-    expect(SURFACES_WITH_FALLBACK).not.toContain("donateTransaction");
-    expect(Object.keys(PROVERS)).not.toContain("donateTransaction");
-  });
 
   it("the model's full-lapse verdict agrees with the coverage list the provers are pinned to", () => {
     // A consistency cross-check across the triangle, not a re-run of the provers: the
     // per-surface tests above prove each fallback, the first test pins the prover set
     // to SURFACES_WITH_FALLBACK, and this pins that same list to the model's verdict.
-    // With every PBS surface failing at once, each listed surface reads usable and
-    // degraded and the one with no fallback (donate) reads broken. If the provers and
-    // the list drift, the first test fails; if the list and the model drift, this does.
+    // With every PBS surface failing at once, each listed surface remains usable.
     const outage = assessOutage(new Set(PBS_BACKED_SURFACES));
     for (const surface of SURFACES_WITH_FALLBACK) {
       expect(outage.surfaces[surface]).toEqual({ usable: true, degraded: true });
     }
-    expect(outage.surfaces.donateTransaction).toEqual({ usable: false, degraded: true });
-    expect(outage.noSurfaceBroken).toBe(false);
+    expect(outage.noSurfaceBroken).toBe(true);
     expect(outage.editorialShellUsable).toBe(true);
   });
 });

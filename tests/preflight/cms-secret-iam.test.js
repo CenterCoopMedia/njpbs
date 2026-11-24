@@ -67,6 +67,10 @@ else if (args[0] === 'run' && args[1] === 'services' && args[2] === 'get-iam-pol
     args[3] === 'ondatasetrefresh' && process.env.IAM_MODE?.startsWith('first-') && process.env.IAM_MODE !== 'first-granted'
       ? [] : ['serviceAccount:'+account]}]}));
 }
+else if (args[0] === 'run' && args[1] === 'services' && args[2] === 'add-iam-policy-binding') {
+  if (process.env.IAM_MODE === 'first-grant-denied') process.exit(1);
+  console.log(JSON.stringify({bindings:[{role:'roles/run.invoker', members:[args[4].slice('--member='.length)]}]}));
+}
 else if (args[0] === 'secrets' && args[1] === 'get-iam-policy') {
   const secret = args[2];
   if (secret === process.env.IAM_SECRET && process.env.IAM_MODE === 'unreadable') process.exit(1);
@@ -87,6 +91,10 @@ chmodSync(join(fixture, "gcloud"), 0o700);
 writeFileSync(join(fixture, "inventory-network.mjs"), `
   globalThis.fetch = async (input, init) => {
     const url = new URL(input);
+    if (url.href === 'https://cloudresourcemanager.googleapis.com/v1/projects/njpbs-site:testIamPermissions' &&
+        init.method === 'POST' && init.headers.Authorization === 'Bearer fixture-metadata-token') {
+      return Response.json(process.env.IAM_MODE === 'first-grant-denied' ? {} : JSON.parse(init.body));
+    }
     if (url.origin !== 'https://cloudfunctions.googleapis.com' || init.headers.Authorization !== 'Bearer fixture-metadata-token') throw Error('Unexpected inventory request');
     if (process.env.IAM_MODE === 'first-inventory-denied') return new Response(null, { status: 403 });
     if (!url.searchParams.get('fields')?.includes('unreachable') || !url.searchParams.get('fields')?.includes('nextPageToken')) throw Error('Incomplete inventory field mask');
@@ -201,11 +209,22 @@ describe("deployed Functions secret IAM", () => {
     expect(preflight.stdout).toContain("1 new service invocation grants require post-deploy verification");
   });
 
-  it("refuses a missing invocation grant after deploy and names the exact authorized repair", () => {
+  it("refuses a new trigger service before mutation when the deploy identity cannot grant invocation", () => {
+    const preflight = run("first-grant-denied", undefined, undefined, [fixture, "--pre-deploy"]);
+    expect(preflight.status).toBe(1);
+    expect(preflight.stderr).toContain("the deploy identity needs run.services.getIamPolicy and run.services.setIamPolicy on njpbs-site");
+    expect(preflight.calls.some(args => args.includes("add-iam-policy-binding") || args[0] === "secrets")).toBe(false);
+  });
+
+  it("grants invocation on only the new trigger service after deploy, then checks it", () => {
     const result = run("first-created", undefined, undefined, [fixture, "--post-deploy"]);
-    expect(result.status).toBe(1);
-    expect(result.stderr).toContain(`gcloud run services add-iam-policy-binding ondatasetrefresh --member=serviceAccount:${defaultRuntime} --role=roles/run.invoker --condition=None --region=us-central1 --project=njpbs-site`);
-    expect(result.calls.some(args => args.includes("add-iam-policy-binding") || args[0] === "secrets")).toBe(false);
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.calls.filter(args => args.includes("add-iam-policy-binding"))).toEqual([["run", "services", "add-iam-policy-binding",
+      "ondatasetrefresh", `--member=serviceAccount:${defaultRuntime}`, "--role=roles/run.invoker", "--condition=None",
+      "--region=us-central1", "--project=njpbs-site", "--format=json"]]);
+    const denied = run("first-grant-denied", undefined, undefined, [fixture, "--post-deploy"]);
+    expect(denied.status).toBe(1);
+    expect(denied.stderr).toContain("Could not grant roles/run.invoker on ondatasetrefresh");
   });
 
   it("verifies all post-deploy identities and service grants with reads only", () => {
@@ -332,7 +351,7 @@ describe("deployed Functions secret IAM", () => {
   ])("refuses a missing or mismatched wake decision before provider reads: %j", overrides => {
     const result = run("first-new", undefined, undefined, [fixture, "--pre-deploy"], overrides);
     expect(result.status).toBe(1);
-    expect(result.stderr).toContain("An explicit production cloud wake decision is required");
+    expect(result.stderr).toContain("An explicit cloud wake decision for the selected target is required");
     expect(result.calls).toEqual([]);
   });
 
@@ -424,7 +443,7 @@ describe("deployed Functions secret IAM", () => {
     expect(checker.with["persist-credentials"]).toBe(false);
     expect(checker.with["sparse-checkout-cone-mode"]).toBe(false);
     expect(checker.with["sparse-checkout"].trim().split("\n")).toEqual([
-      "scripts/check-cms-secret-iam.mjs", "scripts/lib/functions-deploy-inventory.mjs", "scripts/lib/functions-readbacks.sh",
+      "scripts/check-cms-secret-iam.mjs", "scripts/lib/cms-target.mjs", "scripts/lib/functions-deploy-inventory.mjs", "scripts/lib/functions-readbacks.sh",
     ]);
     const setup = steps.findIndex(step => step.name === "Set up Google Cloud CLI for Functions IAM");
     const deploy = steps.findIndex(step => step.id === "deploy_functions");
@@ -433,7 +452,7 @@ describe("deployed Functions secret IAM", () => {
     const receipt = steps.findIndex(step => step.name === "Record the completed Functions receipt");
     expect(steps.some(step => step.uses?.startsWith("google-github-actions/auth@"))).toBe(false);
     expect(steps.some(step => step.with?.name === "cms-event-trigger-first-deploy")).toBe(false);
-    expect(steps[setup]).toMatchObject({ uses: "google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db", with: { project_id: "njpbs-site" } });
+    expect(steps[setup]).toMatchObject({ uses: "google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db", with: { project_id: "${{ env.CMS_TARGET_FIREBASE_PROJECT }}" } });
     const isolate = steps.findIndex(step => step.name === "Isolate trusted event IAM gate");
     expect(steps[isolate].run).toBe('mv .cms-iam-gate "$RUNNER_TEMP/cms-iam-gate"');
     expect(isolate).toBeGreaterThan(steps.indexOf(checker));

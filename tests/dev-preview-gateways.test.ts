@@ -23,7 +23,7 @@ const environment = () => ({ CANONICAL_GITHUB_REPOSITORY: "CenterCoopMedia/njpbs
   GITHUB_WORKFLOW_REF: 'CenterCoopMedia/njpbs/.github/workflows/cms-dev-deploy.yml@refs/heads/main',
   DEPLOY_SHA: sha, GITHUB_WORKFLOW_SHA: sha, GITHUB_SHA: sha, GITHUB_ACTOR: 'fixture-owner', GITHUB_TRIGGERING_ACTOR: 'fixture-owner', RUNNER_ENVIRONMENT: 'github-hosted',
   CMS_DEV_PUBLISH_ENABLED: 'false', CMS_DEV_ACCESS_ORIGIN: 'https://fixture.cloudflareaccess.com', CLOUDFLARE_ACCOUNT_ID: account, DEV_PREVIEW_ACCESS_AUDIENCE: audience,
-  CMS_DEV_RELEASE_PREVIEW_RENDERER: 'true', CMS_DEPLOY_OWNER: 'fixture-owner',
+  CMS_DEPLOY_OWNER: 'fixture-owner',
   CLOUDFLARE_API_TOKEN: 'fixture-token', PATH: process.env.PATH, HOME: process.env.HOME });
 
 function provider(drift = '', stalePrivateReads = 0, deploymentHistory = 11) {
@@ -37,7 +37,7 @@ function provider(drift = '', stalePrivateReads = 0, deploymentHistory = 11) {
   const routes: Array<Record<string, unknown>> = [];
   const unrelatedDomain = { id: 'c'.repeat(32), hostname: 'example.test', service: 'unrelated-fixture', environment: 'production' };
   domains.push(unrelatedDomain);
-  if (drift === 'owned-routine') {
+  if (drift !== 'unowned') {
     domains.push({ id: 'f'.repeat(40), hostname: host, service: staffWorker, zone_id: zone, zone_name: 'njpbs.org',
       environment: 'production', enabled: true, previews_enabled: false });
     dns.push({ id: 'd'.repeat(32), name: host, type: 'AAAA', content: '100::', proxied: true });
@@ -95,7 +95,7 @@ function provider(drift = '', stalePrivateReads = 0, deploymentHistory = 11) {
       if (suffix === 'settings') {
         if (!workers.has(worker)) return new Response(null, { status: 404 });
         result = { bindings: bindings(worker) };
-      } else if (suffix === 'subdomain') result = { enabled: drift === 'public-subdomain', previews_enabled: false };
+      } else if (suffix === 'subdomain') result = { enabled: drift === 'public-subdomain' && staged > 0, previews_enabled: false };
       else if (suffix === 'deployments') {
         expect(Object.fromEntries(url.searchParams)).toEqual({ page: '1', per_page: '1' });
         const stale = worker === privateWorker && ++privateReads <= stalePrivateReads;
@@ -121,7 +121,7 @@ function provider(drift = '', stalePrivateReads = 0, deploymentHistory = 11) {
     staged++;
     return { status: 0, stdout: `Current Version ID: ${version}\n` };
   };
-  return { fetchImpl, spawn, writes, domains, dns, hasPublicOrigin: async () => dns.length > 0, staged: () => staged,
+  return { fetchImpl, spawn, writes, domains, dns, staged: () => staged,
     readbackClock: { now: () => elapsed, wait: async (ms: number) => { elapsed += ms; } }, elapsed: () => elapsed };
 }
 
@@ -141,22 +141,21 @@ describe('safe dev gateway release failure diagnostics', () => {
     { endpoint: `/accounts/${account}/workers/domains`, phase: 'inventory-domains' },
     ...[privateWorker, staffWorker].flatMap(worker => [
       { endpoint: `/accounts/${account}/workers/scripts/${worker}/settings`, phase: `worker-settings:${worker}` },
-      { endpoint: `/accounts/${account}/workers/scripts/${worker}/subdomain`, phase: `worker-subdomain:${worker}`, drift: 'owned-routine' },
+      { endpoint: `/accounts/${account}/workers/scripts/${worker}/subdomain`, phase: `worker-subdomain:${worker}` },
       { endpoint: `/accounts/${account}/workers/scripts/${worker}/deployments`, phase: `collect:${worker}` },
       { endpoint: `/accounts/${account}/workers/scripts/${worker}/deployments`, phase: `final-identity:${worker}`, occurrence: 2 },
     ]),
     { endpoint: `/accounts/${account}/workers/scripts/template-dev-cms-api/settings`, phase: 'api-settings' },
-    { endpoint: `/accounts/${account}/workers/domains`, phase: 'attach-domain', method: 'PUT' },
     { endpoint: `/zones/${zone}/workers/routes`, phase: 'staged-inventory-routes', occurrence: 2 },
     { endpoint: `/accounts/${account}/workers/domains`, phase: 'attached-inventory-domains', occurrence: 3 },
     { endpoint: `/zones/${zone}/workers/routes`, phase: 'final-inventory-routes', occurrence: 4 },
-  ])('names $phase and emits only HTTP status and numeric provider codes', async ({ endpoint, phase, drift, method = 'GET', occurrence = 1 }) => {
-    const boundary = provider(drift);
+  ])('names $phase and emits only HTTP status and numeric provider codes', async ({ endpoint, phase, occurrence = 1 }) => {
+    const boundary = provider();
     const logs: string[] = [];
     let matches = 0;
     const error = await deployDevPreviewGateways({ ...boundary, env: environment(), log: line => logs.push(line),
       fetchImpl: async (input: string, init: RequestInit) => {
-        if (new URL(input).pathname === `/client/v4${endpoint}` && init.method === method && ++matches === occurrence) {
+        if (new URL(input).pathname === `/client/v4${endpoint}` && init.method === 'GET' && ++matches === occurrence) {
           return Response.json({ success: false, errors: [
             { code: 10000, message: 'fixture-private-provider-message' },
             { code: 'fixture-token', message: 'fixture-header-value' },
@@ -209,12 +208,7 @@ describe('safe dev gateway release failure diagnostics', () => {
     expect(boundary.writes).toEqual([]);
   });
 
-  it('names public-origin and Access checks without leaking DNS, redirect or body text', async () => {
-    const dns = await deployDevPreviewGateways({ ...provider(), env: environment(), hasPublicOrigin: async () => {
-      throw new Error('fixture-private-DNS-error');
-    } }).catch(error => error);
-    expect(formatDevPreviewGatewayFailure(dns)).toBe(
-      'Dev preview gateway release failed at public-origin (unknown/none); raw details withheld');
+  it('names the Access check without leaking redirect or body text', async () => {
     const access = await deployDevPreviewGateways({ ...provider('anonymous-content'), env: environment() }).catch(error => error);
     expect(formatDevPreviewGatewayFailure(access)).toBe(
       'Dev preview gateway release failed at access-ready (unknown/none); raw details withheld');
@@ -234,14 +228,11 @@ describe('safe dev gateway release failure diagnostics', () => {
 });
 
 describe('isolated dev exact-preview gateway release', () => {
-  it.each([11, 150])('stages private Workers and attaches only the reviewed hostname with %i deployments in history', async history => {
+  it.each([11, 150])('stages private Workers and keeps the owned hostname with %i deployments in history', async history => {
     const boundary = provider('', 0, history);
     const logs: string[] = [];
     const receipt = await deployDevPreviewGateways({ ...boundary, env: environment(), log: line => logs.push(line) });
-    expect(boundary.writes).toEqual([{ pathname: `/accounts/${account}/workers/domains`, body: {
-      hostname: host, service: staffWorker, zone_id: zone, zone_name: 'njpbs.org', environment: 'production',
-      enabled: true, previews_enabled: false,
-    } }]);
+    expect(boundary.writes).toEqual([]);
     expect(receipt).toMatchObject({ environment: 'development', host, sourceSha: sha,
       signedOutRefusalVerified: true, unrelatedRoutesAndDomainsUnchanged: true });
     expect(receipt.gateways.map((entry: { worker: string }) => entry.worker)).toEqual([privateWorker, staffWorker]);
@@ -249,7 +240,7 @@ describe('isolated dev exact-preview gateway release', () => {
     expect(boundary.domains[0].hostname).toBe('example.test');
     expect(JSON.stringify(receipt)).not.toContain('fixture-token');
   });
-  it.each(['existing-dns', 'wildcard-route', 'existing-domain'])('refuses %s before any deployment or hostname mutation', async drift => {
+  it.each(['wildcard-route', 'existing-domain'])('refuses %s before any deployment or hostname mutation', async drift => {
     const boundary = provider(drift);
     await expect(deployDevPreviewGateways({ ...boundary, env: environment(), log: () => undefined })).rejects.toThrow();
     expect(boundary.staged()).toBe(0);
@@ -277,7 +268,7 @@ describe('isolated dev exact-preview gateway release', () => {
       expect(boundary.elapsed()).toBe(1500);
       expect(boundary.staged()).toBe(2);
       expect(receipt.gateways[0].versionId).toBe(version);
-      expect(boundary.writes).toHaveLength(1);
+      expect(boundary.writes).toEqual([]);
       expect(timeout).toHaveBeenCalledWith(15_000);
       expect(timeout.mock.calls.every(([ms]) => ms === 15_000 || ms === 30_000)).toBe(true);
     } finally { timeout.mockRestore(); }
@@ -303,21 +294,21 @@ describe('isolated dev exact-preview gateway release', () => {
     await expect(deployDevPreviewGateways({ ...boundary, env: environment(), log: () => undefined })).rejects.toThrow();
   });
   it('refreshes only existing owned gateways during a routine deploy with publication active', async () => {
-    const boundary = provider('owned-routine');
+    const boundary = provider();
     const receipt = await deployDevPreviewGateways({ ...boundary,
-      env: { ...environment(), CMS_DEV_RELEASE_PREVIEW_RENDERER: 'false', CMS_DEV_PUBLISH_ENABLED: 'true' }, log: () => undefined });
+      env: { ...environment(), CMS_DEV_PUBLISH_ENABLED: 'true' }, log: () => undefined });
     expect(receipt.signedOutRefusalVerified).toBe(true);
     expect(boundary.writes).toEqual([]);
     expect(boundary.staged()).toBe(2);
   });
-  it('refuses hostname creation on the default routine path', async () => {
-    const boundary = provider();
+  it('refuses hostname creation', async () => {
+    const boundary = provider('unowned');
     await expect(deployDevPreviewGateways({ ...boundary,
-      env: { ...environment(), CMS_DEV_RELEASE_PREVIEW_RENDERER: 'false', CMS_DEV_PUBLISH_ENABLED: 'true' }, log: () => undefined })).rejects.toThrow();
+      env: { ...environment(), CMS_DEV_PUBLISH_ENABLED: 'true' }, log: () => undefined })).rejects.toThrow();
     expect(boundary.staged()).toBe(0);
     expect(boundary.writes).toEqual([]);
   });
-  it.each([{ CMS_DEV_PUBLISH_ENABLED: 'true' }, { GITHUB_REF: 'refs/heads/feature' },
+  it.each([{ GITHUB_REF: 'refs/heads/feature' },
     { CLOUDFLARE_ACCOUNT_ID: 'other-account' }, { RUNNER_ENVIRONMENT: 'self-hosted' }])('rejects an unapproved release tuple %j', async delta => {
     const boundary = provider();
     await expect(deployDevPreviewGateways({ ...boundary, env: { ...environment(), ...delta }, log: () => undefined })).rejects.toThrow();

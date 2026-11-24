@@ -175,9 +175,12 @@ async function main() {
           try { return { key: keyModule.decryptCredential(record, expected, key, manifest.keyVersion),
             revision: record.revision, keyVersion: record.keyVersion }; }
           finally { key.fill(0); }
-        }, transcribe: async (input, key, settings) => {
+        }, transcribe: async (input, key, settings, options) => {
           await current();
-          return require("../functions/lib/video-transcript-elevenlabs").transcribe(input, key, settings, { fetchFn: fetch });
+          return require("../functions/lib/video-transcript-elevenlabs").transcribe(input, key, settings, { ...options, fetchFn: fetch });
+        }, retrieveTranscript: async (response, key, settings) => {
+          await current();
+          return require("../functions/lib/video-transcript-elevenlabs").retrieveTranscript(response, key, settings, { fetchFn: fetch });
         } });
       await run();
     }

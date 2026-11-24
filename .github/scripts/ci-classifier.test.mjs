@@ -88,6 +88,9 @@ describe("CI path classifier", () => {
     "tests/scripts/write-ugc-consent-config.test.mjs",
     "ops/spotlight-most-read/rank_requests.py",
     "ops/spotlight-most-read/test_rank_requests.py",
+    "ops/spotlight-newsletter-tracking/spotlight-newsletter-tracking.php",
+    "ops/spotlight-newsletter-tracking/consent.js",
+    "ops/spotlight-newsletter-tracking/tests/browser-contract.mjs",
   ]) {
     it(`routes ${path} to Policy`, () => {
       assert.deepEqual(classifyPath(path), gates(false, false, false, false));
@@ -149,7 +152,7 @@ describe("CI path classifier", () => {
     }
   });
   it("keeps policy operations documentation in Docs", () => {
-    for (const path of ["ops/spotlight-most-read/HOST_CONTRACT.md"]) {
+    for (const path of ["ops/spotlight-most-read/HOST_CONTRACT.md", "ops/spotlight-newsletter-tracking/README.md"]) {
       assert.deepEqual(classifyPath(path), gates(true, false, false, false));
     }
   });

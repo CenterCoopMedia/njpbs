@@ -9,9 +9,17 @@ const environmentPolicy = () => JSON.parse(readFileSync(new URL("../../.github/d
 
 // No job may read a repository-level secret (#2846).
 const secretExceptions: Record<string, string[]> = {};
+// cms-staging-deploy selects its environment from the target input.
+const TARGET_ENVIRONMENT = "${{ inputs.target == 'development' && 'development' || 'production' }}";
+const environmentsOf = (job: { environment?: string | { name?: string } }): (string | undefined)[] => job.environment === TARGET_ENVIRONMENT ? ["production", "development"]
+  : [typeof job.environment === "string" ? job.environment : job.environment?.name];
 
-function secretNames(value: unknown): string[] {
-  const expressions = JSON.stringify(value).match(/\$\{\{[\s\S]*?\}\}/g) ?? [];
+// `inputs.target == 'development' && secrets.X` reads X in the development environment only.
+const DEVELOPMENT_ONLY = /inputs\.target == 'development' && secrets\.[A-Za-z_]\w*/g;
+function secretNames(value: unknown, environment?: string): string[] {
+  const text = JSON.stringify(value);
+  const expressions = (environment === "development" ? text : text.replace(DEVELOPMENT_ONLY, "inputs.target == 'development' && ''"))
+    .match(/\$\{\{[\s\S]*?\}\}/g) ?? [];
   const names = new Set<string>();
   for (const expression of expressions) {
     const remaining = expression.replace(/\bsecrets\s*(?:\.\s*([a-zA-Z_][\w]*)|\[\s*'([^']+)'\s*\])/gi, (_, dot, bracket) => {
@@ -23,14 +31,14 @@ function secretNames(value: unknown): string[] {
   return [...names];
 }
 
-function assertConfiguredAdmission(job: any, filename: string) {
+function assertConfiguredAdmission(job: any, filename: string, inputs: Record<string, string> = {}) {
   const github = { event_name: "workflow_dispatch", ref: "refs/heads/main", repository_id: "123456",
     workflow_ref: `fixture-org/fixture-site/.github/workflows/${filename}.yml@refs/heads/main`,
     triggering_actor: "fixture-owner" };
   const vars = { CANONICAL_GITHUB_REPOSITORY: "fixture-org/fixture-site",
     CANONICAL_GITHUB_REPOSITORY_ID: "123456", CMS_DEPLOY_OWNER: "fixture-owner" };
   const admit = (changedGithub = {}, changedVars = {}) => runInNewContext(job.if, {
-    github: { ...github, ...changedGithub }, vars: { ...vars, ...changedVars },
+    github: { ...github, ...changedGithub }, vars: { ...vars, ...changedVars }, inputs,
     format: (pattern: string, value: string) => pattern.replace("{0}", value),
   });
   expect(admit()).toBe(true);
@@ -89,6 +97,35 @@ describe("deploy credential environments", () => {
     });
   });
 
+  it("runs a development promotion only in the development environment with the same admission and token", () => {
+    const definition = workflow("promote");
+    expect(definition.on.workflow_dispatch.inputs.target.options).toEqual(["production", "development"]);
+    expect(definition.on.workflow_dispatch.inputs.target.default).toBe("production");
+    type Step = { uses?: string; run?: string; with?: unknown };
+    type Job = { if: string; steps: Step[] };
+    const production: Job = definition.jobs.promote;
+    const development: Job & { environment: string; permissions?: unknown } = definition.jobs["promote-development"];
+    expect(development.environment).toBe("development");
+    assertConfiguredAdmission(development, "promote", { target: "development" });
+    const admits = (job: Job, target?: string) => runInNewContext(job.if, {
+      github: { event_name: "workflow_dispatch", ref: "refs/heads/main", repository_id: "1",
+        workflow_ref: "o/r/.github/workflows/promote.yml@refs/heads/main", triggering_actor: "a" },
+      vars: { CANONICAL_GITHUB_REPOSITORY: "o/r", CANONICAL_GITHUB_REPOSITORY_ID: "1", CMS_DEPLOY_OWNER: "a" },
+      inputs: target === undefined ? {} : { target },
+      format: (pattern: string, value: string) => pattern.replace("{0}", value),
+    });
+    // Exactly one job runs for each target.
+    expect([admits(production, "production"), admits(development, "production")]).toEqual([true, false]);
+    expect([admits(production, "development"), admits(development, "development")]).toEqual([false, true]);
+    expect(development.permissions).toBeUndefined();
+    const step = (job: Job, prefix: string) => job.steps.find(s => s.uses?.startsWith(prefix));
+    expect(step(development, "actions/create-github-app-token@")?.with).toEqual(step(production, "actions/create-github-app-token@")?.with);
+    const push = development.steps[development.steps.length - 1];
+    expect(push.run).toBe('git push origin "$SELECTED_SHA:refs/heads/development"');
+    expect(JSON.stringify(development)).not.toContain("production");
+    for (const s of development.steps.filter(s => s.uses)) expect(s.uses).toMatch(/@[a-f0-9]{40}$/);
+  });
+
   it("restricts the isolated dev staff gateway to explicit main-only development dispatches", () => {
     const definition = workflow("dev-staff-gateway-deploy");
     expect(Object.keys(definition.on)).toEqual(["workflow_dispatch"]);
@@ -119,10 +156,10 @@ describe("deploy credential environments", () => {
   });
 
   it.each([
-    ["cms-staging-deploy", ["admin-build", "firebase-preflight", "cms-api", "firebase", "preview-renderer", "live-smoke", "admin-deploy"]],
-    ["probe-media-manager", ["probe"]],
-  ] as const)("places main-only secret jobs in production: %s", (name, jobs) => {
-    for (const id of jobs) expect(workflow(name).jobs[id].environment).toBe("production");
+    ["cms-staging-deploy", ["admin-build", "firebase-preflight", "cms-api", "firebase", "preview-renderer", "live-smoke", "admin-deploy"], TARGET_ENVIRONMENT],
+    ["probe-media-manager", ["probe"], "production"],
+  ] as const)("places main-only secret jobs in production: %s", (name, jobs, environment) => {
+    for (const id of jobs) expect(workflow(name).jobs[id].environment).toBe(environment);
   });
 
   it("places dev publication credentials only in development", () => {
@@ -137,9 +174,9 @@ describe("deploy credential environments", () => {
   });
 
   it.each([
-    ["cms-dev-deploy", "deploy", "development", "cms-contract-source", "Smoke-test the pinned dev CMS boundaries"],
-    ["cms-staging-deploy", "live-smoke", "production", "cms-smoke-gate", "Smoke-test the deployed signed-out Admin shell"],
-  ])("smokes one signed-in preview after the other live checks in %s", (name, id, environment, source, after) => {
+    ["cms-dev-deploy", "deploy", "development", "development", "cms-contract-source", "Smoke-test the pinned dev CMS boundaries"],
+    ["cms-staging-deploy", "live-smoke", TARGET_ENVIRONMENT, '"$CMS_TARGET"', "cms-smoke-gate", "Smoke-test the deployed signed-out Admin shell"],
+  ])("smokes one signed-in preview after the other live checks in %s", (name, id, environment, target, source, after) => {
     const job = workflow(name).jobs[id];
     expect(job.environment).toBe(environment);
     expect(secretNames(job.env)).not.toContain("CMS_PREVIEW_SMOKE_CREDENTIAL");
@@ -147,7 +184,7 @@ describe("deploy credential environments", () => {
     const existing = job.steps.findIndex((step: any) => step.name === after);
     expect(existing).toBeGreaterThanOrEqual(0);
     expect(check).toBeGreaterThan(existing);
-    expect(job.steps[check].run).toBe(`node "$RUNNER_TEMP/${source}"/scripts/smoke-signed-in-preview.mjs ${environment}`);
+    expect(job.steps[check].run).toBe(`node "$RUNNER_TEMP/${source}"/scripts/smoke-signed-in-preview.mjs ${target}`);
     expect(job.steps[check].env.CMS_PREVIEW_SMOKE_CREDENTIAL).toBe("${{ secrets.CMS_PREVIEW_SMOKE_CREDENTIAL }}");
   });
 
@@ -184,19 +221,25 @@ describe("deploy credential environments", () => {
       const policy = environmentPolicy();
       for (const [id, job] of Object.entries(definition.jobs) as [string, any][]) {
         const context = `${file}/${id}`;
-        const environment = typeof job.environment === "string" ? job.environment : job.environment?.name;
-        if (job.environment !== undefined) expect(Object.keys(policy), context).toContain(environment);
         expect(job.secrets, `${context}: inherited secrets need an explicit policy`).not.toBe("inherit");
-        for (const secret of secretNames([definition.env, job])) {
-          // GITHUB_TOKEN is created by GitHub for each job; it is not migrated.
-          if (secret === "GITHUB_TOKEN") continue;
-          if (secret === "SCHEDULE_BAKE_APP_PRIVATE_KEY") {
-            expect(["schedule-bake.yml/bake", "schedule-bake.yml/deferred-merge"]).toContain(context);
-            expect(environment, context).toBe("schedule-bake");
+        for (const environment of environmentsOf(job)) {
+          if (job.environment !== undefined) expect(Object.keys(policy), context).toContain(environment);
+          for (const secret of secretNames([definition.env, job], environment)) {
+            // GITHUB_TOKEN is created by GitHub for each job; it is not migrated.
+            if (secret === "GITHUB_TOKEN") continue;
+            if (secret === "SCHEDULE_BAKE_APP_PRIVATE_KEY") {
+              expect(["schedule-bake.yml/bake", "schedule-bake.yml/deferred-merge"]).toContain(context);
+              expect(environment, context).toBe("schedule-bake");
+            }
+            // The promote App key shares the production and development environments
+            // with deploy jobs; only the two promotion jobs may read it.
+            if (secret === "CCM_PROMOTE_APP_PRIVATE_KEY") {
+              expect(["promote.yml/promote", "promote.yml/promote-development"]).toContain(context);
+            }
+            if (secretExceptions[context]?.includes(secret)) continue;
+            expect(environment, `${context}: ${secret} has no environment`).toBeDefined();
+            expect(policy[environment!]?.secrets, `${context}: ${secret} is not provisioned in ${environment}`).toContain(secret);
           }
-          if (secretExceptions[context]?.includes(secret)) continue;
-          expect(environment, `${context}: ${secret} has no environment`).toBeDefined();
-          expect(policy[environment]?.secrets, `${context}: ${secret} is not provisioned`).toContain(secret);
         }
       }
     });

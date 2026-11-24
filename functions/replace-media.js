@@ -35,6 +35,7 @@ const {
 const { AUTHOR_PHOTO_CATEGORY, AUTHOR_PROFILE_COLLECTIONS } = require("./lib/author-profile-contract");
 const { createImagePurgeEntry } = require("./lib/media-bin");
 const { mediaReplacementRef } = require("./lib/media-replacement");
+const { ownerRef } = require("./lib/media-hash-owner");
 const {
   bumpMediaDiscoveryRevision,
   withMediaDiscovery,
@@ -86,14 +87,6 @@ class MediaReplacementRejection extends Error {
 function sourceIp(req) {
   return requestHeader(req, "x-forwarded-for")?.split(",")[0]?.trim() ||
     req.ip || null;
-}
-
-function ownerRef(firestore, contentHash) {
-  return firestore
-    .collection("system")
-    .doc("media")
-    .collection("hashOwners")
-    .doc(contentHash);
 }
 
 function replacementRef(firestore, assetId) {
@@ -343,7 +336,7 @@ async function reserveReplacement({
   publicOrigin,
 }) {
   const claimRef = replacementRef(firestore, assetId);
-  const nextOwnerRef = ownerRef(firestore, contentHash);
+  const nextOwnerRef = ownerRef(firestore, contentHash, assetId);
   return firestore.runTransaction(async (transaction) => {
     await requireMasterAvailable(transaction, firestore, master);
     const assetRef = firestore.collection("media_assets").doc(assetId);
@@ -414,7 +407,7 @@ async function reserveReplacement({
     await assertNoProtectedWorkingUsage(firestore, transaction, assetId);
 
     const currentOwnerSnapshot = await transaction.get(
-      ownerRef(firestore, stored.contentHash),
+      ownerRef(firestore, stored.contentHash, assetId),
     );
     const currentOwner = currentOwnerSnapshot.exists
       ? currentOwnerSnapshot.data()
@@ -710,7 +703,7 @@ async function commitReplacement({
     const publicRef = firestore
       .collection("media_assets_public")
       .doc(claim.assetId);
-    const previousOwnerRef = ownerRef(firestore, claim.before.contentHash);
+    const previousOwnerRef = ownerRef(firestore, claim.before.contentHash, claim.assetId);
     const [
       claimSnapshot,
       ownerSnapshot,
@@ -862,7 +855,7 @@ async function committedReplacement(firestore, { claim, record }) {
   const [claimSnapshot, ownerSnapshot, assetSnapshot, publicSnapshot] =
     await Promise.all([
       claimRef.get(),
-      ownerRef(firestore, claim.contentHash).get(),
+      ownerRef(firestore, claim.contentHash, claim.assetId).get(),
       firestore.collection("media_assets").doc(claim.assetId).get(),
       firestore.collection("media_assets_public").doc(claim.assetId).get(),
     ]);
@@ -1043,7 +1036,7 @@ function createCmsReplaceMediaBinaryHandler(deps = {}) {
             await cleanupReplacementStaging({
               firestore,
               storage,
-              nextOwnerRef: ownerRef(firestore, contentHash),
+              nextOwnerRef: ownerRef(firestore, contentHash, assetId),
               claim: cleanupClaim,
             });
           } catch (error) {
@@ -1067,7 +1060,7 @@ function createCmsReplaceMediaBinaryHandler(deps = {}) {
 
       const { claim, stored } = reservation;
       const claimRef = replacementRef(firestore, assetId);
-      const nextOwnerRef = ownerRef(firestore, contentHash);
+      const nextOwnerRef = ownerRef(firestore, contentHash, assetId);
       if (processed && claim.recordSeed.master?.retained !== true) {
         claim.recordSeed.master = await retainMaster({
           masterStorageFactory, upload: sourceUpload, dimensions: sourceDimensions, log,

@@ -26,8 +26,6 @@
     "src/staff-site-worker-configuration.d.ts",
     "../cms-api/worker-configuration.d.ts",
     "src/staff-site-dev-worker-configuration.d.ts",
-    "src/dev-public-worker.ts",
-    "src/dev-public-worker-configuration.d.ts",
     "src/public-post-renderer.d.ts"
   ]
 }

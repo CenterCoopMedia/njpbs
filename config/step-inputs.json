@@ -24,6 +24,8 @@
   "scripts/check-admin-pages-security.mjs": ["CLOUDFLARE_API_TOKEN"],
   "scripts/check-cms-public-contract.mjs": [],
   "scripts/check-cms-secret-iam.mjs": ["DEPLOY_SHA", "FIREBASE_DEPLOY_SERVICE_ACCOUNT"],
+  "scripts/check-dev-anonymous-refusal.mjs": ["CMS_DEV_ACCESS_ORIGIN"],
+  "scripts/cms-reader-binding.mjs": [],
   "scripts/check-prepared-worker.mjs": [],
   "scripts/component-runner.mjs": [],
   "scripts/configure-admin-public-shell.mjs": ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN"],

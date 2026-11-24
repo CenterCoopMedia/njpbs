@@ -1,11 +1,12 @@
-import { isDataFigureData } from "../../../packages/content-core/src/data-figure.ts";
+import { isDataFigureData, type DataFigureData } from "../../../packages/content-core/src/data-figure.ts";
 import {
   createDatasetFigureResolver,
   isDatasetFigures,
   type DatasetFigures,
 } from "../../../packages/content-core/src/dataset-figures.ts";
-import type { DataFigureBlock, PageBlock } from "../../../packages/content-core/src/content-model.ts";
+import type { PageBlock } from "../../../packages/content-core/src/content-model.ts";
 import { visibleLayoutBlocks } from "../../../packages/content-core/src/content-layout.ts";
+import { figureSelections } from "../../../packages/content-core/src/scroll-story.ts";
 
 function isSorted(values: readonly string[]): boolean {
   return values.every((value, index) => index === 0 || values[index - 1].localeCompare(value) <= 0);
@@ -18,8 +19,8 @@ export function projectDatasetFigures(
   owner: string,
   { required = true }: { required?: boolean } = {},
 ): DatasetFigures | undefined {
-  const dataBlocks = visibleLayoutBlocks(blocks).filter((block): block is DataFigureBlock =>
-    block.type === "data_figure" && isDataFigureData(block.data, true));
+  const dataBlocks = visibleLayoutBlocks(blocks).flatMap(figureSelections)
+    .filter((block): block is { id: string; data: DataFigureData } => isDataFigureData(block.data, true));
 
   if (value === undefined) {
     if (required && dataBlocks.length > 0) {
@@ -38,7 +39,7 @@ export function projectDatasetFigures(
   }
 
   const expected = new Map(dataBlocks.map(block => [block.id, block.data]));
-  if (value.figures.length !== expected.size ||
+  if (value.figures.length !== dataBlocks.length || expected.size !== dataBlocks.length ||
       value.figures.some(binding => expected.get(binding.blockId)?.datasetId !== binding.datasetId)) {
     throw new Error(`${owner} frozen dataset figures do not match its blocks`);
   }

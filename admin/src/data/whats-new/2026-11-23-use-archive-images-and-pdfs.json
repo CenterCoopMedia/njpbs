@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-23",
+  "kind": "improved",
+  "title": "Use approved archive images and PDFs",
+  "body": "After an approved archive import, find its images and PDFs in the General category of the media library. Image records carry any saved captions, alt text and credits from the import.",
+  "prs": []
+}

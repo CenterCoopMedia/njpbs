@@ -84,12 +84,6 @@ test("dry renders every runtime/config consumer, preserving target comparisons a
   assert.equal(api.vars.FIREBASE_PROJECT_ID, "njpbs-site-dev");
   assert.equal(api.vars.ADMIN_ORIGIN, inputs.CMS_DEV_ADMIN_ORIGIN);
   assert.equal(api.routes[0].pattern, new URL(inputs.CMS_DEV_API_ORIGIN).hostname);
-  const published = JSON.parse(readFileSync(join(directory, "workers/wrangler.public.dev.jsonc"), "utf8"));
-  assert.equal(published.name, inputs.CLOUDFLARE_DEV_PUBLIC_WORKER);
-  assert.equal(published.services[0].binding, "CMS_API");
-  assert.equal(published.services[0].service, api.name);
-  assert.equal(published.workers_dev, false); assert.equal(published.preview_urls, false);
-  assert.deepEqual(published.routes, []);
   const pins = readFileSync(join(directory, "scripts/assert-dev-cms-targets.mjs"), "utf8");
   assert.ok(pins.includes(`CMS_API_WORKER: "${api.name}"`));
   assert.ok(pins.includes(`CMS_SITE_ORIGIN: "${inputs.CMS_DEV_PUBLIC_ORIGIN}"`));
@@ -166,7 +160,7 @@ test("runs the actual production render block after real gate moves without cred
   try {
     const workflow = parse(readFileSync(join(root, ".github/workflows/cms-staging-deploy.yml"), "utf8"));
     const steps = workflow.jobs["admin-build"].steps;
-    const env = { PATH: process.env.PATH, RUNNER_TEMP: runtime, GITHUB_WORKSPACE: directory,
+    const env = { PATH: process.env.PATH, RUNNER_TEMP: runtime, GITHUB_WORKSPACE: directory, CMS_TARGET_RENDER_SCOPE: "--production",
       ...Object.fromEntries(productionDeploymentInputs.map(name => [name, inputs[name]])) };
     for (const step of steps) {
       if (step.uses?.startsWith("actions/checkout") && step.with?.path) {

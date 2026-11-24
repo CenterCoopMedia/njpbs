@@ -1,5 +1,6 @@
 "use strict";
 
+const { productionServiceAccount } = require("./lib/production-service-account");
 const { randomUUID } = require("node:crypto");
 const { FieldPath } = require("firebase-admin/firestore");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
@@ -19,7 +20,7 @@ const { MediaPurgeStorage } = require("./lib/media-purge-storage");
 const { MEDIA_CACHE_PURGE_TOKEN, createMediaCacheRetirement } = require("./lib/media-purge-cache");
 const DEPLOYMENT = readPurgeDeployment();
 const REAL_DELETES_ENABLED = DEPLOYMENT.realDeletesEnabled;
-const PURGE_SERVICE_ACCOUNT = "cms-media-purge@njpbs-site.iam.gserviceaccount.com";
+const PURGE_SERVICE_ACCOUNT = productionServiceAccount("cms-media-purge");
 const PURGE_ACCESS_KEY = DEPLOYMENT.enabled ? defineSecret("CMS_MEDIA_PURGE_R2_ACCESS_KEY_ID") : null;
 const PURGE_SECRET_KEY = DEPLOYMENT.enabled ? defineSecret("CMS_MEDIA_PURGE_R2_SECRET_ACCESS_KEY") : null;
 const PURGE_WRITE_SECRETS = DEPLOYMENT.enabled ? [PURGE_ACCESS_KEY, PURGE_SECRET_KEY,

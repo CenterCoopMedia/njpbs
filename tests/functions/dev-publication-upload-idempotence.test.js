@@ -33,6 +33,8 @@ beforeEach(async () => {
   directory = await mkdtemp(path.join(tmpdir(), "dev-upload-idempotence-"));
   await queueRef().set({ status: "pending", transport: "github", environment: "development",
     projectId: "njpbs-site-dev", runtime, triggeredAt: new Date("2026-10-10T00:00:00.000Z"), changes: [] });
+  await db.doc("cmsDeploymentReceipts/renderer").set({ schemaVersion: 1, component: "renderer", state: "complete",
+    mutation: { sourceSha: "3".repeat(40), providerIdentities: { rendererSha: "3".repeat(40) } } });
 });
 afterEach(async () => { if (directory) await rm(directory, { recursive: true, force: true }); });
 
@@ -241,7 +243,7 @@ try {
       CLOUDFLARE_ACCOUNT_ID: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", CMS_DEV_CLOUDFLARE_ACCOUNT_ID: "a".repeat(32),
       CLOUDFLARE_DEV_PUBLIC_WORKER: "template-dev-public", CMS_DEV_PUBLIC_ORIGIN: "https://dev-public.example.org", CMS_DEV_PREVIEW_BUCKET: "template-dev-cms-previews",
       CLOUDFLARE_API_TOKEN: "fixture-token", CMS_DEV_ACCESS_CLIENT_ID: "fixture-id", CMS_DEV_ACCESS_CLIENT_SECRET: "fixture-secret",
-      CMS_DEV_CMS_SOURCE_SHA: "1".repeat(40), CMS_DEV_ADMIN_SOURCE_SHA: "2".repeat(40), CMS_DEV_RENDERER_SOURCE_SHA: "3".repeat(40),
+      CMS_DEV_CMS_SOURCE_SHA: "1".repeat(40), CMS_DEV_ADMIN_SOURCE_SHA: "2".repeat(40),
       CMS_DEV_PREVIEW_R2_CREDENTIAL: JSON.stringify({ accessKeyId: "fixture-key", secretAccessKey: "fixture-secret" }),
     },
   });

@@ -3,6 +3,10 @@ const CLOUDFLARE_API = "https://api.cloudflare.com/client/v4";
 export const PUBLIC_WORKER_NAME = "njpbs-production";
 export { cloudflarePublicWorkerTag as publicWorkerTag } from "./cloudflare-account.mjs";
 
+export function cloudflareApiUrl(pathname: string): string {
+  return `${CLOUDFLARE_API}${pathname}`;
+}
+
 export function workerApiPath(suffix: string): string {
   return `${CLOUDFLARE_API}/accounts/${cloudflareAccount()}${suffix}`;
 }

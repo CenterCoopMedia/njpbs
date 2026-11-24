@@ -14,6 +14,8 @@ import { runNoBuildCloudRelease } from "./no-build-cloud-release";
 import { createCmsPublicationCloudStorage } from "./cms-publication-cloud-storage";
 import { safeExternalErrorIdentity } from "./cms-publication-error-identity";
 import type { MediaManagerCredential } from "./frozen-publication";
+import type { PublicationTarget } from "../../functions/lib/publication-target";
+import type { PublicationAccess } from "./activate-public-worker-candidate";
 
 const require = createRequire(import.meta.url);
 const { readNoBuildCloudWork, cloudBillingPaused } = require("../../functions/lib/no-build-cloud-work");
@@ -26,8 +28,9 @@ function reportBackgroundFailure(stage: "work discovery" | "maintenance", error:
 
 /** The cloud runtime never constructs a legacy serializer or claims its queue. */
 export function startNoBuildCloudRuntime({ firestore, firebaseApp, commitSha, serializerId,
-  stateDirectory, buildEnvironment, cloudflareApiToken, storage, previewStorageCredential, mediaManagerCredential, spotlightImageStorageFactory }: {
-  firestore: Firestore; firebaseApp: App; commitSha: string; serializerId: string;
+  stateDirectory, buildEnvironment, cloudflareApiToken, storage, previewStorageCredential, mediaManagerCredential, spotlightImageStorageFactory, target, publicationAccess }: {
+  firestore: Firestore; firebaseApp: App; commitSha: string; serializerId: string; target?: PublicationTarget;
+  publicationAccess?: PublicationAccess;
   stateDirectory: string; buildEnvironment: Record<string, string | undefined>; cloudflareApiToken: string;
   previewStorageCredential: PreviewStorageCredential;
   mediaManagerCredential: MediaManagerCredential;
@@ -37,7 +40,9 @@ export function startNoBuildCloudRuntime({ firestore, firebaseApp, commitSha, se
   const runtime = { owner: "cloudflare" as const, release: commitSha };
   const paused = () => cloudBillingPaused({ runtime,
     read: async (document: string) => (await firestore.doc(document).get()).data() ?? null });
-  const owner = startPublicWorkerDeploymentReconciliationOwner({ firestore, cloudflareApiToken, runtime });
+  if (target !== undefined && target.environment !== storage.target.environment) throw new Error("Cloud runtime storage belongs to another publication target");
+  const access = publicationAccess ? { publicationAccess } : {};
+  const owner = startPublicWorkerDeploymentReconciliationOwner({ firestore, cloudflareApiToken, runtime, ...(target ? { target } : {}), ...access });
   const distDirectory = path.join(stateDirectory, "background", "dist");
   const maintain = noBuildPostMaintenance({ firestore, firebaseApp, commitSha, stateDirectory, distDirectory,
     buildEnvironment, runtime, serializerId, mediaManagerCredential, backgroundBucket: storage.target.backgroundBucket,
@@ -46,7 +51,7 @@ export function startNoBuildCloudRuntime({ firestore, firebaseApp, commitSha, se
   const refresh = cloudExternalRefresh({ firestore, firebaseApp, runtime, serializerId, backgroundBucket: storage.target.backgroundBucket,
     stateDirectory, buildEnvironment, mediaManagerCredential, spotlightImageStorageFactory });
   const retainPreview = cloudEditorialPreviewRetention({ firestore, firebaseApp, runtime, serializerId,
-    backgroundBucket: storage.target.backgroundBucket, stateDirectory, previewStorageCredential });
+    backgroundBucket: storage.target.backgroundBucket, stateDirectory, previewStorageCredential, ...(target ? { target } : {}), ...access });
   let stopped = false;
   let refreshWork: Promise<void> | null = null;
   let previewWork: Promise<void> | null = null;
@@ -80,7 +85,8 @@ export function startNoBuildCloudRuntime({ firestore, firebaseApp, commitSha, se
       await maintain().catch(error => reportBackgroundFailure("maintenance", error));
     }
     const pointer = (await firestore.doc("system/publicDeployment").get()).data();
-    if (!stopped && pointer?.state === "idle") await runNoBuildCloudRelease({ firestore, storage, serializerId, commitSha, stateDirectory, cloudflareApiToken, previewStorageCredential });
+    if (!stopped && pointer?.state === "idle") await runNoBuildCloudRelease({ firestore, storage, serializerId, commitSha, stateDirectory, cloudflareApiToken, previewStorageCredential,
+      ...(target ? { target } : {}), ...access });
   } });
   const stop = () => { stopped = true; service.stop(); owner.stop(); };
   const closed = (async () => {

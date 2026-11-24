@@ -18,7 +18,7 @@ it("uses the reviewed section copy and figure values without copying them into a
     const source = dataHubSectionSource(id);
     expect(source.introduction).toBeTruthy(); expect(source.display).toBeTruthy(); expect(source.period).toBeTruthy(); expect(source.checked).toBeTruthy();
   }
-  expect(dataHubSectionSource("unemployment")).toMatchObject({ heading: "Unemployment rate", display: "4.2%", period: "September 2026", checked: "2026-10-20" });
+  expect(dataHubSectionSource("unemployment")).toMatchObject({ heading: "Unemployment rate", display: "4.2%", period: "October 2026", checked: "2026-11-19" });
   expect(dataHubSectionSource("featured").benchmarks).toEqual([
     { label: "Current rate · most workers", display: "$15.92", period: "Jan. 1–Dec. 31, 2026" },
     { label: "Announced · not yet in effect", display: "$16.48", period: "Effective Jan. 1, 2027" },
@@ -31,7 +31,7 @@ it("uses the reviewed section copy and figure values without copying them into a
   render(<Fields />);
   expect(screen.getByRole("textbox", { name: "Heading" })).toHaveValue("");
   expect(screen.getByRole("textbox", { name: "Heading" })).toHaveAttribute("placeholder", "Unemployment rate");
-  expect(screen.getByRole("textbox", { name: "Introduction" })).toHaveAttribute("placeholder", "Share of the New Jersey labor force unemployed in September 2026, seasonally adjusted.");
+  expect(screen.getByRole("textbox", { name: "Introduction" })).toHaveAttribute("placeholder", "Share of the New Jersey labor force unemployed in October 2026, seasonally adjusted.");
   expect(changed).not.toHaveBeenCalled();
   fireEvent.change(screen.getByRole("textbox", { name: "Heading" }), { target: { value: "Employment context" } });
   fireEvent.change(screen.getByRole("textbox", { name: "Heading" }), { target: { value: "" } });
@@ -49,7 +49,7 @@ it("inherits compiled heading and introduction for whitespace-only overrides", (
   render(<DataHubSectionPreview level={2} data={{ sectionId: "unemployment", heading: "  ", introduction: "\n " }} />);
   expect(outlineSummary({ ...createBlock("data_hub_section", "blank"), data: { sectionId: "unemployment", heading: "  ", introduction: "" } })).toBe("Unemployment");
   expect(screen.getByRole("heading", { name: "Unemployment rate" })).toBeInTheDocument();
-  expect(screen.getByText("Share of the New Jersey labor force unemployed in September 2026, seasonally adjusted.")).toBeInTheDocument();
+  expect(screen.getByText("Share of the New Jersey labor force unemployed in October 2026, seasonally adjusted.")).toBeInTheDocument();
 });
 
 it("previews staff text beside compiled values as inert text", () => {
@@ -57,6 +57,6 @@ it("previews staff text beside compiled values as inert text", () => {
   expect(screen.getByRole("heading", { name: "<img src=x onerror=alert(1)>" })).toBeInTheDocument();
   expect(screen.getByText("Staff context")).toBeInTheDocument();
   expect(screen.getByText("4.2%")).toBeInTheDocument();
-  expect(screen.getByText(/September 2026/)).toBeInTheDocument();
+  expect(screen.getByText(/October 2026/)).toBeInTheDocument();
   expect(container.querySelector("img")).toBeNull();
 });

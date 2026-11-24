@@ -51,6 +51,11 @@ content preparation, it obtains and verifies the exact NEW source's
 The runner calls [stage-cms-publication-cloud-release.sh](../../scripts/stage-cms-publication-cloud-release.sh)
 with `--prepare <operation-id> <new-commit-sha> <old-commit-sha>`. Both runtime
 controls and active public source must be ready at OLD.
+The runner sets `CMS_DEPLOYMENT_ENVIRONMENT` from its run target for prepare,
+seal and check. `development` selects every name from the development entry of
+[`publication-target.js`](../../functions/lib/publication-target.js): project,
+publisher journal, buckets and Worker. The Firebase account must belong to that
+project. Unset means production. Any other value refuses before a credential is read.
 The immutable preparation records NEW, proposed generation, exact predecessor,
 context and server read-time. It reserves no live generation, changes no pin,
 traffic or media fence, and creates no wakeable release request.

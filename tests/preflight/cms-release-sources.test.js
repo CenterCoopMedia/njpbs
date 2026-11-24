@@ -34,7 +34,8 @@ beforeEach(async () => {
     mkdirSync(join(releaseRoot, path, ".."), { recursive: true });
     writeFileSync(join(releaseRoot, path), "export {};\n");
   }
-  await copyImportClosure(repoRoot, releaseRoot, ["scripts/component-runner.mjs"], { assets: CMS_FUNCTION_CONTRACT_FILES });
+  await copyImportClosure(repoRoot, releaseRoot, ["scripts/component-runner.mjs"],
+    { assets: [...CMS_FUNCTION_CONTRACT_FILES, "config/functions-deployment.development.json", "scripts/cms-reader-binding.mjs"] });
   const smoke = "scripts/smoke-cms-functions.mjs";
   const gate = ".github/scripts/require-cms-release-sources.mjs";
   await copyImportClosure(repoRoot, releaseRoot, [smoke, gate], { boundary: {
@@ -77,9 +78,18 @@ describe("CMS release source contract", () => {
     for (const overrides of [
       { force_firebase: true }, { migrations: "repair" }, { migrations: null }, { force_firebase: "false" },
       { force_firebase: undefined }, { release_dispatch_id: "malformed" }, { deploy_ref: trustedWorkflowSha }, { unknown_input: "" },
+      { target: "development" }, { target: "staging" },
     ]) {
       expect(() => check(overrides)).toThrow("Correlated CMS dispatch requires");
     }
+    // The release command decodes production receipts strictly, so only development records its target.
+    expect(Object.keys(check({ target: "production" })).sort()).toEqual(
+      ["deploySha", "releaseChecksContractVersion", "releaseChecksSha", "releaseDispatchId", "schemaVersion", "trustedWorkflowSha"]);
+    const development = overrides => requireCmsReleaseSources({ releaseSha, trustedWorkflowSha, releaseRoot, trustedRoot, target: "development",
+      dispatchInputs: JSON.stringify({ ...inputs, target: "development", ...overrides }) });
+    expect(development()).toMatchObject({ deploySha: releaseSha, releaseDispatchId, target: "development" });
+    expect(() => development({ target: "production" })).toThrow("Correlated CMS dispatch requires");
+    expect(() => requireCmsReleaseSources({ releaseSha, trustedWorkflowSha, releaseRoot, trustedRoot, target: "staging" })).toThrow("must be production or development");
   });
 
   it("holds an old-base emergency before mutation and admits a post-adoption freeze source", () => {
@@ -140,6 +150,10 @@ describe("CMS release source contract", () => {
     writeFileSync(network, `globalThis.fetch = async (url, init = {}) => {
       const { origin, pathname } = new URL(url);
       if (origin === "https://admin.njpbs.org") return new Response(null, {status: 200});
+      if (origin === "https://us-central1-njpbs-site.cloudfunctions.net" &&
+          pathname === "/donationHealth" && init.method === "HEAD") {
+        return new Response(null, {status: 405});
+      }
       if (origin === "https://us-central1-njpbs-site.cloudfunctions.net") return new Response(null, {status: 403});
       if (origin !== "https://cms-api.example.test") throw Error("Unexpected smoke origin");
       if (pathname === "/health") return new Response(null, {status: 200});
@@ -204,7 +218,7 @@ describe("CMS release source contract", () => {
       if (["admin-contract", "contract-settlement"].includes(name)) expect(selectedCommands, name).toEqual([]);
       // Every release-tree script step follows the gate.
       else for (const index of selectedCommands) expect(index, name).toBeGreaterThan(job.steps.indexOf(gate));
-      if (name === "preview-renderer") expect(gate.if).toBe("vars.CMS_PREVIEW_CLOUD_ENABLED == 'true'");
+      if (name === "preview-renderer") expect(gate.if).toBe("(inputs.target == 'development' || vars.CMS_PREVIEW_CLOUD_ENABLED == 'true')");
       for (const step of job.steps) expect(step.run ?? "").not.toMatch(/cp \.(?:metered-api|cms-smoke)-gate\/scripts\//);
     }
     const artifact = workflow.jobs["admin-build"].steps.find(step => step.with?.name === "cms-release-source-identities");

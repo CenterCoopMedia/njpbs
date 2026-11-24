@@ -12,6 +12,7 @@ import { isDeepStrictEqual } from "node:util";
 import { authorPublicPath } from "../../../packages/content-core/src/author-profiles.ts";
 import { publicPage, isPublicPagePath, isAvailablePageSlug, publicPageAliases } from "../../../packages/content-core/src/public-pages.ts";
 import { parseBlocks, safeHref } from "../../../packages/content-core/src/content-model.ts";
+import { figureSelections } from "../../../packages/content-core/src/scroll-story.ts";
 import { homeCompositionError } from "../../../packages/content-core/src/home-composition-contract.ts";
 import type { CmsAuthorBuildData } from "./cms-authors-loader";
 import type { CmsPageBuildData } from "./cms-loader";
@@ -253,8 +254,7 @@ export function assertPublicArtifactBundle(value: unknown): PublicArtifactBundle
   assertArray(value.programs, "Program");
   for (const [label, records] of [["Page", value.pages], ["Post", value.posts]] as const) {
     for (const record of records) {
-      const hasDataFigure = Array.isArray(record.blocks) && record.blocks.some(block =>
-        plainObject(block) && block.type === "data_figure");
+      const hasDataFigure = Array.isArray(record.blocks) && record.blocks.some(block => figureSelections(block).length > 0);
       if (record.datasetFigures === undefined && !hasDataFigure) continue;
       const parsed = parseBlocks(record.blocks);
       if (!parsed.ok) throw new Error(`The public artifact bundle ${label} blocks are invalid`);

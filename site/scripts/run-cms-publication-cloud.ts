@@ -1,5 +1,7 @@
 import { cloudflarePublicWorkerTag } from "./cloudflare-account.mjs";
+import { devCloudflareAccount } from "./dev-cloudflare-account.mjs";
 import { createServer } from "node:http";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { assertCmsPreviewSourceCheckout } from "./cms-publication-runtime-guard";
@@ -22,6 +24,8 @@ import {
 } from "./cms-publication-cloud-control";
 
 const STATE_DIRECTORY = "/var/lib/njpbs-cms-publisher";
+const { publicationTarget } = createRequire(import.meta.url)("../../functions/lib/publication-target.js") as
+  typeof import("../../functions/lib/publication-target");
 
 // Names the startup step that failed. The message stays the original one for
 // callers; the process log prints only the stage, error name and error code.
@@ -66,6 +70,8 @@ async function runCloudPublicationStages(
   const cloudflareApiToken = environment.CMS_PUBLICATION_ACTIVATION_TOKEN ?? "";
   const rawMediaManager = environment.CMS_PUBLICATION_MEDIA_MANAGER_CREDENTIAL ?? "";
   const rawMediaStorage = environment.CMS_PUBLICATION_MEDIA_R2_CREDENTIAL ?? "";
+  const accessClientId = environment.CMS_DEV_ACCESS_CLIENT_ID;
+  const accessClientSecret = environment.CMS_DEV_ACCESS_CLIENT_SECRET;
   const mediaEndpoint = environment.CMS_MEDIA_R2_ENDPOINT;
   const mediaBucket = environment.CMS_MEDIA_R2_BUCKET;
   const inheritedMediaManager = environment.MEDIA_MANAGER_API_KEY !== undefined || environment.MEDIA_MANAGER_API_SECRET !== undefined;
@@ -81,11 +87,13 @@ async function runCloudPublicationStages(
     "MEDIA_MANAGER_API_SECRET",
     "CMS_MEDIA_R2_ACCESS_KEY_ID",
     "CMS_MEDIA_R2_SECRET_ACCESS_KEY",
+    "CMS_DEV_ACCESS_CLIENT_ID",
+    "CMS_DEV_ACCESS_CLIENT_SECRET",
   ])
     // config-input: CMS_MEDIA_R2_ACCESS_KEY_ID, CMS_MEDIA_R2_SECRET_ACCESS_KEY, CMS_PUBLICATION_ACTIVATION_TOKEN
     // config-input: CMS_PUBLICATION_FIREBASE_ACCOUNT, CMS_PUBLICATION_MEDIA_MANAGER_CREDENTIAL
     // config-input: CMS_PUBLICATION_MEDIA_R2_CREDENTIAL, CMS_PUBLICATION_PREVIEW_R2_CREDENTIAL, CMS_PUBLICATION_R2_CREDENTIAL
-    // config-input: MEDIA_MANAGER_API_KEY, MEDIA_MANAGER_API_SECRET
+    // config-input: MEDIA_MANAGER_API_KEY, MEDIA_MANAGER_API_SECRET, CMS_DEV_ACCESS_CLIENT_ID, CMS_DEV_ACCESS_CLIENT_SECRET
     delete environment[key];
   if (inheritedMediaManager) throw new Error("Cloud publication refuses inherited Media Manager credentials");
   if (inheritedMediaStorage) throw new Error("Cloud publication refuses inherited media storage credentials");
@@ -101,18 +109,34 @@ async function runCloudPublicationStages(
     throw new Error("Invalid cloud publication operator mode");
   progress.stage = "cloudflare-configuration";
   cloudflarePublicWorkerTag(environment);
+  progress.stage = "target";
+  // One target for the whole process; a missing environment never means production.
+  const target = publicationTarget(environment.CMS_DEPLOYMENT_ENVIRONMENT ?? "");
+  if (target.environment === "development" && rawMediaStorage) {
+    // The Spotlight cache writes the production media bucket and origin only.
+    throw new Error("Development cloud publication refuses Spotlight media storage");
+  }
+  // A development publisher uploads only to its separately pinned account.
+  if (target.environment === "development") devCloudflareAccount(environment);
+  // Only the private dev origin is read through Access; production never receives these.
+  if (target.environment === "production" ? accessClientId !== undefined || accessClientSecret !== undefined
+    : !accessClientId?.trim() || !accessClientSecret?.trim()) {
+    throw new Error("Cloud publication Access credentials do not match its target");
+  }
+  const publicationAccess = target.environment === "development"
+    ? { clientId: accessClientId as string, clientSecret: accessClientSecret as string } : undefined;
   progress.stage = "source-checkout";
   await assertCmsPreviewSourceCheckout(commitSha);
   progress.stage = "sandbox";
   await assertPreviewSandboxAvailable();
   if (mode === "--preflight") return;
   progress.stage = "inputs";
-  const buildEnvironment =
-    parseCmsPublicationPublicBuildEnvironment(environment);
+  const buildEnvironment = { ...parseCmsPublicationPublicBuildEnvironment(environment, target.environment),
+    CMS_DEPLOYMENT_ENVIRONMENT: target.environment };
   if (!/^[A-Za-z0-9_-]{20,80}$/.test(cloudflareApiToken)) {
     throw new Error("Cloud publication credentials are invalid");
   }
-  const account = parseCmsPublicationFirebaseServiceAccount(rawAccount);
+  const account = parseCmsPublicationFirebaseServiceAccount(rawAccount, target.projectId);
   const mediaManagerCredential = parseCmsPublicationMediaManagerCredential(rawMediaManager);
   // Keep the optional media credential in this operator. Parse it only when a
   // normal refresh needs storage; never pass it into the Astro build environment.
@@ -122,12 +146,12 @@ async function runCloudPublicationStages(
   const previewStorageCredential = parsePreviewStorageCredential(rawPreviewStorage);
   progress.stage = "firebase";
   const app = firebaseAdminRuntime.initializeApp(
-    { credential: firebaseAdminRuntime.cert(account), projectId: "njpbs-site" },
+    { credential: firebaseAdminRuntime.cert(account), projectId: target.projectId },
     "cms-publication-cloud",
   );
   const firestore = firebaseAdminRuntime.getFirestore(app);
   progress.stage = "storage-client";
-  const storage = createCmsPublicationCloudStorage({ ...credentials, includeRenderer: true });
+  const storage = createCmsPublicationCloudStorage({ ...credentials, includeRenderer: true, target });
   let runtime:
     ReturnType<typeof startNoBuildCloudRuntime> | undefined;
   let stopping = false;
@@ -192,6 +216,7 @@ async function runCloudPublicationStages(
     runtime = startNoBuildCloudRuntime({
       firestore, firebaseApp: app, serializerId, commitSha, cloudflareApiToken,
       stateDirectory: STATE_DIRECTORY, buildEnvironment, storage, previewStorageCredential, mediaManagerCredential, spotlightImageStorageFactory,
+      target, ...(publicationAccess ? { publicationAccess } : {}),
     });
     const closed = runtime.closed.then(
       () => null,

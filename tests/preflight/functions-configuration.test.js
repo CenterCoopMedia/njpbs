@@ -9,7 +9,7 @@ import { loadFunctionSource } from "../../scripts/lib/functions-deploy-inventory
 import { DEPLOYMENT_COMPONENTS } from "../../scripts/lib/deployment-components.mjs";
 import { configurationInputs, runtimeParameters, runtimeDotenv, validateDeploymentConfiguration,
   CMS_RELEASE_SECRET_NAMES, FUNCTION_SECRETS, NATIVE_CONFIGURATION, validateConfigurationTable, desiredSecret } from "../../scripts/lib/functions-configuration.mjs";
-import { configurationRequirements, verifyOrProvision, mediaCanary, verifyMediaBindings, verifyNativeResources, nativeConfigurationProvider,
+import { configurationRequirements, verifyOrProvision, verifyMediaLifecycle, mediaCanary, verifyMediaBindings, verifyNativeResources, nativeConfigurationProvider,
   provisionDiscoverySecrets, resolveDiscovery } from "../../scripts/configure-cms-functions.mjs";
 import { prepareCloudPublicationWake } from "../../scripts/prepare-cloud-publication-wake.mjs";
 
@@ -266,6 +266,24 @@ describe("Functions configuration contract", () => {
     await expect(nativeConfigurationProvider({ FIREBASE_DEPLOY_SERVICE_ACCOUNT: deploy }, {
       Auth, execute: () => runtime,
     })).rejects.toThrow(/deploy identity differs/);
+  });
+
+  it("names every secret that lacks the deploy admin role, with the grant command", async () => {
+    const f = fixture();
+    for (const policy of Object.values(f.policies)) policy.bindings[0].role = "roles/secretmanager.viewer";
+    await expect(verifyOrProvision(config, env, f.requirements, f.provider, false, f.createClient))
+      .rejects.toThrow(`Missing deploy roles/secretmanager.admin in njpbs-site: ${edge} ${access} ${secret}. Run explicit provision-config, or for each: gcloud secrets add-iam-policy-binding <secret> --project=njpbs-site`);
+  });
+
+  it("tells a token without R2 read apart from a bucket without the staging rule", async () => {
+    const reply = (status, body) => vi.fn(async () => ({ ok: status === 200, status, json: async () => body }));
+    const rule = { enabled: true, conditions: { prefix: "cms-media-staging/" }, deleteObjectsTransition: { condition: { type: "Age", maxAge: 604800 } } };
+    await expect(verifyMediaLifecycle(env.CLOUDFLARE_ACCOUNT_ID, "fixture-media", "token", reply(403)))
+      .rejects.toThrow("CLOUDFLARE_API_TOKEN cannot read the fixture-media lifecycle: give the production deploy token the account permission Workers R2 Storage Read");
+    await expect(verifyMediaLifecycle(env.CLOUDFLARE_ACCOUNT_ID, "fixture-media", "token", reply(200, { success: true, result: { rules: [] } })))
+      .rejects.toThrow("npx wrangler r2 bucket lifecycle add fixture-media cms-media-staging-expiry cms-media-staging/ --expire-days 7");
+    await expect(verifyMediaLifecycle(env.CLOUDFLARE_ACCOUNT_ID, "fixture-media", "token", reply(500))).rejects.toThrow("Could not verify media bucket retention lifecycle");
+    await expect(verifyMediaLifecycle(env.CLOUDFLARE_ACCOUNT_ID, "fixture-media", "token", reply(200, { success: true, result: { rules: [rule] } }))).resolves.toBeUndefined();
   });
 
   it("fails closed for unknown/missing resources, wrong IAM, secret disagreement and unproven rotations", async () => {

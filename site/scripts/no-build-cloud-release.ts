@@ -13,6 +13,8 @@ import { uploadPublicWorkerCandidate } from "./upload-public-worker-candidate";
 import { PublicWorkerActivationOperatorError, runPublicWorkerActivationOperator } from "./activate-public-worker-candidate";
 import { assertCmsPublicationSourceCheckout } from "./cms-publication-runtime-guard";
 import { assertPreparedPublicWorkerArtifact, verifyPreparedPublicWorkerArtifact } from "../src/lib/public-worker-artifact";
+import type { PublicationTarget } from "../../functions/lib/publication-target";
+import type { PublicationAccess } from "./activate-public-worker-candidate";
 
 const require = createRequire(import.meta.url);
 const { assertPublicationOwner } = require("../../functions/lib/publication-runtime-owner");
@@ -133,8 +135,8 @@ export async function stageNoBuildCloudRelease({ firestore, storage, serializerI
 }
 
 async function readPreparedReleaseRequest(firestore: Firestore, transaction: Transaction,
-  preparationId: string, commitSha: string) {
-  const retained = await readPreparedReleaseProof(transaction, firestore, preparationId, commitSha);
+  preparationId: string, commitSha: string, target?: PublicationTarget) {
+  const retained = await readPreparedReleaseProof(transaction, firestore, preparationId, commitSha, target);
   const [batch, candidate, promotion] = await transaction.getAll(
     firestore.doc(`system/publicDeployment/buildBatches/cms-${preparationId}`),
     firestore.doc(`system/publicDeployment/buildBatches/cms-${preparationId}/candidates/worker`),
@@ -142,27 +144,27 @@ async function readPreparedReleaseRequest(firestore: Firestore, transaction: Tra
   if (!batch.exists || !["ready", "deploying", "reconciling"].includes(batch.data()?.status) || !promotion.exists ||
       promotion.data()?.proofDigest !== metadataDigest(retained.proof)) throw new Error("Prepared release promotion differs");
   assertPublicationOwner(batch.data(), { owner: "cloudflare", release: commitSha });
-  const { recordedAt: _at, ...liveCandidate } = projectPublicWorkerCandidate(candidate.data());
+  const { recordedAt: _at, ...liveCandidate } = projectPublicWorkerCandidate(candidate.data(), null, { target });
   if (!isDeepStrictEqual(liveCandidate, retained.candidate)) throw new Error("Prepared release candidate differs");
   return retained;
 }
 
 /** Materialize only sealed metadata. The atomic promotion already created the
  * original owner's request, so interruption here resumes the same durable job. */
-async function materializePreparedRelease(firestore: Firestore, preparationId: string, commitSha: string) {
-  const retained = await firestore.runTransaction(async transaction => readPreparedReleaseProof(transaction, firestore, preparationId, commitSha),
+async function materializePreparedRelease(firestore: Firestore, preparationId: string, commitSha: string, target?: PublicationTarget) {
+  const retained = await firestore.runTransaction(async transaction => readPreparedReleaseProof(transaction, firestore, preparationId, commitSha, target),
     { readOnly: true });
   await stagePublicMediaManifest({ firestore, manifest: retained.proof.mediaManifest });
   await markPublicMediaManifestReady({ firestore, manifest: retained.proof.mediaManifest });
-  await recordPublicWorkerCandidate({ firestore, candidate: retained.candidate, runtime: { owner: "cloudflare", release: commitSha } });
+  await recordPublicWorkerCandidate({ firestore, candidate: retained.candidate, runtime: { owner: "cloudflare", release: commitSha }, target });
 }
 
 /** One request per pass. The cloud journal retains its original job until a
  * terminal batch; an ambiguous activation remains with the shared lease owner. */
 export async function runNoBuildCloudRelease({ firestore, storage, serializerId, commitSha, stateDirectory, cloudflareApiToken,
-  previewStorageCredential, sourceGit, activationIO }: {
+  previewStorageCredential, sourceGit, activationIO, target, publicationAccess }: {
   firestore: Firestore; storage: Storage; serializerId: string; commitSha: string; stateDirectory: string; cloudflareApiToken: string;
-  previewStorageCredential: PreviewStorageCredential;
+  previewStorageCredential: PreviewStorageCredential; target?: PublicationTarget; publicationAccess?: PublicationAccess;
   sourceGit?: Parameters<typeof assertCmsPublicationSourceCheckout>[1];
   activationIO?: Pick<Parameters<typeof runPublicWorkerActivationOperator>[0], "requestJson" | "requestPublication">;
 }) {
@@ -240,9 +242,9 @@ export async function runNoBuildCloudRelease({ firestore, storage, serializerId,
       if (request.preparationId !== row.id) throw new Error("Prepared release operation differs");
       // A leased candidate keeps its original reconciliation path. Its metadata
       // is already durable and must not be registered again after traffic moves.
-      if (batch.status === "reserved" || batch.status === "ready") await materializePreparedRelease(firestore, row.id, commitSha);
+      if (batch.status === "reserved" || batch.status === "ready") await materializePreparedRelease(firestore, row.id, commitSha, target);
       const sealed = await firestore.runTransaction(transaction => readPreparedReleaseRequest(firestore, transaction,
-        row.id, commitSha), { readOnly: true });
+        row.id, commitSha, target), { readOnly: true });
       prepared = assertPreparedPublicWorkerArtifact(request.preparedArtifact);
       if (!isDeepStrictEqual(prepared, sealed.preparedArtifact) || identity.inputSha256 !== sealed.proof.inputSha256 ||
           request.artifactCheckpointDigest !== sealed.proof.artifactCheckpointDigest) throw new Error("Prepared release proof differs");
@@ -265,15 +267,18 @@ export async function runNoBuildCloudRelease({ firestore, storage, serializerId,
       stage = "candidate upload";
       await uploadPublicWorkerCandidate({ firestore: firestore as never, runtime, cloudflareApiToken,
         artifactReceiptPath: path.join(directory, "artifact-inventory.json"),
-        preparedArtifactPath: path.join(directory, "prepared-worker.json"), distDirectory: path.join(directory, "dist") });
+        preparedArtifactPath: path.join(directory, "prepared-worker.json"), distDirectory: path.join(directory, "dist"),
+        ...(target ? { target } : {}) });
       const { publicationReceiptDigest, artifactFileCount, artifactBytes, ...publication } = prepared;
       stage = "context retention";
       await retainCloudPreviewPublicContext({ firestore: firestore as never, file: path.join(directory, "public-context.json"),
-        publication, ...previewStorageCredential, allowCloudRecovery: true });
+        publication, ...previewStorageCredential, allowCloudRecovery: true,
+        ...(target ? { bucket: target.previewBucket, deploymentEnvironment: target.environment } : {}) });
     }
     stage = "activation";
     const result = await runPublicWorkerActivationOperator({ firestore: firestore as never, runtime, cloudflareApiToken,
-      preparedArtifact: prepared, requestJson: activationIO?.requestJson, requestPublication: activationIO?.requestPublication });
+      preparedArtifact: prepared, requestJson: activationIO?.requestJson, requestPublication: activationIO?.requestPublication,
+      ...(target ? { target } : {}), ...(publicationAccess ? { publicationAccess } : {}) });
     if (["deployed", "failed", "superseded"].includes(result.outcome)) {
       const failureReason = result.outcome === "failed" ? cloudReleaseFailureReason(stage) : null;
       if (failureReason) console.error(failureReason);

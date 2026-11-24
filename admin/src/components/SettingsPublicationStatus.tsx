@@ -13,7 +13,8 @@ export function SettingsPublicationStatus({ publication, retry, retrying, disabl
 }) {
   if (!publication) return null;
   const missing = Object.entries(PUBLIC_CHECK_LABELS).filter(([name]) => publication.missingConsumers.includes(name)).map(([, label]) => label);
-  const remaining = !needsRefresh && missing.length > 0 ? `Public checks remain for ${checkList.format(missing)}.` : null;
+  const remaining = !needsRefresh && !publication.waitingForNewerContext && missing.length > 0
+    ? `Public checks remain for ${checkList.format(missing)}.` : null;
   if (publication.warning || publication.status === "failed") return <InlineMessage tone="warning" className="settings-publication-warning">
     <p><span>{publication.warning ?? "The site update did not complete. Retry publication."}</span>
       {remaining && <><br />{remaining}</>}
@@ -24,5 +25,8 @@ export function SettingsPublicationStatus({ publication, retry, retrying, disabl
       pendingAnnouncement={needsRefresh ? "Checking the site update. Your draft will stay as it is." : "Retrying the accepted site update."} />
   </InlineMessage>;
   if (publication.status === "success") return <InlineMessage tone="success">The site update is complete.</InlineMessage>;
+  if (publication.waitingForNewerContext) return <InlineMessage tone="info" role="status">
+    A newer site update interrupted this attempt. Boardwalk will retry when the newer update is ready.
+  </InlineMessage>;
   return <InlineMessage tone="info" role="status">Updating the site. {remaining}</InlineMessage>;
 }

@@ -40,12 +40,13 @@ test("development deployment inputs come from named repository variables without
 test("the production origin pin refuses missing or wrong configuration at the shell boundary", () => {
   const workflow = readCmsDeployWorkflow();
   assert.ok(workflow.includes('CMS_PRODUCTION_API_ORIGIN: ${{ vars.CMS_PRODUCTION_API_ORIGIN }}'));
-  const block = workflow.match(/          if \[ "\$VITE_FUNCTIONS_BASE_URL" != "\$\{CMS_PRODUCTION_API_ORIGIN:-\}" \]; then\n[\s\S]*?          fi\n/)?.[0];
+  assert.ok(workflow.includes("CMS_TARGET_API_ORIGIN: ${{ inputs.target == 'development' && 'https://dev-cms-api.njpbs.org' || vars.CMS_PRODUCTION_API_ORIGIN }}"));
+  const block = workflow.match(/          if \[ "\$VITE_FUNCTIONS_BASE_URL" != "\$\{CMS_TARGET_API_ORIGIN:-\}" \]; then\n[\s\S]*?          fi\n/)?.[0];
   assert.ok(block, "the origin comparison uses the configured independent pin");
   for (const [pin, allowed] of [[undefined, false], ["", false], ["https://wrong.fixture.test", false], ["https://api.fixture.test", true]]) {
     const result = spawnSync("bash", ["-e", "-c", block], { encoding: "utf8", env: {
       PATH: process.env.PATH, VITE_FUNCTIONS_BASE_URL: "https://api.fixture.test",
-      ...(pin === undefined ? {} : { CMS_PRODUCTION_API_ORIGIN: pin }),
+      ...(pin === undefined ? {} : { CMS_TARGET_API_ORIGIN: pin }),
     } });
     assert.equal(result.status, allowed ? 0 : 1);
     assert.ok(!result.stdout.includes("fixture.test") && !result.stderr.includes("fixture.test"));
@@ -58,7 +59,7 @@ test("the Studio and Admin builds receive their configured suppliers", () => {
   assert.ok(step?.includes('CMS_STUDIO_API_ORIGIN: ${{ vars.CMS_STUDIO_API_ORIGIN }}'));
   assert.ok(step?.includes('node agents/vmix/build-windows.mjs'));
   const admin = workflow.split('      - name: Build admin app\n')[1]?.split('\n      - name:')[0];
-  assert.ok(admin?.includes('VITE_CMS_STUDIO_CONFIGURATION: ${{ secrets.VITE_CMS_STUDIO_CONFIGURATION }}'));
+  assert.ok(admin?.includes("VITE_CMS_STUDIO_CONFIGURATION: ${{ inputs.target != 'development' && secrets.VITE_CMS_STUDIO_CONFIGURATION || '' }}"));
   const policy = JSON.parse(readFileSync(new URL('../../.github/deploy-environments.json', import.meta.url), 'utf8'));
   assert.ok(policy.production.secrets.includes('VITE_CMS_STUDIO_CONFIGURATION'));
 });
@@ -69,8 +70,9 @@ test("the Functions writer and planner derive Studio titles from the same privat
   const planner = workflow.jobs["firebase-preflight"].steps.find(step => step.name === "Plan Functions and renderer release");
   const admin = workflow.jobs["admin-build"].steps.find(step => step.name === "Build admin app");
   for (const step of [writer, planner]) {
-    assert.equal(step.env.VITE_CMS_STUDIO_CONFIGURATION, "${{ secrets.VITE_CMS_STUDIO_CONFIGURATION }}");
-    assert.equal(step.env.VITE_LIVE_PRODUCTION_ENABLED, "${{ vars.LIVE_PRODUCTION_ENABLED || 'false' }}");
+    // A development run reads no production Studio preset.
+    assert.equal(step.env.VITE_CMS_STUDIO_CONFIGURATION, "${{ inputs.target != 'development' && secrets.VITE_CMS_STUDIO_CONFIGURATION || '' }}");
+    assert.equal(step.env.VITE_LIVE_PRODUCTION_ENABLED, "${{ inputs.target != 'development' && vars.LIVE_PRODUCTION_ENABLED || 'false' }}");
     assert.equal(step.env.VITE_LIVE_PRODUCTION_ENABLED, admin.env.VITE_LIVE_PRODUCTION_ENABLED);
   }
   assert.equal(writer.run, "node scripts/component-runner.mjs functions configure");

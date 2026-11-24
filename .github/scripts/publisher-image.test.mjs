@@ -5,12 +5,12 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
-import { productionConfig, publishImage, receiptFiles, registryReader, verifySource } from "./publisher-image.mjs";
+import { productionConfig, publisherTarget, publishImage, receiptFiles, registryReader, targetSource, verifySource } from "./publisher-image.mjs";
 
 const sha = "a".repeat(40), account = "0123456789abcdef0123456789abcdef";
 const digest = `sha256:${"b".repeat(64)}`;
 const image = `registry.cloudflare.com/${account}/njpbs-cms-publisher@${digest}`;
-const inputFingerprint = "d".repeat(64);
+const inputFingerprint = "d".repeat(64), imageName = "njpbs-cms-publisher";
 const env = { CANONICAL_GITHUB_REPOSITORY: "example/source", CANONICAL_GITHUB_REPOSITORY_ID: "123", GITHUB_REPOSITORY: "example/source", GITHUB_REPOSITORY_ID: "123", GITHUB_WORKFLOW_REF: "example/source/.github/workflows/publisher-image.yml@refs/heads/main" };
 
 test("the publisher image workflow pins external actions to full commits", () => {
@@ -60,18 +60,18 @@ test("SHA admission requires successful main source CI and its ci aggregate", as
 test("a rerun reuses the SHA digest; a new image builds once and reads back by digest", async () => {
   for (const existing of [true, false]) {
     let builds = 0, lookups = 0;
-    const result = await publishImage({ sha, account, inputFingerprint, lookup: async tag => {
+    const result = await publishImage({ sha, account, imageName, inputFingerprint, lookup: async tag => {
       lookups++;
       assert.ok(tag === sha || tag === digest);
       return !existing && lookups === 1 ? null : { digest, inputFingerprint };
     }, build: async tag => { builds++; assert.equal(tag, `njpbs-cms-publisher:${sha}`); } });
     assert.equal(result, image); assert.equal(builds, existing ? 0 : 1);
   }
-  await assert.rejects(publishImage({ sha, account, inputFingerprint, lookup: async () => { throw new Error("403"); }, build: () => assert.fail("Lookup failure must not push") }), /403/);
+  await assert.rejects(publishImage({ sha, account, imageName, inputFingerprint, lookup: async () => { throw new Error("403"); }, build: () => assert.fail("Lookup failure must not push") }), /403/);
   let calls = 0;
-  await assert.rejects(publishImage({ sha, account, inputFingerprint, lookup: async () => ++calls === 1 ? { digest, inputFingerprint } : null, build: () => assert.fail() }), /readback differs/);
+  await assert.rejects(publishImage({ sha, account, imageName, inputFingerprint, lookup: async () => ++calls === 1 ? { digest, inputFingerprint } : null, build: () => assert.fail() }), /readback differs/);
   for (const previousInputs of [undefined, "e".repeat(64)]) {
-    await assert.rejects(publishImage({ sha, account, inputFingerprint, lookup: async () => ({ digest, inputFingerprint: previousInputs }), build: () => assert.fail("Changed inputs must not replace the existing SHA image") }), /different deployment inputs/);
+    await assert.rejects(publishImage({ sha, account, imageName, inputFingerprint, lookup: async () => ({ digest, inputFingerprint: previousInputs }), build: () => assert.fail("Changed inputs must not replace the existing SHA image") }), /different deployment inputs/);
   }
 });
 
@@ -81,7 +81,7 @@ test("registry lookup verifies manifest bytes and treats only 404 as absent", as
   const manifest = Buffer.from(JSON.stringify({ schemaVersion: 2, config: { digest: configDigest } }));
   const manifestDigest = `sha256:${createHash("sha256").update(manifest).digest("hex")}`;
   let status = 200, header = manifestDigest, redirect = false, corrupt = false;
-  const lookup = await registryReader(account, "synthetic-api-token", async (url, options) => {
+  const lookup = await registryReader(account, "synthetic-api-token", imageName, async (url, options) => {
     if (options.method === "POST") {
       assert.match(url, /\/containers\/registries\/registry\.cloudflare\.com\/credentials$/);
       assert.deepEqual(JSON.parse(options.body).permissions, ["pull"]);
@@ -130,4 +130,52 @@ test("receipt config matches release method 3372638c source/config comparison", 
   assert.throws(() => productionConfig(source, changed, { checkout, sha, image, variables }), /differs from exact source/);
   assert.throws(() => productionConfig({ ...source, main: "other.ts" }, prepared, { checkout, sha, image, variables }), /contract refused/);
   assert.throws(() => productionConfig(source, prepared, { checkout, sha, image: image.replace(/@.*/, ":main"), variables }), /contract refused/);
+});
+
+test("a development image uses the same source with only the development names", () => {
+  const source = JSON.parse(readFileSync(new URL("../../publisher/wrangler.json", import.meta.url), "utf8"));
+  const target = publisherTarget("development"), checkout = "/tmp/example-source";
+  assert.equal(targetSource(source, publisherTarget("production")), source);
+  const dev = targetSource(source, target);
+  assert.equal(dev.name, "njpbs-dev-cms-publisher");
+  assert.equal(dev.containers[0].name, "njpbs-dev-cms-publisher");
+  assert.deepEqual(dev.r2_buckets, [{ binding: "DURABLE_POST_WITHDRAWALS", bucket_name: "njpbs-dev-cms-publication" }]);
+  assert.deepEqual(dev.routes, [{ pattern: "dev-publisher-health.njpbs.org", custom_domain: true }]);
+  // Everything else, including the container shape and schedule, is the production source.
+  // Development also declares the account pin its container checks; production never has it.
+  assert.equal(dev.vars.CMS_DEV_CLOUDFLARE_ACCOUNT_ID, "");
+  assert.equal("CMS_DEV_CLOUDFLARE_ACCOUNT_ID" in source.vars, false);
+  const strip = config => { const copy = structuredClone(config); for (const key of ["name", "r2_buckets", "routes"]) delete copy[key]; delete copy.containers[0].name; delete copy.vars.CMS_DEV_CLOUDFLARE_ACCOUNT_ID; return copy; };
+  assert.deepEqual(strip(dev), strip(source));
+  const variables = { ...source.vars, CLOUDFLARE_ACCOUNT_ID: account, CLOUDFLARE_PUBLIC_WORKER_TAG: "c".repeat(32), PUBLICATION_ENABLED: "true",
+    CMS_DEPLOYMENT_ENVIRONMENT: "development", PUBLICATION_SERIALIZER_ID: "cloudflare-dev-publisher", CMS_DEV_CLOUDFLARE_ACCOUNT_ID: account };
+  const devImage = `registry.cloudflare.com/${account}/njpbs-dev-cms-publisher@${digest}`;
+  const prepared = structuredClone(dev);
+  prepared.main = "/tmp/prepared/source/publisher/worker.ts";
+  prepared.containers[0].image_build_context = "/tmp/prepared";
+  const config = productionConfig(dev, prepared, { checkout, sha, image: devImage, variables, target });
+  assert.equal(config.name, "njpbs-dev-cms-publisher");
+  assert.equal(config.vars.CMS_DEPLOYMENT_ENVIRONMENT, "development");
+  // The Worker variables are the container's source: a development Worker carries the pin.
+  assert.equal(config.vars.CMS_DEV_CLOUDFLARE_ACCOUNT_ID, account);
+  const unpinned = { ...variables }; delete unpinned.CMS_DEV_CLOUDFLARE_ACCOUNT_ID;
+  for (const pinned of [unpinned, { ...variables, CMS_DEV_CLOUDFLARE_ACCOUNT_ID: "" }, { ...variables, CMS_DEV_CLOUDFLARE_ACCOUNT_ID: "e".repeat(32) }]) {
+    assert.throws(() => productionConfig(dev, prepared, { checkout, sha, image: devImage, variables: pinned, target }), /contract refused/);
+  }
+  // A development config refuses the production image name and production variables.
+  assert.throws(() => productionConfig(dev, prepared, { checkout, sha, image, variables, target }), /contract refused/);
+  for (const [name, value] of [["CMS_DEPLOYMENT_ENVIRONMENT", "production"], ["PUBLICATION_SERIALIZER_ID", "cloudflare-publisher"]]) {
+    assert.throws(() => productionConfig(dev, prepared, { checkout, sha, image: devImage, variables: { ...variables, [name]: value }, target }), /contract refused/);
+  }
+  // Production refuses development variables in the production image.
+  const prodPrepared = structuredClone(source);
+  prodPrepared.containers[0].image_build_context = "/tmp/prepared";
+  assert.throws(() => productionConfig(source, prodPrepared, { checkout, sha, image, variables: { ...variables, PUBLICATION_SERIALIZER_ID: "cloudflare-publisher" } }), /contract refused/);
+  assert.throws(() => productionConfig(source, prodPrepared, { checkout, sha, image, variables: { ...unpinned, CMS_DEPLOYMENT_ENVIRONMENT: "production", PUBLICATION_SERIALIZER_ID: "cloudflare-publisher", CMS_DEV_CLOUDFLARE_ACCOUNT_ID: account } }), /contract refused/);
+  // The development artifact carries no deployable config.
+  const files = receiptFiles({ sha, image: devImage, config, checkout, runId: "1", inputFingerprint, target });
+  assert.deepEqual(Object.keys(files), ["receipt.json"]);
+  assert.deepEqual(JSON.parse(files["receipt.json"]), { schema: 1, target: "development", source_sha: sha, image: devImage, workflow_run_id: "1", deployment_input_sha256: inputFingerprint });
+  assert.throws(() => publisherTarget("staging"), /production or development/);
+  assert.throws(() => publisherTarget(undefined), /production or development/);
 });

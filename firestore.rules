@@ -563,6 +563,21 @@ service cloud.firestore {
       // No client delete: user removal happens server-side via the Admin SDK.
     }
 
+    function validCollectionPins(data) {
+      let ids = data.get('ids', null);
+      let joined = ids is list && ids.size() <= 20 ? ids.join(',') : '';
+      return data.keys().hasOnly(['version', 'ids']) && data.version == 1 &&
+        ids is list && ids.size() <= 20 && ids.toSet().size() == ids.size() &&
+        (ids.size() == 0 || (joined.matches('^[a-f0-9]{64}(,[a-f0-9]{64})*$') &&
+          // A caller cannot combine multiple IDs in one element.
+          joined.split(',').size() == ids.size()));
+    }
+
+    match /mediaCollectionPins/{userId} {
+      allow get: if isOwner(userId) && hasValidStaffSession();
+      allow create, update: if isOwner(userId) && hasValidStaffSession() && validCollectionPins(request.resource.data);
+    }
+
     // Shared rail items (#2593). Staff read active shares with one query and fetch
     // referenced removed shares by document id.
     // cmsSetNavigationPreferences and onNavigationShareOwnerWrite own writes.

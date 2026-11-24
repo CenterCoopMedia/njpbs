@@ -128,6 +128,57 @@ test("success before verified upload, malformed response and wrong async shape c
   }
 });
 
+test("retains the completed identity before rejecting malformed words", async () => {
+  const media = input();
+  const recorded = [];
+  await assert.rejects(adapter.transcribe(media, key, settings, {
+    fetchFn: async (_url, request) => {
+      await consume(request.body);
+      return response({ ...document(), words: [word("Hello", -1, 1)] });
+    },
+    recordCompleted: async identity => { recorded.push(identity); },
+  }), errorOutcome("needs_reconciliation"));
+  assert.deepEqual(recorded, [{ transcriptionId: "transcript-123", inputSha256: media.sha256 }]);
+});
+
+test("malformed and asynchronous identities never become recovery targets", async () => {
+  const recorded = [];
+  for (const value of [{ ...document(), transcription_id: "../transcript" }, { request_id: "pending", transcription_id: "transcript-123" }]) {
+    const request = adapter.transcribe(input(), key, settings, {
+      fetchFn: async (_url, request) => { await consume(request.body); return response(value); },
+      recordCompleted: async identity => { recorded.push(identity); },
+    });
+    if (value.request_id) await assert.rejects(request, errorOutcome("needs_reconciliation"));
+    else assert.equal((await request).transcriptionId, undefined);
+  }
+  assert.deepEqual(recorded, []);
+});
+
+test("retrieves only the saved path, supports an omitted echo, and refuses a different or missing result", async () => {
+  const identity = { transcriptionId: "transcript-123", inputSha256: "a".repeat(64) };
+  const limits = { durationSeconds: 60, maxSpeakers: 3 };
+  const requests = [];
+  const { transcription_id, ...result } = document();
+  const retrieve = (reply, override = {}) => adapter.retrieveTranscript({ ...identity, ...override }, key, limits, {
+    fetchFn: async (url, request) => { requests.push({ url, request }); return reply; },
+  });
+  const recovered = await retrieve(response(result));
+  assert.equal(recovered.transcriptionId, transcription_id);
+  assert.equal(recovered.inputSha256, identity.inputSha256);
+  assert.equal(recovered.segments[0].text, "Hello there.");
+  await assert.rejects(retrieve(response({ ...result, transcription_id: "unrelated" })), errorOutcome("needs_reconciliation"));
+  await assert.rejects(retrieve(new Response("{}", { status: 404 })), errorOutcome("needs_reconciliation"));
+  await assert.rejects(retrieve(new Response("{}", { status: 503 })), errorOutcome("retry_recovery"));
+  await assert.rejects(retrieve(response(result), { transcriptionId: "../other" }), errorOutcome("needs_reconciliation"));
+  assert.equal(requests.length, 4);
+  for (const { url, request } of requests) {
+    assert.equal(url, `${adapter.ENDPOINT}/transcripts/${transcription_id}`);
+    assert.equal(request.method, "GET");
+    assert.equal(request.redirect, "error");
+    assert.equal(request.body, undefined);
+  }
+});
+
 test("word validation rejects absent, unordered, out-of-source and impossible confidence evidence", () => {
   for (const change of [{ start: undefined }, { end: undefined }, { start: -1 }, { end: 1801 }, { start: 1, end: 0.5 },
     { logprob: 0.1 }, { logprob: NaN }, { text: "\u0000bad" }, { speaker_id: {} }, { type: "invented" }]) {

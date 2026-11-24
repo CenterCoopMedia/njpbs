@@ -39,7 +39,6 @@
     "workers/wrangler.jsonc",
     "workers/wrangler.preview.dev.jsonc",
     "workers/wrangler.preview.jsonc",
-    "workers/wrangler.public.dev.jsonc",
     "workers/wrangler.routing-measurement.dev.jsonc",
     "workers/wrangler.staff-preview.dev.jsonc",
     "workers/wrangler.staff-sites.dev.jsonc",
@@ -188,6 +187,10 @@
         {
           "name": "deactivateStaff",
           "module": "functions/deactivate-staff.js"
+        },
+        {
+          "name": "donationHealth",
+          "module": "functions/donation-health.js"
         },
         {
           "name": "getStaffAccessStatus",
@@ -768,7 +771,7 @@
         },
         {
           "name": "cmsSubmitBugReport",
-          "module": "functions/bug-report.js"
+          "module": "functions/dev-bug-report.js"
         },
         {
           "name": "cmsTransitionContent",
@@ -809,6 +812,10 @@
         {
           "name": "getStaffAccessStatus",
           "module": "functions/staff-access.js"
+        },
+        {
+          "name": "donationHealth",
+          "module": "functions/donation-health.js"
         },
         {
           "name": "githubBugReportWebhook",
@@ -1317,13 +1324,11 @@
     {"id":"pkg-shelf-scroll-projection","kind":"ui","sources":["packages/content-core/src/custom-shelf-controls.ts"],"states":["fits","start","middle","end"]},
     {"id":"pkg-town-selection-projection","kind":"ui","sources":["packages/content-core/src/town-lookup-controls.ts"],"states":["unselected","selected","no_exact_match"]},
     {"id":"pkg-data-table-filter","kind":"ui","sources":["packages/content-core/src/data-table-controls.ts"],"states":["all_rows","filtered_rows"]},
-    {"id":"wfr-dev-cms-dag","kind":"deploy","sources":[".github/workflows/cms-dev-deploy.yml"],"states":["source-admitted","renderer-ready","renderer-skipped","renderer-only-terminal","pinned-renderer-verified","firestore-updated","readers-installed","functions-api-updated","gateways-updated","admin-uploaded","boundary-verified","partial-stop"]},
+    {"id":"wfr-dev-cms-dag","kind":"deploy","sources":[".github/workflows/cms-dev-deploy.yml"],"states":["source-admitted","renderer-receipt-verified","firestore-updated","readers-installed","functions-api-updated","gateways-updated","admin-uploaded","boundary-verified","partial-stop"]},
     {"id":"wfr-staff-gateway","kind":"deploy","sources":["scripts/deploy-dev-staff-gateway.mjs"],"states":["old-route-owned","new-route-owned","preflight-verified","deployment-unverified","version-verified","gateway-verified","reconcile"]},
     {"id":"wfr-preview-gateways","kind":"deploy","sources":["scripts/deploy-dev-preview-gateways.mjs"],"states":["inventory-verified","private-worker-staged","staff-worker-staged","domain-attached","provisioning","verified","partial-stop"]},
     {"id":"wfr-dev-readers","kind":"deploy","sources":["functions/lib/dev-reader-deployment.js","scripts/deploy-dev-reader-mounts.mjs"],"states":["inert-default","authorized","candidates-started","functions-deployed","api-deployed","providers-verified","live-readers-committed","descriptor-verified","reconciliation-required"]},
-    {"id":"wfr-preview-runtime","kind":"deploy","sources":["preview-renderer/deploy-dev.mjs","site/scripts/cms-preview-cloud-control.ts"],"states":["absent","paused","starting","ready"]},
-    {"id":"wfr-dev-renderer-release","kind":"deploy","sources":["preview-renderer/deploy-dev.mjs"],"states":["prior","paused-drained","old-inactive","releasing","starting","complete","failed-paused","pinned-proof"]},
-    {"id":"wfr-dev-renderer-bootstrap","kind":"deploy","sources":["functions/lib/dev-preview-renderer-bootstrap.js","preview-renderer/bootstrap-dev.mjs"],"states":["absent","claimed","failed","committed-paused","restored-paused","recovery-bound"]},
+    {"id":"wfr-preview-runtime","kind":"deploy","sources":["site/scripts/cms-preview-cloud-control.ts"],"states":["absent","paused","starting","ready"]},
     {"id":"wfr-private-preview-install","kind":"deploy","sources":["scripts/lib/install-private-preview-pair.mjs"],"states":["uninstalled","plan-bound","identity-created","version-uploaded","version-deployed","container-created","scheduled","resource-complete","reconciliation-required"]},
     {"id":"wfr-private-preview-health","kind":"deploy","sources":["scripts/install-private-preview-pair.mjs","scripts/lib/install-private-preview-pair.mjs"],"states":["resource-required","resources-current","candidate-verified","candidate-pointed","health-collected","qualified","renewal-required"]},
     {"id":"wfr-preview-candidate-pointer","kind":"deploy","sources":["functions/lib/cms-preview-pair-candidate.js"],"states":["unretained","candidate-valid","candidate-expired-or-drifted","retained","disabled"]},

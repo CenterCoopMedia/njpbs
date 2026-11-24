@@ -32,6 +32,9 @@ const videoCase = (name: string, data: unknown) => ({
 });
 
 const step = { text: "Morning commuters arrive.", assetId: "platform", alt: "A railway platform", caption: "" };
+const mediaStep = { ...step, assetId: "", alt: "" };
+const stepVideo = { sourceId: "video-library", assetId: "train-clip", title: "Train arrival" };
+const stepFigure = { datasetId: "on-time-trips", version: { mode: "pinned", releaseId: "september" }, display: "expanded" };
 
 // A valid block of every catalog type, so the accept path is exercised per type.
 const validBlocks = [
@@ -40,7 +43,9 @@ const validBlocks = [
   { id: "p", type: "prose", order: 2, visible: true, data: { content: doc("Body") } },
   { id: "img", type: "image", order: 3, visible: false, section: "hero", data: { assetId: "a1", alt: "Alt", caption: "Cap" } },
   { id: "gal", type: "image_gallery", order: 4, visible: true, data: { images: [{ itemId: "image-1", assetId: "a2", alt: "A" }] } },
-  { id: "scroll", type: "scroll_story", order: 30, visible: true, data: { steps: [step] } },
+  { id: "scroll", type: "scroll_story", order: 30, visible: true, data: {
+    steps: [step, { ...mediaStep, video: stepVideo }, { ...mediaStep, figure: stepFigure }],
+  } },
   { id: "cta", type: "cta_row", order: 5, visible: true, data: { ctas: [{ label: "Give", href: "https://x", variant: "primary" }] } },
   { id: "cards", type: "card_grid", order: 6, visible: true, data: { cards: [{ itemId: "card-1", label: "Watch", title: "T", body: doc("b"), href: "/x" }] } },
   { id: "link", type: "link_card", order: 17, visible: true, data: { title: "Story", url: "https://example.com/story", source: "Outlet", date: "2026-09-17", summary: "Summary" } },
@@ -243,6 +248,11 @@ describe("the CJS block validator mirrors the canonical parseBlocks (#514/#515 w
     { steps: [{ ...step, text: " " }], draft: true },
     { steps: [{ ...step, alt: "" }], draft: true },
     { steps: [{ ...step, privateNote: "working copy" }], draft: false },
+    { steps: [{ ...step, video: stepVideo }], draft: false },
+    { steps: [{ ...mediaStep, video: stepVideo, figure: stepFigure }], draft: false },
+    { steps: [{ ...mediaStep, video: { ...stepVideo, title: "" } }], draft: true },
+    { steps: [{ ...mediaStep, figure: { ...stepFigure, version: { mode: "pinned", releaseId: "" } } }], draft: true },
+    { steps: [{ ...mediaStep, figure: { ...stepFigure, privateNotes: "Unpublished notes" } }], draft: false },
     { steps: Array(SCROLL_STORY_LIMITS.steps + 1).fill(step), draft: false },
   ])("enforces scroll story limits and draft completeness", ({ steps, draft }) => {
     const input = [{ id: "scroll", type: "scroll_story", order: 0, visible: true, data: { steps } }];

@@ -35,15 +35,15 @@ it("sends the renderer's publication receipt read through the public Worker, not
   }
 });
 
-it("keeps checked-in dev admission paused and enables deployed preview only after the renderer job", async () => {
+it("keeps checked-in dev admission paused and enables deployed preview only after the renderer receipt is confirmed", async () => {
   // #2957 replaces the original disabled-only requirement with a matched,
   // runtime-verified dev release. Static Functions inputs still fail closed.
   expect(devFunctionsEnvironment({ CMS_MEDIA_BUCKET: "fixture-dev-media", CMS_MEDIA_ORIGIN: "https://media.fixture.test" }, pathToFileURL(path.resolve(process.cwd(), "..") + path.sep))).toMatch(/^CMS_PREVIEW_SERIALIZER_READY=false$/m);
   const workflow = await source(".github/workflows/cms-dev-deploy.yml");
-  expect(workflow).toMatch(/needs: preview-renderer/);
-  expect(workflow).toMatch(/CMS_DEV_RENDERER_SOURCE_SHA: \$\{\{ inputs\.release_preview_renderer && needs\.preview-renderer\.outputs\.renderer_sha \|\| vars\.CMS_DEV_RENDERER_SOURCE_SHA \}\}/);
-  // An explicit release matches the selected application pin after main advances.
-  expect(workflow).toMatch(/if \[ "\$CMS_DEV_RELEASE_PREVIEW_RENDERER" = true \]; then\s+test "\$CMS_DEV_RENDERER_SOURCE_SHA" = "\$DEPLOY_SHA"/);
+  // The renderer SHA comes only from the confirmed dev renderer component receipt, never from a variable.
+  expect(workflow).not.toMatch(/CMS_DEV_RENDERER_SOURCE_SHA: \$\{\{/);
+  expect(workflow).toMatch(/renderer confirm --source-sha "\$sha"\n\s+printf 'CMS_DEV_RENDERER_SOURCE_SHA=%s\\n' "\$sha" >> "\$GITHUB_ENV"/);
+  expect(workflow).toMatch(/printf 'CMS_PREVIEW_SERIALIZER_READY=true\\nCMS_PREVIEW_RENDERER_SHA=%s\\n' "\$CMS_DEV_RENDERER_SOURCE_SHA"/);
   expect(workflow).toMatch(/test "\$\(git rev-parse HEAD\)" = "\$DEPLOY_SHA"/);
   expect(workflow).toMatch(/VITE_CMS_PREVIEW_ENABLED: 'true'/);
 });

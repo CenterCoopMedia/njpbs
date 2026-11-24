@@ -21,14 +21,14 @@ beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), "dev-deploy-source-"));
   releaseRoot = join(root, "release"); trustedRoot = join(root, "trusted");
   const files = ["scripts/smoke-cms-functions.mjs", "scripts/smoke-dev-cms-functions.mjs", "scripts/check-dev-anonymous-refusal.mjs", "scripts/lib/dev-deploy-source.mjs",
-    "scripts/deploy-dev-functions.mjs", "scripts/deploy-dev-reader-mounts.mjs", "scripts/deploy-dev-preview-gateways.mjs", "preview-renderer/deploy-dev.mjs",
+    "scripts/deploy-dev-functions.mjs", "scripts/deploy-dev-reader-mounts.mjs", "scripts/deploy-dev-preview-gateways.mjs",
     "functions/dev-index.js", "functions/dev-manifest.js"];
   for (const file of files) {
     mkdirSync(join(releaseRoot, file, ".."), { recursive: true });
     writeFileSync(join(releaseRoot, file), "// Reviewed fixture source\n");
   }
   mkdirSync(join(releaseRoot, ".github"));
-  writeFileSync(join(releaseRoot, ".github/cms-deploy-compatibility.json"), JSON.stringify({ contracts: { cmsDevReleaseChecks: { version: 1 } } }));
+  writeFileSync(join(releaseRoot, ".github/cms-deploy-compatibility.json"), JSON.stringify({ contracts: { cmsDevReleaseChecks: { version: 2 } } }));
   git(releaseRoot, "init", "-b", "main");
   git(releaseRoot, "remote", "add", "origin", "https://github.com/example-owner/example-repo.git");
   sourceSha = commit(releaseRoot);
@@ -46,7 +46,7 @@ const check = (patch = {}) => requireDevDeploySource({ env: { ...env, ...patch }
 it("keeps NEW and its checker identity after trusted main advances", () => {
   expect(sourceSha).not.toBe(trustedSha);
   expect(check()).toEqual({ schemaVersion: 1, environment: "development", deploySha: sourceSha,
-    releaseChecksSha: sourceSha, trustedWorkflowSha: trustedSha, releaseChecksContractVersion: 1 });
+    releaseChecksSha: sourceSha, trustedWorkflowSha: trustedSha, releaseChecksContractVersion: 2 });
   expect(assertDevDeployCheckout(env, releaseRoot)).toBe(sourceSha);
   expect(() => assertDevDeployCheckout({ ...env, DEPLOY_SHA: trustedSha }, releaseRoot)).toThrow("selected pin");
   git(releaseRoot, "checkout", "--detach", trustedSha);
@@ -83,7 +83,7 @@ it("refuses a reviewed ancestor without the reader update command before selecte
   expect(() => check({ DEPLOY_SHA: unsupported, GITHUB_SHA: current, GITHUB_WORKFLOW_SHA: current }))
     .toThrow("scripts/deploy-dev-reader-mounts.mjs");
 });
-it.each(["CMS_DEV_RENDERER_ONLY", "CMS_DEV_INSTALL_READER_BRIDGE"])("keeps the exact-workflow-source restriction for %s", name => {
+it.each(["CMS_DEV_INSTALL_READER_BRIDGE"])("keeps the exact-workflow-source restriction for %s", name => {
   expect(() => check({ [name]: "true" })).toThrow("exact workflow source");
   git(releaseRoot, "checkout", "--detach", trustedSha);
   expect(check({ DEPLOY_SHA: trustedSha, [name]: "true" }).deploySha).toBe(trustedSha);
@@ -110,7 +110,6 @@ it("binds both dev jobs to the pin and runs the shared action from the trusted c
     const selected = job.steps.findIndex(step => step.run?.startsWith("node scripts/") || step.run?.startsWith("node .github/"));
     expect(selected).toBeGreaterThan(job.steps.indexOf(composite));
     expect(composite.with["github-token"]).toBe("${{ github.token }}");
-    expect(composite.with["renderer-only"]).toBe("${{ inputs.renderer_only }}");
     expect(composite.with["install-reader-bridge"]).toBe("${{ inputs.install_reader_bridge }}");
     expect(job.permissions.actions).toBe("read");
   }
@@ -131,7 +130,7 @@ it("binds both dev jobs to the pin and runs the shared action from the trusted c
     .toBeLessThan(deploy.findIndex(step => step.name === "Authenticate to dev Firebase with OIDC"));
 });
 
-it("restores a clean selected checkout before the strict bootstrap and reader operators", () => {
+it("restores a clean selected checkout before the strict reader operator", () => {
   cpSync(trustedRoot, join(releaseRoot, ".dev-deploy-gate"), { recursive: true });
   expect(git(releaseRoot, "status", "--porcelain", "--untracked-files=normal")).toContain(".dev-deploy-gate/");
   const action = parse(readFileSync(new URL("../../.github/actions/dev-deploy-source-gates/action.yml", import.meta.url), "utf8"));

@@ -118,6 +118,7 @@ jobs:
       vars.CMS_DEV_PUBLISH_ENABLED == 'false'
     environment: development
     runs-on: ubuntu-24.04
+    # Stops a hung reconcile. Unmeasured: skipped in dev site runs (45279343486, 45286097158, 45302851154).
     timeout-minutes: 15
     permissions:
       contents: read
@@ -200,7 +201,6 @@ jobs:
           CMS_DEV_ACCESS_CLIENT_SECRET: ${{ secrets.CMS_DEV_ACCESS_CLIENT_SECRET }}
           CMS_DEV_CMS_SOURCE_SHA: ${{ vars.CMS_DEV_CMS_SOURCE_SHA }}
           CMS_DEV_ADMIN_SOURCE_SHA: ${{ vars.CMS_DEV_ADMIN_SOURCE_SHA }}
-          CMS_DEV_RENDERER_SOURCE_SHA: ${{ vars.CMS_DEV_RENDERER_SOURCE_SHA }}
         run: |
           chmod 700 dev-publication
           chmod 600 dev-publication/public-context.json
@@ -232,6 +232,7 @@ jobs:
         contains(fromJSON(vars.CMS_PUBLISH_GITHUB_TRUSTED_ACTORS || '[]'), github.actor)))
     environment: development
     runs-on: ubuntu-24.04
+    # Measured Nov. 2026: 125 s, 104 s, 115 s (45279343486, 45286097158, 45302851154).
     timeout-minutes: 13 # Runaway guard: 3x max 4m02s (14d, 2026-10-26; #2657).
     permissions:
       contents: read
@@ -379,6 +380,7 @@ jobs:
         github.actor == vars.CMS_DEPLOY_OWNER && github.triggering_actor == vars.CMS_DEPLOY_OWNER &&
         contains(fromJSON(vars.CMS_PUBLISH_GITHUB_TRUSTED_ACTORS || '[]'), github.actor)))
     runs-on: ubuntu-24.04
+    # Measured Nov. 2026: 122 s, 108 s, 81 s (45279343486, 45286097158, 45302851154).
     timeout-minutes: 30 # Runaway guard: 3x max rounds to 23m; retain 30m floor (#2657).
     permissions:
       contents: read
@@ -489,6 +491,8 @@ jobs:
         run: npm --prefix site run guardrails
         env:
           INTERNAL_SURFACES: "0"
+          # Matches the build, which emits the Data Hub as production does.
+          DATA_HUB_PUBLIC: "1"
       - name: Verify retained Post renderer files
         run: |
           test -f dev-publication/renderer/server/entry.mjs
@@ -525,6 +529,7 @@ jobs:
         contains(fromJSON(vars.CMS_PUBLISH_GITHUB_TRUSTED_ACTORS || '[]'), github.actor)))
     environment: development
     runs-on: ubuntu-24.04
+    # Measured Nov. 2026: 65 s, 67 s, 80 s (45279343486, 45286097158, 45302851154).
     timeout-minutes: 15 # Runaway guard: 3x max rounds to 9m; retain 15m floor (#2657).
     permissions:
       contents: read
@@ -592,13 +597,15 @@ jobs:
           CMS_DEV_ACCESS_CLIENT_SECRET: ${{ secrets.CMS_DEV_ACCESS_CLIENT_SECRET }}
           CMS_DEV_CMS_SOURCE_SHA: ${{ vars.CMS_DEV_CMS_SOURCE_SHA }}
           CMS_DEV_ADMIN_SOURCE_SHA: ${{ vars.CMS_DEV_ADMIN_SOURCE_SHA }}
-          CMS_DEV_RENDERER_SOURCE_SHA: ${{ vars.CMS_DEV_RENDERER_SOURCE_SHA }}
         run: |
           chmod 700 dev-publication
           chmod 600 dev-publication/public-context.json
           node --import ./site/node_modules/tsx/dist/loader.mjs site/scripts/cms-dev-publication.mjs upload
       - name: Record failure or preserve uncertain upload
         if: always() && steps.auth.outcome == 'success' && steps.upload.outcome != 'success'
+        env:
+          DEV_BUILD_RESULT: ${{ needs.build.result }}
+          DEV_UPLOAD_OUTCOME: ${{ steps.upload.outcome }}
         run: node --import ./site/node_modules/tsx/dist/loader.mjs site/scripts/cms-dev-publication.mjs fail
       - name: Retain terminal evidence
         if: always() && needs.build.result == 'success'

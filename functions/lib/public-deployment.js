@@ -277,6 +277,24 @@ function assertPublicDeploymentRetiredCloudReleaseBatch(value, expectedBuildBatc
   return value;
 }
 
+// A publish row that failed or was cancelled before its batch was leased
+// retires the batch in the same transaction (publish-build-state.js).
+const FAILED_PUBLISH_RETIRED_REASON = "publish_failed_before_lease";
+function assertPublicDeploymentFailedPublishRetiredBatch(value, expectedBuildBatchId = null) {
+  const fields = new Set([...PUBLIC_BUILD_RESERVATION_FIELDS, "retiredAt", "retirementReceipt"]);
+  const receiptFields = new Set(["schemaVersion", "reason", "queueId", "queueStatus"]);
+  const { retiredAt, retirementReceipt: receipt, ...original } = value ?? {};
+  assertPublicDeploymentReservedBatch({ ...original, status: "reserved" }, expectedBuildBatchId);
+  if (value.status !== "retired" || !hasOnlyFields(value, fields) ||
+      timestampMillis(retiredAt) === null || timestampMillis(retiredAt) < timestampMillis(value.reservedAt) ||
+      !plainObject(receipt) || Object.keys(receipt).length !== receiptFields.size || !hasOnlyFields(receipt, receiptFields) ||
+      receipt.schemaVersion !== 1 || receipt.reason !== FAILED_PUBLISH_RETIRED_REASON ||
+      `cms-${receipt.queueId}` !== value.buildBatchId || !["failed", "cancelled"].includes(receipt.queueStatus)) {
+    throw new PublicDeploymentStateError("The retired failed-publish reservation is invalid");
+  }
+  return value;
+}
+
 function assertPublicDeploymentLeaseBatch(value, expectedBuildBatchId = null) {
   projectPublicBuildReservation(value, expectedBuildBatchId);
   const fields =
@@ -642,6 +660,8 @@ function projectPublicBuildSupersession(value, expectedBuildBatchId = null) {
 module.exports = {
   assertPublicDeploymentRetiredBatch,
   assertPublicDeploymentRetiredCloudReleaseBatch,
+  assertPublicDeploymentFailedPublishRetiredBatch,
+  FAILED_PUBLISH_RETIRED_REASON,
   PUBLIC_DEPLOYMENT_SCHEMA_VERSION,
   PUBLIC_BUILD_CANCELLED_REASON,
   PublicDeploymentFenceError,

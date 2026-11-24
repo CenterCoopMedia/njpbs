@@ -4,7 +4,8 @@ import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Firestore } from "firebase-admin/firestore";
-import { preparePreviewRenderer } from "../../scripts/prepare-preview-renderer.mjs";
+import { prepareDevPreviewRenderer, preparePreviewRenderer } from "../../scripts/prepare-preview-renderer.mjs";
+import { cmsTarget } from "../../scripts/lib/cms-target.mjs";
 import { firebaseAdminRuntime } from "./firebase-admin-runtime";
 import { assertProductionFirestoreRouting, parseCmsPublicationFirebaseServiceAccount } from "./cms-publication-inputs";
 import { parsePreviewStorageCredential } from "./run-cms-preview-serializer";
@@ -17,7 +18,35 @@ import { collectLiveIdentities } from "../../scripts/lib/cms-component-receipt.m
 import { identitiesMatch } from "../../scripts/lib/cms-release-plan.mjs";
 
 const SERIALIZER = "cloudflare-preview";
-const APPLICATION = "njpbs-cms-preview-renderer";
+// The dev bucket name is rendered into the workspace like every dev resource name.
+const DEV_PREVIEW_BUCKET = "template-dev-cms-previews";
+// A development release reads each credential from its own dev secret, never a production name.
+const DEV_SECRETS = { CMS_PREVIEW_FIREBASE_ACCOUNT: "CMS_DEV_PREVIEW_FIREBASE_ACCOUNT",
+  CMS_PREVIEW_R2_CREDENTIAL: "CMS_DEV_PREVIEW_R2_CREDENTIAL", CLOUDFLARE_API_TOKEN: "CLOUDFLARE_DEV_PREVIEW_RENDERER_TOKEN",
+  CMS_DEV_ACCESS_CLIENT_ID: "CMS_DEV_ACCESS_CLIENT_ID", CMS_DEV_ACCESS_CLIENT_SECRET: "CMS_DEV_ACCESS_CLIENT_SECRET" } as const;
+type PublicationAccess = { clientId: string; clientSecret: string };
+
+/** Storage options for the target: production keeps its defaults; dev names its bucket and Access client. */
+function previewStorageTarget(publicationAccess?: PublicationAccess) {
+  return publicationAccess ? { deploymentEnvironment: "development", bucket: DEV_PREVIEW_BUCKET, publicationAccess } : {};
+}
+
+/** Reads and removes the release credentials; a development release refuses a missing dev secret by name. */
+export function releaseCredentials(env: NodeJS.ProcessEnv = process.env) {
+  const development = cmsTarget(env).environment === "development";
+  const take = (name: keyof typeof DEV_SECRETS) => {
+    // config-input: CMS_PREVIEW_FIREBASE_ACCOUNT, CMS_PREVIEW_R2_CREDENTIAL, CLOUDFLARE_API_TOKEN, CMS_DEV_ACCESS_CLIENT_ID, CMS_DEV_ACCESS_CLIENT_SECRET
+    const value = env[name] ?? ""; delete env[name];
+    if (development && !value) throw new Error(`${DEV_SECRETS[name]} is required for a development renderer release`);
+    return value;
+  };
+  const rawAccount = take("CMS_PREVIEW_FIREBASE_ACCOUNT");
+  const rawStorage = take("CMS_PREVIEW_R2_CREDENTIAL");
+  const token = take("CLOUDFLARE_API_TOKEN");
+  const publicationAccess = development
+    ? { clientId: take("CMS_DEV_ACCESS_CLIENT_ID"), clientSecret: take("CMS_DEV_ACCESS_CLIENT_SECRET") } : undefined;
+  return { rawAccount, rawStorage, token, publicationAccess };
+}
 const releaseSecretValues: string[] = [];
 const STARTUP_HEALTH_DEADLINE_MS = 180_000;
 const PLACEMENT_ERROR = /no container instance(?: that can be provided)?|(?:placement|scheduling) (?:failed|error)|unable to (?:place|schedule)|insufficient (?:placement )?capacity/i;
@@ -236,15 +265,16 @@ export async function retryCloudPreviewRead<T>(read: () => Promise<T>,
 async function applicationId(token: string): Promise<string | null> {
   const applications = await cloudflare(token, "");
   if (!Array.isArray(applications)) throw new Error("Cloud preview application list is invalid");
-  const matches = applications.filter(application => application.name === APPLICATION);
+  const name = cmsTarget().rendererWorker;
+  const matches = applications.filter(application => application.name === name);
   if (matches.length === 0) return null;
   if (matches.length !== 1 || !/^[a-f0-9-]{36}$/.test(matches[0].id)) throw new Error("Cloud preview application identity is invalid");
   return matches[0].id;
 }
 
-async function verifyCloudPreviewDependencies(firestore: Firestore, rawStorage: string, token: string) {
+async function verifyCloudPreviewDependencies(firestore: Firestore, rawStorage: string, token: string, publicationAccess?: PublicationAccess) {
   if (!/^[A-Za-z0-9_-]{20,80}$/.test(token)) throw new Error("Cloud preview deploy credential is invalid");
-  const storage = createCmsPreviewCloudStorage(parsePreviewStorageCredential(rawStorage));
+  const storage = createCmsPreviewCloudStorage({ ...parsePreviewStorageCredential(rawStorage), ...previewStorageTarget(publicationAccess) });
   try { await storage.readPublicContext(firestore); }
   finally { storage.close(); }
   return retryCloudPreviewRead(() => applicationId(token));
@@ -338,18 +368,19 @@ export async function wrangler(prepared: Awaited<ReturnType<typeof preparePrevie
   });
 }
 
-export async function deployPreviewRuntime({ firestore, rendererSha, token, rawAccount, rawStorage }: {
-  firestore: Firestore; rendererSha: string; token: string; rawAccount: string; rawStorage: string;
+export async function deployPreviewRuntime({ firestore, rendererSha, token, rawAccount, rawStorage, publicationAccess }: {
+  firestore: Firestore; rendererSha: string; token: string; rawAccount: string; rawStorage: string; publicationAccess?: PublicationAccess;
 }) {
   const ref = firestore.doc(PREVIEW_RUNTIME_DOCUMENT);
   const control = parsePreviewRuntimeControl((await ref.get()).data());
   if (control.phase !== "paused") throw new Error("Pause preview admission before deploying the renderer");
-  const existingId = await verifyCloudPreviewDependencies(firestore, rawStorage, token);
+  const existingId = await verifyCloudPreviewDependencies(firestore, rawStorage, token, publicationAccess);
   process.stdout.write("Waiting for admitted preview work to finish\n");
   await waitFor("preview work to drain", () => previewRuntimeDrained(firestore));
-  const prepared = await preparePreviewRenderer(rendererSha);
+  const prepared = await (publicationAccess ? prepareDevPreviewRenderer : preparePreviewRenderer)(rendererSha);
   const config = JSON.parse(await readFile(prepared.configPath, "utf8"));
-  const secrets = JSON.stringify({ FIREBASE_SERVICE_ACCOUNT: rawAccount, R2_PREVIEW_CREDENTIAL: rawStorage });
+  const secrets = JSON.stringify({ FIREBASE_SERVICE_ACCOUNT: rawAccount, R2_PREVIEW_CREDENTIAL: rawStorage,
+    ...(publicationAccess ? { CMS_DEV_ACCESS_CLIENT_ID: publicationAccess.clientId, CMS_DEV_ACCESS_CLIENT_SECRET: publicationAccess.clientSecret } : {}) });
   const previousRolloutIds = existingId
     ? (await readCloudPreviewRollouts(query => retryCloudPreviewRead(() => cloudflare(token, `/${existingId}/rollouts${query}`)))).map(row => row.id) : [];
   if (existingId) {
@@ -406,21 +437,18 @@ async function main() {
   }
   const cloudflareAccountId = cloudflareAccount();
   assertProductionFirestoreRouting(process.env);
-  const rawAccount = process.env.CMS_PREVIEW_FIREBASE_ACCOUNT ?? "";
-  const rawStorage = process.env.CMS_PREVIEW_R2_CREDENTIAL ?? "";
-  const token = process.env.CLOUDFLARE_API_TOKEN ?? "";
-  delete process.env.CMS_PREVIEW_FIREBASE_ACCOUNT;
-  delete process.env.CMS_PREVIEW_R2_CREDENTIAL;
-  delete process.env.CLOUDFLARE_API_TOKEN;
-  releaseSecretValues.splice(0, releaseSecretValues.length, ...releaseSecretsFor(rawAccount, rawStorage, token));
-  const account = parseCmsPublicationFirebaseServiceAccount(rawAccount);
+  const { rawAccount, rawStorage, token, publicationAccess } = releaseCredentials();
+  if (publicationAccess && operation === "seed-context") throw new Error("Development has no retained public context seed");
+  releaseSecretValues.splice(0, releaseSecretValues.length, ...releaseSecretsFor(rawAccount, rawStorage, token),
+    ...(publicationAccess ? [publicationAccess.clientId, publicationAccess.clientSecret] : []));
+  const account = parseCmsPublicationFirebaseServiceAccount(rawAccount, cmsTarget().projectId);
   const app = firebaseAdminRuntime.initializeApp({
-    credential: firebaseAdminRuntime.cert(account), projectId: "njpbs-site",
+    credential: firebaseAdminRuntime.cert(account), projectId: cmsTarget().projectId,
   }, "preview-cloud-release");
   const firestore = firebaseAdminRuntime.getFirestore(app);
   try {
     if (operation === "preflight") {
-      await verifyCloudPreviewDependencies(firestore, rawStorage, token);
+      await verifyCloudPreviewDependencies(firestore, rawStorage, token, publicationAccess);
       process.stdout.write("Cloud preview release dependencies verified\n");
     } else if (operation === "pause") await pausePreviewRuntime(firestore, rendererSha);
     else if (operation === "confirm") {
@@ -452,7 +480,7 @@ async function main() {
     }
     else {
       if (!token) throw new Error("Cloud preview deploy credential is required");
-      try { await deployPreviewRuntime({ firestore, rendererSha, token, rawAccount, rawStorage }); }
+      try { await deployPreviewRuntime({ firestore, rendererSha, token, rawAccount, rawStorage, publicationAccess }); }
       catch (error) {
         await pausePreviewRuntime(firestore, rendererSha);
         throw error;

@@ -10,13 +10,14 @@ import sharp from "sharp";
 import mediaContract from "../functions/lib/media-contract.js";
 import thumbnailModule from "../functions/lib/media-thumbnails.js";
 import storageModule from "../functions/lib/r2-media.js";
+import { cmsTarget } from "./lib/cms-target.mjs";
 
 const PAGE_SIZE = 100;
 const CONCURRENCY = 2;
 // Several uniformly transient failures suggest a service outage. One or two
 // optional thumbnails must not block a Functions deployment.
 const MIN_OUTAGE_CANDIDATES = 3;
-const PROJECT_ID = "njpbs-site";
+const PROJECT_ID = cmsTarget().projectId;
 const { finalObjectKey, MAX_IMAGE_PIXELS, MEDIA_TYPES } = mediaContract;
 const { createMediaThumbnails, MediaThumbnailError, thumbnailWidths } = thumbnailModule;
 const { R2MediaStorage } = storageModule;

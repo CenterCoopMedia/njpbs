@@ -83,9 +83,32 @@ export function isVideoBlockData(value: unknown, publishable = true): value is V
   return true;
 }
 
-interface BlockLike {
-  type?: unknown;
-  data?: unknown;
+/** Video selections in one block, in reading order. Callers apply layout visibility. */
+export function blockVideoSelections(block: unknown): Record<string, unknown>[] {
+  if (!plainObject(block) || !plainObject(block.data)) return [];
+  if (block.type === "video") return [block.data];
+  if (block.type !== "scroll_story" || !Array.isArray(block.data.steps)) return [];
+  return block.data.steps.flatMap(step =>
+    plainObject(step) && typeof step.text === "string" && step.text.trim() && plainObject(step.video)
+      ? [step.video] : []);
+}
+
+export function mapBlockVideoData<T>(block: T, map: (data: Record<string, unknown>) => Record<string, unknown>): T {
+  if (!plainObject(block) || !plainObject(block.data)) return block;
+  if (block.type === "video") {
+    const data = map(block.data);
+    return data === block.data ? block : { ...block, data };
+  }
+  if (block.type !== "scroll_story" || !Array.isArray(block.data.steps)) return block;
+  let changed = false;
+  const steps = block.data.steps.map(step => {
+    if (!plainObject(step) || !plainObject(step.video)) return step;
+    const video = map(step.video);
+    if (video === step.video) return step;
+    changed = true;
+    return { ...step, video };
+  });
+  return changed ? { ...block, data: { ...block.data, steps } } : block;
 }
 
 /**
@@ -95,21 +118,17 @@ interface BlockLike {
  * so a page that renders a player is never missed (VPPA).
  */
 export function containsVideo(blocks: unknown): boolean {
-  return Array.isArray(blocks) && blocks.some((block) => {
-    const candidate = block as BlockLike | null;
-    return candidate?.type === "video" && plainObject(candidate.data) && Boolean(candidate.data.public);
-  });
+  return Array.isArray(blocks) && blocks.some(block => blockVideoSelections(block).some(data => Boolean(data.public)));
 }
 
 /** The block list without any client-supplied `public` on video blocks. */
 export function withoutPublicVideoData<T>(blocks: T): T {
   if (!Array.isArray(blocks)) return blocks;
-  return blocks.map((block) => {
-    const candidate = block as BlockLike;
-    if (candidate?.type !== "video" || !plainObject(candidate.data) || !("public" in candidate.data)) return block;
-    const { public: _ignored, ...data } = candidate.data;
-    return { ...(block as object), data };
-  }) as T;
+  return blocks.map(block => mapBlockVideoData(block, data => {
+    if (!("public" in data)) return data;
+    const { public: _ignored, ...authored } = data;
+    return authored;
+  })) as T;
 }
 
 export interface RenderVideoBlockOptions {

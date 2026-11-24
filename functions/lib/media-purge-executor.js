@@ -3,6 +3,7 @@
 const { randomUUID } = require("node:crypto");
 const { adminLogEntry, AUDIT_COLLECTIONS } = require("./audit");
 const { thumbnailObjectKey } = require("./media-contract");
+const { ownerRef } = require("./media-hash-owner");
 
 const ENTRY_LEASE_MS = 2 * 60_000;
 const IO_MARGIN_MS = 15_000;
@@ -24,7 +25,7 @@ function exactPublicKeys(entry, assetId, hash) {
 }
 
 async function ownedReceipt(transaction, firestore, assetId, hash, keys) {
-  const root = firestore.doc(`system/media/hashOwners/${hash}`);
+  const root = ownerRef(firestore, hash, assetId);
   const snapshot = await transaction.get(root);
   const matches = (data) => data?.assetId === assetId && keys.includes(data.finalKey) &&
     ["committed", "purging"].includes(data.state);

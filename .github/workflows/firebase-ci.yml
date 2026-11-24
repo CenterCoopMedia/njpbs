@@ -164,16 +164,16 @@ jobs:
         run: |
           npm run check:staff-sites
           npm run test:staff-sites
-          npx --no-install wrangler types --config workers/wrangler.public.dev.jsonc --include-runtime=false --env-interface DevPublicBindings --check workers/src/dev-public-worker-configuration.d.ts
           npx --no-install wrangler types --config workers/wrangler.staff-sites.dev.jsonc --config cms-api/wrangler.dev.jsonc --include-runtime=false --env-interface DevStaffSiteBindings --check workers/src/staff-site-dev-worker-configuration.d.ts
           npx --no-install wrangler types --config workers/wrangler.staff-sites.jsonc --config cms-api/wrangler.jsonc --config cms-api/wrangler.dev.jsonc --include-runtime=false --env-interface StaffSiteEnv --check workers/src/staff-site-worker-configuration.d.ts
       - name: Dev preview release contracts
         run: >-
           npx --no-install vitest run
-          tests/dev-preview-release.test.ts tests/dev-preview-gateways.test.ts
+          tests/dev-preview-gateways.test.ts
           tests/datasets-contract.test.ts tests/data-figure.test.ts
-          tests/dev-renderer-bootstrap-inputs.test.mjs tests/dev-current-code-preflight.test.ts
-          tests/dev-renderer-workflow.test.mjs tests/development-install-command-files.test.ts
+          tests/dev-current-code-preflight.test.ts
+          tests/development-install-command-files.test.ts
+          tests/dev-setup-check.test.mjs
           --maxWorkers=1 --no-file-parallelism
       - name: Check build-free Post reader in workerd
         run: node scripts/test-no-build-post-reader-runtime.mjs

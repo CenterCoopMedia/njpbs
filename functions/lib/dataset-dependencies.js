@@ -4,6 +4,7 @@ const { validDatasetId, validateDatasetRelease, DatasetError } = require("./data
 const { isDataFigureData } = require("./data-figure");
 const { isDatasetFigures, createDatasetFigureResolver, renderDataFigure } = require("./dataset-figures");
 const { visibleLayoutBlocks } = require("./content-layout");
+const { figureSelections } = require("./scroll-story");
 function canonical(value) {
   if (Array.isArray(value)) return value.map(canonical);
   if (value && typeof value === "object") return Object.fromEntries(Object.keys(value).sort().map(key => [key, canonical(value[key])]));
@@ -14,10 +15,10 @@ const fail = message => { throw new DatasetError(message, 409); };
 function figureBlocks(snapshot) {
   const blocks = snapshot?.blocks ?? [];
   if (!Array.isArray(blocks)) fail("Data figure blocks must use an array.");
-  return visibleLayoutBlocks(blocks).filter(block => block.type === "data_figure");
+  return visibleLayoutBlocks(blocks).flatMap(figureSelections);
 }
-function validateFrozenDatasetFigures(snapshot) {
-  const blocks = figureBlocks(snapshot);
+function validateFrozenDatasetFigures(snapshot, { complete = true } = {}) {
+  const blocks = figureBlocks(snapshot).filter(block => complete || isDataFigureData(block.data, true));
   const figures = snapshot?.datasetFigures;
   if (figures === undefined && !blocks.length) return;
   if (!isDatasetFigures(figures) || figures.figures.length !== blocks.length) fail("The frozen data figures are invalid.");
@@ -51,8 +52,8 @@ async function readApprovedDatasetProjection({ firestore, transaction, datasetId
   return { datasetId, releaseId, revision: approved.revision, digest: approved.digest, approvedAt: approved.approvedAt,
     release: { ...release, reuse: { display: reuse.display, exports: reuse.exports, note: reuse.note } } };
 }
-async function resolveDatasetFiguresInTransaction({ firestore, transaction, snapshot }) {
-  const blocks = figureBlocks(snapshot);
+async function resolveDatasetFiguresInTransaction({ firestore, transaction, snapshot, complete = true }) {
+  const blocks = figureBlocks(snapshot).filter(block => complete || isDataFigureData(block.data, true));
   if (!blocks.length) return snapshot;
   if (blocks.length > 200) fail("Use at most 200 data figures.");
   const resolved = new Map();
@@ -69,7 +70,7 @@ async function resolveDatasetFiguresInTransaction({ firestore, transaction, snap
   const releases = [...new Map([...resolved.values()].map(release => [`${release.datasetId}/${release.releaseId}/${release.revision}/${release.digest}`, release])).values()]
     .sort((a, b) => `${a.datasetId}/${a.releaseId}`.localeCompare(`${b.datasetId}/${b.releaseId}`));
   const next = { ...snapshot, datasetFigures: { figures: figures.sort((a, b) => a.blockId.localeCompare(b.blockId)), releases } };
-  validateFrozenDatasetFigures(next);
+  validateFrozenDatasetFigures(next, { complete });
   return next;
 }
 module.exports = { digest, figureBlocks, validateFrozenDatasetFigures,

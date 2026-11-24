@@ -263,6 +263,19 @@ describe("development renderer, version and baseline boundaries", () => {
     expect(JSON.parse(readFileSync(join(site, ".public-post-renderer/renderer-release.json"), "utf8"))).toEqual(accepted);
     expect(processBoundary).not.toHaveBeenCalled();
   });
+  it.each([
+    [{ dataHubReportingVersion: 1, dataHubCompositionVersion: 1 }, true],
+    [{ dataHubReportingVersion: 1 }, true],
+    [{ dataHubCompositionVersion: 1 }, false],
+  ])("checks the Data Hub seal %o", async (fields, accepted) => {
+    const sealed = { ...release, ...fields };
+    for (const file of ["renderer/renderer-release.json", "dist/posts/_no-build-assets/renderer-release.json"]) {
+      writeFileSync(join(directory, file), JSON.stringify(sealed) + "\n");
+    }
+    const restore = restoreDevPostRenderer(identity.commitSha, directory, join(directory, "restored-site"));
+    if (accepted) await expect(restore).resolves.toEqual(sealed);
+    else await expect(restore).rejects.toThrow("Retained dev renderer source differs");
+  });
   it.each(["source seal", "client seal", "production seal", "missing entry"])("refuses a changed %s before replacing files", async problem => {
     const site = join(directory, "restored-site");
     mkdirSync(join(site, ".public-post-renderer"), { recursive: true });

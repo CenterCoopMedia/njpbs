@@ -39,12 +39,7 @@ describe("PBS outage survivability: the editorial shell outlives any PBS failure
     expect(page.surfacesAwaitingWiring).toEqual([]);
   });
 
-  it("full lapse at handoff: the editorial shell survives, and the model names the surfaces that do not", () => {
-    // The contract's worst case (failure mode "full lapse at handoff"): every PBS
-    // surface falls away together. #189's acceptance criterion 1 is that the site
-    // still serves editorial content, navigation, and the donate path -- the
-    // editorial shell -- which must hold even though not every PBS surface has a
-    // built fallback yet.
+  it("keeps the editorial shell and all modeled fallbacks usable during a full lapse", () => {
     const page = assessOutage(new Set(PBS_BACKED_SURFACES));
 
     // The shell survives: editorial content, navigation, and the give landing page
@@ -66,13 +61,8 @@ describe("PBS outage survivability: the editorial shell outlives any PBS failure
     expect(page.surfacesAwaitingWiring).toEqual([
       "nowNextStrip",
     ]);
-    // The one PBS-backed surface still without a built fallback is broken -- the
-    // contract's one remaining coverage gap: the PBS-hosted donate transaction,
-    // which has no CCM-hosted fallback donation path.
-    expect(page.noSurfaceBroken).toBe(false);
-    const broken = ALL_SURFACES.filter((s) => !page.surfaces[s].usable);
-    expect(broken.slice().sort()).toEqual(["donateTransaction"]);
-    expect(page.surfaces.donateTransaction).toEqual({ usable: false, degraded: true });
+    expect(page.noSurfaceBroken).toBe(true);
+    expect(ALL_SURFACES.filter((s) => !page.surfaces[s].usable)).toEqual([]);
   });
 
   it("a wired fallback is never reported as awaiting wiring, however it fails", () => {
@@ -94,10 +84,10 @@ describe("PBS outage survivability: the editorial shell outlives any PBS failure
     }
   });
 
-  it("fallback coverage is explicit: only donateTransaction lacks a built fallback", () => {
+  it("has explicit fallback coverage for every PBS-backed surface", () => {
     const covered = new Set<PbsSurface>(SURFACES_WITH_FALLBACK);
     const uncovered = PBS_BACKED_SURFACES.filter((s) => !covered.has(s));
-    expect(uncovered.slice().sort()).toEqual(["donateTransaction"]);
+    expect(uncovered).toEqual([]);
   });
 
   it("wired and policy-ready fallbacks partition the coverage list exactly", () => {
@@ -110,6 +100,7 @@ describe("PBS outage survivability: the editorial shell outlives any PBS failure
     // stay green while a surface moved between the lists, which is precisely the
     // change that alters what the model claims a visitor gets.
     expect([...SURFACES_WITH_WIRED_FALLBACK].sort()).toEqual([
+      "donateTransaction",
       "livestreamPlayer",
       "scheduleGrid",
       "vodLaunchCards",

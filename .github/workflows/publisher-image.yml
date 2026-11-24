@@ -1,4 +1,6 @@
 name: Publisher image
+# Production keeps the default title; a development run names its target and source.
+run-name: ${{ inputs.target == 'development' && format('Publisher image development {0}', inputs.sha) || 'Publisher image' }}
 
 on:
   workflow_dispatch:
@@ -7,6 +9,12 @@ on:
         description: Exact 40-character main commit with successful source CI
         required: true
         type: string
+      target:
+        description: Publisher target
+        required: false
+        type: choice
+        default: production
+        options: [production, development]
 
 permissions:
   contents: read
@@ -14,7 +22,7 @@ permissions:
 
 # Serialize the SHA lookup and push so a rerun cannot replace its image.
 concurrency:
-  group: publisher-image-${{ inputs.sha }}
+  group: publisher-image-${{ inputs.target == 'development' && 'development-' || '' }}${{ inputs.sha }}
   cancel-in-progress: false
 
 jobs:
@@ -28,10 +36,13 @@ jobs:
       github.workflow_ref == format('{0}/.github/workflows/publisher-image.yml@refs/heads/main', vars.CANONICAL_GITHUB_REPOSITORY) &&
       vars.CMS_DEPLOY_OWNER != '' && github.triggering_actor == vars.CMS_DEPLOY_OWNER
     runs-on: ubuntu-24.04
+    # Stops a hung image build; kept because it waits on the container build and push.
+    # Measured 177 s, 44 s (reused image), 176 s (45162680868, 45127558717, dev 45256764191).
     timeout-minutes: 45
     environment: publisher-image
     env:
       SOURCE_SHA: ${{ inputs.sha }}
+      PUBLISHER_TARGET: ${{ inputs.target }}
       CANONICAL_GITHUB_REPOSITORY: ${{ vars.CANONICAL_GITHUB_REPOSITORY }}
       CANONICAL_GITHUB_REPOSITORY_ID: ${{ vars.CANONICAL_GITHUB_REPOSITORY_ID }}
       WRANGLER_SEND_METRICS: "false"
@@ -63,13 +74,29 @@ jobs:
       - name: Install locked dependencies
         working-directory: source
         run: npm ci --ignore-scripts --prefer-offline --no-audit --no-fund
-      - name: Prepare exact source and production configuration
+      - name: Prepare exact source and target configuration
         working-directory: source
         env:
-          PUBLISHER_PUBLIC_VARS_JSON: ${{ vars.PUBLISHER_PUBLIC_VARS_JSON }}
+          PUBLISHER_PUBLIC_VARS_JSON: ${{ inputs.target == 'development' && vars.PUBLISHER_DEVELOPMENT_PUBLIC_VARS_JSON || vars.PUBLISHER_PUBLIC_VARS_JSON }}
           CMS_PRODUCTION_API_ORIGIN: ${{ vars.CMS_PRODUCTION_API_ORIGIN }}
           CMS_LOCAL_PUBLICATION_OWNER: ${{ vars.CMS_LOCAL_PUBLICATION_OWNER }}
           CMS_GPU_WORKER_ID: ${{ vars.CMS_GPU_WORKER_ID }}
+          # Production renders only its three inputs; development renders all of them.
+          CLOUDFLARE_DEV_PUBLIC_WORKER: ${{ vars.CLOUDFLARE_DEV_PUBLIC_WORKER }}
+          CMS_DEV_CLOUDFLARE_ACCOUNT_ID: ${{ inputs.target == 'development' && vars.CMS_DEV_CLOUDFLARE_ACCOUNT_ID || '' }}
+          CMS_DEV_ADMIN_ORIGIN: ${{ vars.CMS_DEV_ADMIN_ORIGIN }}
+          CMS_DEV_ADMIN_PAGES: ${{ vars.CMS_DEV_ADMIN_PAGES }}
+          CMS_DEV_API_ORIGIN: ${{ vars.CMS_DEV_API_ORIGIN }}
+          CMS_DEV_API_WORKER: ${{ vars.CMS_DEV_API_WORKER }}
+          CMS_DEV_MEDIA_BUCKET: ${{ vars.CMS_DEV_MEDIA_BUCKET }}
+          CMS_DEV_MEDIA_ORIGIN: ${{ vars.CMS_DEV_MEDIA_ORIGIN }}
+          CMS_DEV_PREVIEW_BUCKET: ${{ vars.CMS_DEV_PREVIEW_BUCKET }}
+          CMS_DEV_PREVIEW_ORIGIN: ${{ vars.CMS_DEV_PREVIEW_ORIGIN }}
+          CMS_DEV_PREVIEW_RENDERER: ${{ vars.CMS_DEV_PREVIEW_RENDERER }}
+          CMS_DEV_PREVIEW_STAFF_WORKER: ${{ vars.CMS_DEV_PREVIEW_STAFF_WORKER }}
+          CMS_DEV_PREVIEW_WORKER: ${{ vars.CMS_DEV_PREVIEW_WORKER }}
+          CMS_DEV_PUBLIC_ORIGIN: ${{ vars.CMS_DEV_PUBLIC_ORIGIN }}
+          CMS_DEV_SITE_PAGES: ${{ vars.CMS_DEV_SITE_PAGES }}
         run: node ../workflow/.github/scripts/publisher-image.mjs prepare
       - name: Reuse or build and push the SHA image
         working-directory: source
@@ -78,7 +105,7 @@ jobs:
         run: node ../workflow/.github/scripts/publisher-image.mjs image
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
-          name: publisher-image-${{ inputs.sha }}-${{ github.run_attempt }}
+          name: publisher-image-${{ inputs.target == 'development' && 'development-' || '' }}${{ inputs.sha }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/publisher-image-receipt/
           if-no-files-found: error
           retention-days: 30

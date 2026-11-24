@@ -40,8 +40,11 @@ function sourceRequirements(source: string): Set<string> {
 const unlistedRequirements = (source: string, declared: string[]) =>
   [...sourceRequirements(source)].filter(name => !declared.includes(name)).sort();
 
-function jobEnvironment(job: Job): string {
-  return typeof job.environment === "string" ? job.environment : job.environment?.name ?? "";
+// cms-staging-deploy selects production or development from its target input.
+const TARGET_ENVIRONMENT = "${{ inputs.target == 'development' && 'development' || 'production' }}";
+function jobEnvironments(job: Job): string[] {
+  if (job.environment === TARGET_ENVIRONMENT) return ["production", "development"];
+  return [typeof job.environment === "string" ? job.environment : job.environment?.name ?? ""];
 }
 
 function envNames(...levels: Array<Env | undefined>): Set<string> {
@@ -142,10 +145,15 @@ describe("release step inputs", () => {
 
     it("declares the referenced suppliers for " + name, () => {
       const missing = Object.entries(workflow.jobs).flatMap(([id, job]) => {
-        const names = { vars: variables, secrets: new Set(["GITHUB_TOKEN", ...(policy[jobEnvironment(job)]?.secrets ?? [])]) };
+        // A target-selected job must find each secret in both environments.
+        const provisioned = jobEnvironments(job).map(environment => policy[environment]?.secrets ?? []);
+        const names = { vars: variables, secrets: new Set(["GITHUB_TOKEN", ...provisioned[0].filter(secret => provisioned.every(list => list.includes(secret)))]) };
         const bareConditions = [job.if, ...(job.steps ?? []).map(step => step.if)]
           .filter((value): value is string => typeof value === "string" && !value.includes("${{"));
-        const expressions = [...expressionText([workflow.env, job]), ...bareConditions];
+        // `inputs.target == 'development' && secrets.X` needs X in the development environment only.
+        const developmentOnly = (expression: string) => expression.replace(/inputs\.target == 'development' && secrets\.([A-Za-z_]\w*)/g,
+          (read, name) => policy.development.secrets.includes(name) ? "inputs.target == 'development' && ''" : read);
+        const expressions = [...expressionText([workflow.env, job]), ...bareConditions].map(developmentOnly);
         return expressions.flatMap(expression => referenceGaps(expression, names)).map(ref => id + " / " + ref);
       });
       expect([...new Set(missing)]).toEqual([]);

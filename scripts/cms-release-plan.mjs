@@ -3,6 +3,7 @@ import { parseMigrationSelection, selectMigrations } from "./lib/deployment-comp
 import { appendFileSync } from "node:fs";
 import { cert, deleteApp, getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
+import { cmsTarget } from "./lib/cms-target.mjs";
 import { ComponentReceiptError, collectLiveIdentities, edgeOriginSecretFingerprint, fingerprintFunctionGraph, fingerprintInputs, readReceipt } from "./lib/cms-component-receipt.mjs";
 import { fingerprintRendererGraph } from "./lib/cms-renderer-graph.mjs";
 import { execFile } from "node:child_process";
@@ -65,7 +66,8 @@ async function loadCredential() {
     : process.env.FIREBASE_SERVICE_ACCOUNT || process.env.CMS_PREVIEW_FIREBASE_ACCOUNT;
   if (!raw) fail("Firebase credentials are required");
   const parsed = raw.trim().startsWith("{") ? JSON.parse(raw) : JSON.parse(readFileSync(raw, "utf8"));
-  if (parsed.project_id !== "njpbs-site") fail("Firebase project must be njpbs-site");
+  const { projectId } = cmsTarget();
+  if (parsed.project_id !== projectId) fail(`Firebase project must be ${projectId}`);
   return parsed;
 }
 
@@ -115,7 +117,7 @@ export async function main() {
   const configurationFingerprint = cloudWakeConfigurationFingerprint(edgeFingerprint, decision, variablesFingerprint);
   const parsed = await loadCredential();
   const created = getApps().length === 0;
-  const app = getApps()[0] || initializeApp({ credential: cert(parsed), projectId: "njpbs-site" });
+  const app = getApps()[0] || initializeApp({ credential: cert(parsed), projectId: cmsTarget().projectId });
   try {
     const firestore = getFirestore(app);
     await assertLegacyCmsWorkflow(firestore);
@@ -182,7 +184,10 @@ export async function main() {
       `configuration_parameters_match=${parameterChanges !== null && Object.values(parameterChanges).every(reasons => !reasons.length)}`,
       `configuration_bindings_current=${secretChanges !== null && Object.values(secretChanges).every(reasons => !reasons.length)}`,
     ].join("\n") + "\n");
-    const liveRendererIdentities = await collectLiveIdentities("renderer", { firestore }).catch(() => null);
+    // A dev run reads the dev renderer with its own token, never CLOUDFLARE_API_TOKEN.
+    const rendererToken = cmsTarget().environment === "development"
+      ? { cloudflareToken: process.env.CLOUDFLARE_DEV_PREVIEW_RENDERER_TOKEN ?? "" } : {};
+    const liveRendererIdentities = await collectLiveIdentities("renderer", { firestore, ...rendererToken }).catch(() => null);
     const liveFunctionsSha = functionsReceipt?.state === "complete"
       ? functionsReceipt.mutation?.sourceSha
       : functionsReceipt?.lastComplete?.sourceSha;

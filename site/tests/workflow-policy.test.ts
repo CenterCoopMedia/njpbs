@@ -438,6 +438,7 @@ describe("workflow gate", () => {
     const publisher = read("../scripts/cms-dev-publication.mjs");
     expect(publisher).toContain('"--unshare-net"');
     expect(publisher).toContain('INTERNAL_SURFACES: "0"');
+    expect(publisher).toContain('DATA_HUB_PUBLIC: "1"');
     expect(publisher).toContain('LAUNCH_CONTENT_DATA_PATH: path.join(directory, "launch.json")');
     expect(publisher).toContain('SPOTLIGHT_NEWS_DATA_PATH: path.join(directory, "spotlight.json")');
   });
@@ -560,6 +561,10 @@ describe("cms staging deploy surface", () => {
         expect(step.env.SA).toBe("${{ secrets.FIREBASE_SERVICE_ACCOUNT }}");
         expect(step.env.GOOGLE_APPLICATION_CREDENTIALS).toBe("${{ runner.temp }}/firebase-service-account.json");
         expect(step.run).not.toContain("GITHUB_ENV");
+      } else if (name === "admin-deploy" && step.name === "Recheck live renderer identity before Admin upload") {
+        // A dev run reads the dev renderer with dev credentials only, with no fallback to production secrets.
+        expect(step.env.CMS_PREVIEW_FIREBASE_ACCOUNT).toBe("${{ inputs.target == 'development' && secrets.CMS_DEV_PREVIEW_FIREBASE_ACCOUNT || inputs.target != 'development' && secrets.FIREBASE_SERVICE_ACCOUNT || '' }}");
+        expect(step.env.CLOUDFLARE_API_TOKEN).toBe("${{ inputs.target == 'development' && secrets.CLOUDFLARE_DEV_PREVIEW_RENDERER_TOKEN || inputs.target != 'development' && secrets.CLOUDFLARE_API_TOKEN || '' }}");
       } else {
         expect(step.env.CMS_PREVIEW_FIREBASE_ACCOUNT, step.name).toBe("${{ secrets.FIREBASE_SERVICE_ACCOUNT }}");
       }
@@ -580,7 +585,7 @@ describe("cms staging deploy surface", () => {
     expect(stagingDeployWorkflow).toContain('node-version: "22.23.5"');
     expect(stagingDeployWorkflow).toContain("FIREBASE_SERVICE_ACCOUNT");
     expect(stagingDeployWorkflow).toContain(
-      '--only "firestore:rules,firestore:indexes,storage"',
+      '--only "$CMS_TARGET_FIREBASE_RULES"',
     );
     expect(stagingDeployWorkflow).toContain(
       "node scripts/component-runner.mjs functions deploy",
@@ -593,7 +598,7 @@ describe("cms staging deploy surface", () => {
     expect(stagingDeployWorkflow).toContain(
       "Configure functions runtime params",
     );
-    expect(stagingDeployWorkflow).toContain("functions/.env.njpbs-site");
+    expect(stagingDeployWorkflow).toContain('"functions/.env.$CMS_TARGET_FIREBASE_PROJECT"');
     expect(stagingDeployWorkflow).toContain("Preflight admin env");
     expect(stagingDeployWorkflow).toContain(
       "Missing required admin build env vars",
@@ -606,7 +611,7 @@ describe("cms staging deploy surface", () => {
     );
     expect(stagingDeployWorkflow).toContain("workingDirectory: admin");
     expect(stagingDeployWorkflow).toContain(
-      "pages deploy dist --project-name=njpbs-admin",
+      "pages deploy dist --project-name=${{ env.CMS_TARGET_ADMIN_PAGES }}",
     );
   });
 

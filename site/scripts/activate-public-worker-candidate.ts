@@ -1,4 +1,5 @@
-import { CloudflareConfigurationError } from "./cloudflare-account.mjs";
+import { CloudflareConfigurationError, cloudflareAccount } from "./cloudflare-account.mjs";
+import { verifyDevPublicWorkerPrivate } from "../../scripts/lib/dev-private-worker.mjs";
 import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
@@ -13,10 +14,13 @@ import {
   type PreparedPublicWorkerArtifact,
 } from "../src/lib/public-worker-artifact.ts";
 import { firebaseAdminRuntime } from "./firebase-admin-runtime.ts";
-import { PUBLIC_WORKER_NAME, publicWorkerTag, workerApiPath } from "./public-worker-cloudflare.ts";
+import { PUBLIC_WORKER_NAME, cloudflareApiUrl, publicWorkerTag, workerApiPath } from "./public-worker-cloudflare.ts";
+import type { PublicationTarget } from "../../functions/lib/publication-target";
 export { PUBLIC_WORKER_NAME, workerApiPath } from "./public-worker-cloudflare.ts";
 
 const requireModule = createRequire(import.meta.url);
+const { assertPublicationTarget, publicationTarget } = requireModule("../../functions/lib/publication-target.js") as
+  typeof import("../../functions/lib/publication-target");
 const { projectPublicDeploymentRestoreReceipt } = requireModule("../../functions/lib/public-deployment.js") as {
   projectPublicDeploymentRestoreReceipt(value: unknown): Record<string, unknown> };
 const bootstrapOperatorModule = requireModule(
@@ -28,7 +32,8 @@ const bootstrapOperatorModule = requireModule(
   };
 };
 const { verifyNoBuildPostPublicRoute } = requireModule("../../functions/lib/no-build-post-recovery.js") as {
-  verifyNoBuildPostPublicRoute(input: { firestore: Firestore; candidate: PublicWorkerCandidate }): Promise<void> };
+  verifyNoBuildPostPublicRoute(input: { firestore: Firestore; candidate: PublicWorkerCandidate; target?: PublicationTarget;
+    headers?: Record<string, string> }): Promise<void> };
 type PublicationRuntime = { owner: "node-compute" | "cloudflare"; release: string };
 const coordinatorModule = requireModule(
   "../../functions/lib/public-deployment-coordinator.js",
@@ -38,6 +43,7 @@ const coordinatorModule = requireModule(
     buildBatchId: string;
     commitSha: string;
     runtime?: PublicationRuntime;
+    target?: PublicationTarget;
   }): Promise<LeaseAcquisition>;
 };
 const activationEvidenceModule = requireModule(
@@ -48,6 +54,7 @@ const activationEvidenceModule = requireModule(
     candidate: PublicWorkerCandidate;
     deploymentStatus: unknown;
     deploymentSource?: "api" | "wrangler";
+    target?: PublicationTarget;
   }): ActivationEvidence;
 };
 const { publicDeploymentCloudflareEvidenceDigest } = requireModule(
@@ -64,6 +71,7 @@ const outcomeStoreModule = requireModule(
     lease: PublicDeploymentLease;
     evidence: ActivationEvidence;
     runtime?: PublicationRuntime;
+    target?: PublicationTarget;
   }): Promise<ActivationResult>;
 };
 
@@ -149,15 +157,18 @@ interface CloudflareRequest {
 }
 
 type RequestJson = (request: CloudflareRequest) => Promise<unknown>;
-type RequestPublication = (url: string) => Promise<string>;
+export type PublicationAccess = { clientId: string; clientSecret: string };
+type RequestPublication = (url: string, access?: PublicationAccess) => Promise<string>;
 type AcquireLease = (input: {
   runtime?: PublicationRuntime;
+  target?: PublicationTarget;
   firestore: Firestore;
   buildBatchId: string;
   commitSha: string;
 }) => Promise<LeaseAcquisition>;
 type SettleOutcome = (input: {
   runtime?: PublicationRuntime;
+  target?: PublicationTarget;
   firestore: Firestore;
   lease: PublicDeploymentLease;
   evidence: ActivationEvidence;
@@ -184,7 +195,13 @@ function exactArray(value: unknown, expected: string[]): boolean {
     value.every((entry, index) => entry === expected[index]);
 }
 
-export function assertPublicWorkerIdentity(response: unknown): string {
+/** Production keeps its fixed Worker; a development target names only its own. */
+export function publicWorkerTarget(target?: PublicationTarget): PublicationTarget {
+  return target === undefined ? publicationTarget("production") : assertPublicationTarget(target);
+}
+
+export function assertPublicWorkerIdentity(response: unknown, target?: PublicationTarget): string {
+  const { workerName } = publicWorkerTarget(target);
   const workerTag = publicWorkerTag();
   if (
     !plainObject(response) ||
@@ -196,7 +213,7 @@ export function assertPublicWorkerIdentity(response: unknown): string {
   const matches = response.result.filter(
     (worker) =>
       plainObject(worker) &&
-      worker.id === PUBLIC_WORKER_NAME &&
+      worker.id === workerName &&
       worker.tag === workerTag,
   );
   if (matches.length !== 1) {
@@ -232,6 +249,43 @@ export function assertUploadOnlyProductionTrigger(
     operatorError("The Cloudflare production trigger is not upload-only");
   }
   return trigger.trigger_uuid;
+}
+
+/** The dev Worker has no Workers Builds trigger; any trigger could deploy it
+ * outside the lease, so development activation refuses one. */
+export function assertPublicWorkerTriggers(response: unknown, expectedWorkerTag: string, target?: PublicationTarget): void {
+  if (publicWorkerTarget(target).environment === "production") {
+    assertUploadOnlyProductionTrigger(response, expectedWorkerTag);
+    return;
+  }
+  if (expectedWorkerTag !== publicWorkerTag() || !plainObject(response) || response.success !== true ||
+      !Array.isArray(response.result) || response.result.length !== 0) {
+    operatorError("The Cloudflare development Worker has a build trigger");
+  }
+}
+
+/** Development reads its Access-protected origin; production never sends Access credentials. */
+export function publicationReadAccess(target: PublicationTarget, access?: PublicationAccess): PublicationAccess | undefined {
+  if (publicWorkerTarget(target).environment === "production") {
+    if (access !== undefined) operatorError("Production publication reads refuse Access credentials");
+    return undefined;
+  }
+  if (!access?.clientId?.trim() || !access.clientSecret?.trim()) operatorError("Development publication reads require Access credentials");
+  return access;
+}
+
+export function publicationReadHeaders(access?: PublicationAccess): Record<string, string> {
+  return access ? { "cf-access-client-id": access.clientId, "cf-access-client-secret": access.clientSecret } : {};
+}
+
+/** A dev route or custom domain would serve a new version outside the staff gateway. */
+export async function assertDevelopmentWorkerPrivate(target: PublicationTarget, requestJson: RequestJson, token: string): Promise<void> {
+  if (publicWorkerTarget(target).environment !== "development") return;
+  await verifyDevPublicWorkerPrivate(async (pathname: string) => {
+    const response = await requestJson({ url: cloudflareApiUrl(pathname), method: "GET", token });
+    if (!plainObject(response) || response.success !== true) operatorError("The Cloudflare API response is invalid");
+    return response.result;
+  }, undefined, cloudflareAccount());
 }
 
 export function assertProductionWorkerSubdomainDisabled(
@@ -317,8 +371,15 @@ export async function requestCloudflareJson(
   }
 }
 
+// The receipt origin selects its Worker identity; every other origin keeps production's.
+function publicationOriginValue(url: string): string {
+  const development = publicationTarget("development");
+  return new URL(url).origin === development.origin ? development.workerName : PUBLICATION_ORIGIN_VALUE;
+}
+
 export async function requestPublicPublicationReceipt(
   url: string,
+  access?: PublicationAccess,
 ): Promise<string> {
   let response: Response;
   try {
@@ -327,6 +388,7 @@ export async function requestPublicPublicationReceipt(
       headers: {
         Accept: "application/json",
         "Cache-Control": "no-cache",
+        ...(access ? { "CF-Access-Client-Id": access.clientId, "CF-Access-Client-Secret": access.clientSecret } : {}),
       },
       redirect: "error",
       signal: AbortSignal.timeout(10_000),
@@ -337,7 +399,7 @@ export async function requestPublicPublicationReceipt(
   if (
     !response.ok ||
     response.headers.get(PUBLICATION_ORIGIN_HEADER) !==
-      PUBLICATION_ORIGIN_VALUE ||
+      publicationOriginValue(url) ||
     !response.headers.get("content-type")?.toLowerCase().startsWith(
       "application/json",
     )
@@ -399,11 +461,15 @@ export async function runPublicWorkerActivationOperator({
   requestPublication = requestPublicPublicationReceipt,
   acquireLeaseFn = acquirePublicDeploymentLease,
   settleOutcomeFn = settlePublicDeploymentOutcome,
+  target,
+  publicationAccess,
 }: {
   firestore: Firestore;
   cloudflareApiToken: string;
   preparedArtifact: unknown;
   runtime?: PublicationRuntime;
+  target?: PublicationTarget;
+  publicationAccess?: PublicationAccess;
   requestJson?: RequestJson;
   requestPublication?: RequestPublication;
   acquireLeaseFn?: AcquireLease;
@@ -420,27 +486,31 @@ export async function runPublicWorkerActivationOperator({
     operatorError("The public Worker activation operator input is invalid");
   }
   publicWorkerTag();
+  const selected = publicWorkerTarget(target);
+  const access = target ? publicationReadAccess(selected, publicationAccess) : undefined;
+  const owned = { ...(runtime ? { runtime } : {}), ...(target ? { target: selected } : {}) };
   const prepared = assertPreparedPublicWorkerArtifact(preparedArtifact);
 
-  const settleOwned: SettleOutcome = input => settleOutcomeFn({ ...input, ...(runtime ? { runtime } : {}) });
+  const settleOwned: SettleOutcome = input => settleOutcomeFn({ ...input, ...owned });
   const workerResponse = await requestJson({
     url: workerApiPath("/workers/scripts"),
     method: "GET",
     token: cloudflareApiToken,
   });
-  const workerTag = assertPublicWorkerIdentity(workerResponse);
+  const workerTag = assertPublicWorkerIdentity(workerResponse, selected);
   const triggerResponse = await requestJson({
     url: workerApiPath(`/builds/workers/${workerTag}/triggers`),
     method: "GET",
     token: cloudflareApiToken,
   });
-  assertUploadOnlyProductionTrigger(triggerResponse, workerTag);
+  assertPublicWorkerTriggers(triggerResponse, workerTag, selected);
+  await assertDevelopmentWorkerPrivate(selected, requestJson, cloudflareApiToken);
 
   const acquisition = await acquireLeaseFn({
     firestore,
     buildBatchId: prepared.buildBatchId,
     commitSha: prepared.commitSha,
-    ...(runtime ? { runtime } : {}),
+    ...owned,
   });
   if (acquisition.outcome !== "acquired") return acquisition;
   const { lease, candidate } = acquisition;
@@ -460,16 +530,17 @@ export async function runPublicWorkerActivationOperator({
         method: "GET",
         token: cloudflareApiToken,
       });
-      assertUploadOnlyProductionTrigger(preDeployTriggerResponse, workerTag);
+      assertPublicWorkerTriggers(preDeployTriggerResponse, workerTag, selected);
       const subdomainResponse = await requestJson({
         url: workerApiPath(
-          `/workers/scripts/${PUBLIC_WORKER_NAME}/subdomain`,
+          `/workers/scripts/${selected.workerName}/subdomain`,
         ),
         method: "POST",
         token: cloudflareApiToken,
         body: { enabled: false, previews_enabled: false },
       });
       assertProductionWorkerSubdomainDisabled(subdomainResponse);
+      await assertDevelopmentWorkerPrivate(selected, requestJson, cloudflareApiToken);
     } catch {
       return settleWithFallback({
         firestore,
@@ -481,7 +552,7 @@ export async function runPublicWorkerActivationOperator({
     try {
       const deploymentResponse = await requestJson({
         url: workerApiPath(
-          `/workers/scripts/${PUBLIC_WORKER_NAME}/deployments`,
+          `/workers/scripts/${selected.workerName}/deployments`,
         ),
         method: "POST",
         token: cloudflareApiToken,
@@ -506,7 +577,7 @@ export async function runPublicWorkerActivationOperator({
   try {
     deploymentResponse = await requestJson({
       url: workerApiPath(
-        `/workers/scripts/${PUBLIC_WORKER_NAME}/deployments`,
+        `/workers/scripts/${selected.workerName}/deployments`,
       ),
       method: "GET",
       token: cloudflareApiToken,
@@ -519,18 +590,20 @@ export async function runPublicWorkerActivationOperator({
     candidate,
     deploymentStatus: activeDeployment(deploymentResponse),
     deploymentSource: "api",
+    ...(target ? { target: selected } : {}),
   });
 
   if (evidence.action === "activate") {
-    const probe = new URL(PUBLICATION_PROBE_PATH, PUBLICATION_PROBE_ORIGIN);
+    const probe = new URL(PUBLICATION_PROBE_PATH, selected.origin);
     probe.searchParams.set("candidate", prepared.buildBatchId);
     probe.searchParams.set("version", candidate.workerVersionId);
     try {
-      const body = await requestPublication(probe.toString());
+      const body = await (access ? requestPublication(probe.toString(), access) : requestPublication(probe.toString()));
       if (!publicPublicationReceiptMatchesPreparedArtifact(body, prepared)) {
         evidence = { action: "reconcile" };
       } else {
-        await verifyNoBuildPostPublicRoute({ firestore, candidate });
+        await verifyNoBuildPostPublicRoute({ firestore, candidate,
+          ...(target ? { target: selected, headers: publicationReadHeaders(access) } : {}) });
       }
     } catch {
       evidence = { action: "reconcile" };
@@ -544,7 +617,8 @@ export async function runPublicWorkerActivationOperator({
         method: "GET",
         token: cloudflareApiToken,
       });
-      assertUploadOnlyProductionTrigger(finalTriggerResponse, workerTag);
+      assertPublicWorkerTriggers(finalTriggerResponse, workerTag, selected);
+      await assertDevelopmentWorkerPrivate(selected, requestJson, cloudflareApiToken);
     } catch {
       evidence = { action: "reconcile" };
     }

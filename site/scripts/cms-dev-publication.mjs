@@ -17,6 +17,7 @@ import { preparePublicWorkerArtifact } from "../src/lib/public-worker-artifact.t
 import { retainCloudPreviewPublicContext } from "./cms-preview-cloud-storage.ts";
 
 import { retryWorkerVersionReceipt, prepareStaticPostProof } from "./upload-public-worker-candidate.ts";
+import { writeDevelopmentPublicWorkerConfig } from "./development-public-worker-config.ts";
 import { publicWorkerCandidateRendererContract } from "./public-post-renderer-release.ts";
 import { findExactRecentWorkerVersion } from "../src/lib/public-worker-version-recovery.ts";
 import { publicRouteBaseForRecordKind } from "../../packages/content-core/src/public-record-kinds.ts";
@@ -122,6 +123,9 @@ export async function prepare(db) {
   db ??= await database();
   const id = await identity();
   const current = await state.readDevPublication(db, id);
+  if (current.queue?.status === "failed" && state.DEV_SETTLED_ERRORS.has(current.queue.error)) {
+    throw new Error(current.queue.error);
+  }
   await mkdir(directory, { recursive: true, mode: 0o700 });
   if (await lstat(path.join(directory, "frozen.json")).catch(() => null)) {
     const frozen = await json(path.join(directory, "frozen.json"));
@@ -176,7 +180,8 @@ async function build() {
   if (!isDeepStrictEqual(frozen.identity, await identity()) || frozen.inputDigest !== await inputDigest()) throw new Error("Frozen dev inputs changed");
   const env = { PATH: process.env.PATH, NODE_ENV: "production", TZ: "America/New_York", ASTRO_TELEMETRY_DISABLED: "1",
     CMS_DEPLOYMENT_ENVIRONMENT: "development", CMS_DEV_FROZEN_BUILD: "1", CMS_OFFLINE_BUILD: "1", CMS_CONTENT_MODE: "published", CMS_LOADER_STRICT: "1",
-    FIREBASE_PROJECT_ID: publicationTarget.projectId,
+    // Production frozen and background builds seal the Data Hub gate open.
+    DATA_HUB_PUBLIC: "1", FIREBASE_PROJECT_ID: publicationTarget.projectId,
     PUBLIC_GA4_REQUIRED: "0", PUBLIC_REPORT_REQUIRED: "0", PUBLIC_SHARE_REQUIRED: "0", INTERNAL_SURFACES: "0",
     PUBLIC_BUILD_BATCH_ID: frozen.identity.buildBatchId, PUBLIC_BUILD_COMMIT_SHA: frozen.identity.commitSha,
     PUBLIC_ARTIFACT_BUNDLE_PATH: path.join(directory, "bundle.json"), PUBLIC_ARTIFACT_BUNDLE_SCHEMA_VERSION: "3",
@@ -210,6 +215,9 @@ export async function restoreDevPostRenderer(sourceSha, artifactDirectory = dire
       !isDeepStrictEqual(seal, { schemaVersion: 1, rendererSha: sourceSha, liveBlogVersion: 1,
       ...(seal.spanishPostVersion === 1 ? { spanishPostVersion: 1 } : {}),
       ...(isPageReaderVersion(seal.pageReaderVersion) ? { pageReaderVersion: seal.pageReaderVersion } : {}),
+      // The Data Hub gate seals reporting, and composition only alongside it.
+      ...(seal.dataHubReportingVersion === 1 ? { dataHubReportingVersion: 1 } : {}),
+      ...(seal.dataHubReportingVersion === 1 && seal.dataHubCompositionVersion === 1 ? { dataHubCompositionVersion: 1 } : {}),
       electionResultsVersion: seal.electionResultsVersion, environment: "development" }) ||
       !isDeepStrictEqual(clientSeal, seal) ||
       !(await lstat(path.join(retained, "server/entry.mjs"))).isFile()) {
@@ -288,21 +296,10 @@ async function activeDeployment(versionId) {
   return active;
 }
 
-// Dev runs the production Worker program from the production config. Only
-// the Worker name, data bindings and routes change; nothing else is dev-only.
 async function writeDevWorkerConfig() {
   target();
-  const { experimental_readRawConfig } = await import("wrangler");
-  const config = experimental_readRawConfig({ config: path.join(root, "workers/wrangler.jsonc") }).rawConfig;
-  const file = path.join(directory, "wrangler.development.json");
-  await save(file, { ...config, name: state.TARGET.workerName, main: path.join(root, "workers", config.main),
-    routes: [], workers_dev: false, preview_urls: false,
-    assets: { ...config.assets, directory: path.join(directory, "dist") },
-    r2_buckets: [{ binding: "DURABLE_POST_WITHDRAWALS", bucket_name: publicationTarget.publicationBucket }],
-    services: [{ binding: "CMS_API", service: "template-dev-cms-api", entrypoint: "PublicContentEntrypoint" }],
-    version_metadata: { binding: "CF_VERSION_METADATA" },
-    vars: { ...config.vars, PUBLICATION_ENVIRONMENT: "development" } });
-  return file;
+  return writeDevelopmentPublicWorkerConfig({ root, target: publicationTarget, assetsDirectory: path.join(directory, "dist"),
+    file: path.join(directory, "wrangler.development.json") });
 }
 
 async function uploadCandidate(publication, rendererSeal) {
@@ -571,6 +568,19 @@ async function finishConfirmedDevPublication(db, id, options) {
   return outcome;
 }
 
+// The dev deployment record names the renderer the dev CMS deploy installed.
+// A receipt without `mutation` was never written by that deploy: a fresh dev
+// project, or a receipt from the retired dev renderer workflow. The CMS deploy
+// refuses until the dev site reaches its commit, so this site run cannot wait
+// for it; it records that no unified receipt exists. A unified receipt must be
+// complete with a full source SHA, or the upload refuses.
+export function devRendererProvenance(receipt, services) {
+  const sourceSha = receipt?.state === "complete" ? receipt.mutation?.sourceSha : undefined;
+  if (services === undefined && !sourceSha) return { renderer: "not deployed" };
+  if (!receipt?.mutation) return { renderer: "no unified receipt" };
+  return /^[a-f0-9]{40}$/.test(sourceSha ?? "") ? { rendererSourceSha: sourceSha } : null;
+}
+
 export async function upload(db, id, reconcileOnly = false, recovery = null) {
   target();
   state.assertDevDatabase(db);
@@ -581,11 +591,12 @@ export async function upload(db, id, reconcileOnly = false, recovery = null) {
   if (!timedOutRecovery && current.batch.status === "deployed") return finishConfirmedDevPublication(db, id);
   try {
     const api = await json(path.join(root, "cms-api/wrangler.dev.jsonc"));
-    const rendererSourceSha = process.env.CMS_DEV_RENDERER_SOURCE_SHA;
-    const rendererNotDeployed = api.services === undefined && !rendererSourceSha;
+    const { readReceipt } = await import("../../scripts/lib/cms-component-receipt.mjs");
+    const rendererReceipt = await readReceipt(db, "renderer");
+    const renderer = devRendererProvenance(rendererReceipt, api.services);
     if (!process.env.CLOUDFLARE_API_TOKEN || !process.env.CMS_DEV_ACCESS_CLIENT_ID || !process.env.CMS_DEV_ACCESS_CLIENT_SECRET ||
         [process.env.CMS_DEV_CMS_SOURCE_SHA, process.env.CMS_DEV_ADMIN_SOURCE_SHA].some(value => !/^[a-f0-9]{40}$/.test(value ?? "")) ||
-        !rendererNotDeployed && !/^[a-f0-9]{40}$/.test(rendererSourceSha ?? "")) {
+        !renderer) {
       throw new Error("Dev upload credentials and component receipts are required");
     }
     const frozen = await json(path.join(directory, "frozen.json"));
@@ -657,13 +668,26 @@ export async function upload(db, id, reconcileOnly = false, recovery = null) {
       buildBatchId: id.buildBatchId, commitSha: id.commitSha, artifactDigest: publication.artifactDigest,
       verifiedAtMs: Date.now(), genericOutcome: outcome.receipt,
       cmsSourceSha: process.env.CMS_DEV_CMS_SOURCE_SHA, adminSourceSha: process.env.CMS_DEV_ADMIN_SOURCE_SHA,
-      ...(rendererNotDeployed ? { renderer: "not deployed" } : { rendererSourceSha }) };
+      ...renderer };
     await save(path.join(directory, "deployment.json"), deployment);
     return "success";
   } catch (error) {
     if (!timedOutRecovery) await state.finishDevPublication(db, id);
     throw error;
   }
+}
+
+// Upload runs only after a successful build, so a failed build in the first
+// attempt shows that no attempt began an upload. A rerun attempt cannot tell:
+// an earlier attempt may have uploaded, so it keeps the reservation (#593).
+export function buildFailedBeforeUpload(env = process.env) {
+  return env.GITHUB_RUN_ATTEMPT === "1" && ["failure", "cancelled"].includes(env.DEV_BUILD_RESULT);
+}
+
+// The upload step of this attempt failed after a successful build (#615). The
+// owner settles only if the batch was never leased; a leased batch keeps its row.
+export function uploadFailedBeforeLease(env = process.env) {
+  return env.DEV_BUILD_RESULT === "success" && env.DEV_UPLOAD_OUTCOME === "failure";
 }
 
 async function main() {
@@ -687,7 +711,9 @@ async function main() {
     if (current.queue?.status !== "failed") state.assertDevReconcileInputs(reconciliationInput(id, current, inventory, recovery));
     return upload(db, id, true, recovery);
   }
-  if (command === "fail") return state.finishDevPublication(await database(), await identity());
+  if (command === "fail") {
+    return state.finishDevPublication(await database(), await identity(), { buildFailed: buildFailedBeforeUpload(), uploadFailed: uploadFailedBeforeLease() });
+  }
   throw new Error("Expected source, inspect-retry, prepare, build, upload, reconcile or fail");
 }
 

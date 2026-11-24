@@ -14,6 +14,18 @@ export function publicPostRendererRelease(rendererSha: string, environment: "pro
     ...(environment === "development" ? { environment } : {}) };
 }
 
+/** A development seal must name development; the rest is the production contract. */
+export function publicWorkerCandidateRendererSeal(rendererRelease: unknown, environment: "production" | "development" = "production"): unknown {
+  if (environment === "production") return rendererRelease;
+  if (!rendererRelease || typeof rendererRelease !== "object" || Array.isArray(rendererRelease) ||
+      (rendererRelease as { environment?: unknown }).environment !== "development") {
+    throw new Error("The public Post renderer does not match its prepared development artifact");
+  }
+  const seal = { ...rendererRelease } as Record<string, unknown>;
+  delete seal.environment;
+  return seal;
+}
+
 export function publicWorkerCandidateRendererContract(rendererRelease: unknown, commitSha: string) {
   const dataHubPublic = rendererRelease !== null && typeof rendererRelease === "object" &&
     "dataHubReportingVersion" in rendererRelease && rendererRelease.dataHubReportingVersion === 1;

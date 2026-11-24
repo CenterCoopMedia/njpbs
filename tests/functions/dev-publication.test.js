@@ -7,7 +7,8 @@ import deployment from "../../functions/lib/public-deployment.js";
 import manifestModule from "../../functions/lib/public-media-manifest.js";
 import publicationModule from "../../functions/lib/no-build-post-publication.js";
 import reconciliation from "../../functions/lib/publish-reconcile.js";
-import { inspectDevPublicationRetry } from "../../site/scripts/cms-dev-publication.mjs";
+import buildState from "../../functions/lib/publish-build-state.js";
+import { buildFailedBeforeUpload, inspectDevPublicationRetry, prepare, uploadFailedBeforeLease } from "../../site/scripts/cms-dev-publication.mjs";
 
 const project = process.env.GCLOUD_PROJECT ?? "demo-njpbs";
 const id = { queueId: "A1b2C3d4E5f6G7h8I9j0", buildBatchId: "cms-A1b2C3d4E5f6G7h8I9j0", commitSha: "a".repeat(40) };
@@ -162,6 +163,134 @@ it("a pre-lease build failure preserves the previous site and exact frozen recov
   expect((await db.doc("system/devPublication").get()).exists).toBe(false);
 });
 
+it("the fail step of a run whose build failed ends its own row and retires its batch; a rerun refuses (#593)", async () => {
+  const previous = { ...deployment.initialPublicDeploymentPointer(), activeGeneration: 4, activeDeploymentId: "old-deployment",
+    activeCommitSha: "b".repeat(40), lastReservedGeneration: 4, newestEligibleGeneration: 4, newestEligibleBuildBatchId: "old-build" };
+  await db.doc("system/publicDeployment").set(previous);
+  await frozen();
+  expect(await dev.finishDevPublication(db, id, { buildFailed: true })).toBe("failed");
+  expect((await queueRef().get()).data()).toMatchObject({ status: "failed", error: dev.DEV_BUILD_FAILED_ERROR });
+  expect((await batchRef().get()).data()).toMatchObject({ status: "retired",
+    retirementReceipt: { schemaVersion: 1, reason: deployment.FAILED_PUBLISH_RETIRED_REASON, queueId: id.queueId, queueStatus: "failed" } });
+  expect(await pointer()).toMatchObject({ activeGeneration: 4, activeDeploymentId: "old-deployment", activeCommitSha: "b".repeat(40) });
+  // The page keeps its previous public revision; only the queue and batch ended.
+  expect((await db.doc("cmsPages/home").get()).data()).toMatchObject({ published: { sourceVersion: 7 } });
+  // A repeated fail step changes nothing, and a rerun of the same run refuses.
+  const settled = (await queueRef().get()).data();
+  expect(await dev.finishDevPublication(db, id, { buildFailed: true })).toBe("unclaimed");
+  expect((await queueRef().get()).data()).toEqual(settled);
+  vi.stubEnv("QUEUE_ID", id.queueId);
+  vi.stubEnv("SOURCE_SHA", id.commitSha);
+  try {
+    await expect(prepare(db)).rejects.toThrow("dispatch a new run");
+  } finally {
+    vi.unstubAllEnvs();
+  }
+});
+
+it("only a first-attempt build failure or cancellation reports no upload", () => {
+  expect(buildFailedBeforeUpload({ GITHUB_RUN_ATTEMPT: "1", DEV_BUILD_RESULT: "failure" })).toBe(true);
+  expect(buildFailedBeforeUpload({ GITHUB_RUN_ATTEMPT: "1", DEV_BUILD_RESULT: "cancelled" })).toBe(true);
+  // An earlier attempt may have uploaded before this rerun's build failed.
+  expect(buildFailedBeforeUpload({ GITHUB_RUN_ATTEMPT: "2", DEV_BUILD_RESULT: "failure" })).toBe(false);
+  for (const result of ["success", "skipped", "", undefined]) {
+    expect(buildFailedBeforeUpload({ GITHUB_RUN_ATTEMPT: "1", DEV_BUILD_RESULT: result })).toBe(false);
+  }
+});
+
+// Run 45389965388 (#615): the build succeeded and upload() threw at its receipt
+// precondition before any provider call. The row was pending and the batch
+// reserved with no candidate; the fail step now ends both, and a rerun refuses.
+it("the fail step of a run whose upload failed before a lease ends its own row; a rerun refuses (#615)", async () => {
+  const previous = { ...deployment.initialPublicDeploymentPointer(), activeGeneration: 4, activeDeploymentId: "old-deployment",
+    activeCommitSha: "b".repeat(40), lastReservedGeneration: 4, newestEligibleGeneration: 4, newestEligibleBuildBatchId: "old-build" };
+  await db.doc("system/publicDeployment").set(previous);
+  await frozen();
+  // upload()'s own catch runs the ordinary cleanup first; it keeps the row.
+  expect(await dev.finishDevPublication(db, id)).toBe("unclaimed");
+  expect(await dev.finishDevPublication(db, id, { uploadFailed: true })).toBe("failed");
+  expect((await queueRef().get()).data()).toMatchObject({ status: "failed", error: dev.DEV_UPLOAD_FAILED_ERROR });
+  expect((await batchRef().get()).data()).toMatchObject({ status: "retired",
+    retirementReceipt: { reason: deployment.FAILED_PUBLISH_RETIRED_REASON, queueId: id.queueId, queueStatus: "failed" } });
+  expect(await pointer()).toMatchObject({ activeGeneration: 4, activeDeploymentId: "old-deployment", activeCommitSha: "b".repeat(40) });
+  vi.stubEnv("QUEUE_ID", id.queueId);
+  vi.stubEnv("SOURCE_SHA", id.commitSha);
+  try {
+    await expect(prepare(db)).rejects.toThrow("dispatch a new run");
+  } finally {
+    vi.unstubAllEnvs();
+  }
+});
+
+it("a failed upload that recorded a candidate keeps its row", async () => {
+  await prepared();
+  expect(await dev.finishDevPublication(db, id, { uploadFailed: true })).toBe("unclaimed");
+  expect((await queueRef().get()).data().status).toBe("pending");
+  expect((await batchRef().get()).data().status).toBe("ready");
+});
+
+it("only a failed upload step after a successful build reports an upload failure", () => {
+  expect(uploadFailedBeforeLease({ DEV_BUILD_RESULT: "success", DEV_UPLOAD_OUTCOME: "failure" })).toBe(true);
+  for (const outcome of ["cancelled", "skipped", "success", "", undefined]) {
+    expect(uploadFailedBeforeLease({ DEV_BUILD_RESULT: "success", DEV_UPLOAD_OUTCOME: outcome })).toBe(false);
+  }
+  expect(uploadFailedBeforeLease({ DEV_BUILD_RESULT: "failure", DEV_UPLOAD_OUTCOME: "failure" })).toBe(false);
+});
+
+it("the operator settle records an upload failure and treats it as settled on repeat (#615)", async () => {
+  await frozen();
+  expect(await dev.settleKilledDevRefresh(db, id, { uploadFailed: true })).toBe("failed");
+  expect((await queueRef().get()).data()).toMatchObject({ status: "failed", error: dev.DEV_UPLOAD_FAILED_ERROR });
+  const settled = (await queueRef().get()).data();
+  expect(await dev.settleKilledDevRefresh(db, id, { uploadFailed: true })).toBe("failed");
+  expect((await queueRef().get()).data()).toEqual(settled);
+});
+
+it("a reported build failure leaves a batch with a recorded candidate to its owners", async () => {
+  await prepared();
+  expect(await dev.finishDevPublication(db, id, { buildFailed: true })).toBe("unclaimed");
+  expect((await queueRef().get()).data().status).toBe("pending");
+  expect((await batchRef().get()).data().status).toBe("ready");
+});
+
+it("the operator settle ends a killed run's never-leased row like the fail step, and refuses a leased batch (#595)", async () => {
+  await frozen();
+  expect(await dev.settleKilledDevRefresh(db, id, { readOnly: true })).toBe("pending");
+  expect((await queueRef().get()).data().status).toBe("pending");
+  expect(await dev.settleKilledDevRefresh(db, id)).toBe("failed");
+  expect((await queueRef().get()).data()).toMatchObject({ status: "failed", error: dev.DEV_BUILD_FAILED_ERROR });
+  expect((await batchRef().get()).data()).toMatchObject({ status: "retired",
+    retirementReceipt: { reason: deployment.FAILED_PUBLISH_RETIRED_REASON, queueId: id.queueId, queueStatus: "failed" } });
+  // A repeated settle reads the same terminal state and writes nothing.
+  const settled = (await queueRef().get()).data();
+  expect(await dev.settleKilledDevRefresh(db, id)).toBe("failed");
+  expect((await queueRef().get()).data()).toEqual(settled);
+});
+
+it("the settle re-reads inside its write and refuses a candidate recorded after its first read", async () => {
+  await frozen();
+  // A rerun records a candidate after the owner's first read and before its write.
+  let reads = 0;
+  const raced = new Proxy(db, { get(target, key) {
+    if (key !== "runTransaction") { const value = Reflect.get(target, key, target); return typeof value === "function" ? value.bind(target) : value; }
+    return async (fn, options) => {
+      const result = await target.runTransaction(fn, options);
+      if (options?.readOnly && reads++ === 0) await batchRef().collection("candidates").doc("worker").set({ raced: true });
+      return result;
+    };
+  } });
+  await expect(dev.settleKilledDevRefresh(raced, id)).rejects.toThrow("never-leased");
+  expect((await queueRef().get()).data().status).toBe("pending");
+  expect((await batchRef().get()).data().status).toBe("reserved");
+});
+
+it("the operator settle refuses a batch with a candidate", async () => {
+  await prepared();
+  await expect(dev.settleKilledDevRefresh(db, id)).rejects.toThrow("never-leased");
+  expect((await queueRef().get()).data().status).toBe("pending");
+  expect((await batchRef().get()).data().status).toBe("ready");
+});
+
 it("stages generic media and candidate, then activates the shared renderer and settles only the published revision", async () => {
   const { candidate } = await prepared();
   expect((await batchRef().get()).data()).toMatchObject({ status: "ready", runtime });
@@ -181,6 +310,16 @@ it("stages generic media and candidate, then activates the shared renderer and s
   expect(await dev.finishDevPublication(db, id)).toBe("success");
   expect((await batchRef().collection("candidates").doc("worker").get()).data()).toEqual(candidate);
   expect((await db.doc("system/devPublication").get()).exists).toBe(false);
+});
+
+it("reads a publication whose reserved batch a failed settlement retired (#583)", async () => {
+  await db.doc("system/publicDeployment").set({ ...deployment.initialPublicDeploymentPointer(), activeGeneration: 4,
+    activeDeploymentId: "old-deployment", activeCommitSha: "b".repeat(40), lastReservedGeneration: 4,
+    newestEligibleGeneration: 4, newestEligibleBuildBatchId: "old-build" });
+  await frozen();
+  await buildState.settleBuildQueue(db, { queueId: id.queueId, status: "failed", queueUpdate: { status: "failed" } });
+  expect((await dev.readDevPublication(db, id)).batch).toMatchObject({ status: "retired",
+    retirementReceipt: { reason: "publish_failed_before_lease", queueId: id.queueId, queueStatus: "failed" } });
 });
 
 it("an uncertain activation retains the generic lease and permits no second provider activation", async () => {

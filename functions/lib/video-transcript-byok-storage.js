@@ -121,6 +121,10 @@ function createVideoTranscriptByokStorage(config, { s3, audio, privateAudio, ass
         if (VersionId) throw problem("byok_storage_spool_missing");
         return null;
       }
+      if (!input && !VersionId && error?.name === "AccessDenied" && error.$metadata?.httpStatusCode === 403) {
+        // S3 can conceal a missing key from a role without ListBucket.
+        throw Object.assign(problem("byok_storage_unavailable"), { unpinnedReadDenied: true });
+      }
       throw problem("byok_storage_unavailable");
     }
   }

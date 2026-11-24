@@ -1,5 +1,6 @@
 "use strict";
 
+const { productionServiceAccount } = require("./lib/production-service-account");
 const { onDocumentWritten } = require("firebase-functions/v2/firestore");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { S3Client } = require("@aws-sdk/client-s3");
@@ -11,7 +12,7 @@ const { ENABLED, WRITE_SECRETS, privateVideoStorage } = require("./lib/private-v
 const { COPIES, currentIdentity, newCopy, dueCopies, enqueueCopy, revokeCopies, claimCopy, saveCopy } = require("./lib/private-video-copy");
 const { createPrivateVideoTransfer } = require("./lib/private-video-transfer");
 
-const SERVICE_ACCOUNT = "boardwalk-s3-media@njpbs-site.iam.gserviceaccount.com";
+const SERVICE_ACCOUNT = productionServiceAccount("boardwalk-s3-media");
 let s3;
 function transferFor(source) {
   const config = runtimeAwsConfig();

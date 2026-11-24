@@ -43,6 +43,7 @@ functions/cloud-publication-wake.generated.json
 /functions/lib/published-resource-check.js
 /functions/lib/published-vocabulary.js
 /functions/lib/schedule-copy.js
+/functions/lib/scroll-story.js
 /functions/lib/spotlight-archive-paths.js
 /functions/lib/town-lookup.js
 /functions/lib/video-block.js

@@ -23,12 +23,27 @@ NJ PBS site. The public Media Manager catalog uses its own build-time fetch.
   and fully unit-tested with a fake request and response.
 - `../http-headers.js` — the shared header baseline (nosniff, deny-frame, HSTS,
   no-referrer, a locked permissions policy) and the CORS origin allowlist.
-- `../../schedule.js` — the only firebase-aware file: it reads the secret and the
+- `../../schedule.js` — the schedule Firebase wrapper: it reads the secret and the
   deploy params and wraps the handler in `onRequest`.
 
 ## The function set the front calls
 
 The schedule handler is built but remains unexported.
+
+### Donation-form health
+
+`donationHealth` takes a GET with no query, body, cookies or authorization. It
+answers with one status: `reachable`, `timeout`, `forbidden`, `rateLimited` or
+`error`. It makes one bounded HEAD request to the fixed PBS form and checks
+the HTTP status and content type. Each instance shares a probe across concurrent
+readers and caches success for 60 seconds and failure for 10 seconds.
+
+The public Worker refreshes the status in the background, with one concurrent
+read per isolate. Page responses use the last observation for up to 30 seconds
+while it refreshes. During a confirmed outage it rewrites the published
+donation anchors to the station's contact page and renders a giving-help notice.
+A cold Worker or an unavailable health service leaves the original links in
+place until it has a usable observation.
 
 ### `scheduleProxy`
 

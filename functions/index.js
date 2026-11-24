@@ -32,6 +32,7 @@ lazyExport("cmsCuezConfirmImport", "./cuez-transfers");
 lazyExport("cmsCuezRetry", "./cuez-transfers");
 lazyExport("cmsCuezReconcile", "./cuez-transfers");
 lazyExport("health", "./health");
+lazyExport("donationHealth", "./donation-health");
 lazyExport("cmsGetBroadcastSchedule", "./broadcast-schedule");
 lazyExport("grantRole", "./roles");
 lazyExport("revokeRole", "./roles");
@@ -136,7 +137,8 @@ lazyExport("decideStaffAccessRequest", "./staff-access");
 lazyExport("onStaffAccessEmailRetry", "./staff-access-email");
 lazyExport("onEditorialNotificationCreated", "./editorial-notification");
 lazyExport("onStaffAccessNotificationCreated", "./staff-access-notification");
-lazyExport("cmsSubmitBugReport", "./bug-report");
+// The dev Admin sends its build revision; dev-bug-report.js selects the wrapper that checks it in development.
+lazyExport("cmsSubmitBugReport", "./dev-bug-report", "selectedCmsSubmitBugReport");
 lazyExport("cmsListBugReports", "./bug-report-triage");
 lazyExport("cmsNudgeBugReport", "./bug-report-triage");
 lazyExport("cmsResolveBugReport", "./bug-report-triage");

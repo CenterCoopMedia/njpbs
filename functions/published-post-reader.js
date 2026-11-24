@@ -1,4 +1,5 @@
 "use strict";
+const { productionServiceAccount } = require("./lib/production-service-account");
 const { isPostLeadMedia, readPostLeadMedia, leadMediaAssetIds } = require("./lib/post-lead-media");
 
 const { createHmac, timingSafeEqual } = require("node:crypto");
@@ -486,8 +487,10 @@ function createCmsGetPublishedPostHandler(deps = {}) {
 }
 
 // Keep one warm instance for reads that cannot wait for a cold start.
-const cmsGetPublishedPost = onRequest({ invoker: "public", minInstances: 1, maxInstances: 10, cpu: 1, concurrency: 80,
-  serviceAccount: "njpbs-published-post-reader@njpbs-site.iam.gserviceaccount.com",
+// Dev keeps no warm instance, as in lib/cms-edge.js.
+const cmsGetPublishedPost = onRequest({ invoker: "public", maxInstances: 10, cpu: 1, concurrency: 80,
+  minInstances: process.env.CMS_DEPLOYMENT_ENVIRONMENT === "development" ? 0 : 1,
+  serviceAccount: productionServiceAccount("njpbs-published-post-reader"),
   secrets: [PUBLISHED_POST_READER_HMAC_KEY] },
   createCmsGetPublishedPostHandler());
 module.exports = { cmsGetPublishedPost, createCmsGetPublishedPostHandler, readPublishedPost, readPublishedHomePostCards, readPublishedChrome,

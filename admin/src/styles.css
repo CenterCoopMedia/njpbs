@@ -7861,6 +7861,10 @@
   }
 }
 
+/* A nonzero transition duration here would give every property of every element a
+   transition, because transition-property defaults to all. Inherited values such as
+   font-size then settle one tree level per frame, so text resizes and the page shifts
+   after it loads. A zero duration starts no transitions. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -7868,7 +7872,7 @@
     scroll-behavior: auto !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+    transition-duration: 0s !important;
   }
 
   .button:hover:not(:disabled),

@@ -1,5 +1,7 @@
 "use strict";
 
+const { ownerRef } = require("./lib/media-hash-owner");
+
 const { preparePublicMediaChangeInTransaction } = require("./lib/public-release-producer");
 
 const { createHash, randomUUID } = require("node:crypto");
@@ -538,14 +540,6 @@ async function putOrConfirm({
   }
 }
 
-function ownerRef(firestore, contentHash) {
-  return firestore
-    .collection("system")
-    .doc("media")
-    .collection("hashOwners")
-    .doc(contentHash);
-}
-
 function mayUseMediaCategory(principal, category, kind, audioReadAdmitted = false) {
   return mayUseMedia(principal, category, kind, audioReadAdmitted);
 }
@@ -610,6 +604,7 @@ function uploadRecordFromClaim({ contentHash, claim, publicOrigin, nowIso, thumb
       ? { animated: claim.recordSeed.animated }
       : {}),
     ...(claim.recordSeed.master ? { master: claim.recordSeed.master } : {}),
+    ...(claim.recordSeed.archiveImport ? { archiveImport: claim.recordSeed.archiveImport } : {}),
     contentHash,
     storageKey: claim.finalKey,
     url: publicMediaUrl(publicOrigin, claim.finalKey),
@@ -1091,7 +1086,7 @@ async function discardUploadAfterCommitRejection({
       const current = await transaction.get(ref);
       if (!current.exists) return;
       const owner = current.data();
-      if (owner.attemptId !== attemptId || owner.state !== "capacity_cleanup") {
+      if (owner.attemptId !== attemptId || owner.state !== "capacity_cleanup" || owner.leaseExpiresAt !== leaseExpiresAt) {
         throw new MediaRequestError(
           `The ${rejectionLabel} upload changed during cleanup`,
           503,
@@ -1123,7 +1118,8 @@ async function discardUploadAfterCommitRejection({
         const owner = current.data();
         if (
           owner.attemptId === attemptId &&
-          owner.state === "capacity_cleanup"
+          owner.state === "capacity_cleanup" &&
+          owner.leaseExpiresAt === leaseExpiresAt
         ) {
           transaction.update(ref, {
             state: previousState,
@@ -1165,12 +1161,21 @@ async function discardUgcDecisionUpload(args) {
   });
 }
 
+async function discardArchiveRejectedUpload(args) {
+  return discardUploadAfterCommitRejection({
+    ...args,
+    discardReason: DISCARD_REASONS.archiveEligibility,
+    rejectionLabel: "archive-rejected",
+    allowReserved: true,
+  });
+}
+
 async function committedUpload(
   firestore,
   { contentHash, attemptId, record, allowTombstoned = false },
 ) {
   const [ownerSnapshot, privateSnapshot, publicSnapshot] = await Promise.all([
-    ownerRef(firestore, contentHash).get(),
+    ownerRef(firestore, contentHash, record.id).get(),
     firestore.collection("media_assets").doc(record.id).get(),
     firestore.collection("media_assets_public").doc(record.id).get(),
   ]);
@@ -1875,6 +1880,7 @@ module.exports = {
   createDefaultMasterStorage,
   createDefaultStorage,
   createCmsUploadMediaHandler,
+  discardArchiveRejectedUpload,
   discardCapacityRejectedUpload,
   discardCategoryRejectedUpload,
   discardUgcDecisionUpload,

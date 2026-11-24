@@ -3,7 +3,7 @@
   "target": "branch",
   "enforcement": "active",
   "bypass_actors": [],
-  "conditions": {"ref_name": {"include": ["refs/heads/production"], "exclude": []}},
+  "conditions": {"ref_name": {"include": ["refs/heads/production", "refs/heads/development"], "exclude": []}},
   "rules": [
     {"type": "deletion"},
     {"type": "non_fast_forward"},

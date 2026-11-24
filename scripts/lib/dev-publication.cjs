@@ -3,13 +3,14 @@
 const { createHash } = require("node:crypto");
 const { isDeepStrictEqual } = require("node:util");
 const { FieldValue } = require("firebase-admin/firestore");
-const { addressedPublishChanges } = require("../../functions/lib/publish-build-state");
+const { addressedPublishChanges, settleBuildQueue } = require("../../functions/lib/publish-build-state");
 const { reserveCmsPublishArtifact, queueIncludesArtifact } = require("../../functions/lib/cms-publish-artifact");
 const { publicationTarget } = require("../../functions/lib/publication-target");
 const { publicationRuntime, assertPublicationOwner, runtimeFields } = require("../../functions/lib/publication-runtime-owner");
 const { assertPublicDeploymentPointer, projectPublicBuildReservation, projectPublicDeploymentLease,
   assertPublicDeploymentReservedBatch, assertPublicDeploymentLeaseBatch,
-  assertPublicDeploymentTerminalBatchStructure, assertPublicDeploymentCancelledBatch } = require("../../functions/lib/public-deployment");
+  assertPublicDeploymentTerminalBatchStructure, assertPublicDeploymentCancelledBatch,
+  assertPublicDeploymentFailedPublishRetiredBatch, FAILED_PUBLISH_RETIRED_REASON } = require("../../functions/lib/public-deployment");
 const { publicDeploymentRef, publicBuildBatchRef, publicWorkerCandidateRef, acquirePublicDeploymentLease } = require("../../functions/lib/public-deployment-coordinator");
 const { createPublicMediaManifest } = require("../../functions/lib/public-media-manifest");
 const { stagePublicMediaManifest, markPublicMediaManifestReady } = require("../../functions/lib/public-media-manifest-store");
@@ -21,12 +22,16 @@ const { recordCmsPublishArtifactInclusion, settleCmsPublishQueueFromPublicDeploy
   assertTerminalAlignment, terminalLease } = require("../../functions/lib/cms-public-deployment-writeback");
 const { STALE_PUBLISH_ERROR } = require("../../functions/lib/publish-reconcile");
 const preupload = require("../../functions/lib/dev-publication-preupload");
-const { publicReleaseDigest, exact } = require("../../functions/lib/public-release-pair");
 
 const PUBLICATION_TARGET = publicationTarget("development");
 const TARGET = Object.freeze({ environment: "development", projectId: "njpbs-site-dev",
   workerName: "template-dev-public", origin: "https://dev-public.example.org", previewBucket: "template-dev-cms-previews" });
 const hash = value => createHash("sha256").update(value).digest("hex");
+// A refresh run whose build job failed or was cancelled settles its own row (#593).
+const DEV_BUILD_FAILED_ERROR = "Development build failed or was cancelled before upload; dispatch a new run";
+const DEV_UPLOAD_FAILED_ERROR = "Development upload failed before a deployment lease; dispatch a new run";
+// Either fail-step settle ends the row for good: a rerun of that run refuses.
+const DEV_SETTLED_ERRORS = new Set([DEV_BUILD_FAILED_ERROR, DEV_UPLOAD_FAILED_ERROR]);
 const inputRef = (db, id) => publicBuildBatchRef(db, id.buildBatchId).collection("inputs").doc("devFrozen");
 
 function assertDevTarget(target) {
@@ -90,7 +95,10 @@ function assertFrozenInput(input, identity) {
 }
 function batchReservation(batch, identity) {
   if (batch.status === "retired") {
-    preupload.assertDevPreuploadRetiredBatch(batch, identity.buildBatchId);
+    // A stale sweep or failed dispatch retires a reserved batch with its own receipt.
+    if (batch.retirementReceipt?.reason === FAILED_PUBLISH_RETIRED_REASON) {
+      assertPublicDeploymentFailedPublishRetiredBatch(batch, identity.buildBatchId);
+    } else preupload.assertDevPreuploadRetiredBatch(batch, identity.buildBatchId);
     const { retiredAt, retirementReceipt, ...original } = batch;
     return projectPublicBuildReservation({ ...original, status: "reserved" }, identity.buildBatchId);
   }
@@ -99,69 +107,6 @@ function batchReservation(batch, identity) {
   else if (batch.status === "cancelled") assertPublicDeploymentCancelledBatch(batch, identity.buildBatchId);
   else assertPublicDeploymentLeaseBatch(batch, identity.buildBatchId);
   return projectPublicBuildReservation(batch, identity.buildBatchId);
-}
-
-// The operator proves the original Actions failure before calling this owner.
-// No absence-only or ordinary workflow cleanup path may invoke settlement.
-async function settleDevPreuploadFailure(db, request, { readOnly = false } = {}) {
-  assertDevDatabase(db);
-  preupload.parseDevPreuploadSettlement(request);
-  const { identity, generation, inputDigest, failure } = request;
-  if (hash(`dev-code-refresh:${failure.runId}`).slice(0, 20) !== identity.queueId) preupload.refuse();
-  const queueRef = db.doc(`cmsPublishQueue/${identity.queueId}`);
-  const batchRef = publicBuildBatchRef(db, identity.buildBatchId);
-  const receiptRef = batchRef.collection("retirements").doc("devPreupload");
-  await db.runTransaction(async transaction => {
-    const [legacy, queueRow, batchRow, candidate, inputRow, pointerRow, manifest, verification, receiptRow] = await transaction.getAll(
-      db.doc("system/devPublication"), queueRef, batchRef, publicWorkerCandidateRef(db, identity.buildBatchId),
-      inputRef(db, identity), publicDeploymentRef(db), batchRef.collection("manifests").doc("publicMedia"),
-      batchRef.collection("manifests").doc("publicMedia").collection("verifications").doc("complete"), receiptRef);
-    await require("../../functions/lib/public-release-writer-fence").assertNoReleaseWriterInTransaction({ firestore: db, transaction });
-    if (legacy.exists || !queueRow.exists || !batchRow.exists || !inputRow.exists || !pointerRow.exists ||
-        candidate.exists || manifest.exists || verification.exists) preupload.refuse();
-    const pointer = assertPublicDeploymentPointer(pointerRow.data());
-    if (pointer.state !== "idle") preupload.refuse();
-    const queue = queueRow.data(), batch = batchRow.data(), input = inputRow.data();
-    const runtime = queueRuntime(queue, identity);
-    assertPublicationOwner(batch, runtime);
-    assertFrozenInput(input, identity);
-    if (input.inputDigest !== inputDigest) preupload.refuse();
-    if (batch.status === "retired") {
-      preupload.assertDevPreuploadRetiredBatch(batch, identity.buildBatchId);
-      const receipt = batch.retirementReceipt;
-      const { preUploadFailureReceiptDigest, ...originalQueue } = queue;
-      if (!isDeepStrictEqual(receipt.request, request) || !receiptRow.exists ||
-          !isDeepStrictEqual(receiptRow.data(), { ...receipt, retiredAt: batch.retiredAt }) ||
-          queue.status !== "failed" || queue.error !== preupload.FAILURE ||
-          !isDeepStrictEqual(queue.completedAt, batch.retiredAt) || preUploadFailureReceiptDigest !== publicReleaseDigest(receipt) ||
-          receipt.originalQueueDigest !== publicReleaseDigest({ ...originalQueue, status: "pending", error: null, completedAt: null }) ||
-          receipt.originalInputDigest !== publicReleaseDigest(input)) preupload.refuse();
-      return;
-    }
-    if (readOnly || receiptRow.exists) preupload.refuse();
-    assertPublicDeploymentReservedBatch(batch, identity.buildBatchId);
-    exact(queue, ["status", "transport", "environment", "projectId", "triggeredBy", "triggeredByEmail", "triggeredAt",
-      "completedAt", "error", "changes", "runtime", "artifactBuild"]);
-    const reservation = projectPublicBuildReservation(batch, identity.buildBatchId);
-    if (queue.status !== "pending" || queue.triggeredBy !== "dev-code-refresh" || queue.triggeredByEmail !== null ||
-        queue.changes.length !== 0 || queue.completedAt !== null || queue.error !== null ||
-        batch.noBuildStaticInput !== undefined || reservation.generation !== generation || reservation.commitSha !== identity.commitSha ||
-        !isDeepStrictEqual(queue.artifactBuild, { buildBatchId: identity.buildBatchId, generation,
-          commitSha: identity.commitSha, cutoffAt: batch.cutoffAt }) ||
-        pointer.lastReservedGeneration < generation || pointer.activeGeneration === generation ||
-        pointer.newestEligibleGeneration === generation || pointer.newestEligibleBuildBatchId === identity.buildBatchId ||
-        !Number.isFinite(input.recordedAt?.toMillis?.()) || input.recordedAt.toMillis() < batch.reservedAt.toMillis() ||
-        input.recordedAt.toMillis() > Date.parse(failure.completedAt)) preupload.refuse();
-    const receipt = { schemaVersion: 1, reason: preupload.REASON, outcome: "failed_not_published", request,
-      requestDigest: publicReleaseDigest(request), originalQueueDigest: publicReleaseDigest(queue),
-      originalBatchDigest: publicReleaseDigest(batch), originalInputDigest: publicReleaseDigest(input) };
-    const retiredAt = FieldValue.serverTimestamp();
-    transaction.create(receiptRef, { ...receipt, retiredAt });
-    transaction.update(batchRef, { status: "retired", retiredAt, retirementReceipt: receipt });
-    transaction.update(queueRef, { status: "failed", error: preupload.FAILURE, completedAt: retiredAt,
-      preUploadFailureReceiptDigest: publicReleaseDigest(receipt) });
-  }, readOnly ? { readOnly: true } : {});
-  return (await receiptRef.get()).data();
 }
 
 // The legacy journal is never drained, reset or adopted by the new adapter.
@@ -274,7 +219,7 @@ async function settleDevDeploymentOutcome(db, identity, lease, evidence) {
 
 // Terminal queue writeback consumes the generic outcome. This adapter never
 // promotes a pointer, fabricates batch readiness or owns a second activation.
-async function finishDevPublication(db, identity, { timeoutOutcome = null } = {}) {
+async function finishDevPublication(db, identity, { timeoutOutcome = null, buildFailed = false, uploadFailed = false } = {}) {
   const current = await readDevPublication(db, identity);
   if (!current.queue || !current.batch) return "unclaimed";
   // The ordinary finalize/fail cleanup cannot undo a failed-queue refusal.
@@ -293,8 +238,23 @@ async function finishDevPublication(db, identity, { timeoutOutcome = null } = {}
     if (outcome.outcome === "deployed") return finishDevPublication(db, identity);
     return outcome.outcome;
   }
-  // A pre-lease failure preserves reservation/candidate evidence. Cancellation
-  // needs its existing authorized generic owner; a workflow cleanup cannot invent it.
+  // The fail step of the run that owns this row reports that the build job of
+  // its first attempt failed or was cancelled. Upload requires a successful
+  // build, so no attempt uploaded, and no candidate, lease or activation
+  // exists: a reserved batch has never been leased. The row ends
+  // here, and settleBuildQueue retires the batch, so the release pause and the
+  // media purge do not wait for the 24-hour stale sweep (#593). A rerun of this
+  // run then refuses in prepare; a new run publishes.
+  if (buildFailed && neverLeased(current, identity)) return settleNeverLeased(db, identity, DEV_BUILD_FAILED_ERROR);
+  // The upload step failed (#615). A reserved batch with no candidate and no
+  // pointer eligibility was never leased, and activation needs a lease, so no
+  // attempt made a version live. A partial upload cannot pass as none: once
+  // upload records its candidate the batch leaves this state and keeps its row.
+  // Before that record, at most an unreferenced, inactive provider version
+  // exists, which no later run can lease, because the batch is retired.
+  if (uploadFailed && neverLeased(current, identity)) return settleNeverLeased(db, identity, DEV_UPLOAD_FAILED_ERROR);
+  // Any other pre-lease failure preserves reservation/candidate evidence.
+  // Cancellation needs its existing authorized generic owner.
   return current.queue.status === "success" ? "success" : "unclaimed";
 }
 
@@ -343,6 +303,43 @@ function assertTimedOutDevTerminal({ queue, batch, candidate, outcome }) {
   assertTerminalAlignment({ queue, batch, candidate, outcome, runtime, target: PUBLICATION_TARGET });
 }
 
+// A pending row with a reserved batch and no candidate was never leased; the
+// pointer has never named the batch as eligible.
+function neverLeased(current, identity) {
+  return current.queue?.status === "pending" && current.batch?.status === "reserved" && !current.candidate &&
+    current.pointer?.newestEligibleBuildBatchId !== identity.buildBatchId;
+}
+
+// The settle transaction reads the queue, batch, candidate and pointer again and
+// refuses unless the row is still never leased, so a rerun or reconciliation
+// that records a candidate or takes a lease after the first read wins.
+async function settleNeverLeased(db, identity, error) {
+  const preflight = async ({ transaction, queue }) => {
+    const [batch, candidate, pointer] = await transaction.getAll(publicBuildBatchRef(db, identity.buildBatchId),
+      publicWorkerCandidateRef(db, identity.buildBatchId), publicDeploymentRef(db));
+    if (!neverLeased({ queue, batch: batch.data(), candidate: candidate.exists,
+      pointer: pointer.exists ? pointer.data() : null }, identity)) {
+      throw new Error("The development refresh row is not pending with a never-leased reserved batch");
+    }
+  };
+  await settleBuildQueue(db, { queueId: identity.queueId, status: "failed", preflight,
+    queueUpdate: { status: "failed", completedAt: FieldValue.serverTimestamp(), error } });
+  return "failed";
+}
+
+// Operator settle for a development refresh run that ended before its fail step
+// ran (#595), or whose upload step failed before the fail step could settle it
+// (#615). The caller proves from the Actions API that the run is completed and
+// that no attempt's upload step succeeded. This owner then requires the same
+// never-leased state as the fail step and ends the row the same way. Any other
+// state refuses: it has a lease or a candidate, and its owner must settle it.
+async function settleKilledDevRefresh(db, identity, { readOnly = false, uploadFailed = false } = {}) {
+  const current = await readDevPublication(db, identity);
+  if (current.queue?.status === "failed" && DEV_SETTLED_ERRORS.has(current.queue.error) && current.batch?.status === "retired") return "failed";
+  if (!neverLeased(current, identity)) throw new Error("The development refresh row is not pending with a never-leased reserved batch");
+  return readOnly ? "pending" : settleNeverLeased(db, identity, uploadFailed ? DEV_UPLOAD_FAILED_ERROR : DEV_BUILD_FAILED_ERROR);
+}
+
 // This permits verification of an existing lease only. It cannot admit a failed
 // queue to writeback; assertDevReconcileInputs requires its deployed outcome.
 function prepareTimedOutDevReconciliation(input) {
@@ -359,9 +356,10 @@ function prepareTimedOutDevReconciliation(input) {
   return batch.status === "deployed" ? terminalLease(batch) : projectPublicDeploymentLease(batch, identity.buildBatchId);
 }
 
-module.exports = { TARGET, hash, assertDevTarget, assertDevDatabase, assertDevQueue, assertIdentity,
+module.exports = {
+  DEV_BUILD_FAILED_ERROR, DEV_UPLOAD_FAILED_ERROR, DEV_SETTLED_ERRORS, TARGET, hash, assertDevTarget, assertDevDatabase, assertDevQueue, assertIdentity,
   selectDevPublicationSource,
   readDevPublication, reserveDevPublication, recordDevInputs, recordDevCandidate,
   assertDevPublicationUnreserved,
   acquireDevDeploymentLease, settleDevDeploymentOutcome, finishDevPublication, assertDevReconcileInputs,
-  prepareTimedOutDevReconciliation, settleDevPreuploadFailure };
+  prepareTimedOutDevReconciliation, settleKilledDevRefresh };

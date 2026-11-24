@@ -19,7 +19,7 @@ const ENTRY_FIELDS = ["postId", "revisionSha256", "sha256", "originalName", "mim
 const text = value => typeof value === "string" && value.isWellFormed();
 const review = reason => ({ action: "review", reason });
 
-async function readManifest(path) {
+export async function readManifest(path) {
   const bytes = await readRegularFile(path, MAX_MANIFEST_BYTES);
   let manifest;
   try {
@@ -46,7 +46,7 @@ async function readManifest(path) {
   return manifest;
 }
 
-async function verifyOriginal(directory, entry) {
+export async function verifyOriginal(directory, entry) {
   const type = contract.mediaType(entry.mimeType);
   if (!type || type.kind === "audio") return review("unsupported-type");
   let bytes;
@@ -77,7 +77,7 @@ async function verifyOriginal(directory, entry) {
     if (error instanceof contract.MediaValidationError) return review("invalid-media-content");
     throw error;
   }
-  return { proof: {
+  return { bytes, proof: {
     sourceRevisionSha256: entry.revisionSha256,
     kind: type.kind,
     title: metadata.name,

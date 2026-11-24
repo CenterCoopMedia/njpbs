@@ -11,6 +11,7 @@ import { pathToFileURL } from "node:url";
 import { deleteApp, getApps, initializeApp } from "firebase-admin/app";
 import { FieldValue, getFirestore } from "firebase-admin/firestore";
 import mediaCategories from "../functions/lib/media-categories.js";
+import { cmsTarget } from "./lib/cms-target.mjs";
 
 const SYSTEM_ACTOR = "system:media-category-seed";
 const MAX_CATEGORIES_PER_TRANSACTION = 250;
@@ -206,7 +207,7 @@ async function main() {
   if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
     throw new Error("GOOGLE_APPLICATION_CREDENTIALS is required");
   }
-  const app = getApps()[0] || initializeApp({ projectId: "njpbs-site" });
+  const app = getApps()[0] || initializeApp({ projectId: cmsTarget().projectId });
   try {
     const firestore = getFirestore(app);
     const { seed, registered } = await prepareMediaCategoryRegistry({ firestore, onlyIfNeeded: process.argv[2] === "--if-needed" });
