@@ -8,8 +8,6 @@ import { spawnSync } from "node:child_process";
 import { afterEach, describe, expect, it } from "vitest";
 import deployment from "../../functions/lib/media-purge-deployment.js";
 const root = fileURLToPath(new URL("../../", import.meta.url));
-// The retry waits are the helper's contract, tested with the helper.
-const NO_WAIT = "--import=data:text/javascript,Atomics.wait=()=>'timed-out'";
 const temporary = [];
 afterEach(() => temporary.splice(0).forEach((dir) => rmSync(dir, { recursive: true, force: true })));
 function directory() {
@@ -20,7 +18,7 @@ function directory() {
 function resolve(configuration = {}) {
   const dir = directory();
   mkdirSync(join(dir, "functions"));
-  writeFileSync(join(dir, "gcloud"), '#!/bin/bash\nprintf "%s\\n" "$*" >> "$PURGE_STUB_CALLS"\nif [[ -n "${PURGE_STUB_ERROR:-}" ]]; then printf "%s\\n" "$PURGE_STUB_ERROR" >&2; exit 1; fi\nprintf "%s\\n" "${PURGE_STUB_STATE:-ENABLED}"\n');
+  writeFileSync(join(dir, "gcloud"), '#!/bin/bash\nprintf "%s\\n" "$*" >> "$PURGE_STUB_CALLS"\nif [[ -n "${PURGE_STUB_ERROR:-}" && "$(wc -l < "$PURGE_STUB_CALLS")" -le "${PURGE_STUB_FAILURES:-9999}" ]]; then printf "%s\\n" "$PURGE_STUB_ERROR" >&2; exit 1; fi\nprintf "%s\\n" "${PURGE_STUB_STATE:-ENABLED}"\n');
   chmodSync(join(dir, "gcloud"), 0o755);
   const calls = join(dir, "calls");
   const result = spawnSync("bash", [join(root, "scripts/resolve-media-purge.sh")], { cwd: dir, encoding: "utf8",
@@ -56,14 +54,20 @@ describe("purge activation decision", () => {
     expect(result.calls.split("\n").filter(Boolean)).toHaveLength(1);
     expect(result.decision).toEqual({ enabled: false, realDeletesEnabled: false });
   });
-  it.each([
-    ["ERROR: (gcloud.secrets.versions.describe) UNAVAILABLE: The service is currently unavailable.", 5],
-    ["ERROR: (gcloud.secrets.versions.describe) PERMISSION_DENIED: Permission denied", 1],
-  ])("fails loud and writes no decision when the state could not be read: %s", (line, attempts) => {
-    const result = resolve({ CMS_MEDIA_PURGE_SWEEP_ENABLED: "true", PURGE_STUB_ERROR: line, NODE_OPTIONS: NO_WAIT });
+  it("asks again until the provider answers an unavailable state read", () => {
+    const result = resolve({ CMS_MEDIA_PURGE_SWEEP_ENABLED: "true", PURGE_STUB_FAILURES: "1",
+      PURGE_STUB_ERROR: "ERROR: (gcloud.secrets.versions.describe) UNAVAILABLE: The service is currently unavailable." });
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.calls.split("\n").filter(Boolean)).toHaveLength(4);
+    expect(result.stderr).toContain("UNAVAILABLE");
+    expect(result.decision).toEqual({ enabled: true, realDeletesEnabled: false });
+  });
+  it("fails loud and writes no decision when the state read is refused", () => {
+    const result = resolve({ CMS_MEDIA_PURGE_SWEEP_ENABLED: "true",
+      PURGE_STUB_ERROR: "ERROR: (gcloud.secrets.versions.describe) PERMISSION_DENIED: Permission denied" });
     expect(result.status).toBe(1);
-    expect(result.calls.split("\n").filter(Boolean)).toHaveLength(attempts);
-    expect(result.stderr).toContain(`${attempts} of 5 attempts`);
+    expect(result.calls.split("\n").filter(Boolean)).toHaveLength(1);
+    expect(result.stderr).toContain("class permission, attempt 1, last provider line: ");
     expect(result.stderr).toContain("could not be read");
     expect(result.written).toBe(false);
   });

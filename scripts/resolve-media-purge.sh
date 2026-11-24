@@ -5,7 +5,7 @@ set -euo pipefail
 ready() {
   local state status=0
   state="$(node "$(dirname "${BASH_SOURCE[0]}")/lib/provider-call.mjs" "secret version $1" -- \
-    timeout 30s gcloud secrets versions describe latest --secret="$1" \
+    gcloud secrets versions describe latest --secret="$1" \
     --project njpbs-site --format='value(state)')" || status=$?
   # Only an absent version is an answer. A provider fault must not switch a feature off.
   [[ "$status" != 4 ]] || return 1

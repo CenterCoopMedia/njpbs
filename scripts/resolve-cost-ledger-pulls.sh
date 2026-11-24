@@ -6,7 +6,7 @@ secret_version_ready() {
   local secret_name="$1"
   local state status=0
   state="$(node "$(dirname "${BASH_SOURCE[0]}")/lib/provider-call.mjs" "secret version $secret_name" -- \
-    timeout 30s gcloud secrets versions describe latest --secret="$secret_name" \
+    gcloud secrets versions describe latest --secret="$secret_name" \
     --project njpbs-site --format='value(state)')" || status=$?
   # Only an absent version is an answer. A provider fault must not switch a feature off.
   [[ "$status" != 4 ]] || return 1
