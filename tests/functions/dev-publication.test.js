@@ -7,6 +7,7 @@ import deployment from "../../functions/lib/public-deployment.js";
 import manifestModule from "../../functions/lib/public-media-manifest.js";
 import publicationModule from "../../functions/lib/no-build-post-publication.js";
 import reconciliation from "../../functions/lib/publish-reconcile.js";
+import buildState from "../../functions/lib/publish-build-state.js";
 import { inspectDevPublicationRetry } from "../../site/scripts/cms-dev-publication.mjs";
 
 const project = process.env.GCLOUD_PROJECT ?? "demo-njpbs";
@@ -181,6 +182,16 @@ it("stages generic media and candidate, then activates the shared renderer and s
   expect(await dev.finishDevPublication(db, id)).toBe("success");
   expect((await batchRef().collection("candidates").doc("worker").get()).data()).toEqual(candidate);
   expect((await db.doc("system/devPublication").get()).exists).toBe(false);
+});
+
+it("reads a publication whose reserved batch a failed settlement retired (#583)", async () => {
+  await db.doc("system/publicDeployment").set({ ...deployment.initialPublicDeploymentPointer(), activeGeneration: 4,
+    activeDeploymentId: "old-deployment", activeCommitSha: "b".repeat(40), lastReservedGeneration: 4,
+    newestEligibleGeneration: 4, newestEligibleBuildBatchId: "old-build" });
+  await frozen();
+  await buildState.settleBuildQueue(db, { queueId: id.queueId, status: "failed", queueUpdate: { status: "failed" } });
+  expect((await dev.readDevPublication(db, id)).batch).toMatchObject({ status: "retired",
+    retirementReceipt: { reason: "publish_failed_before_lease", queueId: id.queueId, queueStatus: "failed" } });
 });
 
 it("an uncertain activation retains the generic lease and permits no second provider activation", async () => {

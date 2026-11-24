@@ -18,6 +18,7 @@ const PUBLIC_SETTINGS_IDS = new Set([
   PUBLIC_SITE_CHROME_SETTINGS_ID,
   SITE_NAVIGATION_SETTINGS_ID,
 ]);
+const { FAILED_PUBLISH_RETIRED_REASON } = require("./public-deployment");
 const PUBLISH_BUILD_PENDING_FIELD = "publishBuildPending";
 const PUBLISH_BUILD_QUEUE_FIELD = "publishBuildQueueId";
 const PUBLISH_BUILD_SETTLEMENT_FIELD = "publishBuildSettlement";
@@ -162,7 +163,7 @@ async function settleBuildQueue(
   if (typeof queueId !== "string" || queueId.length === 0) return false;
   const result = await firestore.runTransaction((transaction) =>
     settleBuildQueueInTransaction(firestore, transaction, {
-      queueId, status, queueUpdate, acceptQueue, preflight,
+      queueId, status, queueUpdate, acceptQueue, preflight, retireReservedBatch: true,
     }));
   if (returnResult) {
     return {
@@ -177,7 +178,7 @@ async function settleBuildQueue(
 async function settleBuildQueueInTransaction(
   firestore,
   transaction,
-  { queueId, status, queueUpdate, acceptQueue = null, preflight = null },
+  { queueId, status, queueUpdate, acceptQueue = null, preflight = null, retireReservedBatch = false },
 ) {
   const queueRef = firestore.collection("cmsPublishQueue").doc(queueId);
   const queueSnapshot = await transaction.get(queueRef);
@@ -203,6 +204,13 @@ async function settleBuildQueueInTransaction(
     return "idempotent";
   }
   if (preflight) await preflight({ transaction, queue, queueRef });
+  // A row that fails before its batch is leased leaves the batch reserved, and
+  // no other writer ends it; the release pause and media purge then wait on it.
+  // Callers that write the batch themselves keep retireReservedBatch false.
+  const batchRef = retireReservedBatch && ["failed", "cancelled"].includes(status) && !retryFailed
+    ? firestore.doc(`system/publicDeployment/buildBatches/cms-${queueId}`)
+    : null;
+  const batch = batchRef ? await transaction.get(batchRef) : null;
   const artifactSettled =
     retryFailed || status === "success" || status === "public_unconfirmed";
   const confirmsUnconfirmedDeployment =
@@ -286,6 +294,13 @@ async function settleBuildQueueInTransaction(
     });
   }
   writeHomeRefresh();
+  if (batch?.exists && batch.data()?.status === "reserved") {
+    transaction.update(batchRef, {
+      status: "retired",
+      retiredAt: FieldValue.serverTimestamp(),
+      retirementReceipt: { schemaVersion: 1, reason: FAILED_PUBLISH_RETIRED_REASON, queueId, queueStatus: status },
+    });
+  }
   return "settled";
 }
 
