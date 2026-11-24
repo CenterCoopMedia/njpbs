@@ -4,7 +4,7 @@ import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } f
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { FUNCTION_SCHEDULES, functionBatches, cloudWakeFunctionPlan, assertCloudWakeRetired, assertCloudWakeSettings, explicitCloudWakeDecision, loadCloudWakeDeployment, assertFunctionsReady, assertSchedulesReady, listPages, deployBatch } from "../../scripts/deploy-cms-function-batches.mjs";
+import { FUNCTION_SCHEDULES, functionTargets, cloudWakeFunctionPlan, assertCloudWakeRetired, assertCloudWakeSettings, explicitCloudWakeDecision, loadCloudWakeDeployment, assertFunctionsReady, assertSchedulesReady, listPages, deployFunctionTargets } from "../../scripts/deploy-cms-function-batches.mjs";
 import { meteredOffenders, scanRepositorySourceFiles } from "../../.github/scripts/metered-api-scan.mjs";
 
 describe("CMS function deployment completion", () => {
@@ -82,13 +82,11 @@ describe("CMS function deployment completion", () => {
       expect(meteredOffenders(root, scanned)).toHaveLength(1);
     } finally { rmSync(root, { recursive: true, force: true }); }
   });
-  it("bounds deployments to ten functions and preserves each target once", () => {
+  it("keeps every target once, in order, in one list", () => {
     const names = Array.from({ length: 23 }, (_, i) => `functions:handler${i}`);
-    const batches = functionBatches(names.join(","));
-    expect(batches.map((batch) => batch.length)).toEqual([10, 10, 3]);
-    expect(batches.flat().map((name) => `functions:${name}`)).toEqual(names);
+    expect(functionTargets(names.join(",")).map((name) => `functions:${name}`)).toEqual(names);
     for (const invalid of ["", "functions:a,functions:a", "functions:a;exit", "storage", "functions:a,"]) {
-      expect(() => functionBatches(invalid)).toThrow();
+      expect(() => functionTargets(invalid)).toThrow();
     }
   });
   it("rejects a missing or non-active function despite successful CLI exit", () => {
@@ -161,7 +159,7 @@ describe("CMS function deployment completion", () => {
         queueMicrotask(() => { child.stdout.emit("data", Buffer.from(output)); child.emit("close", code); });
         return child;
       };
-      const promise = deployBatch(["handler"], launch, "njpbs-site", {
+      const promise = deployFunctionTargets(["handler"], launch, "njpbs-site", {
         manifest: [{ name: "handler", region: "us-central1", platform: "gcfv2" }], request: async () => ({}),
       });
       if (accepted) await expect(promise).resolves.toBeUndefined();
@@ -191,7 +189,7 @@ describe("CMS function build queue expiry recovery", () => {
       return child;
     });
     const wait = vi.fn().mockResolvedValue();
-    const promise = deployBatch(names, launch, "njpbs-site", {
+    const promise = deployFunctionTargets(names, launch, "njpbs-site", {
       manifest: names.map(name => ({ name, region: "us-central1", platform: "gcfv2" })), request, wait,
     });
     const targets = () => launch.mock.calls.map(([, args]) => args[args.indexOf("--only") + 1]);
@@ -234,6 +232,23 @@ describe("CMS function build queue expiry recovery", () => {
       "functions:exampleFunctionB,functions:exampleFunctionC,functions:exampleFunctionD",
       "functions:exampleFunctionB",
     ]);
+  });
+  // One invocation carries the full set. Firebase updates every target, then
+  // prints one failed-name summary for the whole set.
+  const fullSet = [...Array.from({ length: 185 }, (_, i) => `handler${i}`), ...failures[1]];
+  it("retries only the expired names after a full-set deployment", async () => {
+    const run = deployment([[1, recordings[1]], [0, "Deploy complete!\n"]], fullSet);
+    await expect(run.promise).resolves.toBeUndefined();
+    expect(run.targets()).toEqual([
+      fullSet.map(name => `functions:${name}`).join(","),
+      failures[1].map(name => `functions:${name}`).join(","),
+    ]);
+  });
+  it("fails closed once on a non-transient failure in a full-set deployment", async () => {
+    const run = deployment([[1, recordings[1].replace("EXPIRED", "FAILURE")]], fullSet);
+    await expect(run.promise).rejects.toThrow("did not confirm completion");
+    expect(run.targets()).toEqual([fullSet.map(name => `functions:${name}`).join(",")]);
+    expect(run.wait).not.toHaveBeenCalled();
   });
   it("does not retry a non-transient build failure", async () => {
     const run = deployment([[1, recordings[0].replace("EXPIRED", "FAILURE")]], failures[0]);

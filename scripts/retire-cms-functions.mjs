@@ -6,7 +6,7 @@ import { resolve } from "node:path";
 import { withFirestore } from "./cms-component-receipt.mjs";
 import { ComponentReceiptError, assertLegacyPreviewProtocol, readReceipt, requireRunAttempt, requireRunId, requireSha } from "./lib/cms-component-receipt.mjs";
 import { extractProductionExports } from "./smoke-cms-functions.mjs";
-import { FUNCTION_DEPLOY_REGION, cloudWakeFunctionPlan, explicitCloudWakeDecision, functionBatches, main as deployFunctions } from "./deploy-cms-function-batches.mjs";
+import { FUNCTION_DEPLOY_REGION, cloudWakeFunctionPlan, explicitCloudWakeDecision, functionTargets, main as deployFunctions } from "./deploy-cms-function-batches.mjs";
 import { readFunctionsDeployInventory } from "./lib/functions-deploy-inventory.mjs";
 import { cmsTarget } from "./lib/cms-target.mjs";
 import { applyFunctionRetirements, planFunctionRetirements, requireRetirementScope, validateRetirementPlan } from "./lib/functions-retirement.mjs";
@@ -19,7 +19,7 @@ export function retirementContext(firestore, env = process.env) {
   const source = readFileSync("functions/index.js", "utf8");
   const committed = execFileSync("git", ["show", `${sourceSha}:functions/index.js`], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
   if (execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim() !== sourceSha || source !== committed) refuse();
-  const rawNames = functionBatches(env.FUNCTION_TARGETS).flat().sort();
+  const rawNames = functionTargets(env.FUNCTION_TARGETS).sort();
   if (!isDeepStrictEqual(rawNames, extractProductionExports(source).sort())) refuse();
   const target = cmsTarget(env);
   const configuration = JSON.parse(readFileSync(target.firebaseConfig, "utf8"));

@@ -202,8 +202,8 @@ publisher, CMS API, Functions, renderer and Admin independently. `origin/main`,
 
 ## Failed or interrupted CMS release
 
-Earlier successful Functions batches remain live when a later one fails;
-remaining batches keep old revisions. Preserve `in_progress` and `lastComplete`
+Functions that updated remain live when others fail in the same deployment;
+failed functions keep old revisions. Preserve `in_progress` and `lastComplete`
 and treat the release as mixed until guarded recovery finishes. Recompute plans
 and actual identities on a partial rerun. A provider timeout is uncertain, not
 permission to restart under another identity.

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createRequire } from "node:module";
 import { EventEmitter } from "node:events";
 import { assertNoFunctionDeletions, functionDeployManifest, loadFunctionDeployManifest, readFunctionsDeployInventory } from "../../scripts/lib/functions-deploy-inventory.mjs";
-import { deployBatch } from "../../scripts/deploy-cms-function-batches.mjs";
+import { deployFunctionTargets } from "../../scripts/deploy-cms-function-batches.mjs";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -81,7 +81,7 @@ describe("forced Functions deployment inventory", () => {
 
   it("stops before launching a forced production batch when a selected live region would be removed", async () => {
     let launched = false;
-    await expect(deployBatch(["health"], () => { launched = true; }, "njpbs-site", {
+    await expect(deployFunctionTargets(["health"], () => { launched = true; }, "njpbs-site", {
       manifest: manifest(["health"]),
       request: async url => url.includes("/v1/") ? {} : { functions: [live("health", "njpbs-site", "us-central1", "default"), live("health", "njpbs-site", "europe-west1", "default")] },
     })).rejects.toThrow("delete or rename");
@@ -105,7 +105,7 @@ describe("forced Functions deployment inventory", () => {
       queueMicrotask(() => { child.stdout.emit("data", Buffer.from("Deploy complete!")); child.emit("close", 0); });
       return child;
     };
-    await expect(deployBatch(only, launch, projectId, { manifest: manifest(only), request: async url => url.includes("/v1/") ? {} : { functions } })).resolves.toBeUndefined();
+    await expect(deployFunctionTargets(only, launch, projectId, { manifest: manifest(only), request: async url => url.includes("/v1/") ? {} : { functions } })).resolves.toBeUndefined();
     expect(launched).toBe(true);
   });
 

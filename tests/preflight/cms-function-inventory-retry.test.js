@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { deployBatch, requestDeploymentInventory } from "../../scripts/deploy-cms-function-batches.mjs";
+import { deployFunctionTargets, requestDeploymentInventory } from "../../scripts/deploy-cms-function-batches.mjs";
 import { readFunctionsDeployInventory } from "../../scripts/lib/functions-deploy-inventory.mjs";
 
 const functionsUrl = "https://cloudfunctions.googleapis.com/v2/projects/njpbs-site/locations/-/functions";
@@ -58,7 +58,7 @@ describe("CMS function inventory request retries", () => {
   it("never launches a forced deployment after inventory retries fail", async () => {
     const client = { request: vi.fn().mockRejectedValue(providerError(503)) };
     const launch = vi.fn();
-    await expect(deployBatch(["health"], launch, "njpbs-site", {
+    await expect(deployFunctionTargets(["health"], launch, "njpbs-site", {
       manifest: [{ name: "health", region: "us-central1", platform: "gcfv2" }],
       request: (url, token) => requestDeploymentInventory(client, url, token, async () => {}),
     })).rejects.toThrow("HTTP 503, attempt 3 of 3");

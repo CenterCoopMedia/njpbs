@@ -257,17 +257,21 @@ requires its own reviewed explicit scope. Preserve Storage rules and schema
 compatibility during forward recovery; do not replace application code with incompatible
 lease, tier or lifecycle authority.
 
-## Function batches and retirement
+## Function deployment and retirement
 
 [deploy-cms-function-batches.mjs](../../scripts/deploy-cms-function-batches.mjs)
-keeps serial batches of at most ten, no-deletion manifests before every attempt,
-complete intended export inventory and final scheduler/readiness smoke. Known
-Cloud Build `EXPIRED` failures and exact refused Cloud Run invoker-policy reads
-permit bounded retry of only the named failed exports after ten seconds, up to
-two retries. Require one allowed diagnostic per failed name with no other error
-class. Incomplete/unknown failure lists, other faults or missing Deploy complete confirmation stop at
-that batch. Later dependent exports do not run; earlier updated exports remain
-live and the release stays mixed.
+deploys all selected exports in one Firebase invocation. The CLI updates up to
+40 functions at a time and retries quota (429) refusals itself. The script keeps
+no-deletion manifests before every attempt, complete intended export inventory
+and final scheduler/readiness smoke; the inventory and scheduler checks catch a
+run that reports success without updating every export. Known Cloud Build
+`EXPIRED` failures and exact refused Cloud Run invoker-policy reads permit
+bounded retry of only the named failed exports after ten seconds, up to two
+retries. Require one allowed diagnostic per failed name with no other error
+class. Incomplete/unknown failure lists, other faults or missing Deploy complete
+confirmation fail the step after the CLI finishes the whole set. Exports that
+updated remain live, failed exports keep old revisions and the release stays
+mixed. A rerun recomputes the targets and deploys the full selection again.
 
 Function deletion is never simply live-minus-target. The retirement table admits
 only reviewed predecessor exports from the completed receipt that the current
