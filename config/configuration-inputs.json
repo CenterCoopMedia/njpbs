@@ -722,6 +722,7 @@
         "DEV_SDK_PACKET_SHA256",
         "DEV_SLOT_PLAN",
         "DEV_STAFF_JWT_ENTRY",
+        "DEV_UPLOAD_OUTCOME",
         "DEV_VIEWER_ACCESS_ENTRY",
         "EDGE_ENTRY",
         "ELECTION_LATENCY_REPORT",
