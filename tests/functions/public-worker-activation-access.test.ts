@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import { PublicWorkerActivationOperatorError } from "../../site/scripts/activate-public-worker-candidate";
 import { checkPublicWorkerActivationAccess } from "../../site/scripts/check-public-worker-activation-access";
+import { createRequire } from "node:module";
+
+const { publicationTarget } = createRequire(import.meta.url)("../../functions/lib/publication-target.js");
 
 const ACCOUNT = "https://api.cloudflare.com/client/v4/accounts/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const WORKER_NAME = "njpbs-production";
@@ -83,5 +86,43 @@ describe("activation access check", () => {
     ]);
     expect(requestJson.mock.calls.map(([request]) => request.url)).not.toContain(`${ACCOUNT}/builds/workers/${WORKER_TAG}/triggers`);
     expect(JSON.stringify(checks)).not.toContain(TOKEN);
+  });
+
+  describe("development", () => {
+    const development = publicationTarget("development");
+    const ZONE = "c".repeat(32);
+    const ACCOUNT_ID = ACCOUNT.slice(-32);
+    const DEV = `${ACCOUNT}/workers/scripts/${development.workerName}`;
+    const devReplies: Record<string, unknown> = {
+      [`${ACCOUNT}/workers/scripts`]: { success: true, result: [{ id: WORKER_NAME, tag: "e".repeat(32) }, { id: development.workerName, tag: WORKER_TAG }] },
+      [`${ACCOUNT}/builds/workers/${WORKER_TAG}/triggers`]: { success: true, result: [] },
+      [`https://api.cloudflare.com/client/v4/zones?name=njpbs.org&account.id=${ACCOUNT_ID}`]: { success: true, result: [{ id: ZONE, name: "njpbs.org", account: { id: ACCOUNT_ID } }] },
+      [`https://api.cloudflare.com/client/v4/zones/${ZONE}/workers/routes`]: { success: true, result: [] },
+      [`${DEV}/subdomain`]: { success: true, result: { enabled: false, previews_enabled: false } },
+      [`${ACCOUNT}/workers/domains?service=${development.workerName}`]: { success: true, result: [] },
+      [`${DEV}/deployments`]: replies[`${ACCOUNT}/workers/scripts/${WORKER_NAME}/deployments`],
+    };
+    const devProvider = (overrides: Record<string, unknown | Error> = {}) => provider({ ...devReplies, ...overrides });
+
+    it("applies the development assertions to the development Worker with reads only", async () => {
+      const requestJson = devProvider();
+      const checks = await checkPublicWorkerActivationAccess({ cloudflareApiToken: TOKEN, requestJson, target: development });
+      expect(checks.every(entry => entry.ok)).toBe(true);
+      expect(requestJson.mock.calls.every(([request]) => request.method === "GET" && !("body" in request))).toBe(true);
+      expect(requestJson.mock.calls.map(([request]) => request.url)).not.toContain(`${ACCOUNT}/workers/scripts/${WORKER_NAME}/deployments`);
+    });
+
+    it("names the trigger read an account-owned token cannot make, a trigger and a public route", async () => {
+      const forbidden = await checkPublicWorkerActivationAccess({ cloudflareApiToken: TOKEN, target: development, requestJson: devProvider({
+        [`${ACCOUNT}/builds/workers/${WORKER_TAG}/triggers`]: new PublicWorkerActivationOperatorError("The Cloudflare API returned HTTP 403") }) });
+      expect(forbidden[1]).toEqual({ read: "build-trigger", ok: false, reason: "The Cloudflare API returned HTTP 403" });
+      const exposed = await checkPublicWorkerActivationAccess({ cloudflareApiToken: TOKEN, target: development, requestJson: devProvider({
+        [`${ACCOUNT}/builds/workers/${WORKER_TAG}/triggers`]: replies[`${ACCOUNT}/builds/workers/${WORKER_TAG}/triggers`],
+        [`https://api.cloudflare.com/client/v4/zones/${ZONE}/workers/routes`]: { success: true, result: [{ id: "r", pattern: "dev.njpbs.org/*", script: development.workerName }] } }) });
+      expect(exposed.map(entry => [entry.read, entry.ok])).toEqual([
+        ["worker-identity", true], ["build-trigger", false], ["worker-subdomain", false], ["active-deployment", true]]);
+      expect(exposed[1].reason).toBe("The Cloudflare development Worker has a build trigger");
+      expect(exposed[2].reason).toMatch(/^The development Worker must have no public route/);
+    });
   });
 });

@@ -298,11 +298,17 @@ export function publicationReadHeaders(access?: PublicationAccess): Record<strin
 /** A dev route or custom domain would serve a new version outside the staff gateway. */
 export async function assertDevelopmentWorkerPrivate(target: PublicationTarget, requestJson: RequestJson, token: string): Promise<void> {
   if (publicWorkerTarget(target).environment !== "development") return;
-  await verifyDevPublicWorkerPrivate(async (pathname: string) => {
-    const response = await requestJson({ url: cloudflareApiUrl(pathname), method: "GET", token });
-    if (!plainObject(response) || response.success !== true) operatorError("The Cloudflare API response is invalid");
-    return response.result;
-  }, undefined, cloudflareAccount());
+  try {
+    await verifyDevPublicWorkerPrivate(async (pathname: string) => {
+      const response = await requestJson({ url: cloudflareApiUrl(pathname), method: "GET", token });
+      if (!plainObject(response) || response.success !== true) operatorError("The Cloudflare API response is invalid");
+      return response.result;
+    }, undefined, cloudflareAccount());
+  } catch (error) {
+    // Reads keep their own named refusal; the verifier's own refusals are fixed sentences about these three conditions.
+    if (error instanceof PublicWorkerActivationOperatorError || error instanceof CloudflareConfigurationError) throw error;
+    operatorError("The development Worker must have no public route, custom domain, workers.dev or preview URL, and the configured account must hold njpbs.org");
+  }
 }
 
 export function assertProductionWorkerSubdomainDisabled(
