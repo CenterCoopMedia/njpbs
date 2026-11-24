@@ -476,11 +476,12 @@ jobs:
           if-no-files-found: error
           retention-days: 7
       # A step limit above stops a hung browser or workerd child; this names it.
-      # Newest processes first: a hung child outlives its timed-out step.
+      # Every user process (kernel threads excluded), newest first, uncapped:
+      # a hung child outlives its timed-out step and must not be cut off.
       - name: List processes and listening ports after a Site failure
         if: failure()
         run: |
-          ps -eo pid,ppid,etimes,stat,args --sort=etimes | cut -c1-200 | head -60
+          ps --ppid 2 -p 2 --deselect -o pid,ppid,etimes,stat,args --sort=etimes | cut -c1-200
           ss -ltnp || true
 
   admin:
