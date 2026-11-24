@@ -175,19 +175,28 @@ const archiveTarget = "/posts/old-story/";
 const canonicalArchivePost = "/posts/current-story/";
 const archiveMap = JSON.stringify({ [archiveAlias]: archiveTarget });
 const archiveRequest = (path: string, method = "GET") => new Request(`https://dev-public.example.org${path}`, { method });
-async function archiveFixture() {
+async function archiveFixture(composed = false) {
   const shard = `${SPOTLIGHT_ARCHIVE_REDIRECT_ASSETS}${spotlightArchiveRedirectShard(archiveAlias)}.json`;
+  // A direct content head omits archive shards; only the pair's code pack holds them.
   const view = await writePublicReleasePairView({ store, pair, identity, claimDigest, cursor,
+    outputs: (async function* () {
+      yield { path: canonicalArchivePost, status: 200 as const, bytes: body,
+        headers: { "cache-control": "no-store", "content-type": "text/html" } };
+    })() });
+  const codePackClaim = "c".repeat(64);
+  const codePack = await writePublicReleasePairView({ store, pair, identity, claimDigest: codePackClaim, cursor,
     outputs: (async function* () {
       yield { path: shard, status: 200 as const, bytes: new TextEncoder().encode(archiveMap),
         headers: { "cache-control": "no-store", "content-type": "application/json" } };
-      yield { path: `${canonicalArchivePost}index.html`, status: 200 as const, bytes: body,
-        headers: { "cache-control": "no-store", "content-type": "text/html" } };
     })() });
+  if (!composed) decision = { ...decision, contentHead: { ...decision.contentHead, manifestDigest: view.manifestDigest } };
+  const codePackLocator = { ...decision.locator, claimDigest: codePackClaim, manifestDigest: codePack.manifestDigest, manifestBytes: codePack.manifestBytes };
   const lookup = (path: string): PairServingDecision => ({ ...decision, path,
     route: path === archiveTarget ? { ...decision.route, kind: "redirect", family: "post", canonicalPath: canonicalArchivePost } as PairServingDecision["route"] : { kind: "unowned" },
-    locator: { ...decision.locator, manifestDigest: view.manifestDigest, manifestBytes: view.manifestBytes },
-    composition: { artifactPath: `${path}index.html`, absent: false, witnessDigest: decision.contentHead.viewId, expectedBodyDigest: null },
+    locator: composed && path === archiveAlias ? codePackLocator : { ...decision.locator, manifestDigest: view.manifestDigest, manifestBytes: view.manifestBytes },
+    composition: composed ? { artifactPath: path === archiveAlias ? `${path}index.html` : path, absent: false,
+      witnessDigest: decision.contentHead.viewId, expectedBodyDigest: null } : null,
+    ...(path === archiveAlias ? { archiveLocator: codePackLocator } : {}),
   });
   getDecision.mockImplementation(async (_, path) => lookup(path));
   const router = createPublicReleaseRouter({ environment: "development", slots: [slot(), { identity: releasePair("b"), serve: vi.fn() }],
@@ -195,8 +204,8 @@ async function archiveFixture() {
   return { lookup, shard, ingress: router.fetch };
 }
 
-it("redirects an exact archive alias through paired ingress and the legacy retirement rule", async () => {
-  const { shard, ingress } = await archiveFixture();
+it.each(["direct", "composed"])("redirects an exact archive alias from a %s head through paired ingress and the legacy retirement rule", async head => {
+  const { lookup, shard, ingress } = await archiveFixture(head === "composed");
   const throughRetirement = (path: string, method?: string) => legacyRedirects.fetch(archiveRequest(path, method), { ASSETS: { fetch: ingress } });
   for (const method of ["GET", "HEAD"]) {
     const response = await throughRetirement("/blog-post/caf%c3%a9/?ref=archive", method);
@@ -206,6 +215,7 @@ it("redirects an exact archive alias through paired ingress and the legacy retir
     expect(await response.text()).toBe("");
   }
   expect((await ingress(archiveRequest(canonicalArchivePost))).status).toBe(200);
+  getDecision.mockImplementation(async (_, path) => path === "/blog-post/unknown/" ? { ...lookup(archiveAlias), path } : lookup(path));
   expect((await throughRetirement("/blog-post/unknown/")).status).toBe(410);
   expect((await ingress(archiveRequest(shard))).status).toBe(404);
 });

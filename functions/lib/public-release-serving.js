@@ -185,10 +185,26 @@ async function readPublicReleaseDecision({ firestore, environment, selection, pa
           targetProof.bytes > view.VIEW_ROOT_BYTES_LIMIT ||
           targetProof.key !== view.publicReleasePairViewObjectKey(pair, proofLocator.identity, proofLocator.claimDigest, targetProof.digest)) refuse();
     }
+    let archiveLocator = null;
+    // The slot sends a decoded path when it is a valid artifact path.
+    if (route.kind === "unowned" && (spotlightArchivePath(path) || spotlightArchivePath(encodeURI(path)))) {
+      if (composed) archiveLocator = locator;
+      else {
+        // A direct head omits archive shards; read them from the pair's verified code pack.
+        const codePack = await require("./public-release-pair-code-pack-view").assertReadPublicReleasePairStagedCodePackInTransaction({ firestore, transaction, pair });
+        const codeView = (await transaction.get(firestore.doc(`${base}/views/${codePack.viewManifestDigest}`))).data();
+        if (codePack.cursor.baselineDigest !== changes.baselineDigest || codePack.cursor.sequence > contentHead.contextSequence ||
+            !Number.isSafeInteger(codeView?.manifestBytes) || codeView.manifestBytes < 1 || codeView.manifestBytes > view.VIEW_ROOT_BYTES_LIMIT ||
+            codeView.manifestKey !== `${view.publicReleasePairViewPrefix(pair, codePack.identity, codePack.claimDigest)}views/${codePack.viewManifestDigest}.json`) refuse();
+        archiveLocator = { pairDigest: codePack.pairDigest, identity: codePack.identity, claimDigest: codePack.claimDigest,
+          manifestDigest: codePack.viewManifestDigest, manifestBytes: codeView.manifestBytes };
+      }
+    }
     if (now() - selection.readStartedAt >= 5_000) return { kind: "reselect" };
     const composition = composed ? { artifactPath: composed.artifactPath, expectedBodyDigest: composed.expectedBodyDigest,
       absent: composed.absent, witnessDigest: composed.witnessDigest, proofLocator: route.kind === "serve" ? composed.proofLocator : null } : null;
-    const core = { epoch: requested.epoch, pairId: pair.pairId, contentHead, locator, composition, targetProof, route, path };
+    const core = { epoch: requested.epoch, pairId: pair.pairId, contentHead, locator, composition, targetProof, route, path,
+      ...(archiveLocator ? { archiveLocator } : {}) };
     return { kind: "decision", ...core, authorityDigest: protocol.publicReleaseDigest({ ...core, currentSelector: current, changes }) };
   }, { readOnly: true });
 }

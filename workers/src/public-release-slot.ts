@@ -137,10 +137,10 @@ export function createPublicReleaseSlot({ pair, workerVersionId, store, getDecis
         let response = none(404);
         let reselect = false;
         if (before.route.kind === "unowned" && archivePath) {
-          // An unowned composed miss resolves against this pair's sealed code pack.
+          // An unowned miss resolves against this pair's sealed code pack.
           // Storage failures must reach the router before retirement can turn a miss into 410.
           const shard = await readPublicReleasePairOutput({
-            store, pair, locator: before.locator, path: spotlightArchiveRedirectAssetPath(archivePath),
+            store, pair, locator: before.archiveLocator ?? fail(), path: spotlightArchiveRedirectAssetPath(archivePath),
           });
           if (shard) {
             if (shard.status !== 200) fail();

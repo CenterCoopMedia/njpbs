@@ -5,6 +5,7 @@ import path from "node:path";
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { Miniflare } from "miniflare";
 import { isolatedFirestore } from "../helpers/emulator-firestore.js";
+import { publicReleaseCodePackFixture } from "../helpers/public-release-code-pack";
 import { publicReleasePairCompositeFixture } from "../helpers/public-release-pair-composite";
 import { stagedPublicReleasePairCompositeFixture } from "../helpers/staged-public-release-pair-composite";
 import { releasePair, releaseSelector, pairReference } from "../helpers/private-public-release-pair.js";
@@ -13,17 +14,22 @@ import { createPublicReleaseRouter } from "../../workers/src/public-release-rout
 import serving from "../../functions/lib/public-release-serving.js";
 import protocol from "../../functions/lib/public-release-pair.js";
 import inputs from "../../functions/lib/public-release-pair-input.js";
-import type { PairReadStore } from "../../workers/src/public-release-view-reader";
+import { readPublicReleasePairOutput, type PairReadStore } from "../../workers/src/public-release-view-reader";
+import { SPOTLIGHT_ARCHIVE_REDIRECT_ASSETS, spotlightArchiveRedirectShard } from "../../packages/content-core/src/spotlight-archive-paths";
 
 let runtime: Miniflare, directory: string, fixture: Awaited<ReturnType<typeof publicReleasePairCompositeFixture>>;
 let staged: Awaited<ReturnType<typeof stagedPublicReleasePairCompositeFixture>>, store: Awaited<ReturnType<Miniflare["getR2Bucket"]>>;
 const hash = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
+const archiveAlias = "/2012/02/old-transit/";
+const archiveShard = `${SPOTLIGHT_ARCHIVE_REDIRECT_ASSETS}${spotlightArchiveRedirectShard(archiveAlias)}.json`;
+const archiveMap = JSON.stringify({ [archiveAlias]: "/posts/shadow-fixture/" });
 beforeAll(async () => {
   runtime = new Miniflare({ workers: [{ config: { name: "unowned-proof", type: "worker", compatibilityDate: "2026-07-09",
     manifest: { mainModule: "index.js", modules: { "index.js": { type: "esm", contents: "export default {fetch(){return new Response(null,{status:404})}}" } } },
     env: { CONTENT: { type: "r2", name: "unowned-proof" } } } }] });
   store = await runtime.getR2Bucket("CONTENT"); directory = await mkdtemp(path.join(os.tmpdir(), "unowned-proof-"));
-  fixture = await publicReleasePairCompositeFixture({ firestore: isolatedFirestore("unowned-proof"), store, directory, content: "baseline" });
+  fixture = await publicReleasePairCompositeFixture({ firestore: isolatedFirestore("unowned-proof"), store, directory, content: "baseline",
+    prepareArtifacts: (directory, sourceInputs) => publicReleaseCodePackFixture(directory, "b".repeat(40), sourceInputs, { [archiveShard.slice(1)]: archiveMap }) });
   // Real H/G, SDK completion/staging and R2 manifests. The closed-roster helper
   // uses explicit route bodies; this proves confirmation ownership, not SSR.
   staged = await stagedPublicReleasePairCompositeFixture(fixture, store);
@@ -56,6 +62,15 @@ it.each(["/", "/programs/", "/feeds/news.xml", "/pagefind/pagefind.js"])("confir
   expect(proof.headers.get("x-njpbs-release-pair")).toBe(fixture.pair.pairId);
   expect(proof.headers.get("x-njpbs-snapshot-sha256")).toBe(staged.claim.identity.snapshotDigest);
   expect(proof.headers.get("x-njpbs-html-sha256")).toBe(hash(expected.bytes));
+});
+it("reads a direct head's archive shard from the staged code pack", async () => {
+  const { firestore, pair } = fixture;
+  const selection = await serving.readPublicReleaseSelector({ firestore, environment: "development" });
+  const decision = await serving.readPublicReleaseDecision({ firestore, environment: "development", pair, selection, path: archiveAlias });
+  if (decision.kind !== "decision" || !decision.archiveLocator) throw new Error("Expected an archive decision");
+  expect(await readPublicReleasePairOutput({ store, pair, locator: decision.locator, path: archiveShard })).toBeNull();
+  const shard = await readPublicReleasePairOutput({ store, pair, locator: decision.archiveLocator, path: archiveShard });
+  expect(new TextDecoder().decode(shard!.body)).toBe(archiveMap);
 });
 it("refuses an absent manifest path and a caller's incorrect expected digest", async () => {
   expect((await router().prove(new Request("https://dev-public.example.org/absent-manifest-path/"), "0".repeat(64))).status).toBe(503);
