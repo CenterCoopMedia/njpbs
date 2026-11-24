@@ -123,7 +123,16 @@ describe("deploy credential environments", () => {
     const step = (job: Job, prefix: string) => job.steps.find(s => s.uses?.startsWith(prefix));
     expect(step(development, "actions/create-github-app-token@")?.with).toEqual(step(production, "actions/create-github-app-token@")?.with);
     const push = development.steps[development.steps.length - 1];
-    expect(push.run).toBe('git push origin "$SELECTED_SHA:refs/heads/development"');
+    // Development takes any commit of ours: a dev run promotes a release-run-site commit that does not descend
+    // from the development tip. The lease still refuses a tip it did not read. Remove when #632 merges.
+    expect(push.run).toBe('set -euo pipefail\ntip=$(git rev-parse refs/remotes/origin/development)\n' +
+      'git push --force-with-lease="refs/heads/development:$tip" origin "$SELECTED_SHA:refs/heads/development"\n');
+    // Production only moves forward, along main.
+    const productionRuns = production.steps.map(s => s.run ?? "").join("\n");
+    expect(productionRuns).not.toMatch(/--force|\+(?:\$SELECTED_SHA|"\$SELECTED_SHA)/);
+    expect(productionRuns).toContain('git merge-base --is-ancestor origin/production "$SELECTED_SHA"');
+    expect(productionRuns).toContain('git merge-base --is-ancestor "$SELECTED_SHA" origin/main');
+    expect(production.steps[production.steps.length - 1].run).toBe('git push origin "$SELECTED_SHA:refs/heads/production"');
     expect(JSON.stringify(development)).not.toContain("production");
     for (const s of development.steps.filter(s => s.uses)) expect(s.uses).toMatch(/@[a-f0-9]{40}$/);
   });
@@ -196,7 +205,9 @@ describe("deploy credential environments", () => {
 
   it("defines only the approved environments and exact deployment branches", () => {
     expect(Object.fromEntries(Object.entries(environmentPolicy()).map(([name, policy]) => [name, policy.branches]))).toEqual({
-      production: ["main"], "schedule-bake": ["main"], "publisher-image": ["main"], development: ["main"],
+      // A dev run dispatches from release-run-site. Remove it when #632 merges.
+      production: ["main"], "schedule-bake": ["main"],
+      "publisher-image": ["main", "release-run-site"], development: ["main", "release-run-site"],
     });
     expect(environmentPolicy()["publisher-image"].secrets).toEqual(["CLOUDFLARE_PUBLISHER_IMAGE_TOKEN"]);
     const image = workflow("publisher-image").jobs.image;
