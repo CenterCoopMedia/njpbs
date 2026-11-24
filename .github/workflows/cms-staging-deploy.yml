@@ -1070,7 +1070,10 @@ jobs:
         if: needs.firebase-preflight.outputs.reader_binding != ''
         env:
           CMS_READER_BINDING: ${{ needs.firebase-preflight.outputs.reader_binding }}
-        run: node scripts/cms-reader-binding.mjs bind cmsApi
+        run: |
+          # Trusted here: a rerun keeps the attempt-1 binding and runs the release source's binder.
+          [ "$GITHUB_RUN_ATTEMPT" = 1 ] || { echo "::error::A bound run cannot be rerun; dispatch a new run"; exit 1; }
+          node scripts/cms-reader-binding.mjs bind cmsApi
       - name: Bind and start the original production API reader candidate
         if: inputs.install_reader_bridge
         env:
@@ -1429,7 +1432,10 @@ jobs:
         if: needs.firebase-preflight.outputs.functions_mutated == 'true' && needs.firebase-preflight.outputs.reader_binding != ''
         env:
           CMS_READER_BINDING: ${{ needs.firebase-preflight.outputs.reader_binding }}
-        run: node scripts/cms-reader-binding.mjs bind functions
+        run: |
+          # Trusted here: a rerun keeps the attempt-1 binding and runs the release source's binder.
+          [ "$GITHUB_RUN_ATTEMPT" = 1 ] || { echo "::error::A bound run cannot be rerun; dispatch a new run"; exit 1; }
+          node scripts/cms-reader-binding.mjs bind functions
       - name: Bind and start the original production Functions reader candidate
         if: inputs.install_reader_bridge
         env:

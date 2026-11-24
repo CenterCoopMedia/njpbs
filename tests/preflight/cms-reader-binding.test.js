@@ -106,6 +106,14 @@ describe("CMS reader binding for an ordinary deploy", () => {
     expect(() => assertFirstAttempt({ GITHUB_RUN_ATTEMPT: "2" })).toThrow("dispatch a new run");
     const source = readFileSync(new URL("../../scripts/cms-reader-binding.mjs", import.meta.url), "utf8");
     expect(source).toContain("if (selected) assertFirstAttempt(process.env);");
+    // The workflow refuses too, so an older release-source binder never runs on a rerun.
+    const workflow = parse(readFileSync(new URL("../../.github/workflows/cms-staging-deploy.yml", import.meta.url), "utf8"));
+    const steps = Object.fromEntries(Object.values(workflow.jobs).flatMap(job => job.steps).filter(row => row.name).map(row => [row.name, row]));
+    for (const name of ["Bind the CMS readers into the Functions configuration", "Bind the CMS readers into the CMS API config"]) {
+      const run = steps[name].run;
+      expect(run.indexOf('[ "$GITHUB_RUN_ATTEMPT" = 1 ] || {')).toBeGreaterThan(-1);
+      expect(run.indexOf('[ "$GITHUB_RUN_ATTEMPT" = 1 ] || {')).toBeLessThan(run.indexOf("node scripts/cms-reader-binding.mjs bind"));
+    }
     for (const write of ["writeFileSync(path, bindFunctionsDotenv(", "writeFileSync(path, `${JSON.stringify(bindApiConfig("]) {
       const at = source.indexOf(write);
       expect(source.lastIndexOf("assertFirstAttempt(process.env);", at)).toBeGreaterThan(source.lastIndexOf("} else if", at));
