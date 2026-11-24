@@ -42,7 +42,7 @@ function waitsForRefresh(error, since, now) {
   return error?.code === "public_refresh_pending" && Number.isFinite(started) && now - started < REFRESH_WAIT_MS;
 }
 
-function publicationFailure(row, family, now, { error, since } = {}) {
+function publicationFailure(row, family, now, { error = undefined, since = undefined } = {}) {
   if (waitsForRefresh(error, since, now)) return { status: family === "postProof" ? "failed" : "pending", claim: null,
     attempts: row.attempts - 1, nextAttemptAt: now + 60_000, error: families[family].error };
   const exhausted = row.attempts >= 4;

@@ -59,7 +59,7 @@ const refreshProgress = new WeakMap();
 // One public read. Each GET has ten seconds for its headers and body. A valid
 // refresh-pending answer is progress: it restarts that limit until the caller's
 // deadline. A route still refreshing at the deadline is distinct from a stall.
-async function withinPublicRead(milliseconds, work, { onSlowRefresh, stop } = {}) {
+async function withinPublicRead(milliseconds, work, { onSlowRefresh = undefined, stop = undefined } = {}) {
   const controller = new AbortController();
   let stall, end, refreshing = false;
   const slowAt = Date.now() + PUBLIC_READ_STALL_MS;
@@ -117,6 +117,15 @@ async function purgePublicHome({ target, fetchPurge = fetch, purgeConfig } = {})
   await purgePublicCacheTags([publicationPostCacheTag(target, "background")], config, fetchPurge);
 }
 
+function pauseUnlessAborted(milliseconds, signal) {
+  return new Promise((resolve, reject) => {
+    const aborted = () => { clearTimeout(timer); reject(signal.reason); };
+    const timer = setTimeout(() => { signal.removeEventListener("abort", aborted); resolve(undefined); }, milliseconds);
+    signal.addEventListener("abort", aborted, { once: true });
+    if (signal.aborted) aborted();
+  });
+}
+
 // The Post reader's own "retry in one second" answer while its authority
 // refreshes. It carries no receipt, unlike a withdrawal or renderer refusal.
 function isUpdatingAnswer(response) {
@@ -136,7 +145,7 @@ async function readPublicPostAfterRefresh(url, fetchPublic, signal, headers, { u
     // Public reads return Assets while their edge refresh runs. Each pending
     // answer restarts the caller's stall limit and retains the same operation.
     refreshProgress.get(signal)?.();
-    await delay(1_000, undefined, { signal });
+    await pauseUnlessAborted(1_000, signal);
   }
   throw new Error("Public Post confirmation timed out");
 }
