@@ -81,6 +81,7 @@ jobs:
           CMS_GPU_WORKER_ID: ${{ vars.CMS_GPU_WORKER_ID }}
           # Production renders only its three inputs; development renders all of them.
           CLOUDFLARE_DEV_PUBLIC_WORKER: ${{ vars.CLOUDFLARE_DEV_PUBLIC_WORKER }}
+          CMS_DEV_CLOUDFLARE_ACCOUNT_ID: ${{ inputs.target == 'development' && vars.CMS_DEV_CLOUDFLARE_ACCOUNT_ID || '' }}
           CMS_DEV_ADMIN_ORIGIN: ${{ vars.CMS_DEV_ADMIN_ORIGIN }}
           CMS_DEV_ADMIN_PAGES: ${{ vars.CMS_DEV_ADMIN_PAGES }}
           CMS_DEV_API_ORIGIN: ${{ vars.CMS_DEV_API_ORIGIN }}

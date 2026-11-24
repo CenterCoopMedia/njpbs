@@ -32,6 +32,8 @@ export function targetSource(source, target) {
   config.containers[0].name = target.publisherWorker;
   config.r2_buckets = config.r2_buckets.map(bucket => ({ ...bucket, bucket_name: target.publicationBucket }));
   config.routes = [{ pattern: new URL(target.publisherOrigin).host, custom_domain: true }];
+  // Only a development Worker carries the account pin its container checks before every upload.
+  config.vars = { CMS_DEV_CLOUDFLARE_ACCOUNT_ID: "", ...config.vars };
   return config;
 }
 
@@ -117,6 +119,7 @@ export function productionConfig(source, prepared, { checkout, sha, image, varia
       !path.isAbsolute(checkout) || !/^[a-f0-9]{40}$/.test(sha) ||
       !/^[a-f0-9]{32}$/.test(variables.CLOUDFLARE_ACCOUNT_ID ?? "") ||
       (source.account_id !== undefined && source.account_id !== variables.CLOUDFLARE_ACCOUNT_ID) ||
+      (target.environment === "development" && variables.CMS_DEV_CLOUDFLARE_ACCOUNT_ID !== variables.CLOUDFLARE_ACCOUNT_ID) ||
       variables.PUBLICATION_ENABLED !== "true" ||
       JSON.stringify(Object.keys(source.vars).sort()) !== JSON.stringify(Object.keys(variables).sort()) ||
       Object.values(variables).some(value => typeof value !== "string") ||
@@ -182,7 +185,9 @@ async function main(mode, env = process.env) {
       return response.json();
     } });
   } else if (mode === "prepare") {
-    const variables = JSON.parse(env.PUBLISHER_PUBLIC_VARS_JSON);
+    // The development pin comes from its own repository variable, separate from the account in the vars JSON.
+    const variables = { ...JSON.parse(env.PUBLISHER_PUBLIC_VARS_JSON),
+      ...(target.environment === "development" ? { CMS_DEV_CLOUDFLARE_ACCOUNT_ID: env.CMS_DEV_CLOUDFLARE_ACCOUNT_ID ?? "" } : {}) };
     const prepared = JSON.parse(command(process.execPath, ["scripts/prepare-cloud-publisher.mjs", sha,
       // Older source commits accept only the SHA; production keeps that call.
       ...(target.environment === "production" ? [] : [target.environment])], {

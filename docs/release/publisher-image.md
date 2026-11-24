@@ -85,6 +85,12 @@ The development job reads `PUBLISHER_DEVELOPMENT_PUBLIC_VARS_JSON` from the same
 targets refuse a variables map whose environment or serializer names the other
 target.
 
+A development run also adds the repository variable
+`CMS_DEV_CLOUDFLARE_ACCOUNT_ID` to its variables map, and the development
+source declares that key. The development config refuses unless the pin equals
+`CLOUDFLARE_ACCOUNT_ID`. The Worker passes the pin to the publisher container,
+which checks it before every upload. A production map never has the key.
+
 A production run calls the source's preparation script with only the SHA, as
 older source commits require; only a development run adds `development`, so a
 source commit without development preparation refuses.
