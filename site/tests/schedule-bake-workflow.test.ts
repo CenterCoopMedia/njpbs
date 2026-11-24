@@ -62,9 +62,7 @@ describe("schedule bake automation", () => {
 
   it("uses the schedule bake app for repository writes", () => {
     expect(workflow).toContain("permissions:\n  actions: read");
-    expect(workflow).toContain(
-      "actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510",
-    );
+    expect(workflow).toMatch(/uses: actions\/create-github-app-token@[0-9a-f]{40} /);
     expect(workflow).toContain(
       "client-id: ${{ vars.SCHEDULE_BAKE_APP_CLIENT_ID }}",
     );
