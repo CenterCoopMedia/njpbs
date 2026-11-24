@@ -1,7 +1,6 @@
 // Shared by the Node reader and the slot without importing database code.
 export const PAIR_READER_PATH = "/private-pair-reader/v2/read";
 export const PAIR_READER_PATHS_LIMIT = 32;
-export const PAIR_READER_DEADLINE_MS = 3_000;
 export const PAIR_READER_BYTES_LIMIT = 16 * 1024 * 1024;
 export const PAIR_READER_REQUEST_LIMIT = 64 * 1024;
 export const PAIR_READER_REPLY_LIMIT = 24 * 1024 * 1024;

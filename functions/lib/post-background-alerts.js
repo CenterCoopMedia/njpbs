@@ -7,7 +7,7 @@ const { readPublicBackgroundContextInTransaction } = require("./public-context-r
 const { isNoBuildPostId, readNoBuildPostOwner } = require("./no-build-post-ownership");
 const { POST_PROOF_EXHAUSTED_WARNING } = require("./no-build-post-proof-state");
 const { outputLimits } = require("./no-build-record-namespace");
-const { publicContextProgressAt } = require("./no-build-cloud-work");
+const { publicContextProgressAt, failedFinal, preparationExhausted } = require("./no-build-cloud-work");
 const { automaticRecoveryActive } = require("./public-context-alerts");
 const { ownsPublication } = require("./publication-runtime-owner");
 const { cmsPublicationRuntimeRef, projectCmsPublicationRuntimeControl, cloudCmsPublicationRuntimeControl } = require("./cms-publication-runtime-control");
@@ -27,10 +27,14 @@ const ALERT_MESSAGES = {
 
 const replacementRunning = (value, time) => Boolean(["building", "pending", "failed"].includes(value?.status) &&
   value.claim && value.nextAttemptAt > time);
-const replacementFailed = (value, time) => value?.status === "failed" && value.nextAttemptAt === null ||
-  Boolean(value?.claim && value.attempts >= 4 && value.nextAttemptAt <= time);
-const recoveryExhausted = (value, time) => (value?.status === "failed" && value.nextAttemptAt === null ||
-  value?.claim && value.attempts >= 4 && value.nextAttemptAt <= time) && !automaticRecoveryActive(value, time);
+// A background task never runs out of attempts. It needs a replacement after a
+// final outcome or when its claim time passed, as public-context-alerts reads it.
+const claimExpired = (value, time) => typeof value?.claim === "string" && Number.isFinite(value.nextAttemptAt) &&
+  value.nextAttemptAt <= time;
+const taskStopped = (task, time) => failedFinal(task) || claimExpired(task, time);
+// The preparation family still ends after its fourth attempt.
+const preparationStopped = (preparation, time) => failedFinal(preparation) ||
+  Boolean(preparation?.claim) && preparationExhausted(preparation, time);
 
 function actionableReason(health) {
   if (health.reason === "search_capacity") return null;
@@ -78,7 +82,7 @@ async function readFamilyHealthInTransaction({ firestore, transaction, time }) {
   const selected = active.some(row => row.data()?.contextOnly === true)
     ? (await transaction.get(firestore.doc("system/publicDeployment/aggregateContexts/current"))).data() : null;
   let progressAt = null;
-  let preparationRunning = false, preparationFailed = false, preparationExhausted = false;
+  let preparationRunning = false, preparationFailed = false, preparationEnded = false;
   if (context && /^[A-Za-z0-9]{20}$/.test(selected?.operationId ?? "") && /^[A-Za-z0-9]{20}$/.test(selected?.preparationOperationId ?? "")) {
     const [queue, preparation] = await transaction.getAll(firestore.doc(`cmsPublishQueue/${selected.operationId}`),
       firestore.doc(`cmsPublishQueue/${selected.preparationOperationId}/backgroundPreparation/${selected.contextDigest}`));
@@ -92,9 +96,9 @@ async function readFamilyHealthInTransaction({ firestore, transaction, time }) {
       const prepared = preparation.data();
       const matching = prepared && ownsPublication(prepared, runtime) && prepared.contextDigest === selected.contextDigest;
       preparationRunning = queue.data().status === "pending" && matching && prepared.status === "building" && replacementRunning(prepared, time);
-      preparationFailed = queue.data().status === "failed" || matching && replacementFailed(prepared, time);
-      preparationExhausted = queue.data().status === "failed" && queue.data().error === "background_preparation_failed" ||
-        matching && recoveryExhausted(prepared, time);
+      preparationFailed = queue.data().status === "failed" || matching && preparationStopped(prepared, time);
+      preparationEnded = queue.data().status === "failed" && queue.data().error === "background_preparation_failed" ||
+        matching && preparationStopped(prepared, time) && !automaticRecoveryActive(prepared, time);
     }
   }
   const taskPaths = [...new Set(active.map(row => row.data().taskPath))]
@@ -124,12 +128,13 @@ async function readFamilyHealthInTransaction({ firestore, transaction, time }) {
         value.ref.path === `cmsPublishQueue/${state.taskPath?.split("/")[1]}/backgroundPreparation/${context.digest}`)?.data();
       const postPreparationStopped = matching && postPreparation?.contextDigest === context.digest &&
         (state.runtime ? ownsPublication(postPreparation, { ...state.runtime, release: context.rendererSha }) : postPreparation.runtime === undefined) &&
-        replacementFailed(postPreparation, time);
-      const failed = selectedFamily && preparationFailed || matching && replacementFailed(task, time) || postPreparationStopped;
+        preparationStopped(postPreparation, time);
+      const failed = selectedFamily && preparationFailed || matching && taskStopped(task, time) || postPreparationStopped;
       const running = selectedFamily && preparationRunning || matching && replacementRunning(task, time);
       health = backgroundHealth(state, source, { ...context, progressAt: selectedFamily ? progressAt : null }, time,
         failed ? 0 : running ? Infinity : REBUILD_ALERT_AFTER_MS);
-      health.terminalFailure = selectedFamily && preparationExhausted || matching && recoveryExhausted(task, time) || postPreparationStopped;
+      health.terminalFailure = selectedFamily && preparationEnded ||
+        matching && taskStopped(task, time) && !automaticRecoveryActive(task, time) || postPreparationStopped;
       health.replacementNeedsAttention = failed || health.terminalFailure ||
         time - Math.max(health.pendingSince, selectedFamily ? progressAt ?? 0 : 0) >= REBUILD_ALERT_AFTER_MS;
     } catch {

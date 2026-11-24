@@ -9,7 +9,7 @@ const writer = require("./public-release-writer-fence");
 const { exhaustedPostProof } = require("./no-build-post-proof-state");
 const { readPublicContextInTransaction } = require("./public-context-revision");
 const { verifiedPreparation } = require("./public-context-publication");
-const { retryExhausted } = require("./no-build-cloud-work");
+const { failedFinal, preparationExhausted } = require("./no-build-cloud-work");
 const { contextOutputs } = require("./no-build-record-namespace");
 const { publicationTarget } = require("./publication-target");
 const isDevelopment = attempt => attempt.environment === "development";
@@ -226,8 +226,7 @@ async function backgroundWarnings(firestore, transaction, queues, outputs, oldOw
         queue.claim != null || queue.nextAttemptAt != null || withdrawalQueue(queue)) continue;
     const task = (await transaction.get(firestore.doc(path))).data();
     if (task?.schemaVersion !== 1 || task.owner !== output.owner || task.output !== row.id || task.revision !== output.revision ||
-        !task.runtime || !same(task.runtime, oldOwner) || task.status !== "failed" || !retryExhausted(task) || task.claim != null ||
-        task.nextAttemptAt !== null || task.slowRetryAt != null ||
+        !task.runtime || !same(task.runtime, oldOwner) || !failedFinal(task) || task.claim != null || task.slowRetryAt != null ||
         task.dependencies?.before?.visible === true && task.dependencies.after?.visible === false) continue;
 
     // Aggregate failures copy the same output failure to each operation at the
@@ -466,7 +465,7 @@ async function recordFailedPause(firestore, attempt) {
       if (["pending", "publishing", "success"].includes(queue.status) || queueFailedAfterPause(row, oldOwner, initialFailures)) {
         preparationDigest ??= await readPublicContextInTransaction(transaction, firestore);
         const ref = row.ref.collection("backgroundPreparation").doc(preparationDigest), preparation = (await transaction.get(ref)).data();
-        if (preparationOwned(preparation, oldOwner, preparationDigest) && retryExhausted(preparation))
+        if (preparationOwned(preparation, oldOwner, preparationDigest) && preparationExhausted(preparation))
           add("background-preparation-exhausted", row.id, ref.path);
       }
     }

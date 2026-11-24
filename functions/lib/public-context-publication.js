@@ -5,7 +5,7 @@ const { assertCmsPublicationCloudAdmission } = require("./cms-publication-runtim
 const { FieldValue } = require("firebase-admin/firestore");
 const { publicationRuntime, ownsPublication, samePublicationOwner } = require("./publication-runtime-owner");
 const { publicContextDigest, PUBLIC_CONTEXT_PATH } = require("./public-context-revision");
-const { retryExhausted } = require("./no-build-cloud-work");
+const { failedFinal, preparationExhausted } = require("./no-build-cloud-work");
 const { dependency, lastGood } = require("./post-background-outputs");
 const { SUPERSEDED, retryLeft, prepareSupersededPreparationsInTransaction } = require("./superseded-preparation");
 
@@ -374,8 +374,8 @@ async function settlePublicContext({ firestore, operationId, runtime }) {
       const anchorId = current.data()?.contextDigest === job.publicContext.contextDigest && ownsPublication(current.data(), runtime)
         ? current.data().operationId : operationId;
       const preparation = await transaction.get(firestore.doc(`cmsPublishQueue/${anchorId}/backgroundPreparation/${job.publicContext.contextDigest}`));
-      const preparationFailed = preparation.exists && ownsPublication(preparation.data(), runtime) && retryExhausted(preparation.data());
-      if (preparationFailed || tasks.some(row => ownsPublication(row.data(), runtime) && retryExhausted(row.data()))) {
+      const preparationFailed = preparation.exists && ownsPublication(preparation.data(), runtime) && preparationExhausted(preparation.data());
+      if (preparationFailed || tasks.some(row => ownsPublication(row.data(), runtime) && failedFinal(row.data()))) {
         const aliases = await contextAliases(transaction, firestore, operationId, runtime, job, current.data());
         for (const alias of aliases) if (["pending", "failed"].includes(alias.data().status)) transaction.update(alias.ref,
           { status: "failed", error: preparationFailed ? "background_preparation_failed" : "background_generation_failed" });

@@ -110,7 +110,7 @@ export async function checkCloudWorkContract() {
   await check(false);
   docs[taskPath].nextAttemptAt = 1000;
   docs[taskPath].attempts = 4;
-  await check(false);
+  await check(true); // A due task wakes at any attempt count.
   docs["cmsBackgroundOutputs/listings"].status = "verified";
   await check(true); // A legacy receipt needs the release identity added by #3072.
   docs["cmsBackgroundOutputs/listings"].receipt = { rendererSha: "b".repeat(40) };

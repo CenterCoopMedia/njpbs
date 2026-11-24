@@ -1,5 +1,9 @@
 export const PUBLICATION_BACKGROUND_FAMILIES: readonly string[];
 export function retryDue(value: unknown, now: number): boolean;
+export function failedFinal(value: unknown): boolean;
+export function preparationRetryDue(value: unknown, now: number): boolean;
+export function preparationExhausted(value: unknown, now?: number): boolean;
+export function previewRetryDue(value: unknown, now: number): boolean;
 export function cloudBillingPaused(input: { read(path: string): Promise<Record<string, any> | null>; runtime?: { owner: string; release: string } }): Promise<boolean>;
 export function previewContextDue(queue: Record<string, any>, pointer: Record<string, any>, now?: number, claimMasked?: boolean, preparation?: Record<string, any> | null): boolean;
 export function publicContextProgressAt(input: {

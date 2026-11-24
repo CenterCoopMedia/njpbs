@@ -6,7 +6,7 @@ import view from "../../functions/lib/public-release-pair-view.js";
 import { isPublicReleasePairContentFeedPagePath } from "./public-release-pair-content-feed-namespace";
 
 import { PAIR_READER_PATHS_LIMIT, PAIR_READER_BYTES_LIMIT, PAIR_READER_CONTRACT } from "../../packages/content-core/src/private-pair-http.mjs";
-export { PAIR_READER_PATH, PAIR_READER_PATHS_LIMIT, PAIR_READER_DEADLINE_MS, PAIR_READER_BYTES_LIMIT,
+export { PAIR_READER_PATH, PAIR_READER_PATHS_LIMIT, PAIR_READER_BYTES_LIMIT,
   PAIR_READER_REQUEST_LIMIT, PAIR_READER_REPLY_LIMIT, PAIR_READER_CONTRACT } from "../../packages/content-core/src/private-pair-http.mjs";
 export type ReaderDeployment = Readonly<{ schemaVersion: 1; environment: "production" | "development";
   service: string; versionId: string; commitSha: string; contractDigest: string; origin: string }>;

@@ -168,7 +168,7 @@ describe("Post background publication at the database, artifact and HTTP boundar
     return { messages, statuses, check };
   }
 
-  it.each(["verified", "failed", "exhausted", "pending", "building"])(
+  it.each(["verified", "failed", "expired_claim", "pending", "building"])(
     "keeps the withdrawal serving fence and alerts only actionable replacement work: %s", async outcome => {
       await db.doc(contextRevision.PUBLIC_CONTEXT_PATH).set({ schemaVersion: 1, revision: 1, changedAt: new Date(time) });
       await db.doc("backgroundTestContext/current").set({ digest: contextRevision.publicContextDigest(1) });
@@ -204,8 +204,9 @@ describe("Post background publication at the database, artifact and HTTP boundar
       }
       if (outcome === "failed") {
         await replacement.update({ status: "failed", attempts: 1, nextAttemptAt: null, claim: null });
-      } else if (outcome === "exhausted") {
-        await replacement.update({ status: "building", attempts: 4, nextAttemptAt: time, claim: "expired-claim" });
+      } else if (outcome === "expired_claim") {
+        // An expired claim stops the replacement at any attempt count.
+        await replacement.update({ status: "building", attempts: 1, nextAttemptAt: time, claim: "expired-claim" });
       } else {
         if (outcome === "building") {
           await replacement.update({ status: "building", attempts: 1, nextAttemptAt: time + 1_200_000, claim: "live-claim" });

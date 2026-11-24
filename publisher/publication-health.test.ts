@@ -29,16 +29,15 @@ it.each(["verified", "failed"])("gives new CODE retention its durable budget aft
   const fresh = await f.health(1_000_000);
   expect(fresh).toEqual({ healthy: true, reasons: [], oldestDueAt: 1_000_000 });
   const overdue = await f.health(1_000_000 + OVERDUE_MS);
-  expect(overdue.reasons).toContain("work_overdue"); expect(overdue.reasons).not.toContain("preview_context_exhausted");
+  expect(overdue.reasons).toContain("work_overdue");
   expect(overdue.oldestDueAt).toBe(1_000_000);
 });
 
-it("preserves a current generation's original attempt age and exhaustion despite pointer updates", async () => {
+it("preserves a current generation's original attempt age despite pointer updates", async () => {
   const f = previewHealthFixture();
-  Object.assign(f.preview, { status: "failed", publicationGeneration: 2, attempts: 4, startedAt: 1000, nextAttemptAt: null });
+  Object.assign(f.preview, { status: "failed", publicationGeneration: 2, attempts: 5, startedAt: 1000, nextAttemptAt: 2000 });
   const health = await f.health(1_000_000);
-  expect(health.oldestDueAt).toBe(1000); expect(health.reasons).toContain("work_overdue");
-  expect(health.reasons).toContain("preview_context_exhausted");
+  expect(health.oldestDueAt).toBe(1000); expect(health.reasons).toEqual(["work_overdue"]);
 });
 
 it.each([undefined, -1, 1_000_001])("refuses unknown or invalid new-generation health clock %s", async updatedAt => {
@@ -94,20 +93,20 @@ it("keeps the oldest unpublished change and allows only real selected replacemen
   expect((await health(600_000)).reasons).toEqual(["preparation_exhausted", "work_overdue"]);
 });
 
-it.each(["pending", "failed"])("observes private retention exhaustion while unrelated outputs leave the aggregate %s", async status => {
+it.each(["pending", "failed"])("reads a stopped private retention while unrelated outputs leave the aggregate %s", async status => {
   const f = previewHealthFixture(), id = "D".repeat(20);
   f.docs["system/publicDeployment/aggregateContexts/current"].preparationOperationId = id;
   f.docs[`cmsPublishQueue/${id}`].status = status;
   f.docs[`cmsPublishQueue/${id}/backgroundPreparation/${f.preview.contextDigest}`] = {
     runtime, status: "verified", contextDigest: f.preview.contextDigest, preparedDigest: "e".repeat(64) };
   Object.assign(f.preview, { status: "failed", publicationGeneration: 2, attempts: 4, startedAt: 1000, nextAttemptAt: null });
-  expect((await f.health(1_000_000)).reasons).toContain("preview_context_exhausted");
+  expect((await f.health(1_000_000)).reasons).toEqual(["work_overdue"]);
   f.preview.manifestId = "invalid";
   expect((await f.health(1_000_000)).reasons).toContain("state_unreadable");
 
 });
 
-it.each(["building", "failed"])("observes projection-only retention exhaustion while public preparation is %s", async status => {
+it.each(["building", "failed"])("reads projection-only retention while public preparation is %s", async status => {
   const f = previewHealthFixture(), id = "D".repeat(20), inputDigest = "a".repeat(64);
   f.docs["system/publicDeployment/aggregateContexts/current"].preparationOperationId = id;
   f.docs[`cmsPublishQueue/${id}`].status = "pending";
@@ -116,11 +115,12 @@ it.each(["building", "failed"])("observes projection-only retention exhaustion w
     previewProjection: { schemaVersion: 1, status: "verified", inputDigest, digest: "b".repeat(64) } };
   f.docs[`cmsPublishQueue/${id}/backgroundPreparation/${f.preview.contextDigest}`] = preparation;
   Object.assign(f.preview, { status: "failed", publicationGeneration: 2, attempts: 4, startedAt: 1000, nextAttemptAt: null });
+  f.preview.manifestId = "invalid";
   const health = await f.health(1_000_000);
-  expect(health.reasons).toContain("preview_context_exhausted");
+  expect(health.reasons).toContain("state_unreadable");
   expect(health.reasons).not.toContain("preparation_exhausted");
   preparation.previewProjection.inputDigest = "c".repeat(64);
-  expect((await f.health(1_000_000)).reasons).not.toContain("preview_context_exhausted");
+  expect((await f.health(1_000_000)).reasons).not.toContain("state_unreadable");
 });
 
 it.each(["pending", "failed", "success"].flatMap(status =>
@@ -147,8 +147,6 @@ it.each(["stale-context", "previous-release"])("does not report private retentio
   if (reason === "stale-context") aggregate.contextDigest = publicContext.publicContextDigest(2);
   else aggregate.runtime = { ...runtime, release: "f".repeat(40) };
   Object.assign(f.preview, { status: "failed", publicationGeneration: 2, attempts: 4, startedAt: 1000, nextAttemptAt: null });
-  const observed = await f.health(1_000_000);
-  expect(observed.reasons).not.toContain("preview_context_exhausted");
   f.preview.manifestId = "invalid";
   expect((await f.health(1_000_000)).reasons).not.toContain("state_unreadable");
 });

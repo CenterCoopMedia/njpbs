@@ -17,9 +17,12 @@ import type { PublicationTarget } from "../../functions/lib/publication-target";
 
 const require = createRequire(import.meta.url);
 const { cloudCmsPublicationRuntimeControl } = require("../../functions/lib/cms-publication-runtime-control");
-const { retryDue, retryExhausted, previewContextDue } = require("../../functions/lib/no-build-cloud-work");
+const { previewRetryDue, previewContextDue } = require("../../functions/lib/no-build-cloud-work");
 const CURRENT = "system/publicDeployment/aggregateContexts/current";
 const CONTROL = "system/cmsPublicationRuntime";
+// A failed retention retries with no attempt limit. The pause doubles from one
+// minute and stays at 30 minutes once it reaches it.
+const previewRetryPause = (attempts: number) => Math.min(60_000 * 2 ** (attempts - 1), 30 * 60_000);
 const ready = (value: unknown, release: string, serializerId: string) => {
   const control = cloudCmsPublicationRuntimeControl(value);
   return control?.phase === "ready" && control.commitSha === release && control.serializerId === serializerId;
@@ -49,25 +52,6 @@ export function cloudEditorialPreviewRetention({ firestore, firebaseApp, runtime
         queueBefore?.transport !== "public-context-no-build-v1" || queueBefore.runtime?.owner !== runtime.owner ||
         queueBefore.runtime.release !== runtime.release || queueBefore.publicContext?.contextDigest !== selected.contextDigest ||
         !previewContextDue(queueBefore, pointerBefore, clock(), false, preparationBefore)) return false;
-    if (queueBefore.previewContext?.status === "building" &&
-        queueBefore.previewContext.publicationGeneration === pointerBefore.activeGeneration &&
-        retryExhausted(queueBefore.previewContext, clock())) {
-      return firestore.runTransaction(async transaction => {
-        const [queue, pointer, currentRow, control] = await transaction.getAll(
-          firestore.doc(`cmsPublishQueue/${selected.operationId}`), firestore.doc("system/publicDeployment"),
-          firestore.doc(CURRENT), firestore.doc(CONTROL));
-        const value = queue.data()?.previewContext;
-        if (!ready(control.data(), runtime.release, serializerId) || !["pending", "failed", "success"].includes(queue.data()?.status) ||
-            pointer.data()?.state !== "idle" || pointer.data()?.activeCommitSha !== runtime.release ||
-            pointer.data()?.activeGeneration !== pointerBefore.activeGeneration ||
-            currentRow.data()?.operationId !== selected.operationId || currentRow.data()?.contextDigest !== selected.contextDigest ||
-            value?.claim !== queueBefore.previewContext.claim || value?.status !== "building" ||
-            !retryExhausted(value, clock())) return false;
-        transaction.update(firestore.doc(`cmsPublishQueue/${selected.operationId}`), { previewContext: { ...value,
-          status: "failed", claim: null, nextAttemptAt: null, error: "preview_context_retention_failed", diagnostic: "lease" } });
-        return true;
-      });
-    }
     const claim = randomUUID().replaceAll("-", "").slice(0, 20);
     const queueRef = firestore.doc(`cmsPublishQueue/${selected.operationId}`);
     let directory: string | null = null;
@@ -92,7 +76,7 @@ export function cloudEditorialPreviewRetention({ firestore, firebaseApp, runtime
         const before = queue.data()?.previewContext;
         const same = before?.publicationGeneration === publication.generation && before.contextDigest === current.contextDigest;
         if (same && before.status === "verified" && before.manifestId === manifestId) return null;
-        if (same && before.status !== "verified" && !retryDue(before, clock())) return null;
+        if (same && before.status !== "verified" && !previewRetryDue(before, clock())) return null;
         transaction.update(queueRef, { previewContext: { status: "building", manifestId, contextDigest: current.contextDigest,
           publicationArtifactReceiptDigest: publication.artifactReceiptDigest, publicationGeneration: publication.generation,
           claim, attempts: same && before.status !== "verified" ? before.attempts + 1 : 1,
@@ -134,7 +118,7 @@ export function cloudEditorialPreviewRetention({ firestore, firebaseApp, runtime
               queue.data()?.runtime?.owner !== runtime.owner || queue.data()?.runtime?.release !== runtime.release ||
               !previewContextDue(queue.data(), pointer.data(), clock(), false, preparationBefore)) return;
           const same = current?.publicationGeneration === pointerBefore.activeGeneration && current.contextDigest === selected.contextDigest;
-          if (same && !retryDue(current, clock())) return;
+          if (same && !previewRetryDue(current, clock())) return;
           const attempts = same ? current.attempts + 1 : 1;
           failed = { status: "failed", manifestId: same ? current.manifestId ?? null : null,
             publicationArtifactReceiptDigest: same ? current.publicationArtifactReceiptDigest ?? null : null,
@@ -143,7 +127,7 @@ export function cloudEditorialPreviewRetention({ firestore, firebaseApp, runtime
         }
         transaction.update(queueRef, { previewContext: { ...failed, status: moved ? "superseded" : "failed", claim: null,
           error: "preview_context_retention_failed", diagnostic: stage,
-          nextAttemptAt: moved || failed.attempts >= 4 ? null : clock() + 60_000 * 2 ** (failed.attempts - 1) } });
+          nextAttemptAt: moved ? null : clock() + previewRetryPause(failed.attempts) } });
       });
       return true;
     } finally { if (directory) await rm(directory, { recursive: true, force: true }); }

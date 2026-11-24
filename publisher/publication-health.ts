@@ -12,9 +12,6 @@ export type PublicationHealth = {
   reasons: string[];
   oldestDueAt: number | null;
 };
-export const publicationAttemptsExhausted = (record: Record<string, any> | null, now = Date.now()) => Boolean(record &&
-  record.status !== "verified" && Number.isSafeInteger(record.attempts) && record.attempts >= 4 &&
-  (record.nextAttemptAt === null || (Number.isFinite(record.nextAttemptAt) && record.nextAttemptAt <= now)));
 
 /** Observe durable progress only. Neither a process HTTP 200 nor readable
  * last-good output proves that the replacement owner is making progress. */
@@ -33,7 +30,9 @@ export async function readPublicationHealth({ read, listOwners, runtime, now, cl
     oldestDueAt = Math.min(oldestDueAt ?? current, Number(at));
     if (current - Math.max(Number(at), progressAt ?? 0) >= OVERDUE_MS) reasons.add("work_overdue");
   };
-  const exhausted = (record: Record<string, any> | null) => publicationAttemptsExhausted(record, observedAt());
+  // Only the preparation family still ends after four attempts. Preview
+  // retention and background tasks retry until a final outcome.
+  const exhausted = (preparation: Record<string, any>) => cloudWork.preparationExhausted(preparation, observedAt());
 
   const pointer = await read("system/publicDeployment");
   if (!pointer || !["idle", "deploying", "reconciling"].includes(pointer.state)) {
@@ -104,7 +103,6 @@ export async function readPublicationHealth({ read, listOwners, runtime, now, cl
               reasons.add("state_unreadable");
             } else due(Math.max(updatedAt, acceptedAt), aggregateProgressAt);
           } else due(preview?.startedAt ?? aggregate.acceptedAt, aggregateProgressAt);
-          if (sameGeneration && exhausted(preview)) reasons.add("preview_context_exhausted");
         }
       }
     }
@@ -170,7 +168,7 @@ export async function readPublicationHealth({ read, listOwners, runtime, now, cl
     }
     const task = await read(output.taskPath);
     if (!task || !ownership.samePublicationOwner(task, runtime)) reasons.add("state_unreadable");
-    else if (exhausted(task)) reasons.add("family_exhausted");
+    else if (cloudWork.failedFinal(task)) reasons.add("family_exhausted");
   }
   return { healthy: reasons.size === 0, reasons: [...reasons].sort(), oldestDueAt };
 }

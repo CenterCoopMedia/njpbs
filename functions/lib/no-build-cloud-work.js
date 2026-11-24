@@ -21,10 +21,35 @@ async function cloudBillingPaused({ read, runtime }) {
   return (await read("system/billing"))?.disabled === true;
 }
 
+// A row is due at its next attempt, whatever its attempt count. A failed row
+// keeps a next attempt; only a terminal outcome clears it.
 function retryDue(value, now) {
   return ["pending", "failed", "building"].includes(value?.status) &&
-    Number.isSafeInteger(value.attempts) && value.attempts < 4 &&
+    Number.isSafeInteger(value.attempts) && value.attempts >= 0 &&
     Number.isFinite(value.nextAttemptAt) && value.nextAttemptAt <= now;
+}
+
+// A failed row with no next attempt ended on a final outcome, such as a public
+// answer that refused it, or was stopped by a removed attempt cap.
+function failedFinal(value) {
+  return value?.status === "failed" && value.nextAttemptAt === null;
+}
+
+// The preparation family still ends after its fourth attempt
+// (site/scripts/no-build-post-background.ts); its recovery tools read that end.
+function preparationRetryDue(value, now) {
+  return retryDue(value, now) && value.attempts < 4;
+}
+
+function preparationExhausted(value, now = Date.now()) {
+  return ["failed", "building"].includes(value?.status) && Number.isSafeInteger(value.attempts) && value.attempts >= 4 &&
+    (value.nextAttemptAt === null || Number.isFinite(value.nextAttemptAt) && value.nextAttemptAt <= now);
+}
+
+// Preview retention has no final failure: a moved selection is superseded. A
+// failed row the removed four-attempt cap left without a next attempt resumes.
+function previewRetryDue(preview, now) {
+  return retryDue(preview, now) || preview?.status === "failed" && preview.nextAttemptAt === null;
 }
 
 function previewContextDue(queue, pointer, now = Date.now(), claimMasked = false, preparation) {
@@ -54,25 +79,20 @@ function previewContextDue(queue, pointer, now = Date.now(), claimMasked = false
     }
     return preview.publicationGeneration !== generation;
   }
-  const terminal = preview.status === "failed" && preview.attempts === 4 && preview.nextAttemptAt === null;
+  const stopped = preview.status === "failed" && preview.nextAttemptAt === null;
   const seals = preview.manifestId === null && preview.publicationArtifactReceiptDigest === null ||
     digest.test(preview.manifestId ?? "") && digest.test(preview.publicationArtifactReceiptDigest ?? "");
   if (!["building", "failed"].includes(preview.status) ||
       !Number.isSafeInteger(preview.publicationGeneration) || preview.publicationGeneration < 1 ||
-      !Number.isSafeInteger(preview.attempts) || preview.attempts < 1 || preview.attempts > 4 ||
+      !Number.isSafeInteger(preview.attempts) || preview.attempts < 1 ||
       !Number.isFinite(preview.startedAt) || preview.startedAt < 0 ||
-      !(terminal || Number.isFinite(preview.nextAttemptAt) && preview.nextAttemptAt >= preview.startedAt) || !seals ||
+      !(stopped || Number.isFinite(preview.nextAttemptAt) && preview.nextAttemptAt >= preview.startedAt) || !seals ||
       preview.status === "building" && ((!claimMasked && !/^[A-Za-z0-9]{20}$/.test(preview.claim ?? "")) || !digest.test(preview.manifestId ?? ""))) {
     throw new Error("Invalid preview retention retry state");
   }
   if (preview.publicationGeneration !== generation) return true;
-  // An interrupted final claim gets one wake to record terminal failure.
-  return retryDue(preview, now) || preview.status === "building" && retryExhausted(preview, now);
-}
-
-function retryExhausted(value, now = Date.now()) {
-  return ["failed", "building"].includes(value?.status) && Number.isSafeInteger(value.attempts) && value.attempts >= 4 &&
-    (value.nextAttemptAt === null || Number.isFinite(value.nextAttemptAt) && value.nextAttemptAt <= now);
+  // An interrupted claim is due again once its claim time passes.
+  return previewRetryDue(preview, now);
 }
 
 function publicContextProgressAt({ aggregate, queue, preparation, runtime, now, retainProgress = false }) {
@@ -98,7 +118,7 @@ async function currentContextDigest(read) {
 
 function preparationAllowsWork(preparation, runtime, now) {
   return !preparation || (ownsPublication(preparation, runtime) &&
-    (preparation.status === "verified" || retryDue(preparation, now)));
+    (preparation.status === "verified" || preparationRetryDue(preparation, now)));
 }
 
 async function currentCloudPostStates({ read, listOwners, runtime }) {
@@ -203,7 +223,7 @@ async function readNoBuildCloudWork({ read, listOwners, runtime, now = Date.now(
     if (["pending", "failed"].includes(queue.status) && pointer.activeCommitSha === runtime.release) {
       const preparationId = queue.status === "failed" ? contextJob.preparationOperationId ?? contextJob.operationId : contextJob.operationId;
       const preparation = await read(`cmsPublishQueue/${preparationId}/backgroundPreparation/${digest}`);
-      if (queue.status === "pending" && preparation && ownsPublication(preparation, runtime) && retryExhausted(preparation, now)) return result(true);
+      if (queue.status === "pending" && preparation && ownsPublication(preparation, runtime) && preparationExhausted(preparation, now)) return result(true);
       if (preparationAllowsWork(preparation, runtime, now) && (queue.status === "pending" || preparation?.status === "verified")) {
         let complete = true;
         for (const family of contextOutputs(queue.publicContext)) {
@@ -215,7 +235,7 @@ async function readNoBuildCloudWork({ read, listOwners, runtime, now = Date.now(
           const task = state?.taskPath ? await read(state.taskPath) : null;
           if (!task) throw new Error("Missing cloud aggregate family task");
           if (ownsPublication(task, runtime) && (slowBackgroundRetryDue(task, now) || expiredBackgroundClaim(task, now) ||
-              queue.status === "pending" && (retryDue(task, now) || retryExhausted(task, now)))) return result(true);
+              queue.status === "pending" && (retryDue(task, now) || failedFinal(task)))) return result(true);
         }
         // All family writes may have committed before queue settlement was interrupted.
         if (complete) return result(true);
@@ -260,4 +280,5 @@ async function readNoBuildCloudWork({ read, listOwners, runtime, now = Date.now(
   return result(!contextJob && Boolean(await read(CONTEXT)));
 }
 
-module.exports = { PUBLICATION_BACKGROUND_FAMILIES, cloudBillingPaused, readNoBuildCloudWork, currentCloudPostStates, activeCloudPostStates, retryDue, retryExhausted, previewContextDue, publicContextProgressAt };
+module.exports = { PUBLICATION_BACKGROUND_FAMILIES, cloudBillingPaused, readNoBuildCloudWork, currentCloudPostStates, activeCloudPostStates, retryDue, failedFinal,
+  preparationRetryDue, preparationExhausted, previewRetryDue, previewContextDue, publicContextProgressAt };

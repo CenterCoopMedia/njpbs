@@ -23,7 +23,7 @@ import { createCmsPreviewCloudStorage } from "../../site/scripts/cms-preview-clo
 import { cloudEditorialPreviewRetention } from "../../site/scripts/cloud-editorial-preview-retention";
 import { requestPublicPublicationReceipt } from "../../site/scripts/activate-public-worker-candidate";
 import { EDITORIAL_CONTEXTS_COLLECTION, EDITORIAL_SEALS_COLLECTION, LAST_SEALED_EDITORIAL_CONTEXT } from "../../site/scripts/cms-preview-editorial-context";
-import { readPublicationHealth, OVERDUE_MS } from "../../publisher/publication-health";
+import { readPublicationHealth } from "../../publisher/publication-health";
 
 const db = isolatedFirestore("cloud-editorial-preview-retention.test.ts");
 const A = "A".repeat(20), B = "B".repeat(20), digest = context.publicContextDigest(1);
@@ -166,17 +166,18 @@ it("resumes uploaded bytes after lost response without another write or checkpoi
   expect(JSON.stringify(errorLog.mock.calls)).not.toContain("InternalError");
 });
 
-it("bounds receipt failures and exposes exhaustion through the existing health reader", async () => {
+it("retries receipt failures with no attempt limit and a pause that stops growing at 30 minutes", async () => {
   vi.spyOn(console, "error").mockImplementation(() => {}); refuseReceipt = true;
-  for (let attempt = 1; attempt <= 4; attempt++) {
-    await owner()(); expect(await preview()).toMatchObject({ status: "failed", attempts: attempt, diagnostic: "receipt" });
-    if (attempt < 4) clock = (await preview()).nextAttemptAt;
+  for (let attempt = 1; attempt <= 6; attempt++) {
+    await owner()(); const failed = await preview();
+    expect(failed).toMatchObject({ status: "failed", attempts: attempt, diagnostic: "receipt" });
+    expect(failed.nextAttemptAt - clock).toBe(Math.min(60_000 * 2 ** (attempt - 1), 30 * 60_000));
+    const reads = receiptReads; expect(await owner()()).toBe(false); expect(receiptReads).toBe(reads);
+    clock = failed.nextAttemptAt;
   }
-  const reads = receiptReads; expect(await owner()()).toBe(false); expect(receiptReads).toBe(reads);
-  const health = await readPublicationHealth({ runtime, now: clock + OVERDUE_MS,
-    read: async name => (await db.doc(name).get()).data() ?? null, listOwners: async () => [] });
-  expect(health.reasons).toContain("preview_context_exhausted");
-  expect((await queueRef().get()).data()!.status).toBe("success"); expect(puts).toBe(0);
+  refuseReceipt = false;
+  await owner()(); expect(await preview()).toMatchObject({ status: "verified" });
+  expect((await queueRef().get()).data()!.status).toBe("success");
 });
 
 it.each(["claim", "context", "code", "pause"])("refuses verified completion after an upload %s race", async race => {
@@ -201,12 +202,17 @@ it("refuses a concurrent malformed verified marker without resetting its state",
   expect(await preview()).toEqual(malformed); expect(puts).toBe(0);
 });
 
-it("records an expired final claim once without receipt or storage work", async () => {
+it("takes over an expired fifth claim and verifies the retention", async () => {
   await queueRef().update({ previewContext: { status: "building", publicationGeneration: 1, contextDigest: digest,
-    manifestId: "b".repeat(64), publicationArtifactReceiptDigest: "d".repeat(64), attempts: 4,
+    manifestId: "b".repeat(64), publicationArtifactReceiptDigest: "d".repeat(64), attempts: 5,
     startedAt: clock - 600_000, nextAttemptAt: clock - 1, claim: "Q".repeat(20) } });
-  expect(await owner()()).toBe(true); expect(await preview()).toMatchObject({ status: "failed", attempts: 4, nextAttemptAt: null });
-  expect(await owner()()).toBe(false); expect(receiptReads).toBe(0); expect(puts).toBe(0);
+  expect(await owner()()).toBe(true); expect(await preview()).toMatchObject({ status: "verified" });
+});
+
+it("resumes a retention the removed four-attempt cap stopped", async () => {
+  await queueRef().update({ previewContext: { status: "failed", publicationGeneration: 1, contextDigest: digest,
+    manifestId: null, publicationArtifactReceiptDigest: null, attempts: 4, startedAt: clock - 600_000, nextAttemptAt: null, claim: null } });
+  expect(await owner()()).toBe(true); expect(await preview()).toMatchObject({ status: "verified" });
 });
 
 it("global pause refuses a new claim and any CODE request", async () => {
@@ -257,13 +263,6 @@ it("retains a new real CODE generation without relabeling A or B", async () => {
   expect(manifest.contextReceipt.buildBatchId).toBe(bundle.receipt.buildBatchId);
   expect(manifest.selection.publication.buildBatchId).toBe(publication.buildBatchId);
   const after = await preparationRef().get(); expect(after.data()).toEqual(original.data()); expect(after.updateTime).toEqual(original.updateTime);
-});
-
-it.each(["failed", "cancelled"])("does not add preview exhaustion to a %s public aggregate queue", async status => {
-  await queueRef().update({ status, previewContext: { status: "failed", attempts: 4, nextAttemptAt: null, startedAt: clock - OVERDUE_MS } });
-  const health = await readPublicationHealth({ runtime, now: clock,
-    read: async name => (await db.doc(name).get()).data() ?? null, listOwners: async () => [] });
-  expect(health.reasons).not.toContain("preview_context_exhausted");
 });
 
 it("propagates the caller abort into an active prepared checkpoint read", async () => {
