@@ -166,7 +166,7 @@ jobs:
         if: steps.reuse.outputs.reused != 'true'
         run: |
           node scripts/check-release-surfaces.mjs
-          node --test tests/scripts/release-surfaces.test.mjs
+          node --test tests/scripts/release-surfaces.test.mjs tests/scripts/release-path-waits.test.mjs
       - name: Workflow policy unit tests
         if: steps.reuse.outputs.reused != 'true'
         working-directory: site

@@ -1,0 +1,138 @@
+"use strict";
+
+// The one place on the release path where work waits or calls an outside
+// service (Joe, Nov. 24, 2026: "we don't need any timers until we know how
+// long things actually take"). Nothing here stops work by a clock or a count.
+// A call is retried until the service answers; a wait ends only when the state
+// it reads is done or reports its own failure. Every call and wait is measured
+// and written to the run journal, with a line each minute while it waits, so a
+// stuck run names what it waits on. Timers come back one at a time, from these
+// measurements, each with its measured normal value and reason.
+// tests/scripts/release-path-waits.test.mjs keeps time constructs out of every
+// other release-path file and keeps stopping numbers out of this one.
+// Platform-neutral: the preview renderer Worker bundles callers of this file.
+
+// Pacing only: the pause before the next read or retry. It never ends a wait.
+const FIRST_PAUSE_MS = 1_000; // Refresh-pending answers ask for a retry after one second.
+const LONGEST_PAUSE_MS = 30_000; // Keeps an unchanged wait from reading more than twice a minute.
+const JOURNAL_EVERY_MS = 60_000; // One "still waiting" line a minute.
+
+// Limits the platforms enforce themselves. Callers that must name a limit use
+// these maximums; none is ours.
+const PLATFORM_LIMITS = Object.freeze({
+  // Cloud Functions 2nd gen maximum timeoutSeconds by trigger.
+  cloudFunctionsHttpSeconds: 3600,
+  cloudFunctionsScheduleSeconds: 1800,
+  cloudFunctionsTaskQueueSeconds: 1800,
+  cloudFunctionsEventSeconds: 540,
+  // GitHub-hosted runner job maximum; the default when timeout-minutes is absent.
+  githubHostedJobMinutes: 360,
+});
+
+// Answers that mean the service did not answer yet.
+const NO_ANSWER_STATUSES = new Set([429, 502, 503, 504]);
+const NO_ANSWER_CODES = new Set(["ECONNRESET", "ECONNREFUSED", "ETIMEDOUT", "EPIPE", "EAI_AGAIN", "ENOTFOUND", "ENETUNREACH",
+  "EHOSTUNREACH", "UND_ERR_SOCKET", "UND_ERR_CONNECT_TIMEOUT", "UND_ERR_HEADERS_TIMEOUT", "UND_ERR_BODY_TIMEOUT", "UND_ERR_CLOSED"]);
+
+let journalSink = line => console.log(JSON.stringify(line));
+function journal(line) { try { journalSink({ releaseWait: true, ...line }); } catch { /* A journal write never stops work. */ } }
+function setJournal(sink) { journalSink = sink; }
+
+function pause(milliseconds, signal) {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) { reject(signal.reason); return; }
+    const aborted = () => { clearTimeout(timer); reject(signal.reason); };
+    const timer = setTimeout(() => { signal?.removeEventListener("abort", aborted); resolve(); }, milliseconds);
+    signal?.addEventListener("abort", aborted, { once: true });
+  });
+}
+
+function noAnswer(error) {
+  if (error?.retry === true) return true;
+  if (error?.name === "AbortError") return false;
+  for (let cause = error; cause; cause = cause.cause) {
+    if (NO_ANSWER_CODES.has(cause.code)) return true;
+  }
+  return error?.name === "TypeError" && /fetch failed|network|terminated|socket/i.test(error.message ?? "");
+}
+
+function describe(value) {
+  if (value === undefined || value === null) return null;
+  if (typeof value === "string") return value.slice(0, 200);
+  try { return JSON.stringify(value).slice(0, 200); } catch { return String(value).slice(0, 200); }
+}
+
+// Journals "still waiting" each minute while work runs; returns its stop.
+function everyMinute(what, start, last) {
+  const ticker = setInterval(() => journal({ event: "waiting", what, start, waitedMs: Date.now() - start, last: describe(last()) }),
+    JOURNAL_EVERY_MS);
+  ticker.unref?.();
+  return () => clearInterval(ticker);
+}
+
+// Calls an outside service until it answers. `request` makes one attempt and
+// returns its result; a thrown network error, a Response with a no-answer
+// status, or an error marked { retry: true } is retried. Any other result or
+// error is the answer. A stop signal is the caller's own cancellation.
+async function callOutside(what, request, { signal } = {}) {
+  const start = Date.now();
+  let attempts = 0, lastProblem = null, wait = FIRST_PAUSE_MS;
+  const stop = everyMinute(what, start, () => ({ attempts, lastProblem }));
+  try {
+    while (true) {
+      attempts += 1;
+      let result;
+      try { result = await request(); } catch (error) {
+        if (!noAnswer(error)) {
+          journal({ event: "call", what, start, end: Date.now(), durationMs: Date.now() - start, attempts, result: "error", error: describe(error?.message) });
+          throw error;
+        }
+        lastProblem = describe(error?.cause?.code ?? error?.message);
+      }
+      if (result !== undefined || lastProblem === null) {
+        const status = typeof result?.status === "number" && typeof result?.headers?.get === "function" ? result.status : null;
+        if (status === null || !NO_ANSWER_STATUSES.has(status)) {
+          journal({ event: "call", what, start, end: Date.now(), durationMs: Date.now() - start, attempts, result: status ?? "answered" });
+          return result;
+        }
+        await result.body?.cancel?.();
+        lastProblem = `status ${status}`;
+      }
+      journal({ event: "retry", what, attempts, problem: lastProblem });
+      await pause(wait, signal);
+      wait = Math.min(wait * 2, LONGEST_PAUSE_MS);
+      lastProblem = null;
+    }
+  } finally { stop(); }
+}
+
+// Waits for a state. `read` returns { done: value } when finished, { failed:
+// error } when the thing itself reports failure, or { pending: state } while it
+// works. Only done or failed end the wait. A changed pending state reads again
+// soon; an unchanged one reads less often, never stopping.
+async function waitFor(what, read, { signal } = {}) {
+  const start = Date.now();
+  let reads = 0, last = null, wait = FIRST_PAUSE_MS;
+  const stop = everyMinute(what, start, () => ({ reads, last }));
+  const finish = (result, extra = {}) =>
+    journal({ event: "wait", what, start, end: Date.now(), durationMs: Date.now() - start, reads, result, ...extra });
+  try {
+    while (true) {
+      reads += 1;
+      let row;
+      try { row = await read(); } catch (error) { finish("error", { error: describe(error?.message) }); throw error; }
+      if (row && "done" in row) { finish("done"); return row.done; }
+      if (row && "failed" in row) { finish("failed", { error: describe(row.failed?.message ?? row.failed) }); throw row.failed; }
+      const state = describe(row?.pending);
+      if (state !== last) { last = state; wait = FIRST_PAUSE_MS; } else wait = Math.min(wait * 2, LONGEST_PAUSE_MS);
+      await pause(wait, signal);
+    }
+  } finally { stop(); }
+}
+
+function platformLimit(name) {
+  if (!Object.hasOwn(PLATFORM_LIMITS, name)) throw new Error(`Unknown platform limit ${name}`);
+  return PLATFORM_LIMITS[name];
+}
+
+module.exports = { callOutside, waitFor, platformLimit, PLATFORM_LIMITS, setJournal };
