@@ -1,5 +1,6 @@
 "use strict";
 
+const { platformLimit } = require("./lib/release-wait");
 const { randomUUID } = require("node:crypto");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { defineString } = require("firebase-functions/params");
@@ -209,7 +210,8 @@ async function claimTranscriptSweep(firestore, now) {
   return firestore.runTransaction(async (tx) => {
     const current = (await tx.get(ref)).data();
     if (current?.leaseUntil > now) return null;
-    tx.set(ref, { leaseOwner: owner, leaseUntil: now + 5 * 60 * 1000 }, { merge: true });
+    // The sweep lock outlives its holder, the scheduled tick.
+    tx.set(ref, { leaseOwner: owner, leaseUntil: now + (platformLimit("cloudFunctionsScheduleSeconds") + 60) * 1000 }, { merge: true });
     return { ref, owner, after: typeof current?.after === "string" ? current.after : null };
   });
 }
@@ -317,14 +319,14 @@ async function processTranscriptTick({ firestore = db, config = transcriptConfig
   }
 }
 
-const options = { cors: true, maxInstances: 10, timeoutSeconds: 60, serviceAccount: FUNCTION_SERVICE_ACCOUNT };
+const options = { cors: true, maxInstances: 10, timeoutSeconds: platformLimit("cloudFunctionsHttpSeconds"), serviceAccount: FUNCTION_SERVICE_ACCOUNT };
 const cmsRequestVideoTranscript = cmsOnRequest(options, createTranscriptHandler("request"));
 const cmsGetVideoTranscript = cmsOnRequest(options, createTranscriptHandler("get"));
 const cmsCreateVideoTranscriptRead = cmsOnRequest(options, createTranscriptHandler("download"));
 const cmsSaveVideoTranscript = cmsOnRequest(options, createTranscriptHandler("edit"));
 const { READ_SECRETS, WRITE_SECRETS } = require("./lib/private-video-runtime");
 const onVideoTranscriptTick = onSchedule({ schedule: "every 1 minutes", region: "us-central1",
-  timeoutSeconds: 240, memory: "256MiB", maxInstances: 1, concurrency: 1,
+  timeoutSeconds: platformLimit("cloudFunctionsScheduleSeconds"), memory: "256MiB", maxInstances: 1, concurrency: 1,
   serviceAccount: FUNCTION_SERVICE_ACCOUNT, secrets: [...READ_SECRETS, ...WRITE_SECRETS] }, async () => { await processTranscriptTick(); });
 
 module.exports = { cmsRequestVideoTranscript, cmsGetVideoTranscript, cmsCreateVideoTranscriptRead, cmsSaveVideoTranscript,

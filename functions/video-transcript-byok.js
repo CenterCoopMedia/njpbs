@@ -1,4 +1,5 @@
 "use strict";
+const { platformLimit } = require("./lib/release-wait");
 const { createHash } = require("node:crypto");
 const { transcriptConfig } = require("./video-transcripts");
 const { cmsOnRequest } = require("./lib/cms-edge");
@@ -507,7 +508,7 @@ const options = {
   cors: true,
   maxInstances: 3,
   concurrency: 10,
-  timeoutSeconds: 60,
+  timeoutSeconds: platformLimit("cloudFunctionsHttpSeconds"),
   serviceAccount: FUNCTION_SERVICE_ACCOUNT,
 };
 module.exports = {

@@ -44,6 +44,7 @@
     "FIREBASE_PROJECT_ID",
     "FORCE_FIREBASE"
   ],
+  "scripts/release-wait-status.mjs": [],
   "scripts/render-development-config.mjs": ["CMS_GPU_WORKER_ID", "CMS_LOCAL_PUBLICATION_OWNER", "CMS_PRODUCTION_API_ORIGIN"],
   "scripts/seed-content-sections.mjs": ["GOOGLE_APPLICATION_CREDENTIALS"],
   "scripts/seed-media-categories.mjs": ["GOOGLE_APPLICATION_CREDENTIALS"],

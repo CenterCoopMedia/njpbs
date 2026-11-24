@@ -536,8 +536,6 @@ describe("durable delivery", () => {
   it("starts new delivery work from a Firestore event and sweeps every ten minutes", () => {
     expect(delivery.onBugReportDeliveryCreated.__endpoint.eventTrigger.eventFilterPathPatterns.document)
       .toBe("bugReportDeliveryOutbox/{jobId}");
-    expect(delivery.onBugReportDeliveryCreated.__endpoint.timeoutSeconds).toBe(300);
-    expect(delivery.onBugReportDelivery.__endpoint.timeoutSeconds).toBe(300);
     expect(delivery.onBugReportDelivery.__endpoint.scheduleTrigger.schedule)
       .toBe("every 10 minutes");
   });

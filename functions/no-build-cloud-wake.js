@@ -1,5 +1,6 @@
 "use strict";
 
+const { platformLimit } = require("./lib/release-wait");
 const { onDocumentWritten } = require("firebase-functions/v2/firestore");
 const { db } = require("./lib/firebase");
 const { publicationTarget, assertPublicationDatabase } = require("./lib/publication-target");
@@ -41,7 +42,7 @@ async function wakeNoBuildCloud({ firestore = db, fetchImpl = fetch,
     console.warn("Cloud publication wake failed; minute recovery remains due");
   }
 }
-const options = { region: "us-central1", secrets: ["CMS_PUBLICATION_WAKE_TOKEN"], minInstances: 0, maxInstances: 2, timeoutSeconds: 30 };
+const options = { region: "us-central1", secrets: ["CMS_PUBLICATION_WAKE_TOKEN"], minInstances: 0, maxInstances: 2, timeoutSeconds: platformLimit("cloudFunctionsEventSeconds") };
 exports.wakeNoBuildCloud = wakeNoBuildCloud;
 exports.onNoBuildCloudState = onDocumentWritten({ ...options,
   document: "system/publicDeployment/{collection}/{document}" }, async event => wakeNoBuildCloud({ stateCollection: event.params.collection }));

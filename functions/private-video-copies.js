@@ -1,5 +1,6 @@
 "use strict";
 
+const { platformLimit } = require("./lib/release-wait");
 const { productionServiceAccount } = require("./lib/production-service-account");
 const { onDocumentWritten } = require("firebase-functions/v2/firestore");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
@@ -80,7 +81,7 @@ async function processPrivateVideoTick({ firestore = db, source = runtimeRegistr
 }
 
 const options = { region: "us-central1", serviceAccount: SERVICE_ACCOUNT, secrets: WRITE_SECRETS,
-  memory: "512MiB", maxInstances: 1, concurrency: 1, timeoutSeconds: 540 };
+  memory: "512MiB", maxInstances: 1, concurrency: 1, timeoutSeconds: platformLimit("cloudFunctionsEventSeconds") };
 const onPrivateVideoAssetWrite = onDocumentWritten({ ...options, document: "mediaSourceAssets/{assetId}", retry: true }, async (event) => {
   // Read current state, never the possibly stale event payload.
   await reconcilePrivateVideo({ assetId: event.params.assetId });

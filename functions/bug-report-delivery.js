@@ -3,6 +3,7 @@
 // workflow. Report writes commit first. This worker sends or updates one Telegram
 // card and sends bounded transactional confirmations afterward.
 
+const { platformLimit } = require("./lib/release-wait");
 const { createHash, randomUUID, timingSafeEqual } = require("node:crypto");
 const logger = require("firebase-functions/logger");
 const { defineList, defineSecret, defineString } = require("firebase-functions/params");
@@ -63,7 +64,8 @@ const BUG_REPORT_EMAIL_REPLY_TO = defineString("CMS_BUG_REPORT_EMAIL_REPLY_TO", 
 const BUG_REPORT_EMAIL_BCC = defineList("CMS_BUG_REPORT_EMAIL_BCC", { default: [] });
 const MAX_ATTEMPTS = 5;
 const LEASE_MILLIS = 2 * 60 * 1_000;
-const DELIVERY_RUN_LEASE_MILLIS = 330 * 1_000;
+// A delivery run lock outlives its longest holder, the scheduled sweep.
+const DELIVERY_RUN_LEASE_MILLIS = (platformLimit("cloudFunctionsScheduleSeconds") + 30) * 1_000;
 const BATCH_SIZE = 25;
 const CALLBACK_PATTERN =
   /^br:1:(m|s|p|a|t|r|ip|b|rs|d|o|f|x):(br_[0-9a-f]{32})$/;
@@ -1241,7 +1243,7 @@ const onBugReportDeliveryCreated = onDocumentCreated(
   {
     document: `${BUG_REPORT_COLLECTIONS.deliveryOutbox}/{jobId}`,
     secrets: [TELEGRAM_BOT_TOKEN, STAFF_EMAIL_API_TOKEN],
-    timeoutSeconds: 300,
+    timeoutSeconds: platformLimit("cloudFunctionsEventSeconds"),
     memory: "256MiB",
     retry: false,
   },
@@ -1255,7 +1257,7 @@ const onBugReportDelivery = onSchedule(
   {
     schedule: "every 10 minutes",
     maxInstances: 1,
-    timeoutSeconds: 300,
+    timeoutSeconds: platformLimit("cloudFunctionsScheduleSeconds"),
     secrets: [TELEGRAM_BOT_TOKEN, STAFF_EMAIL_API_TOKEN],
   },
   async () => withDeliveryLease(db, runDeliveryWork),
@@ -1264,7 +1266,7 @@ const onBugReportDelivery = onSchedule(
 const telegramBugReportCallback = onRequest(
   {
     secrets: [TELEGRAM_BOT_TOKEN, TELEGRAM_WEBHOOK_SECRET],
-    timeoutSeconds: 30,
+    timeoutSeconds: platformLimit("cloudFunctionsHttpSeconds"),
   },
   async (req, res) => {
     const handler = await createTelegramWebhookHandler();

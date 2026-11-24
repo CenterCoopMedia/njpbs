@@ -1,5 +1,6 @@
 "use strict";
 
+const { platformLimit } = require("./lib/release-wait");
 const { defineSecret } = require("firebase-functions/params");
 const { cmsOnRequest } = require("./lib/cms-edge");
 const { requirePrincipal } = require("./lib/auth");
@@ -30,7 +31,7 @@ function createCmsRecheckPublicationHandler({ firestore = db, requirePrincipalFn
   };
 }
 
-const cmsRecheckPublication = cmsOnRequest({ cors: true, timeoutSeconds: 60, minInstances: 0, maxInstances: 2,
+const cmsRecheckPublication = cmsOnRequest({ cors: true, timeoutSeconds: platformLimit("cloudFunctionsHttpSeconds"), minInstances: 0, maxInstances: 2,
   secrets: development ? [accessId, accessSecret] : [cachePurgeToken] }, createCmsRecheckPublicationHandler());
 
 module.exports = { cmsRecheckPublication, createCmsRecheckPublicationHandler };

@@ -1,5 +1,6 @@
 "use strict";
 
+const { platformLimit } = require("./lib/release-wait");
 const { SPANISH_EDITION_REVIEW_REQUIRED, isSpanishEdition, hasSpanishTranslationApproval } = require("./lib/spanish-edition");
 
 const { publishedBlockResourceError } = require("./lib/published-resource-check");
@@ -1090,7 +1091,7 @@ const onScheduledPublish = onSchedule(
     secrets: [...publishSecretBindings, ...routePurgeSecretNames(), CMS_EDGE_ORIGIN_SECRET],
     concurrency: 1,
     maxInstances: 1,
-    timeoutSeconds: 300,
+    timeoutSeconds: platformLimit("cloudFunctionsScheduleSeconds"),
   },
   async (event) => {
     if (process.env.CMS_DEPLOYMENT_ENVIRONMENT === "development" &&

@@ -1,5 +1,6 @@
 "use strict";
 
+const { platformLimit } = require("./lib/release-wait");
 const { enqueueVideoSearchShard } = require("./lib/video-search-outbox");
 
 const { PREVIEW_JOBS, pendingPreview, renditionState } = require("./lib/video-preview-job");
@@ -986,7 +987,7 @@ async function deleteSourceMedia({
 const commonOptions = {
   cors: true,
   maxInstances: 20,
-  timeoutSeconds: 60,
+  timeoutSeconds: platformLimit("cloudFunctionsHttpSeconds"),
   serviceAccount: FUNCTION_SERVICE_ACCOUNT,
 };
 const cmsStartSourceMediaUpload = cmsOnRequest(commonOptions, makeHandler({

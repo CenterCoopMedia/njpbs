@@ -1,5 +1,6 @@
 "use strict";
 
+const { platformLimit } = require("./lib/release-wait");
 const { productionServiceAccount } = require("./lib/production-service-account");
 const { enrichSourceMediaUploaders } = require("./lib/source-media-uploader");
 const { FieldPath } = require("firebase-admin/firestore");
@@ -428,7 +429,7 @@ function createCmsCreateSourceMediaReadHandler(deps = {}) {
 const functionOptions = {
   cors: true,
   maxInstances: 20,
-  timeoutSeconds: 30,
+  timeoutSeconds: platformLimit("cloudFunctionsHttpSeconds"),
   serviceAccount: FUNCTION_SERVICE_ACCOUNT,
   cpu: 1,
   concurrency: 80,

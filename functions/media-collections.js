@@ -1,5 +1,6 @@
 "use strict";
 
+const { platformLimit } = require("./lib/release-wait");
 const { FieldPath, FieldValue, Timestamp } = require("firebase-admin/firestore");
 const logger = require("firebase-functions/logger");
 const { cmsOnRequest } = require("./lib/cms-edge");
@@ -1186,7 +1187,7 @@ function createCmsSetMediaCollectionItemsHandler(deps = {}) {
   };
 }
 
-const functionOptions = { cors: true, maxInstances: 10, timeoutSeconds: 30 };
+const functionOptions = { cors: true, maxInstances: 10, timeoutSeconds: platformLimit("cloudFunctionsHttpSeconds") };
 const cmsListMediaCollections = cmsOnRequest(
   { ...functionOptions, cpu: 1, concurrency: 80 },
   createCmsListMediaCollectionsHandler(),
