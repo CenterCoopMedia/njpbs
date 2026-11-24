@@ -83,7 +83,8 @@ env:
   CMS_DEV_ACCESS_ORIGIN: ${{ vars.CMS_DEV_ACCESS_ORIGIN }}
 
 concurrency:
-  group: cms-dev-deploy
+  # Shared with development runs of cms-staging-deploy.yml: both write the dev renderer and dev Functions.
+  group: cms-staging-deploy-development
   cancel-in-progress: false
 
 jobs:

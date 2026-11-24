@@ -488,4 +488,9 @@ test("dev dispatch reads the renderer component receipt and opts into image rele
   assert.ok(receiptRead >= 0 && receiptRead < deploy.steps.findIndex(step => step.uses?.startsWith("google-github-actions/auth@")));
   assert.match(deploy.steps[receiptRead].run, /renderer read\)"[\s\S]*renderer confirm --source-sha "\$sha"[\s\S]*CMS_DEV_RENDERER_SOURCE_SHA=%s\\n' "\$sha" >> "\$GITHUB_ENV"/);
   assert.equal(deploy.steps[receiptRead].env.CLOUDFLARE_API_TOKEN, "${{ secrets.CLOUDFLARE_DEV_PREVIEW_RENDERER_TOKEN }}");
+  // Both dev renderer writers share one concurrency group, so they never run at once.
+  const staging = parse(readFileSync(new URL("../.github/workflows/cms-staging-deploy.yml", import.meta.url), "utf8"));
+  assert.equal(workflow.concurrency.group, "cms-staging-deploy-development");
+  assert.equal(evaluate(staging.concurrency.group, { inputs: { target: "development" } }), workflow.concurrency.group);
+  assert.equal(workflow.concurrency["cancel-in-progress"], false);
 });
