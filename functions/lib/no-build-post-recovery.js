@@ -447,7 +447,7 @@ async function judgeCandidateAnswer({ url, fetchPublic, headers, candidate, prev
 }
 
 async function verifyOwnedPostRoutes({ state, staticProof, contentRedirectUrl, candidate, admission, fetchPublic, target, headers,
-  previousRendererSha, rollout }) {
+  previousRendererSha, rollout = CANDIDATE_ROLLOUT }) {
   const slugs = staticProof?.ownedSlugs ?? state.ownedSlugs;
   for (const slug of slugs) {
     await judgeCandidateAnswer({ url: `${target.origin}${postRoutePath(slug)}?cms-code=${candidate.workerVersionId}`,
@@ -477,7 +477,7 @@ async function verifyOwnedPostRoutes({ state, staticProof, contentRedirectUrl, c
   }
 }
 
-async function verifyStaticPostOutputs({ staticProof, candidate, fetchPublic, target, headers, previousRendererSha, rollout }) {
+async function verifyStaticPostOutputs({ staticProof, candidate, fetchPublic, target, headers, previousRendererSha, rollout = CANDIDATE_ROLLOUT }) {
   const proof = require("./no-build-post-static-return").projectStaticProof(staticProof);
   const paths = ["/_publication.json", "/_content-status.json", "/posts/", "/feeds/news.xml", "/api/v1/content.json",
     "/pagefind/pagefind.js", "/search/meaning-index.json",
