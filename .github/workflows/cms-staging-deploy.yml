@@ -207,8 +207,38 @@ jobs:
           CMS_PREVIEW_SMOKE_CREDENTIAL: ${{ secrets.CMS_PREVIEW_SMOKE_CREDENTIAL }}
           CMS_DEV_ACCESS_CLIENT_ID: ${{ inputs.target == 'development' && secrets.CMS_DEV_ACCESS_CLIENT_ID || '' }}
           CMS_DEV_ACCESS_CLIENT_SECRET: ${{ inputs.target == 'development' && secrets.CMS_DEV_ACCESS_CLIENT_SECRET || '' }}
+          CMS_BUG_REPORT_GITHUB_TOKEN: ${{ inputs.target == 'development' && secrets.CMS_BUG_REPORT_GITHUB_TOKEN || '' }}
+          CMS_BUG_REPORT_GITHUB_WEBHOOK_SECRET: ${{ inputs.target == 'development' && secrets.CMS_BUG_REPORT_GITHUB_WEBHOOK_SECRET || '' }}
+          CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP: ${{ inputs.target == 'development' && secrets.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP || '' }}
+          CMS_BUG_REPORT_TELEGRAM_BOT_TOKEN: ${{ inputs.target == 'development' && secrets.CMS_BUG_REPORT_TELEGRAM_BOT_TOKEN || '' }}
+          CMS_BUG_REPORT_TELEGRAM_CHAT_ID: ${{ inputs.target == 'development' && secrets.CMS_BUG_REPORT_TELEGRAM_CHAT_ID || '' }}
+          CMS_BUG_REPORT_TELEGRAM_WEBHOOK_SECRET: ${{ inputs.target == 'development' && secrets.CMS_BUG_REPORT_TELEGRAM_WEBHOOK_SECRET || '' }}
+          CMS_MEDIA_CACHE_PURGE_TOKEN: ${{ inputs.target == 'development' && secrets.CMS_MEDIA_CACHE_PURGE_TOKEN || '' }}
+          CMS_STAFF_EMAIL_API_TOKEN: ${{ inputs.target == 'development' && secrets.CMS_STAFF_EMAIL_API_TOKEN || '' }}
+          CMS_VOICEOVER_R2_ACCESS_KEY_ID: ${{ inputs.target == 'development' && secrets.CMS_VOICEOVER_R2_ACCESS_KEY_ID || '' }}
+          CMS_VOICEOVER_R2_SECRET_ACCESS_KEY: ${{ inputs.target == 'development' && secrets.CMS_VOICEOVER_R2_SECRET_ACCESS_KEY || '' }}
         run: |
           set -euo pipefail
+          if [ "$CMS_TARGET" = development ]; then
+            # GitHub masks every secret value in logs and drops any job output that contains one. A dev
+            # placeholder "1" emptied the Functions configuration fingerprint (dev CMS run 45306098095,
+            # Nov. 23, 2026). Six characters keep real Telegram chat IDs valid; a fixed six-character value
+            # occurs in a 64-character hex output with odds of about 64/16^6 (4 in a million). A shorter
+            # value, a chat ID included, breaks the deploy the same way, so the floor applies to every
+            # name (review finding to drop it for chat IDs rejected by the coordinator, Nov. 23, 2026).
+            # Fix: docs/cms/functions-deploy.md#development-project-setup.
+            short=()
+            for name in $(jq -r '.secrets[]' <<<"$CMS_DEVELOPMENT_ENVIRONMENT_NAMES"); do
+              if [ ! -v "$name" ]; then echo "This step does not read the development secret $name" >&2; exit 1; fi
+              value=${!name}
+              if [ -n "$value" ] && [ "${#value}" -lt 6 ]; then short+=("$name"); fi
+            done
+            unset value
+            if [ "${#short[@]}" -gt 0 ]; then
+              echo "Development secrets shorter than 6 characters (GitHub would mask them in every job output): ${short[*]}" >&2
+              exit 1
+            fi
+          fi
           missing=()
           # The dev Admin stays behind Access and never opens the public authentication shell.
           names=(FIREBASE_SERVICE_ACCOUNT CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_API_TOKEN CMS_EDGE_ORIGIN_SECRET CMS_PREVIEW_R2_CREDENTIAL CMS_PREVIEW_SMOKE_CREDENTIAL)
