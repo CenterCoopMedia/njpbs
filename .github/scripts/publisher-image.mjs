@@ -100,8 +100,13 @@ export async function publishImage({ sha, account, imageName, inputFingerprint, 
   if (!/^[a-f0-9]{64}$/.test(inputFingerprint ?? "")) throw new ImageRefusal("Deployment input fingerprint missing");
   let record = await lookup(sha);
   if (!record) {
-    await build(`${imageName}:${sha}`);
-    record = await lookup(sha);
+    try { await build(`${imageName}:${sha}`); }
+    catch (error) {
+      // A push can land before the command fails; the registry says whether it did.
+      record = await lookup(sha);
+      if (!record) throw error;
+    }
+    record ??= await lookup(sha);
   }
   if (!digestPattern.test(record?.digest ?? "")) throw new ImageRefusal("Published image digest missing");
   if (record.inputFingerprint !== inputFingerprint) throw new ImageRefusal("Existing SHA image has different deployment inputs; use a new source commit");
@@ -184,12 +189,27 @@ export function prepareTarget({ sha, target, variables, checkout, source, env })
   return { prepared, inputFingerprint };
 }
 
+// The last stderr lines of a failed child, with quoted text, addresses and long
+// tokens removed. Wrangler and the prepare script print their error there.
+export function stderrTail(stderr) {
+  return String(stderr ?? "").split("\n").map(line => line.trim()).filter(Boolean).slice(-5)
+    .map(line => line.replace(/(["'`]).*?\1/g, "<value>").replace(/\S+@\S+|https?:\/\/\S+/g, "<value>")
+      .replace(/[A-Za-z0-9_+/=.-]{24,}/g, "<value>").slice(0, 200)).join(" | ");
+}
+
+// Each target reads only its own variables; an empty one never falls back to production's.
+export function publicVariables(target, env) {
+  const selected = env[target.environment === "development" ? "PUBLISHER_DEVELOPMENT_PUBLIC_VARS_JSON" : "PUBLISHER_PUBLIC_VARS_JSON"];
+  if (!selected) throw new ImageRefusal(`Publisher public variables for ${target.environment} are empty`);
+  return JSON.parse(selected);
+}
+
 function command(executable, args, options = {}) {
   try {
     return execFileSync(executable, args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 64 * 1024 * 1024, ...options });
   } catch (error) {
-    // Child errors can retain credential-bearing output. Never print the error object.
-    throw new ImageRefusal(`Publisher image command failed (exit ${Number.isInteger(error.status) ? error.status : "unknown"}); child output withheld`);
+    // Child errors can retain credential-bearing output. Never print the error object or stdout.
+    throw new ImageRefusal(`Publisher image command failed (exit ${Number.isInteger(error.status) ? error.status : "unknown"}): ${stderrTail(error.stderr) || "no stderr"}`);
   }
 }
 
@@ -209,7 +229,7 @@ async function main(mode, env = process.env) {
     } });
   } else if (mode === "prepare") {
     // The development pin comes from its own repository variable, separate from the account in the vars JSON.
-    const variables = { ...JSON.parse(env.PUBLISHER_PUBLIC_VARS_JSON),
+    const variables = { ...publicVariables(target, env),
       ...(target.environment === "development" ? { CMS_DEV_CLOUDFLARE_ACCOUNT_ID: env.CMS_DEV_CLOUDFLARE_ACCOUNT_ID ?? "" } : {}) };
     const { prepared, inputFingerprint } = prepareTarget({ sha, target, variables, checkout, source: source(), env });
     const dockerfile = readFileSync(path.join(prepared.source, "publisher/Dockerfile"), "utf8");

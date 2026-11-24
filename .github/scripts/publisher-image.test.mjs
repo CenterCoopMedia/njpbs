@@ -5,7 +5,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
-import { productionConfig, publisherTarget, publishImage, receiptFiles, registryReader, targetSource, verifySource } from "./publisher-image.mjs";
+import { productionConfig, publisherTarget, publicVariables, publishImage, receiptFiles, registryReader, stderrTail, targetSource, verifySource } from "./publisher-image.mjs";
 
 const sha = "a".repeat(40), account = "0123456789abcdef0123456789abcdef";
 const digest = `sha256:${"b".repeat(64)}`;
@@ -73,6 +73,25 @@ test("a rerun reuses the SHA digest; a new image builds once and reads back by d
   for (const previousInputs of [undefined, "e".repeat(64)]) {
     await assert.rejects(publishImage({ sha, account, imageName, inputFingerprint, lookup: async () => ({ digest, inputFingerprint: previousInputs }), build: () => assert.fail("Changed inputs must not replace the existing SHA image") }), /different deployment inputs/);
   }
+});
+
+test("each target reads only its own public variables and refuses an empty one", () => {
+  const env = { PUBLISHER_PUBLIC_VARS_JSON: '{"CMS_DEPLOYMENT_ENVIRONMENT":"production"}', PUBLISHER_DEVELOPMENT_PUBLIC_VARS_JSON: "" };
+  assert.deepEqual(publicVariables(publisherTarget("production"), env), { CMS_DEPLOYMENT_ENVIRONMENT: "production" });
+  assert.throws(() => publicVariables(publisherTarget("development"), env), /development are empty/);
+  assert.deepEqual(publicVariables(publisherTarget("development"), { ...env, PUBLISHER_DEVELOPMENT_PUBLIC_VARS_JSON: '{"CMS_DEPLOYMENT_ENVIRONMENT":"development"}' }),
+    { CMS_DEPLOYMENT_ENVIRONMENT: "development" });
+});
+
+test("a failed build reads the registry before failing and names its scrubbed stderr", async () => {
+  let lookups = 0;
+  const pushed = await publishImage({ sha, account, imageName, inputFingerprint,
+    lookup: async () => ++lookups === 1 ? null : { digest, inputFingerprint }, build: async () => { throw new Error("exit 1 after push"); } });
+  assert.equal(pushed, image);
+  await assert.rejects(publishImage({ sha, account, imageName, inputFingerprint, lookup: async () => null,
+    build: async () => { throw new Error("exit 1"); } }), /exit 1/);
+  assert.equal(stderrTail("progress\n\nError: push denied for synthetic@example.test token ya29.synthetic-private-credential-value 'secret'\n"),
+    "progress | Error: push denied for <value> token <value> <value>");
 });
 
 test("registry lookup verifies manifest bytes and treats only 404 as absent", async () => {
