@@ -23,16 +23,17 @@ function directives(value: string | null): string[] {
   return (value ?? "").split(",").map((part) => part.split("=", 1)[0].trim().toLowerCase());
 }
 
-// `origin` marks a proxied dev answer. Release readers compare its cache and
-// robots headers exactly, so an origin value that already forbids storage or
-// indexing passes unchanged. Every other answer gets the gateway values.
+// `origin` marks a proxied dev answer. Release readers compare its headers
+// exactly, so origin headers pass unchanged; the gateway adds its protection
+// only where the origin's answer lacks it. Every other answer gets the
+// gateway values.
 function response(body: BodyInit | null, status: number, extra: HeadersInit = {}, origin = false): Response {
   const headers = new Headers(extra);
   if (!origin || !directives(headers.get("cache-control")).includes("no-store")) headers.set("cache-control", "private, no-store");
-  if (status === 429) headers.set("retry-after", "1");
-  headers.set("referrer-policy", "no-referrer");
+  if (status === 429 && (!origin || !headers.has("retry-after"))) headers.set("retry-after", "1");
+  if (!origin || !headers.has("referrer-policy")) headers.set("referrer-policy", "no-referrer");
   if (!origin || !directives(headers.get("x-robots-tag")).includes("noindex")) headers.set("x-robots-tag", "noindex, nofollow, noarchive");
-  headers.set("x-content-type-options", "nosniff");
+  if (!origin || !headers.has("x-content-type-options")) headers.set("x-content-type-options", "nosniff");
   return new Response(body, { status, headers });
 }
 
@@ -146,9 +147,14 @@ export async function serveStaffSite(request: Request, dependencies: Dependencie
         `staff-admission;dur=${admittedAt - admissionStarted}`,
         `staff-origin;dur=${Date.now() - admittedAt}`,
       ].join(", "));
-      headers.delete("access-control-allow-origin");
+      // Only the gateway grants credentialed CORS; other origin CORS and Vary pass.
       headers.delete("access-control-allow-credentials");
-      for (const [name, value] of Object.entries(receiptCors(request))) headers.set(name, value);
+      const cors = receiptCors(request);
+      if (cors["access-control-allow-origin"]) {
+        headers.set("access-control-allow-origin", cors["access-control-allow-origin"]);
+        headers.set("access-control-allow-credentials", "true");
+      }
+      if (!directives(headers.get("vary")).includes("origin")) headers.append("vary", "Origin");
     }
     return response(request.method === "HEAD" ? null : upstream.body, upstream.status, headers, !!dev);
   } catch {
