@@ -34,7 +34,7 @@ test("the wait module holds no number that stops a wait", () => {
   assert.equal(code.match(/\bsetTimeout\(/g)?.length, 1, "setTimeout only paces the next read");
   assert.equal(code.match(/\bsetInterval\(/g)?.length, 1, "setInterval only journals a waiting line");
   const durations = [...code.matchAll(/^const ([A-Z_]+_MS) = [\d_]+; \/\/ .+$/gm)].map(match => match[1]).sort();
-  assert.deepEqual(durations, ["FIRST_PAUSE_MS", "JOURNAL_EVERY_MS", "LONGEST_PAUSE_MS"]);
+  assert.deepEqual(durations, ["CAPACITY_FIRST_PAUSE_MS", "CAPACITY_LONGEST_PAUSE_MS", "FIRST_PAUSE_MS", "JOURNAL_EVERY_MS", "LONGEST_PAUSE_MS"]);
 });
 
 test("a call retries until the service answers and a wait ends only on its state", async () => {

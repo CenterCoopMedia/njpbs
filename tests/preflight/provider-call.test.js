@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
+import releaseWait from "../../functions/lib/release-wait.js";
 import { ABSENT_EXIT, httpFault, main, permanentFailure, providerCall, providerCallSync, providerGcloud, providerJson } from "../../scripts/lib/provider-call.mjs";
 
 const options = () => ({ log: vi.fn() });
@@ -10,6 +11,16 @@ const command = stderr => Object.assign(new Error("Command failed"), { status: 1
 const secretManager503 = "Error: Request to https://secretmanager.googleapis.com/v1/projects/example-project/secrets/EXAMPLE_SECRET had HTTP Error: 503, Authentication backend unavailable.";
 
 describe("provider call rule", () => {
+  it("names the check, the provider's last line and the wanted answer while it waits", async () => {
+    const { setJournal } = releaseWait, lines = [];
+    setJournal(line => lines.push(line));
+    try {
+      const call = vi.fn().mockRejectedValueOnce(command("Error: HTTP Error: 503, Service Unavailable")).mockResolvedValue("answer");
+      await expect(providerCall("Firebase rules and indexes", call, options())).resolves.toBe("answer");
+    } finally { setJournal(line => console.error(JSON.stringify({ severity: "INFO", ...line }))); }
+    expect(lines.find(line => line.event === "retry").problem)
+      .toBe("check=Firebase rules and indexes got=Error: HTTP Error: 503, Service Unavailable want=success");
+  });
   it.each([
     ["HTTP 500", http(500)], ["HTTP 503", http(503)], ["HTTP 530", http(530)], ["HTTP 408", http(408)],
     // One live smoke request of an earlier release answered 429.
@@ -21,6 +32,8 @@ describe("provider call rule", () => {
     ["an unreadable body", new SyntaxError("Unexpected end of JSON input")],
     ["the recorded Secret Manager 503", command(secretManager503)],
     ["a rate quota", command("Error: Quota exceeded for quota metric 'Requests' and limit 'Requests per minute'")],
+    ["the Cloud Run regional CPU allocation", command("Quota exceeded for total allowable CPU per project per region.")],
+    ["an unknown quota", command("Error: Quota exceeded for a quota this test has never seen.")],
     ["an unknown command failure", command("something new")],
   ])("repeats %s and answers the next success", async (_name, fault) => {
     const call = vi.fn().mockRejectedValueOnce(fault).mockResolvedValue("answer");
@@ -36,6 +49,7 @@ describe("provider call rule", () => {
     ["permission", command("Error: Request had HTTP Error: 403, Permission 'secretmanager.secrets.get' denied on resource")],
     ["build", command("Build failed with status: FAILURE")],
     ["quota", command("Quota exceeded: daily limit")],
+    ["quota", command("Error: HTTP Error: 429, Quota exceeded for quota metric 'Functions' and limit 'Functions per project'")],
     ["request", command("gh: Not Found (HTTP 404)")],
   ])("ends at once on a permanent %s fault and names it", async (kind, fault) => {
     const call = vi.fn().mockRejectedValue(fault);

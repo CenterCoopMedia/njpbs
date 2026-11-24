@@ -7,6 +7,19 @@ import { describe, expect, it, vi } from "vitest";
 import { FUNCTION_SCHEDULES, functionTargets, cloudWakeFunctionPlan, assertCloudWakeRetired, assertCloudWakeSettings, explicitCloudWakeDecision, loadCloudWakeDeployment, assertFunctionsReady, assertSchedulesReady, listPages, deployFunctionTargets } from "../../scripts/deploy-cms-function-batches.mjs";
 import { meteredOffenders, scanRepositorySourceFiles } from "../../.github/scripts/metered-api-scan.mjs";
 
+// Function deploy retries are paced in minutes (release-wait capacity pacing);
+// fake timers run that pacing at once.
+async function paced(start) {
+  vi.useFakeTimers();
+  try {
+    const result = start();
+    let done = false;
+    result.then(() => { done = true; }, () => { done = true; });
+    while (!done) await vi.advanceTimersToNextTimerAsync();
+    return await result;
+  } finally { vi.useRealTimers(); }
+}
+
 describe("CMS function deployment completion", () => {
   it("lists every exported scheduled function for the Scheduler check", () => {
     const root = join(import.meta.dirname, "../..");
@@ -161,9 +174,9 @@ describe("CMS function deployment completion", () => {
         queueMicrotask(() => { child.stdout.emit("data", Buffer.from(text)); child.emit("close", exit); });
         return child;
       });
-      const promise = deployFunctionTargets(["handler"], launch, "njpbs-site", {
+      const promise = paced(() => deployFunctionTargets(["handler"], launch, "njpbs-site", {
         manifest: [{ name: "handler", region: "us-central1", platform: "gcfv2" }], request: async () => ({}),
-      });
+      }));
       await expect(promise).resolves.toBeUndefined();
       expect(launch).toHaveBeenCalledTimes(accepted ? 1 : 2);
     }
@@ -180,7 +193,9 @@ describe("CMS function build queue expiry recovery", () => {
     ["exampleFunctionE"],
   ];
   function deployment(outputs, names, request = vi.fn().mockResolvedValue({})) {
+    const times = [];
     const launch = vi.fn(() => {
+      times.push(Date.now());
       const child = new EventEmitter(); child.stdout = new EventEmitter(); child.stderr = new EventEmitter();
       const [code, output] = outputs.shift();
       queueMicrotask(() => {
@@ -190,12 +205,31 @@ describe("CMS function build queue expiry recovery", () => {
       });
       return child;
     });
-    const promise = deployFunctionTargets(names, launch, "njpbs-site", {
+    const promise = paced(() => deployFunctionTargets(names, launch, "njpbs-site", {
       manifest: names.map(name => ({ name, region: "us-central1", platform: "gcfv2" })), request,
-    });
+    }));
     const targets = () => launch.mock.calls.map(([, args]) => args[args.indexOf("--only") + 1]);
-    return { promise, launch, request, targets };
+    const pauses = () => times.slice(1).map((time, index) => time - times[index]);
+    return { promise, launch, request, targets, pauses };
   }
+  it("keeps deploying only the failed functions, paced from 60 s doubling to 5 min, until they complete", async () => {
+    const run = deployment([...Array.from({ length: 5 }, () => [1, recordings[1]]), [0, "Deploy complete!\n"]], ["health", ...failures[1]]);
+    await expect(run.promise).resolves.toBeUndefined();
+    const failed = "functions:exampleFunctionB,functions:exampleFunctionC,functions:exampleFunctionD";
+    expect(run.targets()).toEqual([`functions:health,${failed}`, ...Array(5).fill(failed)]);
+    expect(run.pauses()).toEqual([60_000, 120_000, 240_000, 300_000, 300_000]);
+  });
+  // Recorded from dev run 45504015954 (Nov. 24, 2026): seven Cloud Run services
+  // failed on the regional CPU allocation while the mass update started revisions.
+  it.each([
+    "Could not create or update Cloud Run service videotranscriptworkerclaim, Container Healthcheck failed. Quota exceeded for total allowable CPU per project per region.\n",
+    "Could not create or update Cloud Run service onvideosearchassetwrite, Container Healthcheck failed. Quota exceeded for total allowable memory per project per region.\n",
+    "Error: Quota exceeded for a quota this test has never seen.\n",
+  ])("retries a capacity or unknown quota until the functions deploy: %s", async output => {
+    const run = deployment([[1, output], [1, output], [0, "Deploy complete!\n"]], fullSet);
+    await expect(run.promise).resolves.toBeUndefined();
+    expect(run.launch).toHaveBeenCalledTimes(3);
+  });
   it.each([0, 1, 2])("retries only the failed names from recorded attempt %i, then completes", async index => {
     const names = ["health", ...failures[index]];
     const recorded = recordings[index].replaceAll("EXPIRED", "\x1b[31mEXPIRED\x1b[0m");
@@ -271,7 +305,8 @@ describe("CMS function build queue expiry recovery", () => {
     const run = deployment([[1, output]], fullSet);
     await expect(run.promise).rejects.toThrow("did not confirm completion");
     expect(run.launch).toHaveBeenCalledTimes(1);
-    expect(errors).toHaveBeenLastCalledWith(expect.stringContaining(`class ${kind}, attempt 1, last provider line: `));
+    // The release-wait journal line follows on stderr.
+    expect(errors).toHaveBeenCalledWith(expect.stringContaining(`class ${kind}, attempt 1, last provider line: `));
     errors.mockRestore();
   });
   it("does not retry a non-transient build failure", async () => {

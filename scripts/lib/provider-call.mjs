@@ -31,11 +31,18 @@ const PERMANENT_FAILURES = Object.freeze([
 
 // A rate quota (per second, minute or 100 seconds) or rate limit clears by itself and is retried.
 const RATE_QUOTA = /\bper (?:second|minute|100 seconds)\b|\brate limit\b/i;
+// A quota is final only when the provider names a limit that waiting cannot
+// free: a daily limit or a per-project count. Cloud Run's regional CPU and
+// memory allocation frees as revisions settle (dev run 45504015954, Nov. 24,
+// 2026: "Quota exceeded for total allowable CPU per project per region"), and
+// any other quota wording is retried and reported on each wait.
+const FINAL_QUOTA = /\bdaily limit\b|\bper day\b|limit '[^']* per project'/i;
 
 export function permanentFailure(output) {
   const lines = output.split("\n");
   for (const [kind, pattern] of PERMANENT_FAILURES) {
-    if (lines.some(line => pattern.test(line) && !(["quota", "request"].includes(kind) && RATE_QUOTA.test(line)))) return kind;
+    if (lines.some(line => pattern.test(line) && !(kind === "request" && RATE_QUOTA.test(line)) &&
+      !(kind === "quota" && (RATE_QUOTA.test(line) || !FINAL_QUOTA.test(line))))) return kind;
   }
   return null;
 }
@@ -120,7 +127,8 @@ export async function providerCall(label, call, { readBack, permanent = permanen
     try { return { value: await call() }; }
     catch (error) {
       const kind = error?.name === "AbortError" ? "cancelled" : permanent(error);
-      if (!kind) throw Object.assign(new Error(`${label}: ${faultLine(error)}`), { retry: true });
+      // The wait's minute line names the check and the provider's last answer.
+      if (!kind) throw Object.assign(new Error(`check=${label} got=${faultLine(error)} want=success`), { retry: true });
       const landed = await readBack?.();
       if (landed !== undefined) return { value: landed };
       log(`Provider call failed: ${label}, class ${kind}, attempt ${attempt}, last provider line: ${faultLine(error)}`);

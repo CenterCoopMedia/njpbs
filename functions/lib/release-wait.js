@@ -16,6 +16,14 @@
 const FIRST_PAUSE_MS = 1_000; // Refresh-pending answers ask for a retry after one second.
 const LONGEST_PAUSE_MS = 30_000; // Keeps an unchanged wait from reading more than twice a minute.
 const JOURNAL_EVERY_MS = 60_000; // One "still waiting" line a minute.
+// A regional capacity allocation (Cloud Run CPU for new revisions) frees as
+// other revisions settle, which takes minutes (lgn-checks, njpbs #633).
+const CAPACITY_FIRST_PAUSE_MS = 60_000; // The first pause before a capacity retry.
+const CAPACITY_LONGEST_PAUSE_MS = 300_000; // The longest pause between capacity retries.
+const PACING = Object.freeze({
+  default: { first: FIRST_PAUSE_MS, longest: LONGEST_PAUSE_MS },
+  capacity: { first: CAPACITY_FIRST_PAUSE_MS, longest: CAPACITY_LONGEST_PAUSE_MS },
+});
 
 // Limits the platforms enforce themselves. Callers that must name a limit use
 // these maximums; none is ours.
@@ -74,11 +82,13 @@ function everyMinute(what, start, last) {
 // Calls an outside service until it answers. `request` makes one attempt and
 // returns its result; a thrown network error or an error marked { retry: true }
 // is retried. Any other result or error is the answer. A stop signal is the
-// caller's own cancellation.
-/** @param {string} what @param {() => any} request @param {{ signal?: AbortSignal }} [options] */
-async function callOutside(what, request, { signal } = {}) {
+// caller's own cancellation. `pacing` names the pause schedule.
+/** @param {string} what @param {() => any} request @param {{ signal?: AbortSignal, pacing?: keyof typeof PACING }} [options] */
+async function callOutside(what, request, { signal, pacing = "default" } = {}) {
+  if (!Object.hasOwn(PACING, pacing)) throw new Error(`Unknown pacing ${pacing}`);
+  const { first, longest } = PACING[pacing];
   const start = Date.now();
-  let attempts = 0, lastProblem = null, wait = FIRST_PAUSE_MS;
+  let attempts = 0, lastProblem = null, wait = first;
   const stop = everyMinute(what, start, () => ({ attempts, lastProblem }));
   try {
     while (true) {
@@ -96,7 +106,7 @@ async function callOutside(what, request, { signal } = {}) {
       }
       journal({ event: "retry", what, attempts, problem: lastProblem });
       await pause(wait, signal);
-      wait = Math.min(wait * 2, LONGEST_PAUSE_MS);
+      wait = Math.min(wait * 2, longest);
     }
   } finally { stop(); }
 }
