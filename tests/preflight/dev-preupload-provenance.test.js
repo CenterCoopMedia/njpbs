@@ -1,7 +1,7 @@
 import { expect, it, vi } from "vitest";
 import { createHash } from "node:crypto";
 import target from "../../functions/lib/publication-target.js";
-import { verifyDevPreuploadFailure, devSettlementGithub, assertDevPreuploadFailureSource } from "../../scripts/lib/dev-preupload-provenance.mjs";
+import { verifyDevPreuploadFailure, devSettlementGithub, assertDevPreuploadFailureSource, JSON_LIMIT, LOG_LIMIT } from "../../scripts/lib/dev-preupload-provenance.mjs";
 import { parseDevPreuploadPacket } from "../../scripts/settle-dev-preupload-failure.mjs";
 import contract from "../../functions/lib/dev-publication-preupload.js";
 import { recordedDevPreuploadSourceBlob, devPreuploadRetryFixture } from "../helpers/dev-preupload-sources.js";
@@ -226,6 +226,27 @@ it.each(["https://example.test/log", "http://productionresultssa.blob.core.windo
 it("bounds API/log responses", async () => {
   const request = vi.fn().mockResolvedValue(new Response("x".repeat(256 * 1024 + 1)));
   await expect(devSettlementGithub("synthetic-token", request)("actions/runs/1001")).rejects.toThrow();
+});
+const signedLog = (body, headers = {}) => vi.fn().mockResolvedValueOnce(new Response(null, { status: 302,
+  headers: { location: "https://productionresultssa.blob.core.windows.net/logs/example?sig=synthetic" } }))
+  .mockResolvedValueOnce(new Response(body, { headers }));
+it("reads a build log larger than the API bound", async () => {
+  const big = Buffer.alloc(745_298, "x");
+  expect(await devSettlementGithub("synthetic-token", signedLog(big))("actions/jobs/2001/logs", { log: true })).toEqual(big);
+});
+it("refuses a log over 4 MiB, naming the size and the cap", async () => {
+  const body = Buffer.alloc(LOG_LIMIT + 1, "x"), read = headers =>
+    devSettlementGithub("synthetic-token", signedLog(body, headers))("actions/jobs/2001/logs", { log: true }).catch(e => e);
+  expect(LOG_LIMIT).toBe(4 * 1024 * 1024);
+  const sized = await read({ "content-length": String(body.length) });
+  expect(sized.refusalDetail).toEqual({ reason: "github_response_too_large", kind: "log", bytes: LOG_LIMIT + 1, capBytes: LOG_LIMIT });
+  expect(sized.message).toBe(`GitHub log response is ${LOG_LIMIT + 1} bytes; cap is ${LOG_LIMIT}`);
+  expect((await read()).refusalDetail.bytes).toBe(`>${LOG_LIMIT}`);
+});
+it("keeps the API JSON cap at 256 KiB", async () => {
+  const error = await devSettlementGithub("synthetic-token", vi.fn().mockResolvedValue(new Response("x".repeat(JSON_LIMIT + 1))))("actions/runs/1001").catch(e => e);
+  expect(JSON_LIMIT).toBe(256 * 1024);
+  expect(error.refusalDetail).toMatchObject({ kind: "api", capBytes: JSON_LIMIT });
 });
 
 it.each(["production", "wrong account", "missing source", "unknown field"])("refuses %s operator packet before credential use", mode => {

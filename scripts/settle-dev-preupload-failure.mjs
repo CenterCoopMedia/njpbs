@@ -40,5 +40,9 @@ export async function runDevPreuploadSettlement(args, { openSdk = openDevelopmen
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   runDevPreuploadSettlement(process.argv.slice(2)).then(result => process.stdout.write(JSON.stringify(result) + "\n"))
-    .catch(() => { process.stderr.write('{"status":"refused","code":"dev-preupload-settlement-refused"}\n'); process.exitCode = 1; });
+    .catch(error => {
+      const detail = error?.refusalDetail?.reason === "github_response_too_large" ? { detail: error.refusalDetail } : {};
+      process.stderr.write(JSON.stringify({ status: "refused", code: "dev-preupload-settlement-refused", ...detail }) + "\n");
+      process.exitCode = 1;
+    });
 }
