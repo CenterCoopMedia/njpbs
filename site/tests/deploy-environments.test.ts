@@ -205,9 +205,7 @@ describe("deploy credential environments", () => {
 
   it("defines only the approved environments and exact deployment branches", () => {
     expect(Object.fromEntries(Object.entries(environmentPolicy()).map(([name, policy]) => [name, policy.branches]))).toEqual({
-      // A dev run dispatches from release-run-site. Remove it when #632 merges.
-      production: ["main"], "schedule-bake": ["main"],
-      "publisher-image": ["main", "release-run-site"], development: ["main", "release-run-site"],
+      production: ["main"], "schedule-bake": ["main"], "publisher-image": ["main"], development: ["main"],
     });
     expect(environmentPolicy()["publisher-image"].secrets).toEqual(["CLOUDFLARE_PUBLISHER_IMAGE_TOKEN"]);
     const image = workflow("publisher-image").jobs.image;

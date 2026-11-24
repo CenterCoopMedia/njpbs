@@ -38,8 +38,7 @@
   },
   "development": {
     "branches": [
-      "main",
-      "release-run-site"
+      "main"
     ],
     "secrets": [
       "CLOUDFLARE_DEV_PAGES_TOKEN",
@@ -79,8 +78,7 @@
   },
   "publisher-image": {
     "branches": [
-      "main",
-      "release-run-site"
+      "main"
     ],
     "secrets": [
       "CLOUDFLARE_PUBLISHER_IMAGE_TOKEN"
