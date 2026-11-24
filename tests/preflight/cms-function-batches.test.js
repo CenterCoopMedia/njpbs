@@ -278,7 +278,11 @@ describe("CMS function build queue expiry recovery", () => {
     "Could not create or update Cloud Run service videotranscriptworkerclaim, Container Healthcheck failed. Quota exceeded for total allowable CPU per project per region.\n",
     "Could not create or update Cloud Run service onvideosearchassetwrite, Container Healthcheck failed. Quota exceeded for total allowable memory per project per region.\n",
     "Error: Quota exceeded for a quota this test has never seen.\n",
-  ])("retries a capacity or unknown quota until the functions deploy: %s", async output => {
+    // Google's quota message format for the Cloud Run read and write limits the
+    // same deploys exceeded (run.googleapis.com read_regional and write_regional).
+    "Error: HTTP Error: 429, Quota exceeded for quota metric 'Read requests' and limit 'Read requests per minute per region' of service 'run.googleapis.com'\n",
+    "Error: HTTP Error: 429, Quota exceeded for quota metric 'Write requests' and limit 'Write requests per minute per region' of service 'run.googleapis.com'\n",
+  ])("retries a capacity, rate or unknown quota until the functions deploy: %s", async output => {
     const run = deployment([[1, output], [1, output], [0, "Deploy complete!\n"]], fullSet);
     await expect(run.promise).resolves.toBeUndefined();
     expect(run.launch).toHaveBeenCalledTimes(3);
