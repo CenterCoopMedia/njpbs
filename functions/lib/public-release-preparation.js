@@ -11,11 +11,12 @@ const { PUBLIC_CONTEXT_PATH } = require("./public-context-revision");
 const { publicReleaseFreshnessDigest } = require("./public-release-freshness");
 const { PreparedPublicReleaseError } = require("./public-release-error");
 const { assertPreparedPublicBuildSettings } = require("./public-build-settings");
-const { publicationTarget } = require("./publication-target");
+const { assertPublicationTarget } = require("./publication-target");
 
 const COLLECTION = "system/publicReleasePreparations/entries";
-// An absent target is production; the operators pass one only for development.
-const serializerId = target => publicationTarget(target?.environment).serializerId;
+// Every release caller names its target; an absent one throws instead of
+// meaning production (exp6, Nov. 24, 2026).
+const serializerId = target => assertPublicationTarget(target).serializerId;
 const validId = value => typeof value === "string" && /^[A-Za-z0-9]{20}$/.test(value);
 function refuse(message = "The public release preparation is invalid") { throw new PreparedPublicReleaseError(message); }
 function exact(value, fields) {

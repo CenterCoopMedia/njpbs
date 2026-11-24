@@ -30,6 +30,7 @@ import { preparePublicWorkerArtifact } from
   "../../site/src/lib/public-worker-artifact";
 
 const requireModule = createRequire(import.meta.url);
+const PRODUCTION_TARGET = requireModule("../../functions/lib/publication-target.js").publicationTarget("production");
 const { preparePublicRelease, recordPreparedPublicReleaseCheckpoint, recordPreparedPublicWorkerCandidate } =
   requireModule("../../functions/lib/public-release-preparation.js");
 const { initialPublicDeploymentPointer } = requireModule("../../functions/lib/public-deployment.js");
@@ -241,9 +242,9 @@ describe("public Worker candidate upload orchestration", () => {
     await db.doc("system/cmsPublicationRuntime").set({ schemaVersion: 1, phase: "ready", commitSha: oldCommitSha,
       serializerId: "node-compute-primary", cloud: { phase: "ready", commitSha: oldCommitSha, serializerId: "cloudflare-publisher" } });
     await db.doc("system/publicDeployment/contexts/public").set({ schemaVersion: 1, revision: 11 });
-    const reservation = await preparePublicRelease({ firestore: db, preparationId, oldCommitSha, commitSha: COMMIT_SHA });
+    const reservation = await preparePublicRelease({ target: PRODUCTION_TARGET, firestore: db, preparationId, oldCommitSha, commitSha: COMMIT_SHA });
     const prepared = await fixture(`cms-${preparationId}`, undefined, false, false, false, reservation);
-    if (checkpoint) await recordPreparedPublicReleaseCheckpoint({ firestore: db, preparationId, commitSha: COMMIT_SHA,
+    if (checkpoint) await recordPreparedPublicReleaseCheckpoint({ target: PRODUCTION_TARGET, firestore: db, preparationId, commitSha: COMMIT_SHA,
       inputSha256: "e".repeat(64), artifactCheckpointDigest: "f".repeat(64), preparedArtifact: prepared.prepared, publicBuildSettings });
     const wrangler = fakeWrangler(prepared);
     const input = { ...prepared, firestore: db, runCommand: wrangler.runCommand, preparationId };
@@ -281,7 +282,7 @@ describe("public Worker candidate upload orchestration", () => {
 
   it("keeps the checkpoint immutable and refuses a different artifact before upload", async () => {
     const { input, prepared, preparationId, wrangler } = await detachedFixture();
-    await expect(recordPreparedPublicReleaseCheckpoint({ firestore: db, preparationId, commitSha: COMMIT_SHA,
+    await expect(recordPreparedPublicReleaseCheckpoint({ target: PRODUCTION_TARGET, firestore: db, preparationId, commitSha: COMMIT_SHA,
       inputSha256: "e".repeat(64), artifactCheckpointDigest: "a".repeat(64), preparedArtifact: prepared.prepared, publicBuildSettings }))
       .rejects.toThrow("checkpoint cannot change");
     await writeFile(prepared.preparedArtifactPath, JSON.stringify({ ...prepared.prepared, artifactDigest: "f".repeat(64) }));
@@ -293,7 +294,7 @@ describe("public Worker candidate upload orchestration", () => {
     const { input, preparationId } = await detachedFixture();
     const { recordedAt: _at, ...candidate } = await uploadPublicWorkerCandidate(input);
     await db.doc(`system/publicReleasePreparations/entries/${preparationId}/checkpoints/artifact`).delete();
-    await expect(recordPreparedPublicWorkerCandidate({ firestore: db, preparationId, candidate }))
+    await expect(recordPreparedPublicWorkerCandidate({ target: PRODUCTION_TARGET, firestore: db, preparationId, candidate }))
       .rejects.toThrow("no matching durable checkpoint");
   });
 

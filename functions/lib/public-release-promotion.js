@@ -14,7 +14,7 @@ const { assertPublicMediaManifest } = require("./public-media-manifest");
 const { digest } = require("./no-build-page-ownership");
 const { PreparedPublicReleaseError } = require("./public-release-error");
 const { assertPreparedPublicBuildSettings } = require("./public-build-settings");
-const { publicationTarget } = require("./publication-target");
+const { assertPublicationTarget } = require("./publication-target");
 
 const validDigest = value => typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
 function refuse(message) { throw new PreparedPublicReleaseError(message); }
@@ -25,8 +25,9 @@ function refs(firestore, preparationId) {
     proof: preparation.collection("proofs").doc("complete"),
     promotion: preparation.collection("promotions").doc("reservation"), handover: preparation.collection("proofs").doc("handover") };
 }
-// An absent target is production; the operators pass one only for development.
-const serializerId = target => publicationTarget(target?.environment).serializerId;
+// Every release caller names its target; an absent one throws instead of
+// meaning production (exp6, Nov. 24, 2026).
+const serializerId = target => assertPublicationTarget(target).serializerId;
 function candidateInput(value, target) {
   return Object.fromEntries(Object.entries(projectPublicWorkerCandidate(value, null, { target })).filter(([field]) => field !== "recordedAt"));
 }

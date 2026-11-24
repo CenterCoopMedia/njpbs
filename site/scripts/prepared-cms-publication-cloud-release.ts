@@ -64,7 +64,8 @@ export async function main(args = process.argv.slice(2), environment: NodeJS.Pro
     const { action, queueId, commitSha, apply } = parsePreparedReleaseArguments(args);
     const target = preparedReleaseTarget(environment);
     // Shared release records treat an absent target as production.
-    const scoped = target.environment === "development" ? { target } : {};
+    // Every release record call names its target, production included.
+    const scoped = { target };
     assertProductionFirestoreRouting(environment);
     // The account must belong to the target project, so a mixed credential refuses before any dependency loads.
     const serviceAccount = parseCmsPublicationFirebaseServiceAccount(readFileSync(3, "utf8"), target.projectId);

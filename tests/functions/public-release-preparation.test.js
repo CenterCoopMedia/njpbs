@@ -14,6 +14,7 @@ import candidateStore from "../../functions/lib/public-worker-candidate-store.js
 import { createHash } from "node:crypto";
 import { runNoBuildCloudRelease } from "../../site/scripts/no-build-cloud-release";
 import { publicationTarget } from "../../functions/lib/publication-target.js";
+const PRODUCTION_TARGET = publicationTarget("production");
 
 const oldCommitSha = "a".repeat(40), commitSha = "b".repeat(40);
 const publicBuildSettings = { schemaVersion: 1, commitSha, overridesAbsent: true,
@@ -39,10 +40,10 @@ beforeEach(async () => {
     serializerId: "node-compute-primary", cloud: { phase: "ready", commitSha: oldCommitSha, serializerId: "cloudflare-publisher" } });
   await db.doc("system/publicDeployment/contexts/public").set({ schemaVersion: 1, revision: 11 });
 });
-const prepare = (overrides = {}) => preparation.preparePublicRelease({ firestore: db, preparationId, commitSha, oldCommitSha, ...overrides });
-const reserve = () => coordinator.reservePublicBuildBatch({ firestore: db, buildBatchId: `cms-${preparationId}`,
+const prepare = (overrides = {}) => preparation.preparePublicRelease({ target: PRODUCTION_TARGET, firestore: db, preparationId, commitSha, oldCommitSha, ...overrides });
+const reserve = () => coordinator.reservePublicBuildBatch({ target: PRODUCTION_TARGET, firestore: db, buildBatchId: `cms-${preparationId}`,
   commitSha, runtime: { owner: "cloudflare", release: commitSha } });
-const check = (phase = "ready") => preparation.checkPublicReleasePreparation({ firestore: db, preparationId, commitSha, phase });
+const check = (phase = "ready") => preparation.checkPublicReleasePreparation({ target: PRODUCTION_TARGET, firestore: db, preparationId, commitSha, phase });
 
 it("prepares and retries without changing live admission, generation, eligibility or work", async () => {
   const paths = ["system/publicDeployment", "system/cmsPublicationRuntime", "system/publicDeployment/contexts/public"];
@@ -57,7 +58,7 @@ it("prepares and retries without changing live admission, generation, eligibilit
   const first = await db.doc(path).get();
   expect(await prepare()).toEqual(reservation);
   expect((await db.doc(path).get()).updateTime).toEqual(first.updateTime);
-  expect(await preparation.readPublicReleasePreparation({ firestore: db, preparationId, commitSha })).toEqual(reservation);
+  expect(await preparation.readPublicReleasePreparation({ target: PRODUCTION_TARGET, firestore: db, preparationId, commitSha })).toEqual(reservation);
   const after = await Promise.all(paths.map(async name => (await db.doc(name).get()).data()));
   expect(after).toEqual(before);
   expect(deployment.assertMediaLifecycleDeploymentFence(after[0])).toEqual({ generation: 7,
@@ -175,7 +176,7 @@ it("refuses a freshness check under NEW pins or an unaccepted phase", async () =
 });
 
 async function seal(target) {
-  const scoped = target ? { target } : {};
+  const scoped = { target: target ?? PRODUCTION_TARGET };
   const settings = target ? { schemaVersion: 1, commitSha, environment: "development", values: {}, overridesAbsent: true }
     : publicBuildSettings;
   const reservation = await prepare(scoped);
@@ -204,14 +205,14 @@ async function seal(target) {
   const proof = await promotion.sealPreparedPublicRelease(input);
   return { reservation, candidate, proof, input };
 }
-const promote = (apply = true) => promotion.promotePreparedPublicRelease({ firestore: db, preparationId, commitSha, apply });
+const promote = (apply = true) => promotion.promotePreparedPublicRelease({ target: PRODUCTION_TARGET, firestore: db, preparationId, commitSha, apply });
 const pauseForHandover = async () => {
   await db.doc("system/cmsPublicationRuntime").update({ phase: "paused", "cloud.phase": "paused" });
-  await promotion.handoverPreparedPublicRelease({ firestore: db, preparationId, commitSha });
+  await promotion.handoverPreparedPublicRelease({ target: PRODUCTION_TARGET, firestore: db, preparationId, commitSha });
 };
 
 const readStaleForRecovery = () => db.runTransaction(transaction =>
-  promotion.readStalePublicReleaseBeforeHandover({ firestore: db, transaction, preparationId, commitSha }), { readOnly: true });
+  promotion.readStalePublicReleaseBeforeHandover({ target: PRODUCTION_TARGET, firestore: db, transaction, preparationId, commitSha }), { readOnly: true });
 
 const uploadMedia = () => db.runTransaction(async transaction => {
   transaction.create(db.doc("media_assets_public/22222222-2222-4222-8222-222222222222"), { url: "https://images.example.org/upload.png" });
@@ -225,7 +226,7 @@ it("proves stale upload content before handover without changing the paused owne
   await db.doc("cmsPages/staff-draft").set({ status: "draft", draft: { title: "Draft only" } });
   await expect(readStaleForRecovery()).rejects.toThrow("requires stale preparation content");
   await uploadMedia();
-  await expect(promotion.handoverPreparedPublicRelease({ firestore: db, preparationId, commitSha })).rejects.toThrow("stale");
+  await expect(promotion.handoverPreparedPublicRelease({ target: PRODUCTION_TARGET, firestore: db, preparationId, commitSha })).rejects.toThrow("stale");
   const paused = await runtime.get();
   expect(await readStaleForRecovery()).toEqual({ proofDigest: expect.stringMatching(/^[a-f0-9]{64}$/), runtimeUpdateTime: paused.updateTime });
   expect((await runtime.get()).updateTime).toEqual(paused.updateTime);
@@ -259,7 +260,7 @@ it("binds the compiler settings to the original checkpoint and rejects later sea
   const original = (await checkpoint.get()).data();
   expect(proof.publicBuildSettings).toEqual(publicBuildSettings);
   expect(original.publicBuildSettings).toEqual(publicBuildSettings);
-  expect((await promotion.checkSealedPublicRelease({ firestore: db, preparationId, commitSha })).proof).toEqual(proof);
+  expect((await promotion.checkSealedPublicRelease({ target: PRODUCTION_TARGET, firestore: db, preparationId, commitSha })).proof).toEqual(proof);
   const changed = { ...publicBuildSettings,
     values: { ...publicBuildSettings.values, PUBLIC_GA4_MEASUREMENT_ID: "G-OTHER123" } };
   await expect(promotion.sealPreparedPublicRelease({ ...input, publicBuildSettings: changed }))
@@ -267,7 +268,7 @@ it("binds the compiler settings to the original checkpoint and rejects later sea
   expect((await db.doc(`${path}/proofs/complete`).get()).data()).toEqual(proof);
   expect((await checkpoint.get()).data()).toEqual(original);
   await checkpoint.update({ publicBuildSettings: changed });
-  await expect(promotion.checkSealedPublicRelease({ firestore: db, preparationId, commitSha }))
+  await expect(promotion.checkSealedPublicRelease({ target: PRODUCTION_TARGET, firestore: db, preparationId, commitSha }))
     .rejects.toThrow("sealed build settings differ");
 });
 
@@ -276,7 +277,7 @@ it("refuses a seal or fresh check without the native compiler settings", async (
   await expect(promotion.sealPreparedPublicRelease({ ...input, publicBuildSettings: undefined }))
     .rejects.toThrow("missing or differ");
   await db.doc(`${path}/proofs/complete`).update({ publicBuildSettings: FieldValue.delete() });
-  await expect(promotion.checkSealedPublicRelease({ firestore: db, preparationId, commitSha }))
+  await expect(promotion.checkSealedPublicRelease({ target: PRODUCTION_TARGET, firestore: db, preparationId, commitSha }))
     .rejects.toThrow("missing or differ");
 });
 
@@ -321,7 +322,7 @@ it("prepares, seals, hands over and promotes a development release on developmen
 
 it("refuses a sealed release after newer published content becomes visible", async () => {
   await seal();
-  const sealedRelease = { firestore: db, preparationId, commitSha };
+  const sealedRelease = { target: PRODUCTION_TARGET, firestore: db, preparationId, commitSha };
   const page = db.doc("cmsPages/home");
   await page.set({ status: "draft", draft: { title: "Newer staff revision" } });
   await expect(promotion.checkSealedPublicRelease(sealedRelease)).resolves.toMatchObject({ candidate: { generation: 8 } });
@@ -367,7 +368,7 @@ it("defaults promotion to a read-only preview and reads back one bounded apply r
   await pauseForHandover();
   const names = ["system/publicDeployment", "system/cmsPublicationRuntime"];
   const before = await Promise.all(names.map(async name => (await db.doc(name).get()).data()));
-  const preview = await promotion.promotePreparedPublicRelease({ firestore: db, preparationId, commitSha });
+  const preview = await promotion.promotePreparedPublicRelease({ target: PRODUCTION_TARGET, firestore: db, preparationId, commitSha });
   expect(preview).toMatchObject({ dryRun: true, alreadyApplied: false, receipt: { generation: 8 } });
   expect(await Promise.all(names.map(async name => (await db.doc(name).get()).data()))).toEqual(before);
   expect((await db.doc(`${path}/promotions/reservation`).get()).exists).toBe(false);
@@ -416,7 +417,7 @@ async function staged() {
 it("accepts draft saves after handover and reservation without stranding the release", async () => {
   await staged();
   await db.doc("cmsPosts/newer-draft").set({ status: "draft", draft: { title: "Staff draft during the short switch" } });
-  expect(await coordinator.acquirePublicDeploymentLease({ firestore: db, buildBatchId: `cms-${preparationId}`, commitSha,
+  expect(await coordinator.acquirePublicDeploymentLease({ target: PRODUCTION_TARGET, firestore: db, buildBatchId: `cms-${preparationId}`, commitSha,
     runtime: { owner: "cloudflare", release: commitSha } })).toMatchObject({ outcome: "acquired" });
   expect((await db.doc("system/publicDeployment").get()).data().state).toBe("deploying");
 });
