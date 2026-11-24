@@ -209,6 +209,7 @@ jobs:
           CLOUDFLARE_DEV_PREVIEW_RENDERER_TOKEN: ${{ inputs.target == 'development' && secrets.CLOUDFLARE_DEV_PREVIEW_RENDERER_TOKEN || '' }}
           CMS_DEV_PREVIEW_FIREBASE_ACCOUNT: ${{ inputs.target == 'development' && secrets.CMS_DEV_PREVIEW_FIREBASE_ACCOUNT || '' }}
           CMS_DEV_PREVIEW_R2_CREDENTIAL: ${{ inputs.target == 'development' && secrets.CMS_DEV_PREVIEW_R2_CREDENTIAL || '' }}
+          CLOUDFLARE_DEV_PUBLIC_WORKER_TOKEN: ${{ inputs.target == 'development' && secrets.CLOUDFLARE_DEV_PUBLIC_WORKER_TOKEN || '' }}
           CMS_BUG_REPORT_GITHUB_TOKEN: ${{ inputs.target == 'development' && secrets.CMS_BUG_REPORT_GITHUB_TOKEN || '' }}
           CMS_BUG_REPORT_GITHUB_WEBHOOK_SECRET: ${{ inputs.target == 'development' && secrets.CMS_BUG_REPORT_GITHUB_WEBHOOK_SECRET || '' }}
           CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP: ${{ inputs.target == 'development' && secrets.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP || '' }}
