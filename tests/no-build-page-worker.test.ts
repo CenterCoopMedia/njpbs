@@ -33,6 +33,47 @@ function contextDecision(revision: number, pageId = "home"): NoBuildPageReply {
     contextReceipt: { rendererSha, contextRevision: revision, contextDigest, codeGeneration: 5,
       path: renderContext.path, source: "site" } };
 }
+
+it.each([
+  { kind: "context-page", path: "/contact/", status: 200, version: "site" },
+  { kind: "gone", path: "/contact/", status: 410, version: 7 },
+  { kind: "redirect", path: "/old-contact/", status: 308, version: 7 },
+  { kind: "context-page", path: "/contact/", status: 302, version: 7 },
+] as const)("exposes a verified unowned Page HEAD receipt for $kind", async ({ kind, path, status, version }) => {
+  const decision = contextDecision(4, "contact");
+  if (status === 302) {
+    const published = publishedPageRead("contact", rendererSha);
+    Object.assign(published.page, { contentLinkMode: "custom", contentLinkUrl: "https://example.org/external/" });
+    decision.renderContext = { ...published, kind: "published-page-context", pageId: "contact", path,
+      sourceSeal: { ...published.sourceSeal, codeGeneration: 5 } };
+  }
+  const contentKey = createHash("sha256").update("cmsPages/contact").digest("hex");
+  const contextReceipt = { ...decision.contextReceipt!, contentKey, path,
+    ...(version === "site" ? {} : { source: "cms" as const, sourceVersion: version }) };
+  const getDecision = vi.fn(async () => ({ ...decision, kind, contextReceipt, location: "/contact/" }));
+  const render = async () => "<!doctype html><html>Contact</html>";
+  const worker = createNoBuildPageWorker({ target: publicationTarget("production"), rendererSha, rendererReady: true, getDecision,
+    render, renderContext: render, cache: { async match() { return undefined; }, async put() {} },
+    fetchAsset: async () => new Response("Retained copy"), now: () => now });
+  const ordinary = await worker.fetch(new Request(`https://njpbs.org${path}`, { method: "HEAD" }));
+  expect(ordinary?.status).toBe(status);
+  expect(getDecision).toHaveBeenLastCalledWith(path, "HEAD");
+  expect(ordinary?.headers.get("x-njpbs-page-status")).toBeNull();
+  if (status === 302) expect(ordinary?.headers.get("location")).toBe("https://example.org/external/");
+  const request = new Request(`https://njpbs.org${path}?cms-page-status=1`, { method: "HEAD" });
+  const response = await worker.fetch(request);
+  expect(response?.status).toBe(status === 410 ? 410 : 200);
+  expect(getDecision).toHaveBeenLastCalledWith(path, "HEAD", true);
+  expect(response?.headers.get("x-njpbs-page-status")).toBe(`${contentKey}:${version}`);
+  expect(response?.headers.get("access-control-expose-headers")).toContain("x-njpbs-page-status");
+  expect(response?.headers.get("location")).toBeNull();
+  expect(response?.headers.get("x-njpbs-page-redirect")).toBe(status === 308 ? "/contact/" : null);
+
+  getDecision.mockRejectedValue(new Error("Authority unavailable"));
+  const fallback = await worker.fetch(request);
+  expect(fallback?.status).toBe(200);
+  expect(fallback?.headers.get("x-njpbs-page-status")).toBeNull();
+});
 function liveDecision(revision: number, lane: string): NoBuildPageReply {
   const published = publishedPageRead("live", rendererSha);
   // The synthetic schedule clock must not precede the Page's publication.

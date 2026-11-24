@@ -215,6 +215,9 @@ async function publicationMetadata(firestore, stored, collection, documentId) {
       canResumeReservation = false;
     }
   }
+  const pagePublicPath = collection === "cmsPages"
+    ? require("./lib/public-page-contract").publicPagePath(documentId, stored?.published?.metadata)
+    : null;
   return {
     workingVersion: version(stored?.version),
     contentVersion: version(stored?.contentVersion ?? stored?.version),
@@ -230,6 +233,7 @@ async function publicationMetadata(firestore, stored, collection, documentId) {
     ...(recheckQueueId ? { recheckQueueId } : {}),
     canResumeReservation,
     ...(pageReceipt ? { pageReceipt } : {}),
+    ...(pagePublicPath ? { pagePublicPath } : {}),
     ...(publicationTransport ? { publicationTransport } : {}),
     ...(pageConfirmation ? { pageConfirmation } : {}),
     ...(withdrawalBuildPending ? { withdrawalBuildPending: true } : {}),

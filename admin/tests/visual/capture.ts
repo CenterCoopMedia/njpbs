@@ -70,17 +70,32 @@ export async function openSpecimen(
 ): Promise<void> {
   // Gallery records are fixtures, not production records. Keep their public
   // evidence fixed too, so a live deployment cannot change visual assertions.
+  const pageStatusFixture = pair.id === "study-reference-page" || pair.id === "home-editor-recovery";
   const identity = { schemaVersion: 1, buildBatchId: "visual-gallery", generation: 1, commitSha: "a".repeat(40) };
   await page.route("https://njpbs.org/_publication.json?*", route => route.fulfill({ json: identity }));
   await page.route("https://njpbs.org/_content-status.json?*", route => route.fulfill({ json: {
     ...identity, collections: ["cmsPages", "cmsPosts"], routes: [{
       path: "/posts/station-update/", source: "cms", sourceVersion: 8,
       contentKey: createHash("sha256").update("cmsPosts/post-station-update").digest("hex"),
-    }, ...(pair.id === "study-reference-page" ? [{ path: "/", source: "cms", sourceVersion: 50,
-      contentKey: createHash("sha256").update("cmsPages/home").digest("hex") }] : pair.id === "study-reference-post" ? [{
+    }, ...(pair.id === "study-reference-post" ? [{
       path: "/posts/man-who-waged-delaney-hall-hunger-strike-released-from-ice-custody/", source: "cms", sourceVersion: 29,
       contentKey: createHash("sha256").update("cmsPosts/study-post").digest("hex") }] : [])],
   } }));
+  if (pageStatusFixture) {
+    const cors = { "access-control-allow-origin": "*" };
+    await page.route("http://127.0.0.1:5001/**/cmsGetContent", route => route.fulfill({ headers: cors, json: {
+      success: true, found: true, publication: {
+        workingVersion: 51, contentVersion: 51, workingStatus: "draft", publiclyVisible: true,
+        publishedSourceVersion: 50, publishedContentVersion: 50, publicSourceVersion: 50,
+        publicUpdatePending: false, publicBuildQueueId: null, queueStatus: null, pagePublicPath: "/",
+      },
+    } }));
+    const key = createHash("sha256").update("cmsPages/home").digest("hex");
+    await page.route("https://njpbs.org/?cms-page-status=1", route => route.fulfill({ headers: {
+      ...cors, "access-control-expose-headers": "x-njpbs-page-status, x-njpbs-page-path",
+      "x-njpbs-page-status": `${key}:50`, "x-njpbs-page-path": "/",
+    } }));
+  }
   await page.route("https://njpbs.org/contact/?*", route => route.fulfill({
     body: "", headers: { "x-njpbs-content-source": "committed-fallback" },
   }));
@@ -99,7 +114,8 @@ export async function openSpecimen(
   if (pair.id === "media-favorites-list") {
     await page.addInitScript(() => localStorage.setItem("njpbs-admin:media-display:favorites", JSON.stringify({ layout: "list" })));
   }
-  await page.goto(visualSpecimenUrl(GALLERY_PATH, pair));
+  const captureUrl = visualSpecimenUrl(GALLERY_PATH, pair);
+  await page.goto(pageStatusFixture ? `${captureUrl}&pageStatusFixture=1` : captureUrl);
   // A specimen's visible control or region proves it has mounted even when
   // background requests remain active. Fonts still settle before capture.
   const ready = readyLocator ?? (readyRegion ? page.getByRole("region", { name: readyRegion, exact: true }) : undefined);

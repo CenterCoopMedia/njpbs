@@ -1,7 +1,7 @@
 import { webcrypto, createHash } from "node:crypto";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { PublicContentStatusProvider } from "../src/context/PublicContentStatusContext";
+import { PublicContentStatusProvider, usePublicationMetadata, usePublicationRetry } from "../src/context/PublicContentStatusContext";
 import { PublishedVersionStatus } from "../src/components/PublishedVersionStatus";
 import { loadPublicContentStatus, readPublicContentStatus } from "../src/lib/public-content-status";
 import { cmsGetPublicationStatus, cmsRetryPublication, cmsRecheckPublication } from "../src/lib/functions";
@@ -11,6 +11,15 @@ vi.mock("../src/lib/functions", () => ({ cmsGetPublicationStatus: vi.fn(), cmsRe
 const identity = { schemaVersion: 1, buildBatchId: "build-one", generation: 1, commitSha: "a".repeat(40) };
 const contentKey = createHash("sha256").update("cmsPosts/post-one").digest("hex");
 const contactKey = createHash("sha256").update("cmsPages/contact").digest("hex");
+function pageHead(path: string, pageId: string, version: number | "site", status = 200, alias?: string) {
+  const key = createHash("sha256").update(`cmsPages/${pageId}`).digest("hex");
+  const response = new Response(null, { status, headers: {
+    "x-njpbs-page-status": `${key}:${version}`, "x-njpbs-page-path": path,
+    ...(alias ? { "x-njpbs-page-redirect": alias } : {}),
+  } });
+  Object.defineProperty(response, "url", { value: `https://njpbs.org${path}?cms-page-status=1` });
+  return response;
+}
 function receipt(version = 8, publication = identity) {
   return { ...publication, collections: ["cmsPages", "cmsPosts"], routes: [
     { path: "/", source: "site" },
@@ -374,18 +383,29 @@ describe("public version evidence", () => {
   });
 
   it.each([
-    { route: { path: "/contact/", source: "site" }, label: "Site content live" },
-    { route: { path: "/contact/", source: "cms", sourceVersion: 7, contentKey: contactKey }, label: "Version 3 live" },
-  ])("reads Contact from the committed inventory like every other unowned Page ($label)", async ({ route, label }) => {
+    { response: () => pageHead("/contact/", "contact", "site"), label: "Site content live" },
+    { response: (url: string) => new URL(url).pathname === "/contact/"
+      ? pageHead("/contact/", "contact", 7, 200, "/contact-new/")
+      : pageHead("/contact-new/", "contact", 7), label: "Version 3 live" },
+    { response: () => pageHead("/contact/", "contact", 7, 200, "https://example.org/"), label: "Public status unavailable" },
+    { response: () => pageHead("/contact/", "contact", 7, 410), label: "Not live" },
+    { response: () => new Response(null, { headers: { "x-njpbs-content-source": "r2-last-good" } }), label: "Public status unavailable" },
+    { response: () => new Response(null, { status: 200 }), label: "Public status unavailable" },
+    { response: () => pageHead("/reused-path/", "about", 7), label: "Public status unavailable" },
+  ])("uses the current unowned Page decision ($label)", async ({ response, label }) => {
     vi.stubGlobal("crypto", webcrypto);
-    const fetchMock = vi.fn(async (url: string) => Response.json(
-      url.includes("_content-status") ? { ...receipt(), routes: [{ path: "/", source: "site" }, route] } : identity));
+    const route = { path: "/contact/", source: "cms", sourceVersion: 6, contentKey: contactKey };
+    const fetchMock = vi.fn(async (url: string, options: RequestInit) => options.method === "HEAD"
+      ? response(url) : Response.json(url.includes("_content-status") ? { ...receipt(), routes: [route] } : identity));
     vi.stubGlobal("fetch", fetchMock);
+    vi.mocked(cmsGetPublicationStatus).mockResolvedValue({ ...saved("success"), publication: {
+      ...saved("success").publication, workingVersion: 3, publishedContentVersion: 3,
+      publishedSourceVersion: 7, pagePublicPath: "/contact/",
+    } });
     render(<PublicContentStatusProvider getIdToken={async () => "test-token"}>
       <PublishedVersionStatus
         collection="cmsPages"
         documentId="contact"
-        loadPublicationMetadata={false}
         contentVersion={3}
         publishedContentVersion={3}
         publishedSourceVersion={7}
@@ -393,7 +413,179 @@ describe("public version evidence", () => {
       />
     </PublicContentStatusProvider>);
     expect(await screen.findByText(label)).toBeVisible();
-    expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/contact/"))).toBe(false);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("https://njpbs.org/contact/?cms-page-status=1",
+      expect.objectContaining({ method: "HEAD", credentials: "omit", cache: "no-store", redirect: "error" })));
+    expect(fetchMock.mock.calls.every(([url]) => new URL(url).origin === "https://njpbs.org")).toBe(true);
+    expect(screen.queryByText("Published copy live")).not.toBeInTheDocument();
+  });
+
+  it("confirms a settled list row without calling the CMS record endpoint", async () => {
+    vi.stubGlobal("crypto", webcrypto);
+    let reveal!: (entries: Partial<IntersectionObserverEntry>[]) => void;
+    vi.stubGlobal("IntersectionObserver", class {
+      constructor(callback: typeof reveal) { reveal = callback; }
+      observe() {}
+      disconnect() {}
+    });
+    const fetchMock = vi.fn(async (url: string, options: RequestInit) => options.method === "HEAD"
+      ? pageHead("/contact/", "contact", "site") : Response.json(url.includes("_content-status") ? receipt() : identity));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<PublicContentStatusProvider getIdToken={async () => "test-token"}>
+      <PublishedVersionStatus collection="cmsPages" documentId="contact" loadPublicationMetadata={false} compact />
+    </PublicContentStatusProvider>);
+    await waitFor(() => expect(reveal).toBeDefined());
+    expect(fetchMock.mock.calls.some(([, options]) => options.method === "HEAD")).toBe(false);
+    expect(screen.getByText("Checking public site…")).toBeVisible();
+    await act(async () => { reveal([{ isIntersecting: true }]); });
+    expect(await screen.findByText("Site content live")).toBeVisible();
+    expect(cmsGetPublicationStatus).not.toHaveBeenCalled();
+  });
+
+  it("holds the last Page proof during a refresh and clears it on a retained response", async () => {
+    vi.stubGlobal("crypto", webcrypto);
+    let finish: ((response: Response) => void) | undefined;
+    vi.stubGlobal("fetch", vi.fn(async (url: string, options: RequestInit) => {
+      if (options.method !== "HEAD") return Response.json(url.includes("_content-status") ? receipt() : identity);
+      return new Promise<Response>(resolve => { finish = resolve; });
+    }));
+    vi.mocked(cmsGetPublicationStatus).mockResolvedValue({ ...saved("success"), publication: {
+      ...saved("success").publication, publishedSourceVersion: 7, pagePublicPath: "/contact/",
+    } });
+    render(<PublicContentStatusProvider getIdToken={async () => "test-token"}>
+      <PublishedVersionStatus collection="cmsPages" documentId="contact" />
+    </PublicContentStatusProvider>);
+    await waitFor(() => expect(finish).toBeDefined());
+    expect(screen.getByText("Checking public site…")).toBeVisible();
+    await act(async () => { finish?.(pageHead("/contact/", "contact", 7)); });
+    expect(await screen.findByText("Version 2 live")).toBeVisible();
+    finish = undefined;
+    await act(async () => { window.dispatchEvent(new Event("focus")); });
+    await waitFor(() => expect(finish).toBeDefined());
+    expect(screen.getByText("Version 2 live")).toBeVisible();
+    await act(async () => { finish?.(new Response(null)); });
+    expect(await screen.findByText("Public status unavailable")).toBeVisible();
+  });
+
+  it("rechecks a settled Page proof on a bounded interval", async () => {
+    vi.stubGlobal("crypto", webcrypto);
+    let tick: (() => void) | undefined;
+    const nativeSetInterval = globalThis.setInterval;
+    vi.spyOn(window, "setInterval").mockImplementation((callback, delay) => {
+      if (delay === 5_000 && typeof callback === "function") {
+        tick = () => callback();
+        return nativeSetInterval(() => {}, 3_600_000);
+      }
+      return nativeSetInterval(callback, delay);
+    });
+    let now = 1_000_000;
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    let withdrawn = false;
+    let checks = 0;
+    vi.stubGlobal("fetch", vi.fn(async (url: string, options: RequestInit) => {
+      if (options.method !== "HEAD") return Response.json(url.includes("_content-status") ? receipt() : identity);
+      checks += 1;
+      return pageHead("/contact/", "contact", 7, withdrawn ? 410 : 200);
+    }));
+    vi.mocked(cmsGetPublicationStatus).mockResolvedValue({ ...saved("success"), publication: {
+      ...saved("success").publication, publishedSourceVersion: 7, pagePublicPath: "/contact/",
+    } });
+    render(<PublicContentStatusProvider getIdToken={async () => "test-token"}>
+      <PublishedVersionStatus collection="cmsPages" documentId="contact" />
+    </PublicContentStatusProvider>);
+    expect(await screen.findByText("Version 2 live")).toBeVisible();
+    await waitFor(() => expect(tick).toBeDefined());
+    withdrawn = true;
+    now += 5_000;
+    await act(async () => { tick?.(); });
+    expect(checks).toBe(1);
+    now += 60_000;
+    await act(async () => { tick?.(); });
+    expect(await screen.findByText("Not live")).toBeVisible();
+    expect(checks).toBe(2);
+  });
+
+  it("reads the record again when a retry arrives during the Page probe", async () => {
+    vi.stubGlobal("crypto", webcrypto);
+    let finishHead: ((response: Response) => void) | undefined;
+    vi.stubGlobal("fetch", vi.fn(async (url: string, options: RequestInit) => {
+      if (options.method !== "HEAD") return Response.json(url.includes("_content-status") ? receipt() : identity);
+      return new Promise<Response>(resolve => { finishHead = resolve; });
+    }));
+    let queueStatus = "failed";
+    vi.mocked(cmsGetPublicationStatus).mockImplementation(async () => ({ ...saved(queueStatus), publication: {
+      ...saved(queueStatus).publication, publishedSourceVersion: 7, pagePublicPath: "/contact/",
+    } }));
+    vi.mocked(cmsRetryPublication).mockImplementation(async () => {
+      queueStatus = "pending";
+      return { success: true, queueId: "retry-one", dispatched: false, status: "pending", message: "Queued" };
+    });
+    let retry: ReturnType<typeof usePublicationRetry>;
+    function Queue() {
+      retry = usePublicationRetry();
+      return <p>Queue {usePublicationMetadata("cmsPages", "contact")?.data?.queueStatus ?? "unknown"}</p>;
+    }
+    render(<PublicContentStatusProvider getIdToken={async () => "test-token"}><Queue /></PublicContentStatusProvider>);
+    await waitFor(() => expect(finishHead).toBeDefined());
+    expect(screen.getByText("Queue failed")).toBeVisible();
+    await act(async () => { await retry?.({ collection: "cmsPages", id: "contact", sourceVersion: 7, baseVersion: 12 }); });
+    const firstHead = finishHead;
+    finishHead = undefined;
+    await act(async () => { firstHead?.(pageHead("/contact/", "contact", 7)); });
+    expect(await screen.findByText("Queue pending")).toBeVisible();
+  });
+
+  it.each([true, false])("reports an unpublished custom Page as not live (load metadata: %s)", async (loadPublicationMetadata) => {
+    vi.stubGlobal("crypto", webcrypto);
+    const fetchMock = vi.fn<(url: string, options: RequestInit) => Promise<Response>>(async (url) =>
+      Response.json(url.includes("_content-status") ? receipt() : identity));
+    vi.stubGlobal("fetch", fetchMock);
+    vi.mocked(cmsGetPublicationStatus).mockResolvedValue({ ...saved("success"), publication: {
+      ...saved("success").publication, publishedSourceVersion: null, publiclyVisible: false,
+    } });
+    render(<PublicContentStatusProvider getIdToken={async () => "test-token"}>
+      <PublishedVersionStatus collection="cmsPages" documentId={`page-${"a".repeat(32)}`}
+        loadPublicationMetadata={loadPublicationMetadata} />
+    </PublicContentStatusProvider>);
+    expect(await screen.findByText("Not live")).toBeVisible();
+    expect(fetchMock.mock.calls.some(([, options]) => options.method === "HEAD")).toBe(false);
+  });
+
+  it.each([true, false])("retries a failed Page check once and refreshes on reconnect (load metadata: %s)", async (loadPublicationMetadata) => {
+    vi.stubGlobal("crypto", webcrypto);
+    let retry: (() => void) | undefined;
+    const start = loadPublicationMetadata ? "setInterval" : "setTimeout";
+    const timer = globalThis[start];
+    vi.spyOn(window, start).mockImplementation((callback, delay) => {
+      if (delay === 5_000 && typeof callback === "function") {
+        retry = () => callback();
+        return timer(() => {}, 60_000);
+      }
+      return timer(callback, delay);
+    });
+    let checks = 0;
+    vi.stubGlobal("fetch", vi.fn(async (url: string, options: RequestInit) => {
+      if (options.method !== "HEAD") return Response.json(url.includes("_content-status") ? receipt() : identity);
+      return ++checks < 3 ? new Response(null) : pageHead("/contact/", "contact", 7);
+    }));
+    vi.mocked(cmsGetPublicationStatus).mockResolvedValue({ ...saved("success"), publication: {
+      ...saved("success").publication, publishedSourceVersion: 7, pagePublicPath: "/contact/",
+    } });
+    render(<PublicContentStatusProvider getIdToken={async () => "test-token"}>
+      <PublishedVersionStatus collection="cmsPages" documentId="contact" loadPublicationMetadata={loadPublicationMetadata} />
+    </PublicContentStatusProvider>);
+    const settled = (label: string) => waitFor(() => expect(screen.getByText(label)).toBeVisible(), { timeout: 1_000 });
+    await settled("Public status unavailable");
+    await waitFor(() => expect(retry).toBeDefined(), { timeout: 1_000 });
+    const retryOnce = retry;
+    retry = undefined;
+    await act(async () => { retryOnce?.(); });
+    await waitFor(() => expect(checks).toBe(2), { timeout: 1_000 });
+    await settled("Public status unavailable");
+    if (loadPublicationMetadata) await act(async () => { retryOnce?.(); });
+    else expect(retry).toBeUndefined();
+    expect(checks).toBe(2);
+    await act(async () => { window.dispatchEvent(new Event("online")); });
+    await settled(loadPublicationMetadata ? "Version 2 live" : "Published copy live");
   });
 
   it.each([
@@ -498,15 +690,16 @@ describe("public version evidence", () => {
     let publication = identity;
     let inventoryPublication = identity;
     let broken = false;
-    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string, options: RequestInit) => {
       if (broken) throw new Error("Offline");
+      if (options.method === "HEAD") return pageHead("/", "home", "site");
       return Response.json(url.includes("_content-status") ? receipt(version, inventoryPublication) : publication);
     }));
     let queueStatus = "pending";
     vi.mocked(cmsGetPublicationStatus).mockImplementation(async (_token, request) =>
       request.id === "home" ? { ...saved(), found: false, publication: {
         ...saved().publication, workingVersion: null, publishedSourceVersion: null,
-        publiclyVisible: false, publicUpdatePending: false, publicBuildQueueId: null, queueStatus: null,
+        publiclyVisible: false, publicUpdatePending: false, publicBuildQueueId: null, queueStatus: null, pagePublicPath: "/",
       } } : saved(queueStatus));
     render(<PublicContentStatusProvider getIdToken={async () => "test-token"}>
       <input aria-label="Unsaved title" defaultValue="Original" />
@@ -702,11 +895,11 @@ describe("public version evidence", () => {
       return nativeSetInterval(() => {}, 3_600_000);
     });
     vi.stubGlobal("crypto", webcrypto);
-    vi.stubGlobal("fetch", vi.fn(async (url: string) => url.includes("/contact/")
-      ? new Response("") : Response.json(url.includes("_content-status") ? receipt() : identity)));
+    vi.stubGlobal("fetch", vi.fn(async (url: string, options: RequestInit) => options.method === "HEAD"
+      ? pageHead("/", "home", "site") : Response.json(url.includes("_content-status") ? receipt() : identity)));
     vi.mocked(cmsGetPublicationStatus).mockImplementation(async (_token, request) => request.id === "home"
       ? { ...saved(), publication: { ...saved().publication, publicUpdatePending: false,
-        publiclyVisible: false, publicBuildQueueId: null, queueStatus: null } } : saved());
+        publiclyVisible: false, publicBuildQueueId: null, queueStatus: null, pagePublicPath: "/" } } : saved());
     render(<PublicContentStatusProvider getIdToken={async () => "test-token"}>
       <PublishedVersionStatus collection="cmsPosts" documentId="post-one" workingVersion={12} />
       <PublishedVersionStatus collection="cmsPages" documentId="home" />

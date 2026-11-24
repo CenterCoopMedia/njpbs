@@ -32,3 +32,16 @@ it("leaves the reply shape unchanged for an older Worker that does not request a
     headers: { "x-njpbs-public-decision-valid-until": String(Date.now() + 60_000) } })));
   expect(await entrypoint().getNoBuildPage("/contact/", rendererSha)).toEqual(reply());
 });
+
+it("requests Page status data only for an explicit HEAD probe", async () => {
+  const fetch = vi.fn<(url: string, options: RequestInit) => Promise<Response>>(async () => Response.json(reply()));
+  vi.stubGlobal("fetch", fetch);
+  const rpc = entrypoint();
+  await rpc.getNoBuildPage("/contact/", rendererSha, "HEAD");
+  await rpc.getNoBuildPage("/contact/", rendererSha, "HEAD", true, false, true);
+  await expect(rpc.getNoBuildPage("/contact/", rendererSha, "GET", true, false, true)).rejects.toThrow();
+  const request = { mode: "no-build-page-v1", path: "/contact/", rendererSha, method: "HEAD" };
+  expect(fetch.mock.calls.map(([, options]) => JSON.parse(String(options.body)))).toEqual([
+    request, { ...request, pageStatus: true },
+  ]);
+});

@@ -1,5 +1,6 @@
 "use strict";
 
+const { createHash } = require("node:crypto");
 const { pageContextCodeGeneration } = require("./public-release-page-context-code-seal");
 const { PUBLIC_PAGE_DEFINITIONS, publicPageDefinition, publicPagePath } = require("./public-page-contract");
 const { pagePublicationTarget } = require("./no-build-page-target");
@@ -11,7 +12,7 @@ const { assertNoBuildPageContextInTransaction, readPageRenderDependenciesInTrans
 
 /** Called only after the exclusive Page owner decision. Never turns a claim,
  * alias, owned withdrawal, or unreadable snapshot into an ASSETS fallback. */
-async function readNoBuildPageContextDecision({ firestore, transaction, path, unownedPath, rendererSha, now = new Date(), target, scheduleCapture, requestScheduleCapture = false, readProviderInput, strictPublicReleaseInputs = false, legacyStaffServing = false }) {
+async function readNoBuildPageContextDecision({ firestore, transaction, path, unownedPath = undefined, rendererSha, now = new Date(), target, scheduleCapture, requestScheduleCapture = false, readProviderInput = undefined, strictPublicReleaseInputs = false, legacyStaffServing = false, pageStatus = false }) {
   target = pagePublicationTarget({ firestore, target });
   if (typeof path !== "string" || !(path === "/" || /^\/[a-z0-9]+(?:-[a-z0-9]+)*\/$/.test(path))) return { kind: "pass", path };
   // A caller may have already checked this exact path in this transaction.
@@ -68,7 +69,8 @@ async function readNoBuildPageContextDecision({ firestore, transaction, path, un
   const siteFrame = result.state !== "live" && !pageId.startsWith("page-") && Boolean(builtIn);
   const receipt = { rendererSha, contextRevision, contextDigest: publicContextDigest(contextRevision),
     codeGeneration: pointer.activeGeneration, path, source: siteFrame ? "site" : "cms",
-    ...(siteFrame ? {} : { sourceVersion: document?.published?.sourceVersion }) };
+    ...(siteFrame ? {} : { sourceVersion: document?.published?.sourceVersion }),
+    ...(pageStatus ? { contentKey: createHash("sha256").update(`cmsPages/${pageId}`).digest("hex") } : {}) };
   // An unowned built-in withdrawal/scheduled snapshot keeps its committed
   // frame, as the full build does. Exclusive owners were refused above.
   if (result.state === "withdrawn" && !siteFrame) return { kind: "gone", path, receipt };

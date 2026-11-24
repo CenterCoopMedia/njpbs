@@ -71,7 +71,7 @@ async function serve(request: Request, env: PublicEnv, ctx: ExecutionContext, ta
       waitUntil: task => ctx.waitUntil(task),
       readWithdrawal: path => readDurablePageWithdrawal(env.DURABLE_POST_WITHDRAWALS, target.workerName, path),
       scheduleProof,
-      getDecision: (path, method) => env.CMS_API.getNoBuildPage(path, rendererSha, method, true, scheduleProof) });
+      getDecision: (path, method, pageStatus) => env.CMS_API.getNoBuildPage(path, rendererSha, method, true, scheduleProof, pageStatus) });
     const response = await pages.fetch(request);
     if (response) return response;
   }

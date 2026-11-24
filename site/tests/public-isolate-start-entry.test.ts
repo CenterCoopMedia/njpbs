@@ -99,7 +99,7 @@ it("answers the rollback proof read only on development", async () => {
   expect(schedule.status).toBe(200);
   expect(schedule.headers.get("x-njpbs-worker-version")).toBe(version);
   expect(await schedule.json()).toEqual({ scheduleProof: true });
-  expect(getNoBuildPage).toHaveBeenCalledWith("/_schedule-sources.json", "a".repeat(40), "GET", true, true);
+  expect(getNoBuildPage).toHaveBeenCalledWith("/_schedule-sources.json", "a".repeat(40), "GET", true, true, undefined);
   getNoBuildPage.mockClear();
   const production = await read("https://njpbs.org", undefined, "/_schedule-sources.json", "GET");
   expect(production.headers.get("x-njpbs-worker-version")).toBeNull();

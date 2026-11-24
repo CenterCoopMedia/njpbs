@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-23",
+  "kind": "fixed",
+  "title": "Check the current public Page",
+  "body": "When you open a Page, Boardwalk checks what the public site is serving. If it cannot confirm the public copy, it shows that the status is unavailable.",
+  "prs": []
+}

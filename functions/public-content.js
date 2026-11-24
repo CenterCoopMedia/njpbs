@@ -118,10 +118,10 @@ function createCmsGetPublicPageHandler(deps = {}) {
   // authority for every request. Reuse only the stable Page projection under
   // that exact capture and a fresh ordinary public validator. No transport
   // lease is exposed: the Worker keeps both authority checks around rendering.
-  const readScheduledDecision = async ({ capture, read, path, rendererSha, method, target }) => {
+  const readScheduledDecision = async ({ capture, read, path, rendererSha, method, target, pageStatus }) => {
     const schedules = require("./lib/no-build-page-schedule-reader");
     const identity = schedules.pageScheduleCaptureIdentity({ firestore, target, rendererSha, capture });
-    const requestKey = JSON.stringify(["scheduled-page", path, rendererSha, method, identity]);
+    const requestKey = JSON.stringify([pageStatus ? "scheduled-page-status" : "scheduled-page", path, rendererSha, method, identity]);
     const validator = await readPublicDecisionValidator(firestore);
     schedules.assertPageScheduleCapture({ firestore, target, rendererSha, capture });
     if (validator.cacheable) {
@@ -188,8 +188,9 @@ function createCmsGetPublicPageHandler(deps = {}) {
           result => result.kind !== "code-post-unavailable");
       }
       if (req.body?.mode === "no-build-page-v1") {
-        const { path, rendererSha, method = "GET", scheduleProof = false } = req.body;
-        if (!["GET", "HEAD"].includes(method)) throw new Error("Invalid public Page method");
+        const { path, rendererSha, method = "GET", scheduleProof = false, pageStatus = false } = req.body;
+        if (!["GET", "HEAD"].includes(method) || typeof pageStatus !== "boolean" ||
+            pageStatus && method !== "HEAD") throw new Error("Invalid public Page method");
         const target = require("./lib/no-build-page-target").pagePublicationTarget({ firestore, target: deps.target });
         const scheduleExport = require("./lib/no-build-page-schedule-reader").isPageScheduleExportPath(path);
         if (typeof scheduleProof !== "boolean" || (scheduleProof && (target.environment !== "development" || !scheduleExport ||
@@ -198,10 +199,10 @@ function createCmsGetPublicPageHandler(deps = {}) {
         }
         const read = async () => {
           const result = await readNoBuildPageDecision({ firestore, path, rendererSha: scheduleProof ? undefined : rendererSha,
-            target, legacyStaffServing: true,
+            target, legacyStaffServing: true, pageStatus,
             currentCodeRequest: deps.currentCodeRequest,
             ...(decisionCache ? { readScheduledDecision: ({ capture, read }) =>
-              readScheduledDecision({ capture, read, path, rendererSha, method, target }) } : {}) });
+              readScheduledDecision({ capture, read, path, rendererSha, method, target, pageStatus }) } : {}) });
           const limit = result.kind === "schedule-export" ? 24 * 1024 * 1024 : 8 * 1024 * 1024;
           if (!contentLinkReadFits(result, limit, result.published ? "published" : "renderContext")) throw new Error("Published Page read too large");
           return result;
@@ -209,7 +210,7 @@ function createCmsGetPublicPageHandler(deps = {}) {
         // These routes qualify their schedule capture before any projection
         // cache hit. They never supply a lease for the Worker HTML cache.
         if (scheduleExport || ["/schedule/", "/live/"].includes(path)) return reply(req, res, await read());
-        return await cachedDecision(req, res, JSON.stringify(["page", path, rendererSha, method]), read,
+        return await cachedDecision(req, res, JSON.stringify([pageStatus ? "page-status" : "page", path, rendererSha, method]), read,
           result => !["schedule-export", "schedule-unavailable"].includes(result.kind) &&
             !["schedule", "live"].includes(result.receipt?.pageId ?? result.renderContext?.pageId));
       }
