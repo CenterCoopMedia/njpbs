@@ -605,6 +605,8 @@ jobs:
           node --import ./site/node_modules/tsx/dist/loader.mjs site/scripts/cms-dev-publication.mjs upload
       - name: Record failure or preserve uncertain upload
         if: always() && steps.auth.outcome == 'success' && steps.upload.outcome != 'success'
+        env:
+          DEV_BUILD_RESULT: ${{ needs.build.result }}
         run: node --import ./site/node_modules/tsx/dist/loader.mjs site/scripts/cms-dev-publication.mjs fail
       - name: Retain terminal evidence
         if: always() && needs.build.result == 'success'
