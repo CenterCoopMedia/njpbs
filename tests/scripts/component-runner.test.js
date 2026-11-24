@@ -57,9 +57,15 @@ describe("component runner", () => {
     for (const ErrorType of [CmsSmokeError, FunctionsDeployInventoryError, FunctionsConfigurationError]) {
       expect(componentFailureDiagnostic(new ErrorType("Native boundary proof failed"))).toBe("Native boundary proof failed");
     }
-    for (const error of [new Error("synthetic-private-value"), new SyntaxError("synthetic-private-value")]) {
-      expect(componentFailureDiagnostic(error)).toBe("Component operation did not complete");
-    }
+    expect(componentFailureDiagnostic(new Error("synthetic-private-value"))).toBe("Component operation did not complete: Error");
+    expect(componentFailureDiagnostic(new SyntaxError("synthetic-private-value"))).toBe("Component operation did not complete: SyntaxError");
+    expect(componentFailureDiagnostic(Object.assign(new Error("spawn failed synthetic-private-value"), { code: "ENOENT" })))
+      .toBe("Component operation did not complete: Error code ENOENT");
+    const firestore = Object.assign(new Error("10 ABORTED: Too much contention on doc 'cmsDeploymentReceipts/functions' token ya29.synthetic-private-credential-value"),
+      { code: 10, details: "Too much contention" });
+    expect(componentFailureDiagnostic(firestore)).toBe("Component operation did not complete: Error code 10: 10 ABORTED: Too much contention on doc <value> token <value>");
+    const admin = Object.assign(new Error("Failed to parse private key for synthetic@example.test"), { name: "FirebaseAppError", code: "app/invalid-credential" });
+    expect(componentFailureDiagnostic(admin)).toBe("Component operation did not complete: FirebaseAppError code app/invalid-credential: Failed to parse private key for <value>");
   });
 
   it("tracks the dispatcher and table at the selected source pin", () => {
@@ -94,7 +100,7 @@ describe("component runner", () => {
     } catch (error) {
       expect(error.status).toBe(1);
       expect(error.stdout.toString()).toBe("");
-      expect(error.stderr.toString()).toBe("Component operation did not complete\n");
+      expect(error.stderr.toString()).toBe("Component operation did not complete: Error\n");
     }
   });
 });
