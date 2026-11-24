@@ -163,13 +163,14 @@ it("recovers a missed CODE wake through actual leased H, completed G and private
   expect(task.data().status).toBe("pending");
   const pendingRef = firestore.doc(`${work.publicReleasePairPath(pair.pairId)}/switchCodePending/${codeOperationId}`);
   const pendingBefore = (await pendingRef.get()).data()!, taskBefore = task.data();
-  // The work owner's exact terminal-failure shape cannot be auto-reclaimed.
+  // A row the removed attempt cap stopped is due at once; the continuation waits for its receipt.
   await task.ref.update({ status: "failed", attempts: 4, nextAttemptAt: null, lastFailure: "render-failed" });
   await pendingRef.update({ nextAttemptAt: 0 });
   await continuation.beforePoll!({});
-  expect((await pendingRef.get()).data()).toMatchObject({ lease: null, nextAttemptAt: null, failures: 3, lastFailure: "work-failed" });
-  const quarantinedWriteCount = writes.length;
-  await continuation.beforePoll!({}); expect(writes.length).toBe(quarantinedWriteCount);
+  const waiting = (await pendingRef.get()).data()!;
+  expect(waiting).toMatchObject({ lease: null, failures: pendingBefore.failures, lastFailure: pendingBefore.lastFailure });
+  expect(waiting.nextAttemptAt).toBeGreaterThan(0);
+  expect((await task.ref.get()).data()).toMatchObject({ status: "failed", nextAttemptAt: null });
   // Restore the private failure fixture before exercising the real G owner.
   await task.ref.set(taskBefore); await pendingRef.set(pendingBefore);
   const staged = await stagedPublicReleasePairCompositeFixture({ ...fixture, taskId: task.id }, store);

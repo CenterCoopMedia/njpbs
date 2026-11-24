@@ -129,12 +129,8 @@ export function createPublicReleaseSwitchCodeContinuation(options: Options): {
         const task = await work.enqueuePublicReleasePairWorkInTransaction({ firestore, transaction, pair,
           input: { ...current.scope, inputManifestDigest: captured.receipt.inputManifestDigest } as any });
         // A new enqueue wrote only the new work row. Completed tasks do not write.
-        const taskState = task.task as { status: string; nextAttemptAt: number | null };
-        if (taskState.status === "failed" && taskState.nextAttemptAt === null) {
-          transaction.update(firestore.doc(owner.codePendingPath(pair, operationId)), {
-            lease: null, nextAttemptAt: null, failures: 3, lastFailure: "work-failed" });
-          return null;
-        }
+        // A failed task always has its next attempt, so only its receipt ends the wait.
+        const taskState = task.task as { status: string };
         if (taskState.status !== "complete") {
           transaction.update(firestore.doc(owner.codePendingPath(pair, operationId)), { lease: null, nextAttemptAt: clock() + 30_000 });
           return null;

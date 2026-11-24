@@ -119,6 +119,18 @@ it("keeps claiming expired work past any attempt count and always schedules a fa
   expect(Boolean(await claim(next, taskId, now + 1000))).toBe(true);
 });
 
+it("resumes a row the removed attempt cap stopped: minute recovery finds it and a claim retries it", async () => {
+  await register(next);
+  const { taskId } = await enqueue(next, input());
+  await claim(next, taskId);
+  // The shape the cap wrote before cbca85e: failed with no next attempt.
+  await db.doc(`${path(next)}/work/${taskId}`).update({ status: "failed", attempts: 4, claimDigest: null, leaseUntil: null,
+    nextAttemptAt: null, acceptedDueAt: null, lastFailure: "lease-expired" });
+  await db.doc(`${path(next)}/journals/${next.publisher.journalNamespace}`).update({ job: null });
+  expect((await work.readPublicReleasePairWork({ firestore: db, pair: next, now: 200_000 })).taskIds).toEqual([taskId]);
+  expect(Boolean(await claim(next, taskId, 200_000))).toBe(true);
+  expect(await stored(next, taskId)).toMatchObject({ status: "running", attempts: 5 });
+});
 it("routes private wakes by exact incarnation and uses the same durable predicate for idle/minute recovery", async () => {
   await register(next);
   const identity = { pairId: next.pairId, commitSha: next.commitSha, environment: next.environment, journalNamespace: next.publisher.journalNamespace };

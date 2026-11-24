@@ -141,6 +141,12 @@ function parseTask(value, pair, taskId) {
   if (value.status === "running" && (value.attempts < 1 || !digest(value.claimDigest) || !positive(value.leaseUntil) ||
       value.nextAttemptAt !== null || value.receiptDigest !== null)) refuse();
   // A failed attempt always has its next attempt. Only a receipt ends the work.
+  // A row the removed attempt cap stopped (nextAttemptAt null) is due at once.
+  // Delete this and its recovery query when no dev or production pair work row
+  // is failed with nextAttemptAt null.
+  if (value.status === "failed" && value.nextAttemptAt === null && value.acceptedDueAt === null) {
+    value = { ...value, nextAttemptAt: 1, acceptedDueAt: identity.kind === "accepted" ? 1 : null };
+  }
   if (value.status === "failed" && (value.attempts < 1 || value.claimDigest !== null || value.leaseUntil !== null || value.receiptDigest !== null || value.lastFailure === null ||
       !positive(value.nextAttemptAt))) refuse();
   if (value.status === "complete" && (value.attempts < 1 || value.claimDigest !== null || value.leaseUntil !== null ||
@@ -309,11 +315,12 @@ async function readPublicReleasePairWork({ firestore, pair: rawPair, now = Date.
       allowed(status, selector, task.identity.kind, pair, false);
       return { taskIds: [row.id] };
     }
-    const [pending, expired] = await Promise.all([
+    const [pending, expired, stopped] = await Promise.all([
       transaction.get(work.where("nextAttemptAt", "<=", now).limit(20)),
       transaction.get(work.where("leaseUntil", "<=", now).limit(20)),
+      transaction.get(work.where("status", "==", "failed").where("nextAttemptAt", "==", null).limit(20)),
     ]);
-    const tasks = new Map([...pending.docs, ...expired.docs].map(row => [row.id, parseTask(row.data(), pair, row.id)]));
+    const tasks = new Map([...pending.docs, ...expired.docs, ...stopped.docs].map(row => [row.id, parseTask(row.data(), pair, row.id)]));
     const due = [...tasks].filter(([, task]) => publicReleasePairTaskDue(task, now));
     for (const [, task] of due) allowed(status, selector, task.identity.kind, pair, false);
     due.sort((a, b) => Number(b[1].identity.kind === "accepted") - Number(a[1].identity.kind === "accepted") || a[0].localeCompare(b[0]));
