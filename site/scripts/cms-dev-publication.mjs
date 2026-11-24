@@ -123,8 +123,8 @@ export async function prepare(db) {
   db ??= await database();
   const id = await identity();
   const current = await state.readDevPublication(db, id);
-  if (current.queue?.status === "failed" && current.queue.error === state.DEV_BUILD_FAILED_ERROR) {
-    throw new Error(state.DEV_BUILD_FAILED_ERROR);
+  if (current.queue?.status === "failed" && state.DEV_SETTLED_ERRORS.has(current.queue.error)) {
+    throw new Error(current.queue.error);
   }
   await mkdir(directory, { recursive: true, mode: 0o700 });
   if (await lstat(path.join(directory, "frozen.json")).catch(() => null)) {
@@ -568,6 +568,19 @@ async function finishConfirmedDevPublication(db, id, options) {
   return outcome;
 }
 
+// The dev deployment record names the renderer the dev CMS deploy installed.
+// A receipt without `mutation` was never written by that deploy: a fresh dev
+// project, or a receipt from the retired dev renderer workflow. The CMS deploy
+// refuses until the dev site reaches its commit, so this site run cannot wait
+// for it; it records that no unified receipt exists. A unified receipt must be
+// complete with a full source SHA, or the upload refuses.
+export function devRendererProvenance(receipt, services) {
+  const sourceSha = receipt?.state === "complete" ? receipt.mutation?.sourceSha : undefined;
+  if (services === undefined && !sourceSha) return { renderer: "not deployed" };
+  if (!receipt?.mutation) return { renderer: "no unified receipt" };
+  return /^[a-f0-9]{40}$/.test(sourceSha ?? "") ? { rendererSourceSha: sourceSha } : null;
+}
+
 export async function upload(db, id, reconcileOnly = false, recovery = null) {
   target();
   state.assertDevDatabase(db);
@@ -580,11 +593,10 @@ export async function upload(db, id, reconcileOnly = false, recovery = null) {
     const api = await json(path.join(root, "cms-api/wrangler.dev.jsonc"));
     const { readReceipt } = await import("../../scripts/lib/cms-component-receipt.mjs");
     const rendererReceipt = await readReceipt(db, "renderer");
-    const rendererSourceSha = rendererReceipt?.state === "complete" ? rendererReceipt.mutation?.sourceSha : undefined;
-    const rendererNotDeployed = api.services === undefined && !rendererSourceSha;
+    const renderer = devRendererProvenance(rendererReceipt, api.services);
     if (!process.env.CLOUDFLARE_API_TOKEN || !process.env.CMS_DEV_ACCESS_CLIENT_ID || !process.env.CMS_DEV_ACCESS_CLIENT_SECRET ||
         [process.env.CMS_DEV_CMS_SOURCE_SHA, process.env.CMS_DEV_ADMIN_SOURCE_SHA].some(value => !/^[a-f0-9]{40}$/.test(value ?? "")) ||
-        !rendererNotDeployed && !/^[a-f0-9]{40}$/.test(rendererSourceSha ?? "")) {
+        !renderer) {
       throw new Error("Dev upload credentials and component receipts are required");
     }
     const frozen = await json(path.join(directory, "frozen.json"));
@@ -656,7 +668,7 @@ export async function upload(db, id, reconcileOnly = false, recovery = null) {
       buildBatchId: id.buildBatchId, commitSha: id.commitSha, artifactDigest: publication.artifactDigest,
       verifiedAtMs: Date.now(), genericOutcome: outcome.receipt,
       cmsSourceSha: process.env.CMS_DEV_CMS_SOURCE_SHA, adminSourceSha: process.env.CMS_DEV_ADMIN_SOURCE_SHA,
-      ...(rendererNotDeployed ? { renderer: "not deployed" } : { rendererSourceSha }) };
+      ...renderer };
     await save(path.join(directory, "deployment.json"), deployment);
     return "success";
   } catch (error) {
@@ -670,6 +682,12 @@ export async function upload(db, id, reconcileOnly = false, recovery = null) {
 // an earlier attempt may have uploaded, so it keeps the reservation (#593).
 export function buildFailedBeforeUpload(env = process.env) {
   return env.GITHUB_RUN_ATTEMPT === "1" && ["failure", "cancelled"].includes(env.DEV_BUILD_RESULT);
+}
+
+// The upload step of this attempt failed after a successful build (#615). The
+// owner settles only if the batch was never leased; a leased batch keeps its row.
+export function uploadFailedBeforeLease(env = process.env) {
+  return env.DEV_BUILD_RESULT === "success" && env.DEV_UPLOAD_OUTCOME === "failure";
 }
 
 async function main() {
@@ -694,7 +712,7 @@ async function main() {
     return upload(db, id, true, recovery);
   }
   if (command === "fail") {
-    return state.finishDevPublication(await database(), await identity(), { buildFailed: buildFailedBeforeUpload() });
+    return state.finishDevPublication(await database(), await identity(), { buildFailed: buildFailedBeforeUpload(), uploadFailed: uploadFailedBeforeLease() });
   }
   throw new Error("Expected source, inspect-retry, prepare, build, upload, reconcile or fail");
 }
