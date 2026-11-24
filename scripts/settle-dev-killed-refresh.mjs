@@ -4,7 +4,7 @@
 // live Actions API, then ends the row through the fail step's settle.
 // The packet request is { runId, commitSha }: the batch's commitSha and the run
 // whose id gives its queue id, sha256("dev-code-refresh:<runId>")[0:20]. To find it:
-//   gh run list --repo CenterCoopMedia/njpbs --workflow cms-dev-publish.yml --status completed --limit 100 \
+//   gh run list --repo "$CANONICAL_GITHUB_REPOSITORY" --workflow cms-dev-publish.yml --status completed --limit 100 \
 //     --json databaseId --jq '.[].databaseId' | while read id; do
 //     [ "$(printf 'dev-code-refresh:%s' "$id" | sha256sum | cut -c1-20)" = "<queueId>" ] && echo "$id"; done
 // Fd 3 carries the development SDK credential and fd 4 a GitHub token, as for

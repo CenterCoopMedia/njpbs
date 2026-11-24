@@ -23,7 +23,7 @@ function fixture(upload = "skipped") {
 
 const packet = () => ({ schemaVersion: 1, kind: "dev-killed-refresh-settlement", operatorCommitSha: "c".repeat(40),
   credentialIdentity: { projectId: "njpbs-site-dev", clientEmail: "cms-sdk@njpbs-site-dev.iam.gserviceaccount.com",
-    privateKeyId: "f".repeat(40), secretRef: "pass://claude/firebase/njpbs-site-dev/cms-deploy" },
+    privateKeyId: "f".repeat(40), secretRef: "pass://example/service/credential" },
   request: { runId: "1001", commitSha: "a".repeat(40) } });
 
 it("derives the queue and batch from the run id", () => {
