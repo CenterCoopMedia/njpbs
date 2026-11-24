@@ -377,10 +377,10 @@ export async function readState({ firestore, target, cwd, dependencies }, { sign
     baseline = { sourceSha, receiptDigest: contractDigest([functionsReceipt, apiReceipt, rendererReceipt]) };
   } else {
     baseline = await devCompletedBaseline(priorAdminSha, functions, signal);
-    const { collectDevRendererIdentity, assertPinnedDevRendererReceipt } = await import(pathToFileURL(join(trustedRoot, "preview-renderer/deploy-dev.mjs")));
-    const control = (await firestore.doc("system/cmsPreviewRuntime").get()).data();
-    previewIdentity = await collectDevRendererIdentity(process.env.CMS_CONTRACT_PREVIEW_TOKEN, rendererReceipt?.sourceSha, fetch, { releaseStartedAt: rendererReceipt?.releaseStartedAt });
-    assertPinnedDevRendererReceipt(control, rendererReceipt, previewIdentity, rendererReceipt?.sourceSha);
+    // The dev renderer has the same component receipt as production, read with the dev renderer token.
+    if (rendererReceipt?.state !== "complete") refuse("preview-receipt");
+    previewIdentity = await collectLiveIdentities("renderer", { firestore, cloudflareToken: process.env.CMS_CONTRACT_PREVIEW_TOKEN ?? "" });
+    if (contractDigest(previewIdentity) !== contractDigest(rendererReceipt.mutation?.providerIdentities)) refuse("preview-receipt");
     if (api.tag !== priorAdminSha) refuse("dev-api-source");
   }
   const batches = await firestore.collection("system/publicDeployment/buildBatches").where("generation", "==", publicRoot.activeGeneration)

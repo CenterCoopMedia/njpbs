@@ -398,7 +398,8 @@ describe("CMS deploy target", () => {
     // secret or variable the environment lacks (CenterCoopMedia/njpbs#562). The release runner
     // checks env.CMS_DEVELOPMENT_ENVIRONMENT_NAMES before a development dispatch.
     const names = JSON.parse(workflow.env.CMS_DEVELOPMENT_ENVIRONMENT_NAMES);
-    const strip = text => text.replace(/inputs\.target != 'development' && (?:secrets|vars)\.[A-Z]\w*/g, "")
+    // A development run never evaluates `target != 'development' && X` or `target == 'development' || X`.
+    const strip = text => text.replace(/inputs\.target (?:!= 'development' &&|== 'development' \|\|) (?:secrets|vars)\.[A-Z]\w*/g, "")
       .replace(/inputs\.target == 'development' && ([^|}]+?) \|\| (?:secrets|vars)\.[A-Z]\w*/g, "$1");
     const reads = { secrets: new Set(), vars: new Set() };
     const collect = value => {
@@ -410,19 +411,18 @@ describe("CMS deploy target", () => {
       for (const row of steps) if (!/^inputs\.target != 'development'/.test(row.if ?? "")) collect(row);
     }
     expect(names.secrets).toEqual([...reads.secrets].sort());
-    expect(names.secrets).toEqual(["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN", "CMS_BUG_REPORT_GITHUB_TOKEN",
+    expect(names.secrets).toEqual(["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_DEV_PREVIEW_RENDERER_TOKEN", "CMS_BUG_REPORT_GITHUB_TOKEN",
       "CMS_BUG_REPORT_GITHUB_WEBHOOK_SECRET", "CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP", "CMS_BUG_REPORT_TELEGRAM_BOT_TOKEN",
       "CMS_BUG_REPORT_TELEGRAM_CHAT_ID", "CMS_BUG_REPORT_TELEGRAM_WEBHOOK_SECRET", "CMS_DEV_ACCESS_CLIENT_ID", "CMS_DEV_ACCESS_CLIENT_SECRET",
-      "CMS_EDGE_ORIGIN_SECRET", "CMS_MEDIA_CACHE_PURGE_TOKEN", "CMS_PREVIEW_R2_CREDENTIAL", "CMS_PREVIEW_SMOKE_CREDENTIAL",
+      "CMS_DEV_PREVIEW_FIREBASE_ACCOUNT", "CMS_DEV_PREVIEW_R2_CREDENTIAL", "CMS_EDGE_ORIGIN_SECRET", "CMS_MEDIA_CACHE_PURGE_TOKEN", "CMS_PREVIEW_R2_CREDENTIAL", "CMS_PREVIEW_SMOKE_CREDENTIAL",
       "CMS_STAFF_EMAIL_API_TOKEN", "CMS_VOICEOVER_R2_ACCESS_KEY_ID", "CMS_VOICEOVER_R2_SECRET_ACCESS_KEY", "FIREBASE_SERVICE_ACCOUNT"]);
     // The development environment overrides each of these, and a production value fails a check:
     // the Admin preflight checks the project, auth domain and API origin, the Admin build refuses
     // another app id, App Check compares the site key with the dev app's registration, the IAM
     // check requires the active dev deploy account, and the signed-in preview smoke signs in
-    // through the dev Admin (API key) and opens its target record in dev. The renderer SHA has no
-    // repository value.
+    // through the dev Admin (API key) and opens its target record in dev.
     const overridden = names.variables;
-    expect(overridden).toEqual(["CMS_DEV_RENDERER_SOURCE_SHA", "CMS_PREVIEW_SMOKE_TARGET", "FIREBASE_DEPLOY_SERVICE_ACCOUNT", "VITE_FIREBASE_API_KEY",
+    expect(overridden).toEqual(["CMS_PREVIEW_SMOKE_TARGET", "FIREBASE_DEPLOY_SERVICE_ACCOUNT", "VITE_FIREBASE_API_KEY",
       "VITE_FIREBASE_APPCHECK_SITE_KEY", "VITE_FIREBASE_APP_ID", "VITE_FIREBASE_AUTH_DOMAIN", "VITE_FIREBASE_PROJECT_ID", "VITE_FUNCTIONS_BASE_URL"]);
     for (const name of overridden) expect(reads.vars.has(name), name).toBe(true);
     // Shared on purpose: admission identities (canonical repository, deploy owner), dev resource
@@ -430,7 +430,7 @@ describe("CMS deploy target", () => {
     // readiness and feature flags both targets assert.
     expect([...reads.vars].filter(name => !overridden.includes(name) && !name.startsWith("CMS_DEV_")).sort()).toEqual([
       "AUTHOR_PAGES_LIVE", "CANONICAL_GITHUB_REPOSITORY", "CANONICAL_GITHUB_REPOSITORY_ID", "CLOUDFLARE_DEV_PUBLIC_WORKER", "CMS_DEPLOY_OWNER",
-      "CMS_GPU_WORKER_ID", "CMS_LOCAL_PUBLICATION_OWNER", "CMS_MEDIA_MASTER_R2_BUCKET", "CMS_PREVIEW_ACCESS_VERIFIED", "CMS_PREVIEW_SERIALIZER_READY",
+      "CMS_GPU_WORKER_ID", "CMS_LOCAL_PUBLICATION_OWNER", "CMS_PREVIEW_ACCESS_VERIFIED", "CMS_PREVIEW_SERIALIZER_READY",
       "CMS_PREVIEW_TRANSPORT", "CMS_PRODUCTION_API_ORIGIN", "VITE_CMS_PREVIEW_ENABLED", "VITE_VIDEO_REPLACEMENT_ENABLED",
     ]);
   });
@@ -438,13 +438,41 @@ describe("CMS deploy target", () => {
   it("keeps every Cloudflare write of a development run on dev names", () => {
     expect(branches("CMS_TARGET_FIREBASE_CONFIG")).toEqual(["'firebase.dev.json'", "'firebase.json'"]);
     expect(branches("CMS_TARGET_FIREBASE_RULES")).toEqual(["'firestore:rules,firestore:indexes'", "'firestore:rules,firestore:indexes,storage'"]);
-    expect(branches("CMS_TARGET_RENDERER_SHA")).toEqual(["vars.CMS_DEV_RENDERER_SOURCE_SHA", "''"]);
+    expect(workflow.env.CMS_TARGET_RENDERER_SHA).toBeUndefined();
+    expect(deploy).not.toContain("CMS_DEV_RENDERER_SOURCE_SHA");
     const steps = Object.values(workflow.jobs).flatMap(current => current.steps);
     expect(steps.some(row => row.name === "Refuse development steps that still act on production systems")).toBe(false);
-    // The renderer, Containers and Studio connector steps name production resources; cms-dev-deploy.yml owns the dev renderer.
-    const gated = steps.filter(row => /CMS_PREVIEW_CLOUD_ENABLED|CMS_MEDIA_MASTER_R2_BUCKET != ''/.test(row.if ?? ""));
-    expect(gated.length).toBeGreaterThan(20);
-    for (const row of gated) expect(row.if).toMatch(/inputs\.target != 'development' && /);
+    // The media master steps name production resources and skip dev.
+    const media = steps.filter(row => /CMS_MEDIA_MASTER_R2_BUCKET != ''/.test(row.if ?? ""));
+    expect(media.length).toBeGreaterThan(0);
+    for (const row of media) expect(row.if).toMatch(/^inputs\.target != 'development' && /);
+    // The renderer and Containers steps run on both targets. Production keeps its exact condition:
+    // `(target == 'development' || E)` is E there, as `target != 'development' && E` was.
+    const guard = "(inputs.target == 'development' || vars.CMS_PREVIEW_CLOUD_ENABLED == 'true')";
+    const renderer = steps.filter(row => /CMS_PREVIEW_CLOUD_ENABLED/.test(row.if ?? ""));
+    expect(renderer.length).toBeGreaterThan(20);
+    for (const row of renderer) expect(row.if.startsWith(guard), row.name).toBe(true);
+    expect(deploy).not.toContain("inputs.target != 'development' && vars.CMS_PREVIEW_CLOUD_ENABLED");
+    // Each renderer credential is the dev renderer secret on dev and the production secret only on production,
+    // with no fallback between them; a missing dev secret is empty, and the release runner refuses it by name.
+    const rendererSecrets = { CMS_PREVIEW_FIREBASE_ACCOUNT: ["CMS_DEV_PREVIEW_FIREBASE_ACCOUNT", "FIREBASE_SERVICE_ACCOUNT"],
+      CMS_PREVIEW_R2_CREDENTIAL: ["CMS_DEV_PREVIEW_R2_CREDENTIAL", "CMS_PREVIEW_R2_CREDENTIAL"],
+      CLOUDFLARE_API_TOKEN: ["CLOUDFLARE_DEV_PREVIEW_RENDERER_TOKEN", "CLOUDFLARE_API_TOKEN"] };
+    let checked = 0;
+    for (const row of renderer) {
+      for (const [name, [dev, production]] of Object.entries(rendererSecrets)) {
+        if (row.env?.[name] === undefined) continue;
+        expect(row.env[name], `${row.name} ${name}`).toBe(
+          `${"${{"} inputs.target == 'development' && secrets.${dev} || inputs.target != 'development' && secrets.${production} || '' }}`);
+        checked++;
+      }
+    }
+    expect(checked).toBe(20);
+    // Every release-script step takes the dev Access client on dev (preview storage reads and the Worker secret).
+    expect(renderer.filter(row => /deploy-cms-preview-cloud\.ts /.test(row.run ?? ""))
+      .map(row => [row.env.CMS_DEV_ACCESS_CLIENT_ID, row.env.CMS_DEV_ACCESS_CLIENT_SECRET])).toEqual(Array(4).fill([
+      "${{ inputs.target == 'development' && secrets.CMS_DEV_ACCESS_CLIENT_ID || '' }}",
+      "${{ inputs.target == 'development' && secrets.CMS_DEV_ACCESS_CLIENT_SECRET || '' }}"]));
     for (const name of ["Open only the Admin authentication shell", "Smoke-test the deployed signed-out Admin shell",
       "Verify the private guide boundary before Admin upload", "Verify the private guide boundary after Admin upload"]) {
       expect(steps.find(row => row.name === name).if).toMatch(/^inputs\.target != 'development'/);

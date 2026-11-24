@@ -5,7 +5,7 @@ import { pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { parse } from "yaml";
-import { probeCmsContainers } from "../../.github/scripts/cms-containers-read-probe.mjs";
+import { probeApplication, probeCmsContainers } from "../../.github/scripts/cms-containers-read-probe.mjs";
 
 beforeAll(() => vi.stubEnv("CLOUDFLARE_ACCOUNT_ID", "a".repeat(32)));
 afterAll(() => vi.unstubAllEnvs());
@@ -110,5 +110,13 @@ describe("trusted Containers read gate", () => {
     const sleep = vi.fn();
     await expect(probeCmsContainers(token, { request, sleep })).rejects.toThrow("could not be verified");
     expect(sleep).not.toHaveBeenCalled();
+  });
+
+  it("reads only the dev renderer the workflow names on a development run", () => {
+    expect(probeApplication({})).toBe("njpbs-cms-preview-renderer");
+    expect(probeApplication({ CMS_TARGET: "development", CMS_DEV_PREVIEW_RENDERER: "njpbs-dev-cms-preview-renderer" })).toBe("njpbs-dev-cms-preview-renderer");
+    for (const name of ["", "njpbs-cms-preview-renderer"]) {
+      expect(() => probeApplication({ CMS_TARGET: "development", CMS_DEV_PREVIEW_RENDERER: name })).toThrow("could not be verified");
+    }
   });
 });

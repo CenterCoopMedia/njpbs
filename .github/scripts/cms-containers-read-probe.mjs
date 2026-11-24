@@ -1,12 +1,19 @@
 import { pathToFileURL } from "node:url";
 
-const APPLICATION = "njpbs-cms-preview-renderer";
 const failure = () => new Error("Cloud preview Containers reads could not be verified");
+
+// A development run reads only the dev renderer the workflow names (cms-target.mjs rule).
+export function probeApplication(env = process.env) {
+  if (env.CMS_TARGET !== "development") return "njpbs-cms-preview-renderer";
+  const name = env.CMS_DEV_PREVIEW_RENDERER ?? "";
+  if (!/^[a-z0-9][a-z0-9-]{0,62}$/.test(name) || !name.split("-").includes("dev")) throw failure();
+  return name;
+}
 
 // This trusted-workflow gate uses only Node built-ins. Older selected releases
 // do not need a new CLI command, dependencies or a copied deployment helper.
 export async function probeCmsContainers(token, {
-  accountId = process.env.CLOUDFLARE_ACCOUNT_ID, request = fetch, sleep = ms => new Promise(resolve => setTimeout(resolve, ms)),
+  accountId = process.env.CLOUDFLARE_ACCOUNT_ID, application = probeApplication(), request = fetch, sleep = ms => new Promise(resolve => setTimeout(resolve, ms)),
 } = {}) {
   if (!/^[a-f0-9]{32}$/.test(accountId ?? "")) throw failure();
   const api = `https://api.cloudflare.com/client/v4/accounts/${accountId}/containers/applications`;
@@ -37,7 +44,7 @@ export async function probeCmsContainers(token, {
   };
   const applications = await read("");
   if (!Array.isArray(applications) || applications.some(row => !row || typeof row !== "object")) throw failure();
-  const matches = applications.filter(row => row.name === APPLICATION);
+  const matches = applications.filter(row => row.name === application);
   if (matches.length === 0) return; // First installation has no application yet.
   if (matches.length !== 1 || !/^[a-f0-9-]{36}$/.test(matches[0].id ?? "")) throw failure();
   const id = matches[0].id;

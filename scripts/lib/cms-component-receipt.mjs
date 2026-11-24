@@ -703,7 +703,7 @@ export async function startReceipt(firestore, input, deps = {}) {
       return { changed: false, receipt: current };
     }
     const lastComplete = current?.state === "complete"
-      ? current.mutation
+      ? (current.mutation ?? null)
       : (current?.lastComplete ?? null);
     const receipt = {
       schemaVersion: RECEIPT_SCHEMA_VERSION,
