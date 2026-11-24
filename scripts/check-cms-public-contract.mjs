@@ -245,10 +245,24 @@ function outputValues(source) {
   return values;
 }
 
+// The production plan runs the same component entry the deploy workflow runs
+// (`node scripts/component-runner.mjs <component> plan`). The component
+// modules export main without calling it, so a direct path writes no plan.
+export function productionPlanCommands(trustedRoot, { candidateSha, workflowSha, secretsFile, fingerprintFile }) {
+  const runner = join(trustedRoot, "scripts/component-runner.mjs");
+  return {
+    functions: [runner, "functions", "plan"],
+    cmsApi: [runner, "cmsApi", "plan", "--source-sha", candidateSha, "--trusted-workflow-sha", workflowSha,
+      "--secrets-file", secretsFile, "--configuration-fingerprint-file", fingerprintFile],
+  };
+}
+
 async function nativeProductionPlan({ candidateSha, cwd, directory, signal }) {
   const functionsOutput = join(directory, "functions-plan.txt"), apiOutput = join(directory, "api-plan.txt");
   const baseEnv = { ...process.env, GITHUB_WORKSPACE: cwd, DEPLOY_SHA: candidateSha };
-  await privateCommand(process.execPath, [join(trustedRoot, "scripts/cms-release-plan.mjs")], {
+  const commands = productionPlanCommands(trustedRoot, { candidateSha, workflowSha: process.env.CMS_TRUSTED_WORKFLOW_SHA ?? process.env.GITHUB_SHA,
+    secretsFile: join(directory, "api-secrets.json"), fingerprintFile: join(directory, "api-configuration.sha256") });
+  await privateCommand(process.execPath, commands.functions, {
     cwd, directory, signal, env: { ...baseEnv, GITHUB_OUTPUT: functionsOutput },
   });
   const functions = outputValues(await readFile(functionsOutput, "utf8"));
@@ -258,9 +272,7 @@ async function nativeProductionPlan({ candidateSha, cwd, directory, signal }) {
   await writeFile(secretsFile, JSON.stringify({ CMS_EDGE_ORIGIN_SECRET: process.env.CMS_EDGE_ORIGIN_SECRET,
     FIREBASE_WEB_API_KEY: process.env.FIREBASE_WEB_API_KEY }), { mode: 0o600 });
   try {
-    await privateCommand(process.execPath, [join(trustedRoot, "scripts/cms-component-receipt.mjs"), "plan", "--component", "cmsApi",
-      "--source-sha", candidateSha, "--trusted-workflow-sha", process.env.CMS_TRUSTED_WORKFLOW_SHA ?? process.env.GITHUB_SHA,
-      "--secrets-file", secretsFile, "--configuration-fingerprint-file", join(directory, "api-configuration.sha256")], {
+    await privateCommand(process.execPath, commands.cmsApi, {
       cwd, directory, signal, env: { ...baseEnv, GITHUB_OUTPUT: apiOutput, FUNCTIONS_MUTATED: functions.functions_mutated,
         CONFIGURATION_REQUIRES_RELEASE: functions.configuration_requires_release, CMS_EDGE_ORIGIN_SECRET_FINGERPRINT: functions.edge_origin_secret_fingerprint },
     });
@@ -704,22 +716,13 @@ export async function main(argv = process.argv.slice(2)) {
     });
     const summary = await boundedContractProof(async ({ signal, attempt }) => {
       const attemptDirectory = await privateDirectory(directory, `attempt-${attempt}-`);
-      let state, plan;
-      try {
-        state = await readPinnedState({ signal, originalPriorAdminSha: previous?.priorAdminSha });
-        await compareContractInputs({ candidateSha, baselineSha: state.identity.backend.baseline.sourceSha, cwd });
-        if (process.env.FORCE_FIREBASE === "true" || process.env.CMS_DEV_RENDERER_ONLY === "true" || process.env.CMS_DEV_RELEASE_PREVIEW_RENDERER === "true" ||
-            process.env.CMS_DEV_INSTALL_READER_BRIDGE === "true" || process.env.CMS_PRODUCTION_INSTALL_READER_BRIDGE === "true") refuse("plan-not-unchanged");
-        plan = environment === "production" ? await nativeProductionPlan({ candidateSha, cwd, directory: attemptDirectory, signal }) :
-          await nativeDevelopmentPlan({ state, target, candidateSha, cwd, signal });
-        assertUnchangedPlan(plan);
-      } catch (error) {
-        // Only full/unknown planning, before any independent capture, retains the held dev method.
-        if (environment === "development" && boundary === "preflight" && !previous && process.env.CMS_DEV_PUBLISH_ENABLED === "false") {
-          return { schemaVersion: 1, candidateSha, result: "full", reason: "full-or-unknown-plan" };
-        }
-        throw error;
-      }
+      const state = await readPinnedState({ signal, originalPriorAdminSha: previous?.priorAdminSha });
+      await compareContractInputs({ candidateSha, baselineSha: state.identity.backend.baseline.sourceSha, cwd });
+      if (process.env.FORCE_FIREBASE === "true" || process.env.CMS_DEV_RENDERER_ONLY === "true" || process.env.CMS_DEV_RELEASE_PREVIEW_RENDERER === "true" ||
+          process.env.CMS_DEV_INSTALL_READER_BRIDGE === "true" || process.env.CMS_PRODUCTION_INSTALL_READER_BRIDGE === "true") refuse("plan-not-unchanged");
+      const plan = environment === "production" ? await nativeProductionPlan({ candidateSha, cwd, directory: attemptDirectory, signal }) :
+        await nativeDevelopmentPlan({ state, target, candidateSha, cwd, signal });
+      assertUnchangedPlan(plan);
       if (environment === "development" && process.env.CMS_DEV_PUBLISH_ENABLED !== "true") refuse("dev-independent-mode");
       if (dependencies.priorAdminSha !== state.identity.priorAdminSha) refuse("prepare-source-changed");
       await compareContractInputs({ candidateSha: state.identity.priorAdminSha, baselineSha: state.identity.backend.baseline.sourceSha, cwd });
