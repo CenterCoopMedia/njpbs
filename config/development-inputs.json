@@ -135,7 +135,7 @@
     "CMS_DEV_ADMIN_PAGES": {
       "kind": "resource",
       "placeholder": "template-dev-admin",
-      "files": [
+      "files": ["admin/wrangler.dev.jsonc", 
         "cms-api/src/index.ts",
         "scripts/assert-dev-cms-targets.mjs",
         "scripts/fixtures/dev-targets.json",
@@ -177,7 +177,7 @@
     "CMS_DEV_API_WORKER": {
       "kind": "resource",
       "placeholder": "template-dev-cms-api",
-      "files": [
+      "files": ["admin/wrangler.dev.jsonc", 
         "scripts/lib/cms-public-contract.mjs",
         "cms-api/wrangler.dev.jsonc",
         "functions/lib/public-worker-candidate.js",
