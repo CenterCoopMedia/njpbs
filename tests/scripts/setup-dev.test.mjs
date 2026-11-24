@@ -10,7 +10,8 @@ const script = resolve('scripts/setup-dev.sh');
 let bin; let log;
 const stub = (name, body = '') => {
   const path = join(bin, name);
-  writeFileSync(path, `#!/usr/bin/env bash\n{ printf '%s' "${name}"; printf ' %s' "$@"; [ -n "\${CMS_TARGET:-}" ] && printf ' target=%s' "$CMS_TARGET"; for fd in 3 4 5; do [ -e /proc/self/fd/$fd ] && printf ' fd%s' "$fd"; done; echo; } >> "${log}"\n${body}\n`);
+  // One write per call: process substitutions run beside the caller.
+  writeFileSync(path, `#!/usr/bin/env bash\nline="${name}"; for arg in "$@"; do line+=" $arg"; done; [ -n "\${CMS_TARGET:-}" ] && line+=" target=$CMS_TARGET"; for fd in 3 4 5; do [ -e /proc/self/fd/$fd ] && line+=" fd$fd"; done; echo "$line" >> "${log}"\n${body}\n`);
   chmodSync(path, 0o755);
 };
 const env = { DEV_PUBLISHER_KEY_ENTRY: 'dev/publisher-key', DEV_OPERATOR_CREDENTIAL_ENTRY: 'dev/operator', DEV_CLOUDFLARE_READ_ENTRY: 'dev/cf-read',
