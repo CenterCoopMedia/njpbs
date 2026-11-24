@@ -29,7 +29,7 @@ export async function loadCloudWakeDeployment({
   const decision = explicitCloudWakeDecision(env);
   const target = cmsTarget(env);
   if (decision.environment !== target.environment) {
-    throw new ComponentReceiptError("The function batch runner deploys the selected target's codebase only");
+    throw new ComponentReceiptError("The function deploy runner deploys the selected target's codebase only");
   }
   await prepare({ environment: decision.environment, enabled: decision.enabled });
   const deployment = read({ env: { GCLOUD_PROJECT: target.projectId, GOOGLE_CLOUD_PROJECT: target.projectId } });
@@ -53,7 +53,7 @@ export function assertCloudWakeSettings(functions) {
 }
 
 export function cloudWakeFunctionPlan(targets, deployment) {
-  const names = functionBatches(targets).flat();
+  const names = functionTargets(targets);
   if (typeof deployment?.enabled !== "boolean") throw new ComponentReceiptError("Invalid cloud wake deployment decision");
   if (deployment.enabled && CLOUD_WAKE_FUNCTIONS.some((name) => !names.includes(name))) {
     throw new ComponentReceiptError("Enabled cloud wake handlers are missing from the deploy manifest");
@@ -62,22 +62,21 @@ export function cloudWakeFunctionPlan(targets, deployment) {
   return { names: selected, retired: deployment.enabled ? [] : CLOUD_WAKE_FUNCTIONS };
 }
 
-export function selectedFunctionBatches(manifestNames, selection = "all") {
-  const selected = selection === "all" ? manifestNames : functionBatches(selection).flat();
+export function selectedFunctionNames(manifestNames, selection = "all") {
+  const selected = selection === "all" ? manifestNames : functionTargets(selection);
   if (!selected.length || selected.some(name => !manifestNames.includes(name))) {
     throw new ComponentReceiptError("Selected Functions differ from the complete manifest");
   }
-  return Array.from({ length: Math.ceil(selected.length / 10) }, (_, index) => selected.slice(index * 10, index * 10 + 10));
+  return selected;
 }
 
 export function functionDeploymentPhase(names, selection, phase = "complete", previewTargets = "") {
-  const batches = selectedFunctionBatches(names, selection);
-  if (phase === "complete") return { batches, readyNames: names };
+  const selected = selectedFunctionNames(names, selection);
+  if (phase === "complete") return { selected, readyNames: names };
   if (phase !== "before-preview" || selection === "all") throw new ComponentReceiptError("Invalid Functions deployment phase");
-  const preview = new Set(selectedFunctionBatches(names, previewTargets).flat());
-  const ordinary = batches.flat();
-  if (ordinary.some(name => preview.has(name))) throw new ComponentReceiptError("A preview reader cannot deploy before the pause");
-  return { batches, readyNames: ordinary };
+  const preview = new Set(selectedFunctionNames(names, previewTargets));
+  if (selected.some(name => preview.has(name))) throw new ComponentReceiptError("A preview reader cannot deploy before the pause");
+  return { selected, readyNames: selected };
 }
 
 export function assertCloudWakeRetired(names, functions) {
@@ -101,13 +100,13 @@ export const FUNCTION_SCHEDULES = Object.freeze([
   { name: "onElectionResultsSourcePoll", schedules: ["0 8,20 * * *"], timeZone: "America/New_York" },
 ]);
 
-export function functionBatches(targets) {
+export function functionTargets(targets) {
   if (!/^functions:[A-Za-z][A-Za-z0-9]*(,functions:[A-Za-z][A-Za-z0-9]*)*$/.test(targets ?? "")) {
     throw new ComponentReceiptError("Invalid function target list");
   }
   const names = targets.split(",").map((target) => target.slice("functions:".length));
   if (new Set(names).size !== names.length) throw new ComponentReceiptError("Duplicate function target");
-  return Array.from({ length: Math.ceil(names.length / 10) }, (_, index) => names.slice(index * 10, index * 10 + 10));
+  return names;
 }
 
 export function assertFunctionsReady(names, functions) {
@@ -208,9 +207,9 @@ function runFunctionDeploy(names, launch, project) {
   });
 }
 
-export async function deployBatch(names, launch = spawn, project = PROJECT, { manifest, request, wait = pause } = {}) {
+export async function deployFunctionTargets(names, launch = spawn, project = PROJECT, { manifest, request, wait = pause } = {}) {
   if (!Array.isArray(names) || !names.length || !Array.isArray(manifest) ||
-      names.some(name => !manifest.some(fn => fn.name === name))) throw new ComponentReceiptError("Function batch differs from the exact manifest");
+      names.some(name => !manifest.some(fn => fn.name === name))) throw new ComponentReceiptError("Function targets differ from the exact manifest");
   let pending = names;
   for (let attempt = 1; attempt <= 3; attempt++) {
     assertNoFunctionDeletions(manifest, await readFunctionsDeployInventory(project, request), { projectId: project, codebase: cmsTarget().codebase, only: pending });
@@ -238,7 +237,7 @@ export async function main({ retireCloudWake, verifyOnly = false } = {}) {
     read: (options) => require(readerPath).readCloudPublicationWakeDeployment(options),
   });
   const { names, retired } = cloudWakeFunctionPlan(process.env.FUNCTION_TARGETS, deployment);
-  const { batches, readyNames } = functionDeploymentPhase(names, process.env.CMS_FUNCTION_DEPLOY_TARGETS,
+  const { selected, readyNames } = functionDeploymentPhase(names, process.env.CMS_FUNCTION_DEPLOY_TARGETS,
     process.env.CMS_FUNCTION_DEPLOY_PHASE, process.env.CMS_PREVIEW_FUNCTION_TARGETS);
   const project = deployment.projectId;
   const manifest = loadFunctionDeployManifest(names, project);
@@ -252,13 +251,12 @@ export async function main({ retireCloudWake, verifyOnly = false } = {}) {
   const parent = `projects/${project}/locations/${REGION}`;
   const functionsUrl = `https://cloudfunctions.googleapis.com/v2/${parent}/functions`;
   assertCloudWakeRetired(retired, await listPages(request, functionsUrl, "functions"));
-  // Firebase recommends ten or fewer functions per deploy to avoid mutation quotas.
-  // https://firebase.google.com/docs/functions/manage-functions
+  // One Firebase invocation builds and uploads once; the CLI updates up to 40
+  // functions at a time and retries quota (429) refusals itself. The inventory
+  // and scheduler checks below catch a run that reports success incompletely.
   if (!verifyOnly) {
-    for (const [index, batch] of batches.entries()) {
-      console.log(`Deploying function batch ${index + 1} of ${batches.length}`);
-      await deployBatch(batch, spawn, project, { manifest, request });
-    }
+    console.log(`Deploying ${selected.length} functions in one Firebase invocation`);
+    await deployFunctionTargets(selected, spawn, project, { manifest, request });
   }
   const functions = await listPages(request, functionsUrl, "functions");
   assertCloudWakeRetired(retired, functions);

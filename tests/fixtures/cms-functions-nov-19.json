@@ -2,6 +2,5 @@
   "before": "a901219d58a80ce3862316432ee57977b984c744",
   "after": "bce824c0dce202b4d94779c05c50b0b86b81c0b8",
   "removedVariable": "CMS_PUBLISH_TRANSPORT",
-  "count": 182,
-  "batches": 19
+  "count": 182
 }

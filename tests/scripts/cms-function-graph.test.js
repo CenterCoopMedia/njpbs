@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { configurationFingerprint, fingerprintFunctionGraph, fingerprintInputs, fingerprintPaths, functionGraphSource, readCommittedBlobs, startReceipt, completeReceipt } from "../../scripts/lib/cms-component-receipt.mjs";
 import { INDEPENDENT_INPUTS } from "../../scripts/lib/deployment-components.mjs";
-import { functionDeploymentPhase, selectedFunctionBatches } from "../../scripts/deploy-cms-function-batches.mjs";
+import { functionDeploymentPhase, selectedFunctionNames } from "../../scripts/deploy-cms-function-batches.mjs";
 import { contractRecipe } from "../../scripts/lib/functions-contracts.mjs";
 import { cloudWakeConfigurationFingerprint, decideRelease, deploymentVariablesFingerprint, functionSourceProof,
   runtimeParameterChanges } from "../../scripts/lib/cms-release-plan.mjs";
@@ -56,7 +56,7 @@ async function releaseInputs(before, after, cwd) {
 
 describe("committed Functions module graph", () => {
   it("replays the November 19 rollout from both committed sources", async () => {
-    const { before, after, removedVariable, count, batches } =
+    const { before, after, removedVariable, count } =
       JSON.parse(readFileSync(new URL("../fixtures/cms-functions-nov-19.json", import.meta.url), "utf8"));
     const { plan, target } = await releaseInputs(before, after);
     const table = JSON.parse(execFileSync("git", ["show", `${before}:config/functions-configuration.json`], { encoding: "utf8" }));
@@ -82,8 +82,7 @@ describe("committed Functions module graph", () => {
       baselineConfigurationFingerprint: plan.functionsReceipt.mutation.configurationFingerprint });
     expect(result).toMatchObject({ functionDeployTargets: "all", releaseReason: "functions_configuration_changed" });
     expect(result.functionReasons).toEqual(Object.fromEntries(manifest.map(name => [name, ["functions_configuration_changed"]])));
-    const selectedBatches = selectedFunctionBatches(manifest, result.functionDeployTargets);
-    expect(selectedBatches).toHaveLength(batches);
+    expect(selectedFunctionNames(manifest, result.functionDeployTargets)).toEqual(manifest);
   });
 
   it("skips a variable-list edit when the committed closures and deployed values agree", async () => {
@@ -331,10 +330,10 @@ describe("committed Functions module graph", () => {
 
   it("deploys only validated selections while retaining the complete inventory manifest", () => {
     const names = ["health", "cmsPreview", "cmsPreviewStatus"];
-    expect(selectedFunctionBatches(names, "functions:cmsPreview,functions:cmsPreviewStatus")).toEqual([["cmsPreview", "cmsPreviewStatus"]]);
-    expect(selectedFunctionBatches(names, "all")).toEqual([names]);
+    expect(selectedFunctionNames(names, "functions:cmsPreview,functions:cmsPreviewStatus")).toEqual(["cmsPreview", "cmsPreviewStatus"]);
+    expect(selectedFunctionNames(names, "all")).toEqual(names);
     for (const selection of ["", "functions:unknown", "functions:health,functions:health", "all;exit"]) {
-      expect(() => selectedFunctionBatches(names, selection)).toThrow();
+      expect(() => selectedFunctionNames(names, selection)).toThrow();
     }
   });
   it("discovers all five retained-reader edges in the generated modules", async () => {
@@ -367,9 +366,9 @@ describe("committed Functions module graph", () => {
   it("keeps preview readers out of the pre-pause phase and verifies the full inventory after it", () => {
     const names = ["health", "cmsPreview", "cmsPreviewStatus"];
     expect(functionDeploymentPhase(names, "functions:health", "before-preview", "functions:cmsPreview,functions:cmsPreviewStatus"))
-      .toEqual({ batches: [["health"]], readyNames: ["health"] });
+      .toEqual({ selected: ["health"], readyNames: ["health"] });
     expect(functionDeploymentPhase(names, "functions:cmsPreview,functions:cmsPreviewStatus"))
-      .toEqual({ batches: [["cmsPreview", "cmsPreviewStatus"]], readyNames: names });
+      .toEqual({ selected: ["cmsPreview", "cmsPreviewStatus"], readyNames: names });
     for (const [selection, phase, preview] of [["all", "before-preview", "functions:cmsPreview"],
       ["functions:cmsPreview", "before-preview", "functions:cmsPreview"],
       ["functions:health", "unknown", "functions:cmsPreview"], ["functions:health", "before-preview", ""]]) {
