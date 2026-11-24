@@ -24,7 +24,7 @@ async function fixture(work) {
   const root = mkdtempSync(join(tmpdir(), "dev-functions-deploy-"));
   const prior = { GCLOUD_PROJECT: process.env.GCLOUD_PROJECT, GOOGLE_CLOUD_PROJECT: process.env.GOOGLE_CLOUD_PROJECT, CMS_DEPLOYMENT_ENVIRONMENT: process.env.CMS_DEPLOYMENT_ENVIRONMENT };
   try {
-    for (const path of ["firebase.dev.json", "cms-api/wrangler.dev.jsonc", "preview-renderer/wrangler.dev.jsonc", "workers/wrangler.staff-preview.dev.jsonc", "workers/wrangler.preview.dev.jsonc"]) {
+    for (const path of ["firebase.dev.json", "admin/wrangler.dev.jsonc", "cms-api/wrangler.dev.jsonc", "preview-renderer/wrangler.dev.jsonc", "workers/wrangler.staff-preview.dev.jsonc", "workers/wrangler.preview.dev.jsonc"]) {
       mkdirSync(join(root, path, ".."), { recursive: true }); cpSync(join(repo, path), join(root, path));
     }
     cpSync(join(repo, "functions"), join(root, "functions"), { recursive: true, filter: path => !path.includes("node_modules") });
