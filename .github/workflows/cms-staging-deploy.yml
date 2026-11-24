@@ -760,6 +760,7 @@ jobs:
           CLOUD_PUBLICATION_WAKE_ENVIRONMENT: ${{ env.CMS_TARGET }}
           CLOUD_PUBLICATION_WAKE_ENABLED: ${{ inputs.target != 'development' }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_DEV_PREVIEW_RENDERER_TOKEN: ${{ inputs.target == 'development' && secrets.CLOUDFLARE_DEV_PREVIEW_RENDERER_TOKEN || '' }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           FIREBASE_WEB_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY || inputs.target != 'development' && secrets.VITE_FIREBASE_API_KEY || '' }}
           CMS_PREVIEW_R2_CREDENTIAL: ${{ secrets.CMS_PREVIEW_R2_CREDENTIAL }}
@@ -907,6 +908,7 @@ jobs:
           CLOUD_PUBLICATION_WAKE_ENVIRONMENT: ${{ env.CMS_TARGET }}
           CLOUD_PUBLICATION_WAKE_ENABLED: ${{ inputs.target != 'development' }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_DEV_PREVIEW_RENDERER_TOKEN: ${{ inputs.target == 'development' && secrets.CLOUDFLARE_DEV_PREVIEW_RENDERER_TOKEN || '' }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           set -euo pipefail
@@ -2259,6 +2261,7 @@ jobs:
           CLOUD_PUBLICATION_WAKE_ENVIRONMENT: ${{ env.CMS_TARGET }}
           CLOUD_PUBLICATION_WAKE_ENABLED: ${{ inputs.target != 'development' }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_DEV_PREVIEW_RENDERER_TOKEN: ${{ inputs.target == 'development' && secrets.CLOUDFLARE_DEV_PREVIEW_RENDERER_TOKEN || '' }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           FIREBASE_WEB_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY || inputs.target != 'development' && secrets.VITE_FIREBASE_API_KEY || '' }}
           CMS_PREVIEW_R2_CREDENTIAL: ${{ secrets.CMS_PREVIEW_R2_CREDENTIAL }}
@@ -2408,6 +2411,7 @@ jobs:
           CLOUD_PUBLICATION_WAKE_ENVIRONMENT: ${{ env.CMS_TARGET }}
           CLOUD_PUBLICATION_WAKE_ENABLED: ${{ inputs.target != 'development' }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_DEV_PREVIEW_RENDERER_TOKEN: ${{ inputs.target == 'development' && secrets.CLOUDFLARE_DEV_PREVIEW_RENDERER_TOKEN || '' }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           FIREBASE_WEB_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY || inputs.target != 'development' && secrets.VITE_FIREBASE_API_KEY || '' }}
           CMS_PREVIEW_R2_CREDENTIAL: ${{ secrets.CMS_PREVIEW_R2_CREDENTIAL }}
