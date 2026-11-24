@@ -128,4 +128,4 @@ function platformLimit(name) {
   return PLATFORM_LIMITS[name];
 }
 
-module.exports = { callOutside, waitFor, platformLimit, PLATFORM_LIMITS, setJournal };
+module.exports = { callOutside, waitFor, noAnswer, platformLimit, PLATFORM_LIMITS, setJournal };
