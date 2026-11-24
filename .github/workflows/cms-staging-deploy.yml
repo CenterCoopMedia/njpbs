@@ -254,7 +254,6 @@ jobs:
         run: |
           {
             echo "### Production steps this development run skips"
-            echo "- Preview renderer pause, deploy, receipts and Containers probe: not rehearsed on dev; cms-dev-deploy.yml still writes the dev renderer (jawn-ops#1188)."
             echo "- Admin public authentication shell: the dev Admin stays behind Access. Dev counterpart: the anonymous-refusal proof in live-smoke."
             echo "- Signed-out Admin boot check: the dev Admin answers with the Access login. Dev counterpart: the anonymous-refusal proof in live-smoke."
             echo "- Private guide boundary checks: they read the production guide bucket and host."

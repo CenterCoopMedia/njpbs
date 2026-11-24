@@ -218,7 +218,7 @@ describe("CMS release source contract", () => {
       if (["admin-contract", "contract-settlement"].includes(name)) expect(selectedCommands, name).toEqual([]);
       // Every release-tree script step follows the gate.
       else for (const index of selectedCommands) expect(index, name).toBeGreaterThan(job.steps.indexOf(gate));
-      if (name === "preview-renderer") expect(gate.if).toBe("inputs.target != 'development' && vars.CMS_PREVIEW_CLOUD_ENABLED == 'true'");
+      if (name === "preview-renderer") expect(gate.if).toBe("(inputs.target == 'development' || vars.CMS_PREVIEW_CLOUD_ENABLED == 'true')");
       for (const step of job.steps) expect(step.run ?? "").not.toMatch(/cp \.(?:metered-api|cms-smoke)-gate\/scripts\//);
     }
     const artifact = workflow.jobs["admin-build"].steps.find(step => step.with?.name === "cms-release-source-identities");
