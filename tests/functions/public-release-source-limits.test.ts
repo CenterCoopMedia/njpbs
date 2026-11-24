@@ -17,7 +17,11 @@ it("warns at exactly 50% and preserves unknown headroom instead of reporting zer
   const half = limits.historicalSourceHeadroom({ changes: 5000, rootFiles: 5000, censusBytes: 8 * 1024 * 1024 });
   expect(half.warnings).toEqual(["changes", "rootFiles", "censusBytes"]);
   expect(half.checks.changes).toMatchObject({ used: 5000, limit: 10_000, remaining: 5000, percent: 50, warning: true });
-  expect(half.checks.transactionMs).toMatchObject({ used: null, remaining: null, percent: null, warning: false });
+  expect(half.checks.transactionMs).toMatchObject({ used: null, limit: null, remaining: null, percent: null, warning: false });
+  const measured = limits.historicalSourceHeadroom({ transactionMs: 500_000, readMs: 100_000 });
+  expect(measured.checks.transactionMs).toEqual({ used: 500_000, limit: null, remaining: null, percent: null, warning: false, exceeded: false });
+  expect(measured.checks.readMs).toEqual({ used: 100_000, limit: null, remaining: null, percent: null, warning: false, exceeded: false });
+  expect(measured.warnings).toEqual([]);
 });
 it("admits replacement files without consuming more root slots and refuses overflow before insert", () => {
   const files = limits.createHistoricalSourceInventory<{ bytes: Uint8Array }>();
@@ -35,24 +39,15 @@ it("keeps canonical census encoding within the existing input-file contract", ()
     .toThrowError(expect.objectContaining({ code: "historical-source-census-bytes-limit" }));
   expect(files.size).toBe(0);
 });
-it("refuses the whole-history transaction before its backend lifetime and prevents later reads", async () => {
-  vi.useFakeTimers({ toFake: ["performance", "setTimeout", "clearTimeout"] });
+it("measures transaction and read time without ending a slow read", async () => {
+  vi.useFakeTimers({ toFake: ["performance"] });
   const budget = limits.historicalSourceReadBudget();
-  vi.advanceTimersByTime(limits.HISTORICAL_TRANSACTION_MS);
-  const read = vi.fn(async () => "should not run");
-  await expect(budget.read(read)).rejects.toMatchObject({ code: "historical-source-transaction-limit" });
-  expect(read).not.toHaveBeenCalled();
-});
-it("bounds an unavailable SDK read before idle expiration and ignores a later response", async () => {
-  vi.useFakeTimers({ toFake: ["performance", "setTimeout", "clearTimeout"] });
-  const budget = limits.historicalSourceReadBudget();
-  let finish!: (value: string) => void;
-  const pending = budget.read(() => new Promise<string>(resolve => { finish = resolve; }));
-  const refusal = expect(pending).rejects.toMatchObject({ code: "historical-source-read-time-limit" });
-  await vi.advanceTimersByTimeAsync(limits.HISTORICAL_READ_MS);
-  await refusal; finish("late"); await Promise.resolve();
-  const next = vi.fn(async () => "wrong"); await expect(budget.read(next)).rejects.toMatchObject({ code: "historical-source-read-time-limit" });
-  expect(next).not.toHaveBeenCalled();
+  vi.advanceTimersByTime(300_000);
+  const value = await budget.read(async () => { vi.advanceTimersByTime(120_000); return "answered"; });
+  expect(value).toBe("answered");
+  expect(budget.usage()).toEqual({ transactionMs: 420_000, readMs: 120_000 });
+  expect(await budget.read(async () => "next")).toBe("next");
+  expect(budget.usage().readMs).toBe(120_000);
 });
 it("keeps numeric SDK retry status unchanged", async () => {
   const budget = limits.historicalSourceReadBudget(), error = Object.assign(new Error("contention"), { code: 10 });
@@ -64,4 +59,7 @@ it("recognizes the complete error contract across module realms and rejects a fo
   expect(limits.isHistoricalSourceLimitError(copy)).toBe(true);
   expect(limits.isHistoricalSourceLimitError({ ...copy, code: "transport-unavailable" })).toBe(false);
   expect(limits.isHistoricalSourceLimitError({ ...copy, details: { ...copy.details, limit: 20_000 } })).toBe(false);
+  expect(limits.isHistoricalSourceLimitError({ ...copy, code: "historical-source-transaction-limit",
+    details: { metric: "transactionMs", used: 240_000, limit: 240_000 } })).toBe(false);
+  expect(() => limits.checkHistoricalSourceLimit("transactionMs" as never, 1_000_000)).toThrow("Invalid source limit measurement");
 });

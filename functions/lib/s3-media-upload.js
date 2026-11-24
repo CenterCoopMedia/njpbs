@@ -15,6 +15,7 @@ const {
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 const { createAwsRoleCredentialProvider } = require("./aws-workload-credentials");
 const { SourceObjectError, verifyTarget } = require("./s3-media-source");
+const { callOutside } = require("./release-wait");
 
 const PART_URL_TTL_SECONDS = 15 * 60;
 
@@ -190,13 +191,13 @@ function createS3MediaUploader(config, deps = {}) {
   async function copyClip(source, session, output, registration) {
     const client = clientFor(source);
     const target = address(source, session);
-    const options = { abortSignal: AbortSignal.timeout(100_000) };
+    const send = (what, command) => callOutside(`S3 clip copy ${what}`, () => client.send(command));
     const from = { ...output, bucket: config.renditionBucket, expectedBucketOwner: source.expectedBucketOwner };
     if (!from.bucket || from.bucket === source.bucket) throw new SourceObjectError(503, "Clip storage is unavailable");
-    await verifyTarget(client, from, options);
+    await callOutside("S3 clip copy source HeadObject", () => verifyTarget(client, from));
     async function existingCopy() {
       try {
-        return await client.send(new HeadObjectCommand(target), options);
+        return await send("HeadObject", new HeadObjectCommand(target));
       } catch (error) {
         if (error?.$metadata?.httpStatusCode === 404) return null;
         throw error;
@@ -205,14 +206,14 @@ function createS3MediaUploader(config, deps = {}) {
     const existing = await existingCopy();
     if (existing) return existing;
 
-    const abortCopy = UploadId => client.send(new AbortMultipartUploadCommand({ ...target, UploadId }),
-      { abortSignal: AbortSignal.timeout(5000) }).catch(() => {});
+    const abortCopy = UploadId => send("AbortMultipartUpload", new AbortMultipartUploadCommand({ ...target, UploadId }))
+      .catch(() => {});
     let UploadId = registration.uploadId;
     if (!UploadId) {
-      const started = await client.send(new CreateMultipartUploadCommand({ ...target,
+      const started = await send("CreateMultipartUpload", new CreateMultipartUploadCommand({ ...target,
         ContentType: session.mimeType,
         Metadata: { "boardwalk-session": session.id, "boardwalk-asset": session.assetId },
-      }), options);
+      }));
       if (!started.UploadId) throw new Error("Clip copy did not return an upload id");
       try {
         UploadId = await registration.claimUpload(started.UploadId);
@@ -226,15 +227,15 @@ function createS3MediaUploader(config, deps = {}) {
     const count = Math.ceil(output.sizeBytes / partBytes);
     try {
       // One batch fits the HTTP window. The upload and its finished parts survive a retry.
-      const listed = await client.send(new ListPartsCommand({ ...upload, MaxParts: 1000 }), options);
+      const listed = await send("ListParts", new ListPartsCommand({ ...upload, MaxParts: 1000 }));
       const parts = new Map((listed.Parts ?? []).map(part => [part.PartNumber, part.ETag]));
       const numbers = Array.from({ length: count }, (_, index) => index + 1);
       const missing = numbers.filter(number => !parts.get(number));
       const batch = await Promise.allSettled(missing.slice(0, 4).map(async PartNumber => {
-        const result = await client.send(new UploadPartCopyCommand({ ...upload, PartNumber,
+        const result = await send("UploadPartCopy", new UploadPartCopyCommand({ ...upload, PartNumber,
           CopySource: copySource, ExpectedSourceBucketOwner: from.expectedBucketOwner,
           ...(count > 1 ? { CopySourceRange: `bytes=${(PartNumber - 1) * partBytes}-${Math.min(PartNumber * partBytes, output.sizeBytes) - 1}` } : {}),
-        }), options);
+        }));
         if (!result.CopyPartResult?.ETag || result.CopySourceVersionId !== from.objectVersionId) {
           throw new SourceObjectError(409, "The clip output is no longer available");
         }
@@ -242,8 +243,8 @@ function createS3MediaUploader(config, deps = {}) {
       }));
       for (const part of batch) if (part.status === "rejected") throw part.reason;
       if (missing.length > 4) return null;
-      await client.send(new CompleteMultipartUploadCommand({ ...upload, IfNoneMatch: "*",
-        MultipartUpload: { Parts: numbers.map(PartNumber => ({ PartNumber, ETag: parts.get(PartNumber) })) } }), options);
+      await send("CompleteMultipartUpload", new CompleteMultipartUploadCommand({ ...upload, IfNoneMatch: "*",
+        MultipartUpload: { Parts: numbers.map(PartNumber => ({ PartNumber, ETag: parts.get(PartNumber) })) } }));
     } catch (error) {
       if (error?.name !== "NoSuchUpload" && ![409, 412].includes(error?.$metadata?.httpStatusCode)) throw error;
       const winner = await existingCopy();

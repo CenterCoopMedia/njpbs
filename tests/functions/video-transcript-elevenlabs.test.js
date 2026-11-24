@@ -59,7 +59,6 @@ test("preflight rejects wrong version, size, URL, settings, keys and consumed st
   }
   await assert.rejects(adapter.transcribe(input(), Buffer.from("\r\nsecret"), settings, { fetchFn }), errorOutcome("pre_submission"));
   await assert.rejects(adapter.transcribe(input(), key, { ...settings, languageCode: "unknown" }, { fetchFn }), errorOutcome("pre_submission"));
-  await assert.rejects(adapter.transcribe(input(), key, settings, { fetchFn, timeoutMs: Infinity }), errorOutcome("pre_submission"));
   const consumed = input(); consumed.stream.read();
   await assert.rejects(adapter.transcribe(consumed, key, settings, { fetchFn }), errorOutcome("pre_submission"));
   assert.equal(calls, 0);
@@ -99,12 +98,6 @@ test("every HTTP failure after dispatch stays uncertain, with no redirect or POS
     await assert.rejects(adapter.transcribe(input(), key, settings, { fetchFn: async () => { calls++; return new Response("secret provider detail", { status }); } }), errorOutcome("needs_reconciliation"));
     assert.equal(calls, 1);
   }
-});
-
-test("deadline aborts a transport that ignores cancellation and destroys owned source", async () => {
-  const media = input(); let request;
-  await assert.rejects(adapter.transcribe(media, key, settings, { timeoutMs: 10, fetchFn: async (_url, value) => { request = value; return new Promise(() => {}); } }), errorOutcome("needs_reconciliation"));
-  assert.ok(request.signal.aborted); assert.ok(media.stream.destroyed);
 });
 
 test("caller cancellation is distinct before dispatch and uncertain after dispatch", async () => {

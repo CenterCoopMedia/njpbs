@@ -11,7 +11,6 @@ const { isPairFailureCode, PairExecutionError, assertPrivatePairResources } = re
 const PAIRS = "system/publicReleasePairs";
 const KINDS = new Set(["accepted", "qualification", "recovery"]);
 const LEASE_MS = 60_000;
-const MAX_ATTEMPTS = 4;
 function refuse() { throw new PublicReleaseProtocolError(); }
 
 /** Read-only, non-transactional hint for the private Worker. Claim/settlement
@@ -134,15 +133,16 @@ function parseTask(value, pair, taskId) {
     inputManifestDigest: identity.inputManifestDigest });
   if (!samePair(identity, expected) || publicReleaseDigest(identity) !== taskId ||
       !["pending", "running", "complete", "failed"].includes(value.status) ||
-      !Number.isSafeInteger(value.attempts) || value.attempts < 0 || value.attempts > MAX_ATTEMPTS ||
+      !Number.isSafeInteger(value.attempts) || value.attempts < 0 ||
       !(value.lastFailure === null || isPairFailureCode(value.lastFailure)) ||
       value.acceptedDueAt !== (identity.kind === "accepted" ? value.nextAttemptAt : null)) refuse();
   if (value.status === "pending" && (value.attempts !== 0 || value.claimDigest !== null || value.leaseUntil !== null ||
       value.nextAttemptAt !== 0 || value.receiptDigest !== null || value.lastFailure !== null)) refuse();
   if (value.status === "running" && (value.attempts < 1 || !digest(value.claimDigest) || !positive(value.leaseUntil) ||
       value.nextAttemptAt !== null || value.receiptDigest !== null)) refuse();
+  // A failed attempt always has its next attempt. Only a receipt ends the work.
   if (value.status === "failed" && (value.attempts < 1 || value.claimDigest !== null || value.leaseUntil !== null || value.receiptDigest !== null || value.lastFailure === null ||
-      (value.attempts === MAX_ATTEMPTS ? value.nextAttemptAt !== null : !positive(value.nextAttemptAt)))) refuse();
+      !positive(value.nextAttemptAt))) refuse();
   if (value.status === "complete" && (value.attempts < 1 || value.claimDigest !== null || value.leaseUntil !== null ||
       value.nextAttemptAt !== null || !digest(value.receiptDigest))) refuse();
   return freeze({ ...value, identity: expected });
@@ -252,11 +252,11 @@ async function assertPublicReleasePairInputOwnerInTransaction({ firestore, trans
   return { receipt, slot };
 }
 
-// Read-only wake hints and minute recovery use the same bounded due predicate.
+// Read-only wake hints and minute recovery use the same due predicate.
 // Hints never supply a claim, create work, or certify a publication.
 function publicReleasePairTaskDue(task, now) {
   return task.status === "pending" || task.status === "running" && task.leaseUntil <= now ||
-    task.status === "failed" && task.attempts < MAX_ATTEMPTS && task.nextAttemptAt <= now;
+    task.status === "failed" && task.nextAttemptAt <= now;
 }
 async function claimPublicReleasePairWork({ firestore, pair: rawPair, taskId, now = Date.now() }) {
   const pair = parsePublicReleasePair(rawPair);
@@ -276,12 +276,6 @@ async function claimPublicReleasePairWork({ firestore, pair: rawPair, taskId, no
       if (journal.job.taskId !== taskId || journal.job.claimDigest !== task.claimDigest ||
           journal.job.leaseUntil !== task.leaseUntil) refuse();
     } else if (task.status === "running") refuse();
-    if (task.attempts === MAX_ATTEMPTS) {
-      transaction.set(workRef, { ...task, status: "failed", claimDigest: null, leaseUntil: null, nextAttemptAt: null,
-        acceptedDueAt: null, lastFailure: "lease-expired" });
-      transaction.set(journalRef, { ...journal, job: null });
-      return null;
-    }
     const leaseUntil = now + LEASE_MS;
     transaction.set(workRef, { ...task, status: "running", attempts: task.attempts + 1, claimDigest, leaseUntil, nextAttemptAt: null, acceptedDueAt: null });
     transaction.set(journalRef, { ...journal, job: { taskId, claimDigest, leaseUntil } });
@@ -374,10 +368,11 @@ async function settlePublicReleasePairWork({ firestore, pair: rawPair, taskId, t
       // original claim/manifest or make recovery claim and render it again.
       transaction.create(pairRef.collection("staging").doc(taskId), { ...receipt, attempts: 0, nextAttemptAt: 0, lastFailure: null });
     }
-    else if (task.attempts < MAX_ATTEMPTS && retryAt === null) refuse();
+    // Every failed attempt is retried; the caller paces it with retryAt.
+    else if (retryAt === null) refuse();
     transaction.set(workRef, { ...task, status: receipt ? "complete" : "failed", claimDigest: null, leaseUntil: null,
-      nextAttemptAt: receipt || task.attempts === MAX_ATTEMPTS ? null : retryAt,
-      acceptedDueAt: receipt || task.attempts === MAX_ATTEMPTS || task.identity.kind !== "accepted" ? null : retryAt,
+      nextAttemptAt: receipt ? null : retryAt,
+      acceptedDueAt: receipt || task.identity.kind !== "accepted" ? null : retryAt,
       receiptDigest: receipt ? publicReleaseDigest(receipt) : null, lastFailure: receipt ? task.lastFailure : failureCode });
     transaction.set(journalRef, { ...journal, job: null });
     // This completes private rendering work only. It NEVER writes a public

@@ -168,7 +168,7 @@ function publicCopyProviders() {
     },
     prepareCopy: input => runtime.preparePublicCopy({ ...input, s3, r2,
       config: { renditionBucket: "fixture-derived", renditionExpectedBucketOwner: source.expectedBucketOwner } }),
-    recover: (at = Date.now() + 2 * publicVideo.PUBLIC_VIDEO_OPERATION_MS) => withdrawals.createPublicVideoWithdrawalRecoveryHandler({ firestore: db, r2Fn: () => r2,
+    recover: (at = Date.now() + 2 * publicVideo.PUBLIC_VIDEO_OPERATION_LEASE_MS) => withdrawals.createPublicVideoWithdrawalRecoveryHandler({ firestore: db, r2Fn: () => r2,
       purgeConfigFn: () => ({ zoneId: "c".repeat(32), token: "fixture" }), now: () => at,
       fetchImpl: async () => ({ ok: true, json: async () => ({ success: true }) }), log: { info() {}, warn() {}, error() {} } })(),
     withdraw: event => withdrawals.createPublicVideoWithdrawalHandler({ firestore: db, r2Fn: () => r2,

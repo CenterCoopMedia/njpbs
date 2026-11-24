@@ -58,9 +58,12 @@ async function checkPublicContextAlerts({ firestore, send, now = Date.now, log =
       const add = (reason, outcome) => notices.push({ output: task.output, jobId: id, reason, failureClass: outcome,
         actionable: reason === "failed" && !automaticRecoveryActive(task, time),
         identity: `${identity}:${reason}` });
-      const exhausted = task.attempts >= 4 && task.status !== "verified" &&
-        (task.nextAttemptAt === null || task.claim && task.nextAttemptAt <= time);
-      if (exhausted) add("failed", task.claim ? "lease_lost" : failureClass(task.lastAttempt?.failureClass));
+      // A failed attempt or an expired claim notifies once per task revision.
+      // Its retry continues; only a stalled retry makes the notice actionable.
+      const leaseLost = typeof task.claim === "string" && Number.isFinite(task.nextAttemptAt) && task.nextAttemptAt <= time;
+      if (leaseLost || task.status === "failed" && task.lastAttempt?.failureClass != null) {
+        add("failed", leaseLost ? "lease_lost" : failureClass(task.lastAttempt.failureClass));
+      }
       if (task.attempts > 1) add("multiple_attempts", task.lastAttempt?.failureClass == null && task.status === "verified"
         ? "none" : failureClass(task.lastAttempt?.failureClass));
     }

@@ -37,11 +37,15 @@ it("retains Home's initial child shape and refuses a malformed row", () => {
   expect(policy.publicationAttempt({ ...row, transport: "post-no-build-v1", nextAttemptAt: 0, attempts: -1 }, "post", 0)).toBeNull();
 });
 
-it("keeps the background owner's attempt contract", () => {
+it("retries background work at every attempt count with a pause that stops growing at 30 minutes", () => {
   const row = { status: "failed", attempts: 3, nextAttemptAt: 1_000, claim: null };
-  expect(policy.publicationAttempt({ ...row, attempts: 4 }, "background", 1_000)).toBe("exhaust");
+  expect(policy.publicationAttempt({ ...row, attempts: 4 }, "background", 1_000)).toBe("claim");
+  expect(policy.publicationAttempt({ ...row, attempts: 40 }, "background", 1_000)).toBe("claim");
+  expect(policy.publicationAttempt({ ...row, attempts: 40 }, "background", 999)).toBeNull();
   expect(policy.publicationFailure(row, "background", 1_000)).toMatchObject({ status: "failed", nextAttemptAt: 241_000 });
-  expect(policy.publicationFailure({ ...row, attempts: 4 }, "background", 1_000)).toMatchObject({ status: "failed", nextAttemptAt: null });
+  expect(policy.publicationFailure({ ...row, attempts: 5 }, "background", 1_000)).toMatchObject({ status: "failed", nextAttemptAt: 961_000 });
+  expect(policy.publicationFailure({ ...row, attempts: 6 }, "background", 1_000)).toMatchObject({ status: "failed", nextAttemptAt: 1_801_000 });
+  expect(policy.publicationFailure({ ...row, attempts: 2_000 }, "background", 1_000)).toMatchObject({ status: "failed", nextAttemptAt: 1_801_000 });
 });
 
 it.each(families.slice(0, 3))("keeps %s manual retry behind its own owner and an unclaimed failure", (family, identity) => {
@@ -52,13 +56,15 @@ it.each(families.slice(0, 3))("keeps %s manual retry behind its own owner and an
   expect(policy.publicationRetry({ ...row, transport: "foreign", owner: "foreign" }, family)).toBe(false);
 });
 
-it("limits slow transient retries and longer leases to their original background instance", () => {
+it("resumes rows the removed attempt cap stopped, only on their original background instance", () => {
   const row = { status: "failed", attempts: 4, nextAttemptAt: null, claim: null,
     lastAttempt: { retryable: true, failureClass: "lease_lost" }, slowRetryAt: 600_000 };
   expect(policy.publicationAttempt(row, "background", 599_999)).toBeNull();
   expect(policy.publicationAttempt(row, "background", 600_000)).toBe("claim");
   expect(policy.publicationClaim(row, "slow", 600_000, 90_000)).toEqual({ attempts: 5, claim: "slow", nextAttemptAt: 690_000 });
-  expect(policy.publicationAttempt({ ...row, lastAttempt: { retryable: false, failureClass: "validation" } }, "background", 600_000)).toBeNull();
+  expect(policy.publicationAttempt({ ...row, lastAttempt: { retryable: false, failureClass: "validation" } }, "background", 600_000)).toBe("claim");
+  expect(policy.publicationAttempt({ ...row, slowRetryAt: null }, "background", 600_000)).toBeNull();
+  expect(policy.slowBackgroundRetryDue({ ...row, claim: "active" }, 600_000)).toBe(false);
   expect(policy.publicationAttempt(row, "postProof", 600_000)).toBeNull();
   expect(policy.publicationAttempt({ ...row, transport: "post-no-build-v1" }, "post", 600_000)).toBeNull();
 });

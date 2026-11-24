@@ -5,11 +5,12 @@
 // the first attempt, and the existing Telegram scheduler recovers safe retries.
 
 const { db } = require("./firebase");
+const { platformLimit } = require("./release-wait");
 
 const STAFF_ACCESS_NOTIFICATION_COLLECTION =
   "staffAccessNotificationOutbox";
-const MAX_ATTEMPTS = 5;
-const LEASE_MILLIS = 2 * 60 * 1_000;
+// The sending lease outlives its longest holder, the Telegram scheduler.
+const LEASE_MILLIS = (platformLimit("cloudFunctionsScheduleSeconds") + 60) * 1_000;
 const BATCH_SIZE = 25;
 
 function notificationId(uid, requestVersion) {
@@ -192,10 +193,11 @@ async function settleNotificationFailure(row, error, deps = {}) {
   const at = now();
   const retryable = error?.kind === "retryable";
   const ambiguous = error?.kind !== "terminal" && !retryable;
-  const canRetry = retryable && row.attemptCount < MAX_ATTEMPTS;
+  const canRetry = retryable;
   const state = ambiguous ? "unknown" : canRetry ? "pending" : "terminal_failed";
+  // Pacing only: doubling pauses, at most an hour apart. A refusal retries until delivered.
   const nextAttemptAt = canRetry
-    ? new Date(at.getTime() + 2 ** Math.max(0, row.attemptCount - 1) * 60 * 1_000)
+    ? new Date(at.getTime() + Math.min(2 ** Math.max(0, row.attemptCount - 1), 60) * 60 * 1_000)
     : null;
   const safeError = `${error?.kind || "ambiguous"}${error?.status ? ` (${error.status})` : ""}`;
   await firestore.runTransaction(async (transaction) => {
@@ -312,7 +314,6 @@ async function processPendingStaffAccessNotifications(deps = {}) {
 module.exports = {
   BATCH_SIZE,
   LEASE_MILLIS,
-  MAX_ATTEMPTS,
   STAFF_ACCESS_NOTIFICATION_COLLECTION,
   claimStaffAccessNotification,
   deliverStaffAccessNotification,

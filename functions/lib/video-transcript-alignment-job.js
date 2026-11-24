@@ -11,7 +11,6 @@ const { transcriptSegmentsVersion } = require("./video-transcript-processor");
 
 const ALIGNMENT_JOBS = "mediaSourceTranscriptAlignmentJobs";
 const LEASE_MS = 120_000;
-const MAX_ATTEMPTS = 3;
 const MAX_PASSAGE_SECONDS = 180;
 const ADAPTER_REVISION = "qwen3-forced-aligner-adapter-v1";
 const MODEL_REPOSITORY = "Qwen/Qwen3-ForcedAligner-0.6B";
@@ -229,14 +228,6 @@ async function claimAlignmentJob({ firestore, source, config, now = Date.now() }
           slot?.kind === "alignment" && slot.jobId === alignment.id) {
         return { alignment, transcript };
       }
-      if ((alignment.attempt ?? 0) >= MAX_ATTEMPTS) {
-        const at = new Date(now).toISOString();
-        tx.update(ref, { active: false, phase: "needs_reconciliation", leaseToken: null,
-          leaseUntil: 0, errorCode: "alignment_worker_lost", updatedAt: at });
-        if (transcript.alignmentRequestId === alignment.id) tx.update(transcriptRef,
-          { alignmentState: "needs_reconciliation", alignmentUpdatedAt: at });
-        continue;
-      }
       const changes = { phase: "running", leaseToken: randomUUID(), leaseUntil: now + LEASE_MS,
         ...(alignment.audioInput ? { audioReadLeaseUntil: now + LEASE_MS } : {}),
         attempt: (alignment.attempt ?? 0) + 1, stage: "downloading", updatedAt: new Date(now).toISOString() };
@@ -390,7 +381,7 @@ function parseAlignmentWorkerRequest(operation, body) {
   return body;
 }
 
-module.exports = { ALIGNMENT_JOBS, LEASE_MS, MAX_ATTEMPTS, MAX_PASSAGE_SECONDS, ADAPTER_REVISION,
+module.exports = { ALIGNMENT_JOBS, LEASE_MS, MAX_PASSAGE_SECONDS, ADAPTER_REVISION,
   MODEL_REPOSITORY, MODEL_REVISION, alignmentEngine, hasAlignedWords, selectedPassages, buildAlignmentSnapshot,
   parseAlignmentRequest, requestAlignment, claimAlignmentJob, withAlignmentLease, heartbeatAlignmentJob,
   failAlignmentJob, completeAlignmentJob, cancelAlignment, parseAlignmentWorkerRequest };

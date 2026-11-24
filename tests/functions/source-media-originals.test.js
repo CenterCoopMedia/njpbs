@@ -450,13 +450,6 @@ describe("durable restore completion and requester notices", () => {
     expect(db.rows.get("mediaSourceAssets/asset")).not.toHaveProperty("originalAvailability");
     expect([...db.rows.values()].find(row => row.outcome)?.outcome).toBe("stale");
   });
-  it("bounds unresolved restore work to 72 hours and leaves a failure notice", async () => {
-    const db = database(); const aws = sdk(); await restore(db, aws);
-    aws.send.mockClear(); await tick(db, aws, now + 73 * 3_600_000);
-    expect(aws.send).not.toHaveBeenCalled();
-    expect([...db.rows.values()].find(row => row.outcome)?.outcome).toBe("failed");
-    expect(await tick(db, aws, now + 74 * 3_600_000)).toBe(0);
-  });
   it("keeps list, status, request and completion work off the asset/search stamp", async () => {
     const db = database(); const aws = sdk();
     await originals.refreshOriginal({ firestore: db, storage: aws.storage, source, asset: parsed(), fresh: true, now });

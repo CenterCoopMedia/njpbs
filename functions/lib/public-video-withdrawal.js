@@ -11,16 +11,17 @@ const {
 } = require("./public-video-references");
 const {
   PUBLIC_VIDEO_COLLECTION,
-  PUBLIC_VIDEO_OPERATION_MS,
+  PUBLIC_VIDEO_OPERATION_LEASE_MS,
   PublicVideoError,
 } = require("./public-video");
+const { callOutside } = require("./release-wait");
 
 const MAX_CONTENT_RECORDS = 5_000;
 const REQUEST_COLLECTION = "cmsPublicVideoWithdrawals";
-const RETRY_MS = PUBLIC_VIDEO_OPERATION_MS;
+// Pacing only: the pause before recovery tries a pending withdrawal again.
+const RETRY_MS = 15 * 60_000;
 const RECOVERY_BATCH = 10;
 const RECOVERY_URLS = 20;
-const RECOVERY_MS = 180_000;
 
 function withdrawalRequest(current, urls, now) {
   return {
@@ -133,7 +134,7 @@ async function claimWithdrawal({
       id: randomUUID(),
       kind: "withdraw",
       urls: selected,
-      expiresAt: now + PUBLIC_VIDEO_OPERATION_MS,
+      expiresAt: now + PUBLIC_VIDEO_OPERATION_LEASE_MS,
     };
     tx.set(ref, {
       ...record,
@@ -158,13 +159,12 @@ function validatePurgeConfig(config) {
 
 async function purgeCopies({ urls, config, fetchImpl, signal = undefined }) {
   for (let offset = 0; offset < urls.length; offset += 100) {
-    const timeout = AbortSignal.timeout(10_000);
-    const response = await fetchImpl(
+    const response = await callOutside("Cloudflare video cache purge", () => fetchImpl(
       `https://api.cloudflare.com/client/v4/zones/${config.zoneId}/purge_cache`,
       {
         method: "POST",
         redirect: "error",
-        signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+        ...(signal ? { signal } : {}),
         headers: {
           Authorization: `Bearer ${config.token}`,
           "Content-Type": "application/json",
@@ -176,7 +176,7 @@ async function purgeCopies({ urls, config, fetchImpl, signal = undefined }) {
             .map((url) => url.slice("https://".length)),
         }),
       },
-    );
+    ), { signal });
     if (!response.ok || (await response.json())?.success !== true) {
       throw new PublicVideoError(
         "Public video cache withdrawal is pending.",
@@ -211,25 +211,17 @@ function createWithdrawalAttempt({
 }) {
   return async (
     { ref: requestRef, request },
-    { maxUrls = Infinity, deadline = Infinity } = {},
+    { maxUrls = Infinity } = {},
   ) => {
     const assetId = requestRef.id;
-    const networkSignal = (timeout) => {
-      const remaining = deadline - now();
-      if (remaining <= 0)
-        throw new PublicVideoError(
-          "Public video recovery time limit reached.",
-          503,
-        );
-      return AbortSignal.timeout(Math.min(timeout, remaining));
-    };
     let stage = "configuration";
+    let claim;
     try {
       const config = purgeConfigFn();
       validatePurgeConfig(config);
       const r2 = r2Fn();
       stage = "claim";
-      const claim = await claimWithdrawal({
+      claim = await claimWithdrawal({
         firestore,
         assetId,
         urls: request.urls,
@@ -239,20 +231,20 @@ function createWithdrawalAttempt({
       if (claim.operation) {
         stage = "delete";
         for (const url of claim.operation.urls) {
-          await r2.client.send(
-            new DeleteObjectCommand({
-              Bucket: r2.bucket,
-              Key: new URL(url).pathname.slice(1),
-            }),
-            { abortSignal: networkSignal(30_000) },
+          await callOutside("R2 public video DeleteObject", () =>
+            r2.client.send(
+              new DeleteObjectCommand({
+                Bucket: r2.bucket,
+                Key: new URL(url).pathname.slice(1),
+              }),
+            ),
           );
         }
         stage = "purge";
         await purgeCopies({
           urls: claim.operation.urls,
           config,
-          fetchImpl: (url, options) =>
-            fetchImpl(url, { ...options, signal: networkSignal(10_000) }),
+          fetchImpl,
         });
         stage = "complete";
         await firestore.runTransaction(async (tx) => {
@@ -287,16 +279,26 @@ function createWithdrawalAttempt({
           count: claim.operation.urls.length,
         });
     } catch (error) {
+      if (claim?.operation) await releaseWithdrawal(firestore, claim).catch(() => {});
       withdrawalFailure(log, assetId, stage, error);
     }
   };
+}
+
+// A failed attempt no longer holds its lease. Its withdraw operation stays on
+// the record, so the next claim or copy carries its URLs forward.
+function releaseWithdrawal(firestore, claim) {
+  return firestore.runTransaction(async (tx) => {
+    const current = (await tx.get(claim.ref)).data();
+    if (current?.operation?.id !== claim.operation.id) return;
+    tx.update(claim.ref, { "operation.expiresAt": 0 });
+  });
 }
 
 function createPublicVideoWithdrawalRecoveryHandler(deps) {
   const { firestore, now = Date.now } = deps;
   const attempt = createWithdrawalAttempt(deps);
   return async () => {
-    const deadline = now() + RECOVERY_MS;
     // One indexed due query; an empty pass does not scan content or call providers.
     const due = await firestore
       .collection(REQUEST_COLLECTION)
@@ -305,7 +307,6 @@ function createPublicVideoWithdrawalRecoveryHandler(deps) {
       .limit(RECOVERY_BATCH)
       .get();
     for (const snapshot of due.docs) {
-      if (now() >= deadline) break;
       const request = await firestore.runTransaction(async (tx) => {
         const current = (await tx.get(snapshot.ref)).data();
         if (!current || current.nextAttemptAt > now()) return null;
@@ -317,7 +318,7 @@ function createPublicVideoWithdrawalRecoveryHandler(deps) {
       try {
         await attempt(
           { ref: snapshot.ref, request },
-          { maxUrls: RECOVERY_URLS, deadline },
+          { maxUrls: RECOVERY_URLS },
         );
       } catch {
         // The attempt emits a safe stage error. Leave intent for the next due pass.

@@ -32,11 +32,13 @@ const {
 } = require("./video-block");
 const { visibleLayoutBlocks } = require("./content-layout");
 const { ID_PATTERN, parseSourceMediaAsset } = require("./source-media-contract");
+const { platformLimit } = require("./release-wait");
 
 const PUBLIC_VIDEO_COLLECTION = "cmsPublicVideos";
 const PUBLIC_VIDEO_SCHEMA_VERSION = 1;
-// Longer than the copy Function's 540-second deadline and withdrawal's 300 seconds.
-const PUBLIC_VIDEO_OPERATION_MS = 15 * 60_000;
+// Lease on a copy or withdrawal operation. It outlives the longest holder: the
+// copy runs in an HTTP Function, withdrawal in event and schedule Functions.
+const PUBLIC_VIDEO_OPERATION_LEASE_MS = (platformLimit("cloudFunctionsHttpSeconds") + 60) * 1000;
 const DEFAULT_WIDTH = 1920;
 const DEFAULT_HEIGHT = 1080;
 const IMMUTABLE_CACHE = "public, max-age=31536000, immutable";
@@ -265,7 +267,7 @@ function samePublicVideoSource(current, asset) {
 async function acquirePublicVideoCopy({ firestore, assetId, asset, freshGeneration = false, now = Date.now() }) {
   if (asset) readyRendition(asset);
   const ref = firestore.collection(PUBLIC_VIDEO_COLLECTION).doc(assetId);
-  const operation = { id: randomUUID(), kind: "copy", expiresAt: now + PUBLIC_VIDEO_OPERATION_MS };
+  const operation = { id: randomUUID(), kind: "copy", expiresAt: now + PUBLIC_VIDEO_OPERATION_LEASE_MS };
   const previous = await firestore.runTransaction(async tx => {
     const snapshot = await tx.get(ref);
     const record = snapshot.data();
@@ -471,7 +473,7 @@ async function previewVideosCurrent({ tx, firestore, state }) {
 
 module.exports = {
   PUBLIC_VIDEO_COLLECTION,
-  PUBLIC_VIDEO_OPERATION_MS,
+  PUBLIC_VIDEO_OPERATION_LEASE_MS,
   PublicVideoError,
   acquirePublicVideoCopy,
   publicVideoKeys,

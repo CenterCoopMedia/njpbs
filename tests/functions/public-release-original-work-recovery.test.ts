@@ -192,22 +192,21 @@ it("quarantines corrupt original H after bounded failures while retaining source
   expect(await state(`cmsPosts/${document.id}`)).toEqual(source);
 });
 
-it.each(["changes", "rootFiles", "censusBytes", "transactionMs", "readMs"] as HistoricalSourceMetric[])("handles the actual %s historical limit without confusing a hard limit and elapsed time", async metric => {
+it.each(["changes", "rootFiles", "censusBytes"] as HistoricalSourceMetric[])("quarantines work at the actual %s historical limit", async metric => {
   const { options, due } = await accepted();
   const limit = sourceLimits.historicalSourceHeadroom().checks[metric].limit;
   let error: unknown;
   try { sourceLimits.checkHistoricalSourceLimit(metric, limit + 1); } catch (caught) { error = caught; }
   expect(sourceLimits.isHistoricalSourceLimitError(error)).toBe(true);
   const unavailable = { put: store.put.bind(store), async get(): Promise<never> { throw error; } };
-  const permanent = ["changes", "rootFiles", "censusBytes"].includes(metric);
   for (let attempt = 1; attempt <= 3; attempt++) {
     expect(await recoverOriginalPublicReleaseWork({ ...options, store: unavailable })).toMatchObject({
-      status: permanent && attempt === 3 ? "quarantined" : "retry" });
-    expect(await state(due)).toMatchObject({ recoveryFailures: permanent ? attempt : 0 });
+      status: attempt === 3 ? "quarantined" : "retry" });
+    expect(await state(due)).toMatchObject({ recoveryFailures: attempt });
     time += 30_000;
   }
   expect(await state(`${admissions.ADMISSIONS}/pending/${options.operationId}`)).toBeDefined();
-  expect(await state(`cmsPublishQueue/${options.operationId}`)).toMatchObject({ status: permanent ? "failed" : "pending" });
+  expect(await state(`cmsPublishQueue/${options.operationId}`)).toMatchObject({ status: "failed" });
 });
 
 it("serializes concurrent missed-wake recovery into one original task", async () => {

@@ -10,6 +10,7 @@ const { createAwsRoleCredentialProvider } = require("./aws-workload-credentials"
 const { parseSourceMediaRendition } = require("./source-media-rendition");
 
 const { assertOriginalReadable, mapOriginalStorageError, stateFromHead } = require("./source-original-state");
+const { callOutside } = require("./release-wait");
 
 const READ_URL_TTL_SECONDS = 5 * 60;
 const AWS_ACCOUNT_ID_PATTERN = /^\d{12}$/;
@@ -159,13 +160,12 @@ function createS3MediaRestoreCheck(config, deps = {}) {
   const clientFor = sourceClientFactory(config, deps);
   return async (source, asset) => {
     const client = clientFor(source);
-    const options = { abortSignal: AbortSignal.timeout(12_000) };
     async function check(target, label) {
       if (!target || target.objectVersionId === "null") {
         throw new SourceObjectError(409, `${label} has no retained file version.`);
       }
       try {
-        return await verifyTarget(client, target, options);
+        return await callOutside(`S3 ${target.kind ?? "media"} HeadObject`, () => verifyTarget(client, target));
       } catch (error) {
         if (error instanceof SourceObjectError) {
           throw new SourceObjectError(409, `${label} is no longer available.`);

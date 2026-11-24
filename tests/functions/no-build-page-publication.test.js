@@ -17,7 +17,6 @@ import deployment from "../../functions/lib/public-deployment.js";
 import pagePublication from "../../functions/lib/no-build-page-publication.js";
 import ownership from "../../functions/lib/no-build-page-ownership.js";
 import admission from "../../functions/lib/no-build-family-admission.js";
-import reconcile from "../../functions/lib/publish-reconcile.js";
 import reporting from "../../functions/lib/data-hub-reporting.js";
 const db = isolatedFirestore("no-build-page-publication.test.js");
 
@@ -457,7 +456,7 @@ const due = "2026-10-13T12:00:00.000Z";
 function runScheduler(deps = {}) {
   return scheduler.createScheduledPublishRunner({ firestore, now: () => due, log: quiet,
     assertPublishReadyFn: offlineBuild, assertPublishedMediaSafeFn: offlineBuild,
-    enqueuePublishFn: offlineBuild, reconcileStaleFn: async () => {}, ...deps })();
+    enqueuePublishFn: offlineBuild, ...deps })();
 }
 it("retains a legacy Page schedule selected during a pause until build-free admission resumes", async () => {
   const id = "faq";
@@ -696,27 +695,6 @@ it.each([
   }
 });
 
-
-it("keeps an accepted Page withdrawal and its queue link owned after the serializer reconciliation cutoff", async () => {
-  const handler = lifecycle.createCmsTransitionContentHandler({ firestore, requirePrincipalFn: async () => pageActor,
-    now: () => instant, log: quiet });
-  const result = await invoke(handler, { collection: "cmsPages", id: "contact", baseVersion: 1, action: "unpublish" });
-  expect(result.code, JSON.stringify(result.body)).toBe(200);
-  const ownerRef = db.doc(`${ownership.PAGE_OWNER_COLLECTION}/contact`);
-  const owner = await ownerRef.get();
-  const queueRef = db.doc(`cmsPublishQueue/${owner.data().operationId}`);
-  const pageRef = db.doc("cmsPages/contact");
-  const before = await db.getAll(queueRef, pageRef, ownerRef);
-  expect(before[0].data()).toMatchObject({ status: "pending", transport: "page-no-build-v1" });
-  expect(before[1].data()).toMatchObject({ publishBuildQueueId: queueRef.id });
-  const staleNow = before[0].data().triggeredAt.toMillis() + 25 * 60 * 60 * 1000;
-  expect(await reconcile.reconcileStalePublishRows({ firestore: db, now: () => staleNow })).toBe(0);
-  const after = await db.getAll(queueRef, pageRef, ownerRef);
-  for (let index = 0; index < before.length; index++) {
-    expect(after[index].data()).toEqual(before[index].data());
-    expect(after[index].updateTime).toEqual(before[index].updateTime);
-  }
-});
 
 
 it.each([

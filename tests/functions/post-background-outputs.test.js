@@ -493,25 +493,6 @@ describe("Post background publication at the database, artifact and HTTP boundar
     expect(await head.text()).toBe("");
   });
 
-  it("bounds automatic retries and leaves failed outputs fenced", async () => {
-    fail = "search";
-    await accept("publish-1", document());
-    for (let attempt = 1; attempt <= 4; attempt++) {
-      await owner().recover();
-      const state = await task("publish-1", "search");
-      expect(state).toMatchObject({ status: "failed", attempts: attempt });
-      if (attempt < 4) time = state.nextAttemptAt;
-    }
-    expect((await task("publish-1", "search")).nextAttemptAt).toBeNull();
-    time += 86_400_000;
-    fail = null;
-    await owner().recover();
-    expect((await task("publish-1", "search")).attempts).toBe(4);
-    expect((await request("/pagefind/fragment/one.pf_fragment")).status).toBe(503);
-    expect((await request("/search/meaning-index.json")).status).toBe(503);
-    expect((await request("/posts/")).status).toBe(200);
-  });
-
   it("retains last good families through failures and repeated publications without extending their age", async () => {
     await accept("publish-1", document());
     await owner().recover();
@@ -936,29 +917,6 @@ describe("Post background publication at the database, artifact and HTTP boundar
     expect((await db.doc("cmsPublishQueue/aborted").get()).exists).toBe(false);
     expect((await db.collection("cmsBackgroundOutputs").get()).empty).toBe(true);
     expect((await db.collection("cmsPublishQueue/aborted/backgroundOutputs").get()).empty).toBe(true);
-  });
-
-  it("supersedes exhausted families after a public-context change without resetting the accepted operation", async () => {
-    await accept("publish-1", document());
-    const broken = owner({ build: async () => { throw new Error("Storage unavailable"); } });
-    for (let attempt = 1; attempt <= 4; attempt++) {
-      await broken.recover();
-      if (attempt < 4) time = (await task("publish-1", "listings")).nextAttemptAt;
-    }
-    for (const output of outputs) {
-      expect(await task("publish-1", output)).toMatchObject({ status: "failed", attempts: 4, nextAttemptAt: null });
-    }
-    const accepted = (await db.doc("cmsPublishQueue/publish-1").get()).data();
-    // Successful code activation advances this shared context through its owner.
-    await db.doc("backgroundTestContext/current").set({ digest: digest("repaired public source") });
-    await owner().recover();
-    for (const output of outputs) {
-      expect(await task("publish-1", output)).toMatchObject({ status: "superseded", attempts: 4, nextAttemptAt: null });
-      expect(await task("publish-1", `${output}-2`)).toMatchObject({ status: "verified", attempts: 1,
-        revision: 2, receipt: { contextDigest: digest("repaired public source") } });
-      expect((await request(files[output][0])).status).toBe(200);
-    }
-    expect((await db.doc("cmsPublishQueue/publish-1").get()).data()).toEqual(accepted);
   });
 
   it("keeps defaults inert, requires the Post allowlist and refuses unsupported Home paths", async () => {

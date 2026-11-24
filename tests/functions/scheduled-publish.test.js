@@ -1139,7 +1139,6 @@ describe("scheduled publish snapshot", () => {
       const run = createScheduledPublishRunner({
         firestore: db,
         assertPublishReadyFn: vi.fn(async () => ({ token: "configured" })),
-        reconcileStaleFn: vi.fn(),
         enqueuePublishFn,
         now: () => NOW,
         log: {
@@ -1209,7 +1208,6 @@ describe("scheduled publish snapshot", () => {
     const run = createScheduledPublishRunner({
       firestore: db,
       assertPublishReadyFn: vi.fn(async () => ({ token: "configured" })),
-      reconcileStaleFn: vi.fn(),
       enqueuePublishFn,
       now: () => NOW,
       log: {
@@ -1284,7 +1282,6 @@ describe("scheduled publish snapshot", () => {
     const run = createScheduledPublishRunner({
       firestore: db,
       assertPublishReadyFn: vi.fn(async () => ({ token: "configured" })),
-      reconcileStaleFn: vi.fn(),
       enqueuePublishFn,
       now: () => NOW,
       log: {
@@ -2136,38 +2133,7 @@ describe("scheduled publish snapshot", () => {
     });
   });
 
-  it("keeps the empty-tick fallback until the dedicated scheduler is enabled", async () => {
-    await db.collection("cmsPages").doc("contact").set({
-      id: "contact",
-      title: "Later",
-      status: "scheduled",
-      publishAt: "2026-07-16T12:00:00.000Z",
-      blocks: [],
-      version: 1,
-    });
-    const assertPublishReadyFn = vi.fn();
-    const enqueuePublishFn = vi.fn();
-    const reconcileStaleFn = vi.fn(async () => 0);
-    const run = createScheduledPublishRunner({
-      firestore: db,
-      assertPublishReadyFn,
-      enqueuePublishFn,
-      reconcileStaleFn,
-      now: () => NOW,
-    });
-
-    await expect(run()).resolves.toEqual({
-      publishedCount: 0,
-      queueId: null,
-      changes: [],
-    });
-    expect(reconcileStaleFn).toHaveBeenCalledOnce();
-    expect(reconcileStaleFn).toHaveBeenCalledWith({ firestore: db });
-    expect(assertPublishReadyFn).not.toHaveBeenCalled();
-    expect(enqueuePublishFn).not.toHaveBeenCalled();
-  });
-
-  it("keeps reconciling when the only due page moves to failure", async () => {
+  it("enqueues nothing when the only due page moves to failure", async () => {
     // A rejected page must not prevent stale build reconciliation during the
     // same tick that records its visible failure.
     const fat = "x".repeat(40000);
@@ -2194,12 +2160,10 @@ describe("scheduled publish snapshot", () => {
       version: 1,
     });
     const enqueuePublishFn = vi.fn();
-    const reconcileStaleFn = vi.fn(async () => 0);
     const run = createScheduledPublishRunner({
       firestore: db,
       assertPublishReadyFn: vi.fn(),
       enqueuePublishFn,
-      reconcileStaleFn,
       now: () => NOW,
       log: { info: () => {}, warn: () => {}, error: () => {} },
     });
@@ -2209,7 +2173,6 @@ describe("scheduled publish snapshot", () => {
       queueId: null,
       changes: [],
     });
-    expect(reconcileStaleFn).toHaveBeenCalledOnce();
     expect(enqueuePublishFn).not.toHaveBeenCalled();
     // #2761: scheduling is not approval; blockers return to draft and clear the time.
     const failedDocument = (await db.collection("cmsPages").doc("contact").get()).data();

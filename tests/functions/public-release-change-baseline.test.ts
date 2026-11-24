@@ -471,18 +471,17 @@ it("bounds outbox retries and preserves a terminal failed capture without latest
   }
   await expect(processPublicReleaseCaptureOutboxOperation(options)).rejects.toMatchObject({ code: "historical-capture-failed" });
 });
-it.each(["changes", "rootFiles", "censusBytes", "transactionMs", "readMs"] as const)("retains the named %s limit in the actual capture outbox", async metric => {
+it.each(["changes", "rootFiles", "censusBytes"] as const)("retains the named %s limit in the actual capture outbox", async metric => {
   await capture(); await publish("operation-one", "First");
   const { processPublicReleaseCaptureOutboxOperation } = await import("../../site/scripts/public-release-pair-source-owner");
   const module = createRequire(import.meta.url)("../../functions/lib/public-release-source-limits.js");
   const error = new module.HistoricalSourceLimitError(metric, module.historicalSourceHeadroom().checks[metric].limit + 1);
-  const budget = vi.spyOn(module, "historicalSourceReadBudget").mockReturnValue({ check() {},
+  const budget = vi.spyOn(module, "historicalSourceReadBudget").mockReturnValue({
     read: async () => { throw error; }, usage: () => ({ transactionMs: 0, readMs: 0 }) });
   try {
     const store = { get: async () => { throw new Error("No source fallback"); }, put: async () => { throw new Error("No writes expected"); } };
     const result = await processPublicReleaseCaptureOutboxOperation({ firestore: db, pair, store, sourceOperationId: "operation-one" });
-    const permanent = ["changes", "rootFiles", "censusBytes"].includes(metric);
-    expect(result).toMatchObject({ status: permanent ? "failed" : "pending", attempts: 1, failure: error.code });
+    expect(result).toMatchObject({ status: "failed", attempts: 1, failure: error.code });
     const outbox = (await db.doc("system/publicReleaseChanges/captures/operation-one").get()).data()!;
     expect(Object.values(outbox.packs)[0]).toMatchObject({ status: result.status, failure: error.code, attempts: 1 });
   } finally { budget.mockRestore(); }

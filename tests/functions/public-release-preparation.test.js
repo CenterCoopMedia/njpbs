@@ -422,12 +422,12 @@ it("accepts draft saves after handover and reservation without stranding the rel
   expect((await db.doc("system/publicDeployment").get()).data().state).toBe("deploying");
 });
 
-it.each(["deployed", "uncertain", "exhausted"])("consumes a preuploaded release with %s evidence and no artifact I/O", async outcome => {
+it.each(["deployed", "uncertain", "fifth-attempt uncertain"])("consumes a preuploaded release with %s evidence and no artifact I/O", async outcome => {
   const { candidate } = await seal();
   await pauseForHandover();
   await promote();
   const releaseRequest = db.doc(`cmsPublicationSerializerJournals/cloudflare-publisher/releases/${preparationId}`);
-  if (outcome === "exhausted") await releaseRequest.update({ attempts: 3 });
+  if (outcome === "fifth-attempt uncertain") await releaseRequest.update({ attempts: 4 });
   const workerTag = "d".repeat(32);
   const calls = [];
   let providerReadAvailable = outcome === "deployed";
@@ -462,17 +462,11 @@ it.each(["deployed", "uncertain", "exhausted"])("consumes a preuploaded release 
   } else {
     expect(pointer).toMatchObject({ state: "reconciling", activeGeneration: 7 });
     expect((await db.doc("cmsPublicationSerializerJournals/cloudflare-publisher").get()).data().job.queueId).toBe(preparationId);
-    if (outcome === "exhausted") {
+    if (outcome === "fifth-attempt uncertain") {
+      // No attempt limit: the fifth nonterminal attempt stays scheduled for reconciliation.
       const request = (await releaseRequest.get()).data();
-      expect(request).toMatchObject({ status: "failed", attempts: 4, nextAttemptAt: null,
-        failureReason: expect.stringContaining("exhausted while activation remains nonterminal") });
-      const retainedJournal = (await db.doc("cmsPublicationSerializerJournals/cloudflare-publisher").get()).data();
-      await run();
-      expect((await releaseRequest.get()).data()).toEqual(request);
-      expect((await db.doc("system/publicDeployment").get()).data()).toEqual(pointer);
-      expect((await db.doc("cmsPublicationSerializerJournals/cloudflare-publisher").get()).data()).toEqual(retainedJournal);
-      expect(calls.filter(call => call.method === "POST" && call.path.endsWith("/deployments"))).toHaveLength(1);
-      return;
+      expect(request).toMatchObject({ attempts: 5, failureReason: null });
+      expect(Number.isFinite(request.nextAttemptAt)).toBe(true);
     }
     // A due retry reconciles the existing candidate and lease. It must not
     // register the metadata again or send a second traffic change.

@@ -93,7 +93,7 @@ export const CODE_CONSTRUCTS = [
   // Not wait limits: lock leases, credential, cache and session expiry, clock
   // skew, retention and media lengths. Their names say which.
   ["duration constant", /\b(?![A-Z0-9_]*(?:LEASE|TTL|SKEW|RETENTION|LIFETIME|SESSION|DURATION|TIMESTAMP|PASSAGE|AUDIO_SECONDS|_AGE))[A-Z][A-Z0-9_]*(?:_MS|_SECONDS|_MINUTES|TIMEOUT|DEADLINE|STALL|BUDGET|BACKSTOP)\b[A-Z0-9_]*\s*=/],
-  ["attempt cap", /\b[A-Z][A-Z0-9_]*(?:ATTEMPTS|RETRIES|ROUNDS|POLLS|ATTEMPT_LIMIT|RETRY_LIMIT)\b[A-Z0-9_]*\s*=\s*[\d(]|\bmax(?:Attempts|Retries|Rounds|Polls)\b/],
+  ["attempt cap", /\b[A-Z][A-Z0-9_]*(?:ATTEMPTS|RETRIES|ROUNDS|POLLS|ATTEMPT_LIMIT|RETRY_LIMIT)\b[A-Z0-9_]*\s*=\s*[\d(]|\bmax(?:Attempts|Retries|Rounds|Polls)\b|\b(?:attempts|failures|retries)\s*(?:>=|>|===)\s*[2-9]/],
   // "deadline-exceeded" is a gRPC status name, not a limit.
   ["deadline", /\bdeadline\b(?!-exceeded)/i],
 ];

@@ -2,7 +2,6 @@
 
 const { platformLimit } = require("./release-wait");
 
-const SLOW_RETRY_MS = 10 * 60_000;
 const FAILURE_CLASSES = ["timeout", "storage_readback", "lease_lost", "context_changed", "validation"];
 const TRANSIENT_STORAGE_CODES = new Set([4, 8, 10, 13, 14, 408, 429, 500, 502, 503, 504,
   "ETIMEDOUT", "ECONNRESET", "ECONNREFUSED", "EAI_AGAIN"]);
@@ -27,7 +26,6 @@ function publicationAttempt(row, family, now) {
   if (!Number.isFinite(due) || due > now) return null;
   if (family !== "background" && (!Number.isSafeInteger(attempts) || attempts < 0 ||
       family !== "postProof" && row.claim != null && (typeof row.claim !== "string" || !row.claim))) return null;
-  if (family === "background" && attempts >= 4) return "exhaust";
   return "claim";
 }
 
@@ -65,9 +63,10 @@ function publicAnswerRefused(error, current = undefined) {
 
 function publicationFailure(row, family, now, error = undefined, current = undefined) {
   if (family === "background") {
-    const exhausted = row.attempts >= 4;
-    return { status: "failed", claim: null, nextAttemptAt: exhausted ? null : now + 60_000 * 2 ** (row.attempts - 1),
-      error: families[family].error };
+    // Background work never runs out of attempts. The pause doubles from one
+    // minute and stays at 30 minutes once it reaches it.
+    const pause = Math.min(60_000 * 2 ** Math.max(0, row.attempts - 1), 30 * 60_000);
+    return { status: "failed", claim: null, nextAttemptAt: now + pause, error: families[family].error };
   }
   const refused = publicAnswerRefused(error, current);
   return { status: refused || family === "postProof" ? "failed" : "pending", claim: null,
@@ -89,11 +88,13 @@ function backgroundFailure(error, signal, stage) {
   return { failureClass: "validation", retryable: false };
 }
 
+// A failed, unclaimed background row is due at its next attempt, whatever its
+// attempt count. A row the removed four-attempt cap stopped has no next
+// attempt; it resumes at its slowRetryAt when it has one.
 function slowBackgroundRetryDue(task, time) {
-  return task?.status === "failed" && Number.isSafeInteger(task.attempts) && task.attempts >= 4 &&
-    task.nextAttemptAt === null && task.lastAttempt?.retryable === true &&
-    ["timeout", "storage_readback", "lease_lost"].includes(task.lastAttempt.failureClass) &&
-    Number.isFinite(task.slowRetryAt) && task.slowRetryAt <= time;
+  if (task?.status !== "failed" || task.claim != null) return false;
+  const due = task.nextAttemptAt ?? task.slowRetryAt;
+  return Number.isFinite(due) && due <= time;
 }
 
 function expiredBackgroundClaim(task, time) {
@@ -102,4 +103,4 @@ function expiredBackgroundClaim(task, time) {
 }
 
 module.exports = { publicAnswerOrigin, publicAnswerRefused, publicationAttempt, publicationClaim, publicationFailure, publicationRetry,
-  SLOW_RETRY_MS, FAILURE_CLASSES, backgroundFailure, slowBackgroundRetryDue, expiredBackgroundClaim };
+  FAILURE_CLASSES, backgroundFailure, slowBackgroundRetryDue, expiredBackgroundClaim };

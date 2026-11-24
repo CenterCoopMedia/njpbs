@@ -9,6 +9,7 @@
 const { defineSecret, defineString } = require("firebase-functions/params");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { admin, db } = require("./lib/firebase");
+const { platformLimit } = require("./lib/release-wait");
 const { accessTierReadsActive } = require("./lib/access-tier-activation");
 const { editorialEmailContent, editorialRecipient } = require("./lib/editorial-notice");
 const approvalRoleNames = require("./lib/staff-approval-role-names.json");
@@ -32,8 +33,8 @@ const STAFF_EMAIL_ADMIN_ORIGIN = defineString("CMS_STAFF_EMAIL_ADMIN_ORIGIN", {
 });
 
 const OUTBOX_COLLECTION = "staffAccessEmailOutbox";
-const MAX_ATTEMPTS = 5;
-const LEASE_MILLIS = 2 * 60 * 1000;
+// The sending lease outlives its longest holder, an HTTP request handler.
+const LEASE_MILLIS = (platformLimit("cloudFunctionsHttpSeconds") + 60) * 1000;
 const MAX_JSON_REQUEST_BYTES = 4 * 1024 * 1024;
 class EmailDeliveryError extends Error {
   constructor(message, { kind, status = null, cause = null } = {}) {
@@ -612,12 +613,10 @@ async function deliverStaffAccessEmail(id, deps = {}) {
     let nextAttemptAt = null;
     if (deliveryError.kind === "ambiguous") {
       state = "unknown";
-    } else if (
-      deliveryError.kind === "retryable" &&
-      attemptCount < MAX_ATTEMPTS
-    ) {
+    } else if (deliveryError.kind === "retryable") {
       state = "pending";
-      const backoffMinutes = 2 ** Math.max(0, attemptCount - 1);
+      // Pacing only: doubling pauses, at most an hour apart, until delivered.
+      const backoffMinutes = Math.min(2 ** Math.max(0, attemptCount - 1), 60);
       nextAttemptAt = new Date(now().getTime() + backoffMinutes * 60 * 1000);
     } else {
       state = "failed";

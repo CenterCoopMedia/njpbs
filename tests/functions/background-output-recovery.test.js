@@ -78,7 +78,7 @@ function owner(firestore = db) {
 const readWork = () => work.readNoBuildCloudWork({ runtime, now: time, read: async path => (await db.doc(path).get()).data() ?? null });
 const check = send => alerts.checkPublicContextAlerts({ firestore: db, now: () => time, send, log: { error() {}, info: (_message, data) => observations.push(...data.observations) } });
 
-it("alerts when only the video catalog exhausts its retries", async () => {
+it("alerts when only the video catalog fails an attempt", async () => {
   const catalog = "V".repeat(20);
   await db.runTransaction(async transaction => {
     const accepted = await publication.enqueuePublicContextInTransaction({ transaction, firestore: db, operationId: catalog,
@@ -88,7 +88,8 @@ it("alerts when only the video catalog exhausts its retries", async () => {
   const queue = db.doc(`cmsPublishQueue/${catalog}`);
   const batch = db.batch();
   for (const output of publication.OUTPUTS) batch.update(queue.collection("backgroundOutputs").doc(output), { status: "verified" });
-  batch.update(queue.collection("backgroundOutputs").doc("videoCatalog"), { status: "failed", attempts: 4, nextAttemptAt: null });
+  batch.update(queue.collection("backgroundOutputs").doc("videoCatalog"), { status: "failed", attempts: 4, nextAttemptAt: null,
+    lastAttempt: { failureClass: "validation", retryable: false } });
   batch.update(queue, { status: "failed" });
   await batch.commit();
   const sent = [];
@@ -98,7 +99,8 @@ it("alerts when only the video catalog exhausts its retries", async () => {
   expect(sent[0]).toContain("background output aggregate: failed");
 });
 
-async function exhaust() {
+// Four failed attempts. Each leaves its next attempt scheduled.
+async function failFour() {
   const worker = owner();
   for (let attempt = 1; attempt <= 4; attempt++) {
     await worker.recover();
@@ -107,17 +109,16 @@ async function exhaust() {
   await publication.settlePublicContext({ firestore: db, operationId, runtime });
 }
 
-it("wakes one slow transient attempt after ten minutes and seals the same failed aggregate on success", async () => {
+it("retries a transient failure past four attempts at its backoff and seals the aggregate on success", async () => {
   fault = { storage: 503 };
-  await exhaust();
+  await failFour();
   const failed = (await taskRef().get()).data();
-  expect(failed).toMatchObject({ attempts: 4, status: "failed", nextAttemptAt: null,
-    slowRetryAt: time + 600_000, lastAttempt: { failureClass: "storage_readback", retryable: true } });
-  expect((await db.doc(`cmsPublishQueue/${operationId}`).get()).data()).toMatchObject({ status: "failed", aggregateReceipt: null });
-  // Public search recovery stays paced; the verified input independently
-  // wakes private preview retention, as required by #4505.
-  expect(await readWork()).toEqual({ maintenance: false, reconcile: false, previewContext: true });
-  time = failed.slowRetryAt - 1;
+  expect(failed).toMatchObject({ attempts: 4, status: "failed", nextAttemptAt: time + 480_000,
+    slowRetryAt: null, lastAttempt: { failureClass: "storage_readback", retryable: true } });
+  expect((await db.doc(`cmsPublishQueue/${operationId}`).get()).data()).toMatchObject({ aggregateReceipt: null });
+  // Public search recovery stays paced.
+  expect((await readWork()).maintenance).toBe(false);
+  time = failed.nextAttemptAt - 1;
   await owner().recover();
   expect(builds).toBe(4);
   expect((await readWork()).maintenance).toBe(false);
@@ -138,31 +139,37 @@ it("wakes one slow transient attempt after ten minutes and seals the same failed
   expect(JSON.stringify(attempts.docs.map(row => row.data()))).not.toContain("private");
 });
 
-it("paces each further transient failure ten minutes apart and stops spending while billing is paused", async () => {
+it("doubles the pause after the fourth failure up to 30 minutes and stops spending while billing is paused", async () => {
   fault = { storage: "ECONNRESET" };
-  await exhaust();
-  time = (await taskRef().get()).data().slowRetryAt;
+  await failFour();
+  time = (await taskRef().get()).data().nextAttemptAt;
   await db.doc("system/billing").set({ disabled: true });
   expect((await readWork()).maintenance).toBe(false);
   await owner().recover();
   expect(builds).toBe(4);
   await db.doc("system/billing").delete();
   await owner().recover();
-  expect((await taskRef().get()).data()).toMatchObject({ attempts: 5, slowRetryAt: time + 600_000, nextAttemptAt: null });
+  expect((await taskRef().get()).data()).toMatchObject({ attempts: 5, slowRetryAt: null, nextAttemptAt: time + 960_000 });
   await owner().recover();
   expect(builds).toBe(5);
+  for (const attempts of [6, 7]) {
+    time = (await taskRef().get()).data().nextAttemptAt;
+    await owner().recover();
+    expect((await taskRef().get()).data()).toMatchObject({ status: "failed", attempts, nextAttemptAt: time + 1_800_000 });
+  }
+  expect(builds).toBe(7);
 });
 
-it.each(["corrupt", "validation", "permission"])("keeps %s failure terminal after the existing fast budget", async kind => {
+it.each(["corrupt", "validation", "permission"])("keeps retrying a %s failure after four attempts", async kind => {
   fault = kind === "corrupt" ? { corrupt: true } : kind === "permission" ? { storage: 403 } : { build: {} };
-  await exhaust();
-  expect((await taskRef().get()).data()).toMatchObject({ attempts: 4, nextAttemptAt: null, slowRetryAt: null,
+  await failFour();
+  expect((await taskRef().get()).data()).toMatchObject({ attempts: 4, nextAttemptAt: time + 480_000, slowRetryAt: null,
     lastAttempt: { failureClass: kind === "validation" ? "validation" : "storage_readback", retryable: false } });
-  time += 86_400_000;
+  time = (await taskRef().get()).data().nextAttemptAt;
   fault = null;
   await owner().recover();
-  expect(builds).toBe(4);
-  expect((await readWork()).maintenance).toBe(false);
+  expect(builds).toBe(5);
+  expect((await taskRef().get()).data()).toMatchObject({ attempts: 5, status: "verified" });
 });
 
 it("records timeout without retaining the provider message", async () => {
@@ -190,7 +197,7 @@ it("records a lost lease on its own attempt without overwriting the next claiman
   expect(attempts.docs[0].data()).toMatchObject({ failureClass: "lease_lost", retryable: true });
 });
 
-it("exhausts an interrupted fourth background claim before slow retrying the same child", async () => {
+it("retries an interrupted fourth background claim on the same child once its claim expires", async () => {
   fault = { storage: 503 };
   for (let attempt = 1; attempt <= 3; attempt++) {
     await owner().recover();
@@ -203,16 +210,12 @@ it("exhausts an interrupted fourth background claim before slow retrying the sam
   time += 3_639_999;
   await owner().recover();
   expect((await taskRef().get()).data()).toEqual(claimed);
-  time++;
-  await owner().recover();
-  expect(builds).toBe(3);
-  expect((await taskRef().get()).data()).toMatchObject({ status: "failed", attempts: 4, claim: null,
-    nextAttemptAt: null, slowRetryAt: time + 600_000, lastAttempt: { failureClass: "lease_lost", retryable: true } });
   const originalState = (await db.doc("cmsBackgroundOutputs/search").get()).data();
   expect(originalState.taskPath).toBe(taskRef().path);
-  time += 600_000;
+  time++;
   fault = null;
   await owner().recover();
+  expect(builds).toBe(4);
   expect((await taskRef().get()).data()).toMatchObject({ status: "verified", attempts: 5, claim: null,
     nextAttemptAt: null, runtime, revision: claimed.revision, contextDigest: claimed.contextDigest });
   expect((await db.doc("cmsBackgroundOutputs/search").get()).data()).toMatchObject({
@@ -220,21 +223,22 @@ it("exhausts an interrupted fourth background claim before slow retrying the sam
   expect((await db.collection("cmsPublishQueue").get()).docs.map(row => row.id)).toEqual([operationId]);
 });
 
-it("wakes an interrupted final slow claim once to record its lost lease and next slow due time", async () => {
+it("reclaims an expired claim after five attempts and schedules its next retry", async () => {
   fault = { storage: 503 };
-  await exhaust();
+  await failFour();
   await taskRef().update({ attempts: 5, claim: "11111111-1111-4111-8111-111111111111", nextAttemptAt: time - 1, startedAt: time - 60_000 });
   expect((await readWork()).maintenance).toBe(true);
   await owner().recover();
-  expect(builds).toBe(4);
-  expect((await taskRef().get()).data()).toMatchObject({ attempts: 5, nextAttemptAt: null, claim: null,
-    slowRetryAt: time + 600_000, lastAttempt: { failureClass: "lease_lost" } });
+  expect(builds).toBe(5);
+  expect((await taskRef().get()).data()).toMatchObject({ status: "failed", attempts: 6, nextAttemptAt: time + 1_800_000, slowRetryAt: null });
   expect((await readWork()).maintenance).toBe(false);
 });
 
-it("alerts output and aggregate exhaustion on the next minute pass, deduplicates and retries delivery", async () => {
+it("alerts a stalled failed output on the next minute pass, deduplicates and retries delivery", async () => {
   fault = { storage: 403 };
-  await exhaust();
+  await failFour();
+  // The retry is overdue by the stalled-work window: its wake stopped.
+  time = (await taskRef().get()).data().nextAttemptAt + 900_000;
   const messages = [];
   await check(async () => { throw new Error("private send failure"); });
   await check(async message => { messages.push(message); });
@@ -244,7 +248,6 @@ it("alerts output and aggregate exhaustion on the next minute pass, deduplicates
   await check(async message => { messages.push(message); });
   expect(messages).toHaveLength(1);
   expect(messages[0]).toContain(`background output search: failed; failure class storage_readback; job ${operationId}`);
-  expect(messages[0]).toContain(`background output aggregate: failed; failure class storage_readback; job ${operationId}`);
   expect(messages[0]).not.toContain("private");
 });
 
@@ -265,26 +268,24 @@ it("logs a second attempt without Telegram", async () => {
   expect(observations).toHaveLength(1);
 });
 
-it("logs scheduled slow recovery and alerts if it later becomes terminal", async () => {
+it("logs a scheduled retry and alerts if its wake later stalls", async () => {
   fault = { storage: 503 };
-  await exhaust();
+  await failFour();
   const messages = [];
   await check(async message => messages.push(message));
   expect(messages).toEqual([]);
   expect(observations.some(value => value.reason === "failed")).toBe(true);
-  expect((await taskRef().get()).data().slowRetryAt).toBe(time + 600_000);
-  await taskRef().update({ slowRetryAt: null });
+  time = (await taskRef().get()).data().nextAttemptAt + 900_000;
   await check(async message => messages.push(message));
   await check(async message => messages.push(message));
   expect(messages).toHaveLength(1);
   expect(messages[0]).toContain("search: failed");
-  expect(messages[0]).toContain("aggregate: failed");
 });
 
-it.each(["slow_retry", "expired_claim"])("escalates overdue %s output and aggregate recovery exactly once", async kind => {
+it.each(["retry", "expired_claim"])("escalates overdue %s output recovery exactly once", async kind => {
   fault = { storage: 503 };
-  await exhaust();
-  const dueAt = (await taskRef().get()).data().slowRetryAt;
+  await failFour();
+  const dueAt = (await taskRef().get()).data().nextAttemptAt;
   if (kind === "expired_claim") await taskRef().update({ status: "pending", claim: "expired-final-claim",
     nextAttemptAt: dueAt, slowRetryAt: null });
   const messages = [];
@@ -295,7 +296,6 @@ it.each(["slow_retry", "expired_claim"])("escalates overdue %s output and aggreg
   time++; await observe(); await observe();
   expect(messages).toHaveLength(1);
   expect(messages[0]).toContain("search: failed");
-  expect(messages[0]).toContain("aggregate: failed");
 });
 
 it.each([false, true])("alerts aggregate preparation failure even when families verified=%s", async verified => {
@@ -304,31 +304,6 @@ it.each([false, true])("alerts aggregate preparation failure even when families 
   const messages = [];
   await check(async message => { messages.push(message); });
   expect(messages).toEqual([`NJ PBS background output aggregate: failed; failure class validation; job ${operationId}.`]);
-});
-
-it("alerts a repeated output and aggregate failure after staff retries the same job", async () => {
-  fault = { storage: 403 };
-  await exhaust();
-  const first = (await taskRef().get()).data();
-  const messages = [];
-  await check(async message => { messages.push(message); });
-  await db.runTransaction(async transaction => {
-    const retry = await publication.retryPublicContextInTransaction({ transaction, firestore: db, operationId, runtime });
-    retry();
-  });
-  expect((await taskRef().get()).data()).toMatchObject({ status: "pending", attempts: 0, revision: first.revision });
-  await exhaust();
-  const second = (await taskRef().get()).data();
-  expect(second.alertEpoch).not.toBe(first.alertEpoch);
-  expect(second).toMatchObject({ attempts: 4, revision: first.revision, status: "failed", contextDigest });
-  await check(async message => { messages.push(message); });
-  await check(async message => { messages.push(message); });
-  expect(messages).toHaveLength(2);
-  for (const message of messages) {
-    expect(message).toContain(`background output search: failed; failure class storage_readback; job ${operationId}`);
-    expect(message).toContain(`background output aggregate: failed; failure class storage_readback; job ${operationId}`);
-    expect(message).not.toContain("private");
-  }
 });
 
 it("alerts repeated preparation failure after staff retries without any output attempt", async () => {
@@ -353,7 +328,7 @@ it("alerts repeated preparation failure after staff retries without any output a
   expect(builds).toBe(0);
 });
 
-it("bounds terminal Telegram delivery and records every diagnostic once", async () => {
+it("bounds failed-output Telegram delivery and records every diagnostic once", async () => {
   const jobId = "J".repeat(200);
   for (const output of ["home", ...Object.keys(paths), "programs", "events"]) {
     const taskPath = `cmsPublishQueue/${jobId}/backgroundOutputs/${output}`;
@@ -374,10 +349,10 @@ it("bounds terminal Telegram delivery and records every diagnostic once", async 
   expect(new Set(observations.map(value => `${value.output}:${value.reason}`)).size).toBe(18);
 });
 
-it("allows only one slow claimant while the first worker is building", async () => {
+it("allows only one claimant of a fifth attempt while the first worker is building", async () => {
   fault = { storage: 503 };
-  await exhaust();
-  time = (await taskRef().get()).data().slowRetryAt;
+  await failFour();
+  time = (await taskRef().get()).data().nextAttemptAt;
   fault = null;
   let entered;
   let release;

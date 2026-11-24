@@ -31,9 +31,6 @@ const {
   enqueueSerializerBuild,
 } = require("./lib/cms-publish-serializer-queue");
 const {
-  reconcileStalePublishRows,
-} = require("./lib/publish-reconcile");
-const {
   assertPublishedMediaSafe,
 } = require("./lib/published-media-safety");
 const {
@@ -166,15 +163,9 @@ async function assertPublishReady(fields = {}, deps = {}) {
   // The transport is metered and the queue requires terminal writeback, so all
   // readiness gates run before a caller mutates lifecycle state or creates a row.
   await assertBillingEnabledFn(firestore);
-  const reconciledCount = await reconcileStalePublishRows({ firestore, now });
-  if (reconciledCount > 0) {
-    log.info("cmsPublish: reconciled stale queue rows", {
-      count: reconciledCount,
-    });
-  }
 
   if (transport === SERIALIZER_TRANSPORT) {
-    return { transport, reconciledCount };
+    return { transport };
   }
 
   try {
@@ -185,7 +176,7 @@ async function assertPublishReady(fields = {}, deps = {}) {
   if (!resolveWritebackConfigured(isWritebackConfigured)) {
     throw failedPrecondition(WRITEBACK_NOT_CONFIRMED_ERROR);
   }
-  return { transport, reconciledCount };
+  return { transport };
 }
 
 class PublishDispatchError extends Error {
@@ -737,7 +728,6 @@ module.exports = {
   createCmsPublishHandler,
   assertPublishReady,
   authorizePublishRequest,
-  reconcileStalePublishRows,
   enqueuePublishBuild,
   buildDispatchPayload,
   dispatchPublish,

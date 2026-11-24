@@ -19,16 +19,14 @@ function transferFor(source) {
   const config = runtimeAwsConfig();
   const r2 = privateVideoStorage(true);
   if (source?.roleArn) s3 ??= new S3Client({ region: config.region,
-    credentials: createAwsRoleCredentialProvider({ ...config, roleArn: source.roleArn }), maxAttempts: 2,
-    requestHandler: { connectionTimeout: 3000, requestTimeout: 30000, throwOnRequestTimeout: true } });
+    credentials: createAwsRoleCredentialProvider({ ...config, roleArn: source.roleArn }), maxAttempts: 2 });
   return createPrivateVideoTransfer({ s3, r2: r2.client, bucket: r2.bucket, config });
 }
 
 function privateAudioFor(firestore = db) {
   const config = require("./video-transcripts").transcriptConfig();
   const client = config.controlRoleArn ? new S3Client({ region: config.region,
-    credentials: createAwsRoleCredentialProvider({ ...config, roleArn: config.controlRoleArn }), maxAttempts: 2,
-    requestHandler: { connectionTimeout: 3000, requestTimeout: 30000, throwOnRequestTimeout: true } }) : undefined;
+    credentials: createAwsRoleCredentialProvider({ ...config, roleArn: config.controlRoleArn }), maxAttempts: 2 }) : undefined;
   return require("./lib/private-transcript-audio").createPrivateTranscriptAudio({
     firestore, s3: client, config, storage: privateVideoStorage,
   });

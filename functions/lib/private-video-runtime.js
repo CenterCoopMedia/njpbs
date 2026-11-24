@@ -27,11 +27,8 @@ function configuredStorage(mode) {
   if (!accessKeyId || !secretAccessKey) throw Error("private_video_configuration_invalid");
   let client = clients.get(mode);
   if (!client) {
-    // Streaming reads use the caller's header/body abort deadlines. An idle
-    // socket limit could cut off input while the provider upload drains it.
-    const requestTimeout = mode === "stream" ? 0 : write ? 30000 : 1500;
-    client = new S3Client({ ...r2ClientConfig({ endpoint, accessKeyId, secretAccessKey }), maxAttempts: write ? 2 : 1,
-      requestHandler: { connectionTimeout: write ? 3000 : 1000, requestTimeout, throwOnRequestTimeout: true } });
+    // No request timeout: a call ends when R2 answers or the caller cancels.
+    client = new S3Client({ ...r2ClientConfig({ endpoint, accessKeyId, secretAccessKey }), maxAttempts: write ? 2 : 1 });
     clients.set(mode, client);
   }
   return { client, bucket };

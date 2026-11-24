@@ -13,13 +13,13 @@ const { adminLogEntry, AUDIT_COLLECTIONS } = require("./audit");
 const { assertBillingEnabled } = require("./billing-state");
 
 const { originalStatusRef, readOriginalStatuses } = require("./source-original-status");
+const { callOutside } = require("./release-wait");
 
 const RESTORES = "mediaSourceOriginalRestores";
 const CACHE_MS = 15 * 60 * 1000;
 const CHECK_MS = 15 * 60 * 1000;
 // Staff text in Boardwalk and the staff guide says "at least 7 days". Change them together.
 const DEEP_ARCHIVE_RESTORE_DAYS = 7;
-const MAX_WAIT_MS = 72 * 60 * 60 * 1000;
 const problem = (status, message) => Object.assign(new Error(message), { status });
 
 function sameOriginal(left, right) {
@@ -61,8 +61,8 @@ function createOriginalStorage(config, deps = {}) {
     return clients.get(source.roleArn);
   }
   return {
-    async head(source, asset, { timeoutMs = 2500 } = {}) {
-      return verifyTarget(clientFor(source), originalTarget(source, asset), { abortSignal: AbortSignal.timeout(timeoutMs) });
+    async head(source, asset) {
+      return callOutside("S3 original HeadObject", () => verifyTarget(clientFor(source), originalTarget(source, asset)));
     },
     async restore(source, asset, storageClass) {
       // Intelligent-Tiering moves the exact version back to Frequent Access. Days is invalid here.
@@ -70,8 +70,8 @@ function createOriginalStorage(config, deps = {}) {
       const RestoreRequest = storageClass === "DEEP_ARCHIVE"
         ? { Days: DEEP_ARCHIVE_RESTORE_DAYS, GlacierJobParameters: { Tier: "Standard" } } : { Tier: "Standard" };
       try {
-        await clientFor(source).send(new RestoreObjectCommand({ ...objectRequest(originalTarget(source, asset)), RestoreRequest }),
-          { abortSignal: AbortSignal.timeout(5000) });
+        await callOutside("S3 original RestoreObject", () =>
+          clientFor(source).send(new RestoreObjectCommand({ ...objectRequest(originalTarget(source, asset)), RestoreRequest })));
       } catch (error) {
         if (error?.name !== "RestoreAlreadyInProgress") throw mapOriginalStorageError(error);
       }
@@ -109,14 +109,11 @@ async function refreshOriginal({ firestore, storage, source, asset, now = Date.n
 async function refreshListedOriginals({ firestore, storage, source, assets, records, log }) {
   if (!ORIGINAL_BUCKETS.has(source.bucket)) return records;
   const originals = await readOriginalStatuses(firestore, assets);
-  const deadline = Date.now() + 1500;
-  const boundedStorage = { ...storage, head: (itemSource, asset) => storage.head(itemSource, asset,
-    { timeoutMs: Math.max(1, deadline - Date.now()) }) };
   let next = 0;
   async function worker() {
-    while (next < assets.length && Date.now() < deadline) {
+    while (next < assets.length) {
       const asset = assets[next++];
-      try { originals.set(asset.id, await refreshOriginal({ firestore, storage: boundedStorage, source, asset, cached: originals.get(asset.id) })); }
+      try { originals.set(asset.id, await refreshOriginal({ firestore, storage, source, asset, cached: originals.get(asset.id) })); }
       catch (error) { log.warn("Original status check failed", { assetId: asset.id, ...safeStorageDiagnostic(error) }); }
     }
   }
@@ -214,10 +211,6 @@ async function processOriginalRestores({ firestore, storage, registry, now = Dat
       const asset = assetSnapshot.exists ? parseSourceMediaAsset(assetSnapshot.id, assetSnapshot.data()) : null;
       if (!asset || !sameOriginal({ ...asset, lifecycle: "active" }, job)) {
         await finishRestore(firestore, snapshot.ref, job, null, "stale");
-        continue;
-      }
-      if (now - job.requestedAt > MAX_WAIT_MS) {
-        await finishRestore(firestore, snapshot.ref, job, null, "failed");
         continue;
       }
       if (!source || !ORIGINAL_BUCKETS.has(source.bucket) || source.bucket !== job.bucket ||

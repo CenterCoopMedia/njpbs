@@ -100,15 +100,23 @@ it("recovers a missed wake and expired claim, renews exact ownership, and refuse
   await complete(next, second, 62_002);
 });
 
-it("records final expired work as failed once and releases its journal without another execution", async () => {
+it("keeps claiming expired work past any attempt count and always schedules a failed attempt's retry", async () => {
   await register(next);
   const { taskId } = await enqueue(next, input());
-  for (let attempt = 0; attempt < 4; attempt++) expect(Boolean(await claim(next, taskId, 1000 + attempt * 60_001))).toBe(true);
-  expect(await claim(next, taskId, 1000 + 4 * 60_001)).toBe(null);
-  expect((await stored(next, taskId)).status).toBe("failed");
-  expect((await stored(next, taskId)).nextAttemptAt).toBe(null);
-  expect((await stored(next, taskId)).lastFailure).toBe("lease-expired");
-  expect((await work.readPublicReleasePairWork({ firestore: db, pair: next, now: 1_000_000 })).taskIds).toEqual([]);
+  let claimed;
+  for (let attempt = 0; attempt < 6; attempt++) {
+    claimed = await claim(next, taskId, 1000 + attempt * 60_001);
+    expect(Boolean(claimed)).toBe(true);
+  }
+  expect((await stored(next, taskId)).attempts).toBe(6);
+  const now = 1000 + 5 * 60_001 + 1;
+  await expect(work.settlePublicReleasePairWork({ firestore: db, pair: next, taskId, token: claimed.token,
+    manifestDigest: null, failureCode: "render-failed", now })).rejects.toThrow();
+  await work.settlePublicReleasePairWork({ firestore: db, pair: next, taskId, token: claimed.token,
+    manifestDigest: null, failureCode: "render-failed", retryAt: now + 1000, now });
+  expect(await stored(next, taskId)).toMatchObject({ status: "failed", attempts: 6, nextAttemptAt: now + 1000, lastFailure: "render-failed" });
+  expect((await work.readPublicReleasePairWork({ firestore: db, pair: next, now: now + 1000 })).taskIds).toEqual([taskId]);
+  expect(Boolean(await claim(next, taskId, now + 1000))).toBe(true);
 });
 
 it("routes private wakes by exact incarnation and uses the same durable predicate for idle/minute recovery", async () => {

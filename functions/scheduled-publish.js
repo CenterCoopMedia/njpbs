@@ -159,11 +159,6 @@ async function defaultAssertPublishedMediaSafe(fields) {
   return assertPublishedMediaSafe(fields);
 }
 
-async function defaultReconcileStalePublishRows(fields) {
-  const { reconcileStalePublishRows } = require("./lib/publish-reconcile");
-  return reconcileStalePublishRows(fields);
-}
-
 async function defaultEnqueuePublish(fields) {
   const { enqueuePublishBuild } = require("./publish");
   return enqueuePublishBuild(fields);
@@ -174,7 +169,6 @@ function createScheduledPublishRunner(deps = {}) {
     firestore = db,
     assertPublishReadyFn = defaultAssertPublishReady,
     assertPublishedMediaSafeFn = defaultAssertPublishedMediaSafe,
-    reconcileStaleFn = defaultReconcileStalePublishRows,
     enqueuePublishFn = defaultEnqueuePublish,
     versionHistoryEntryFn = versionHistoryEntry,
     adminLogEntryFn = adminLogEntry,
@@ -339,11 +333,6 @@ function createScheduledPublishRunner(deps = {}) {
       );
 
     if (candidates.length === 0) {
-      // Keep this fallback until the dedicated Healthchecks-bound reconciliation
-      // scheduler is provisioned and exported. A claimed stale queue is not an
-      // isPendingBuild candidate, so an empty scheduled-publish tick must still
-      // release it during the transition.
-      if (!scoped) await reconcileStaleFn({ firestore });
       return { publishedCount: 0, queueId: null, changes: [] };
     }
 
@@ -1037,11 +1026,6 @@ function createScheduledPublishRunner(deps = {}) {
 
     if (preparedBatch.allChanges.length === 0) {
       if (buildReadinessError) throw buildReadinessError;
-      // Same fallback as the no-candidate tick above. A window of deterministic
-      // blockers moves each row to an audited failure and reaches this line with
-      // nothing enqueued; the transient drops (a deleted document, one that
-      // stopped being due) reach it too. Run reconciliation in every case.
-      if (!scoped) await reconcileStaleFn({ firestore });
       return { publishedCount: 0, queueId: null, changes: [] };
     }
     let queued = null;

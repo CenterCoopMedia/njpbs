@@ -9,7 +9,7 @@ const { isPostRouteSlug, postRoutePath } = require("./post-slug-contract");
 const { collectPublishedMediaUsage, MediaUsageError } = require("./media-usage");
 const { publiclyVisible } = require("./public-video-references");
 const { cloudBillingPaused } = require("./no-build-cloud-work");
-const { SLOW_RETRY_MS, backgroundFailure, publicationAttempt, publicationClaim, publicationFailure } = require("./background-output-attempt");
+const { backgroundFailure, publicationAttempt, publicationClaim, publicationFailure } = require("./background-output-attempt");
 
 const { OUTPUTS, outputForPath, backgroundOutputForPath, canonicalPath, isBackgroundAssetPath } = require("./post-background-paths");
 const { RECORD_FAMILIES, CHECKPOINT_FAMILIES, VIDEO_CATALOG_OUTPUT, outputLimits } = require("./no-build-record-namespace");
@@ -356,19 +356,6 @@ function createPostBackgroundOutputs({ firestore, enabled = false, accepting = e
       } else if (state.status === "verified") return null;
       const decision = publicationAttempt(task, "background", now());
       if (!decision) return null;
-      if (decision === "exhaust") {
-        // An interrupted final claim still gets a terminal outcome and a slow
-        // retry. Do not let an expired lease become a permanent silent stop.
-        const interrupted = typeof task.claim === "string";
-        const lastAttempt = { attempt: task.attempts, startedAt: task.startedAt ?? now() - leaseMs,
-          durationMs: Math.max(0, now() - (task.startedAt ?? now() - leaseMs)),
-          failureClass: interrupted ? "lease_lost" : "validation", retryable: interrupted };
-        transaction.update(ref, { ...publicationFailure(task, "background", now()), error: "background_retry_exhausted",
-          lastAttempt, slowRetryAt: interrupted ? now() + SLOW_RETRY_MS : null });
-        if (/^[a-f0-9-]{36}$/.test(task.claim ?? "")) transaction.set(ref.collection("attempts").doc(task.claim), lastAttempt);
-        transaction.update(stateRef(output), { status: "failed" });
-        return null;
-      }
       const claim = randomUUID();
       const next = { ...task, ...runtimeFields(runtime), contextDigest, rendererSha: context.rendererSha,
         ...(context.sourceReadAt === undefined ? {} : { sourceReadAt: context.sourceReadAt }),
@@ -477,8 +464,7 @@ function createPostBackgroundOutputs({ firestore, enabled = false, accepting = e
       const lastAttempt = { ...attempt, ...(receipt ? { failureClass: null, retryable: false } : failure) };
       const outcome = receipt ? { status, claim: null, nextAttemptAt: null, error: null } : publicationFailure(claimed, "background", now());
       transaction.set(ref.collection("attempts").doc(claimed.claim), lastAttempt);
-      transaction.update(ref, { ...outcome, receipt, lastAttempt,
-        slowRetryAt: !receipt && outcome.nextAttemptAt === null && failure.retryable ? now() + SLOW_RETRY_MS : null });
+      transaction.update(ref, { ...outcome, receipt, lastAttempt, slowRetryAt: null });
       transaction.update(stateRef(output), { status, receipt,
         ...(receipt ? { previousAssets, lastGood: { receipt, after: source }, pendingSince: null, withdrawalDeadline: null, withdrawalDeadlineRevision: null } : {}) });
       if (receipt && catalogRef && !retainedCatalog.exists) transaction.create(catalogRef, homeSource);

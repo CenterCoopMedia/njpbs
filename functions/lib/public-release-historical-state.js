@@ -46,7 +46,6 @@ async function reconstructPublicReleaseState({ firestore, sourceOperationId, log
     const baseline = await baselines.assertReadPublicReleaseChangeBaselineInTransaction({ firestore, transaction, logBaselineDigest: actualBaselineDigest });
     const documents = new Map(), sourceBodies = new Map(), sourceMembers = new Map();
     const apply = (contentDigest, body) => {
-      budget.check();
       sourceBodies.set(contentDigest, body);
       for (const { path, data } of body.documents) {
         if (data === null) { documents.delete(path); sourceMembers.delete(path); }
@@ -61,7 +60,6 @@ async function reconstructPublicReleaseState({ firestore, sourceOperationId, log
     let cursor = receipt.baselineCursor, final = null;
     const accepted = [];
     for (let start = cursor.sequence + 1; start <= upper; start += 100) {
-      budget.check();
       const refs = Array.from({ length: Math.min(100, upper - start + 1) }, (_, index) => firestore.doc(`${ROOT}/entries/${String(start + index).padStart(16, "0")}`));
       const rows = await transaction.getAll(...refs);
       const entries = rows.map(row => log.parsePublicReleaseChange(row.data()));
@@ -102,7 +100,6 @@ async function reconstructPublicReleaseState({ firestore, sourceOperationId, log
       if (matches.length !== 1) refuse(); originalPair = matches[0];
     }
     const renderedAt = final ? new Date(final.createdAt).toISOString() : receipt.createdAt;
-    budget.check();
     return { receipt, logBaselineDigest: actualBaselineDigest, baselineMembers: baseline.sourceMembers, cursor, documents,
       sourceBodies, sourceMembers, accepted, event: final, originalPair, renderedAt,
       headroom: sourceLimits.historicalSourceHeadroom({ changes, ...budget.usage() }) };

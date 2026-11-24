@@ -137,16 +137,6 @@ describe("alignment queue persistence", () => {
     expect((await slotRef.get()).data()).toMatchObject({ kind: "alignment", jobId: eligible.alignmentRef.id });
   });
 
-  it("retires an exhausted job and claims the next job without another worker poll", async () => {
-    const exhausted = await queue("exhausted");
-    const eligible = await queue("eligible", 1);
-    await exhausted.alignmentRef.update({ attempt: alignment.MAX_ATTEMPTS });
-
-    expect((await claim())?.alignment.id).toBe(eligible.alignmentRef.id);
-    expect((await exhausted.alignmentRef.get()).data()).toMatchObject({ active: false,
-      phase: "needs_reconciliation", errorCode: "alignment_worker_lost" });
-  });
-
   it("replaces a stale live alignment slot with the next eligible claim", async () => {
     const stale = await queue("stale-owner");
     await claim();

@@ -21,7 +21,6 @@ const WORKER_READY_MS = 15 * 60_000;
 const WORKER_RECORD_MS = 5 * 60_000;
 const ENGINE = "ffmpeg-orientation-v1";
 const LEASE_MS = 120_000;
-const MAX_ATTEMPTS = 3;
 const MAX_DURATION_SECONDS = 3600;
 // The worker accepts the same 2 GB input as transcription.
 const MAX_INPUT_BYTES = 2_000_000_000;
@@ -220,12 +219,6 @@ async function claimExportJob({ firestore, now = Date.now() }) {
         continue;
       }
       if (job.leaseToken && job.leaseUntil > now && slot?.kind === "orientation" && slot.jobId === job.id) return job;
-      if (!job.uploadIssued && job.attempt >= MAX_ATTEMPTS) {
-        tx.update(jobRef, { active: false, phase: "needs_reconciliation", leaseToken: null, leaseUntil: 0,
-          errorCode: "export_worker_lost", updatedAt: at });
-        releasePreviewHold(tx, hold);
-        continue;
-      }
       // A claim that only checks an issued upload is not a render attempt.
       const changes = { phase: "running", leaseToken: randomUUID(), leaseUntil: now + LEASE_MS,
         attempt: job.uploadIssued ? job.attempt : job.attempt + 1, stage: "downloading", updatedAt: at };
@@ -497,6 +490,6 @@ function workerJob(job, input) {
     durationSeconds: job.input.durationSeconds, maxOutputBytes: MAX_OUTPUT_BYTES, input };
 }
 
-module.exports = { EXPORTS, STRAYS, ENGINE, FRAMES, LEASE_MS, MAX_ATTEMPTS, MAX_DURATION_SECONDS, MAX_OUTPUT_BYTES,
+module.exports = { EXPORTS, STRAYS, ENGINE, FRAMES, LEASE_MS, MAX_DURATION_SECONDS, MAX_OUTPUT_BYTES,
   exportId, parseExportRequest, requestExport, listExports, recordExportWorker, publicExport, claimExportJob, withExportLease,
   heartbeatExportJob, failExportJob, completeExportJob, settleIssuedUpload, settleExpiredUploads, checkStrayUpload, parseExportWorkerRequest, workerJob };

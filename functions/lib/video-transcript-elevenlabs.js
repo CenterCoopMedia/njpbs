@@ -2,12 +2,12 @@
 
 const { createHash, randomBytes } = require("node:crypto");
 const { Readable } = require("node:stream");
+const { callOutside } = require("./release-wait");
 const ENDPOINT = "https://api.elevenlabs.io/v1/speech-to-text";
 const MODEL = "scribe_v2";
 const MAX_INPUT_BYTES = 2_000_000_000;
 const MAX_RESULT_BYTES = 16 * 1024 * 1024;
 const MAX_DURATION_SECONDS = 7200;
-const TIMEOUT_MS = 600_000;
 const LANGUAGE = { "en-US": "en", "es-US": "es" };
 
 class AdapterError extends Error {
@@ -45,8 +45,7 @@ function validateInput(input, key, settings, options) {
   }
   if (!settings || Object.keys(settings).some((name) => !["languageCode", "maxSpeakers"].includes(name)) ||
       !Object.hasOwn(LANGUAGE, settings.languageCode) || !Number.isInteger(settings.maxSpeakers) ||
-      settings.maxSpeakers < 2 || settings.maxSpeakers > 10 || typeof options.fetchFn !== "function" ||
-      !Number.isInteger(options.timeoutMs) || options.timeoutMs < 1 || options.timeoutMs > TIMEOUT_MS) {
+      settings.maxSpeakers < 2 || settings.maxSpeakers > 10 || typeof options.fetchFn !== "function") {
     throw new AdapterError("elevenlabs_settings_invalid", "pre_submission");
   }
 }
@@ -180,7 +179,7 @@ async function readResult(response) {
     }
     return JSON.parse(Buffer.concat(chunks).toString("utf8"));
   } finally {
-    // Cancellation must not extend the submission deadline on a broken transport.
+    // Cancellation must not hold the result on a broken transport.
     void reader.cancel().catch(() => {});
     reader.releaseLock();
   }
@@ -195,16 +194,17 @@ async function readResult(response) {
  * follows the account default; this does not promise zero retention.
  */
 async function transcribe(input, key, settings, options = {}) {
-  const { fetchFn, timeoutMs = TIMEOUT_MS, signal, recordCompleted } = options;
-  validateInput(input, key, settings, { fetchFn, timeoutMs });
+  const { fetchFn, signal, recordCompleted } = options;
+  validateInput(input, key, settings, { fetchFn });
   if (signal !== undefined && !(signal instanceof AbortSignal)) throw new AdapterError("elevenlabs_signal_invalid", "pre_submission");
   if (signal?.aborted) throw new AdapterError("elevenlabs_cancelled", "pre_submission");
   const controller = new AbortController();
   const upload = multipart(input, settings, controller.signal);
-  let timer;
-  let rejectDeadline;
-  const stop = () => { controller.abort(); upload.body.destroy(); input.stream.destroy(); rejectDeadline(uncertain()); };
-  const deadline = new Promise((_, reject) => { rejectDeadline = reject; timer = setTimeout(stop, timeoutMs); });
+  // The caller's cancellation is the only stop. The single-pass upload is
+  // never retried: a lost response stays uncertain for reconciliation.
+  let rejectCancelled;
+  const stop = () => { controller.abort(); upload.body.destroy(); input.stream.destroy(); rejectCancelled(uncertain()); };
+  const cancelled = new Promise((_, reject) => { rejectCancelled = reject; });
   signal?.addEventListener("abort", stop, { once: true });
   try {
     const submit = async () => {
@@ -218,8 +218,7 @@ async function transcribe(input, key, settings, options = {}) {
       if (!upload.state.verified || controller.signal.aborted) throw uncertain();
       return document;
     };
-    const document = await Promise.race([submit(), deadline]);
-    clearTimeout(timer);
+    const document = await Promise.race([submit(), cancelled]);
     signal?.removeEventListener("abort", stop);
     const transcriptionId = document?.transcription_id;
     const inputSha256 = upload.state.inputSha256;
@@ -233,7 +232,6 @@ async function transcribe(input, key, settings, options = {}) {
     if (error instanceof AdapterError) throw error;
     throw uncertain();
   } finally {
-    clearTimeout(timer);
     signal?.removeEventListener("abort", stop);
     controller.abort();
     upload.body.destroy();
@@ -246,8 +244,8 @@ async function retrieveTranscript({ transcriptionId, inputSha256 }, key, setting
   const unavailable = () => new AdapterError("elevenlabs_result_unavailable", "retry_recovery");
   let response;
   try {
-    response = await fetchFn(`${ENDPOINT}/transcripts/${transcriptionId}`, { method: "GET", redirect: "error",
-      signal: AbortSignal.timeout(30_000), headers: { "xi-api-key": key.toString("ascii") } });
+    response = await callOutside("ElevenLabs transcript GET", () => fetchFn(`${ENDPOINT}/transcripts/${transcriptionId}`,
+      { method: "GET", redirect: "error", headers: { "xi-api-key": key.toString("ascii") } }));
   } catch { throw unavailable(); }
   if (!response.ok) {
     void response.body?.cancel().catch(() => {});
@@ -265,5 +263,5 @@ async function retrieveTranscript({ transcriptionId, inputSha256 }, key, setting
   return { segments: normalizeResult(document, settings.durationSeconds, settings.maxSpeakers), model: MODEL, inputSha256, transcriptionId };
 }
 
-module.exports = { MODEL, ENDPOINT, MAX_INPUT_BYTES, MAX_RESULT_BYTES, MAX_DURATION_SECONDS, TIMEOUT_MS,
+module.exports = { MODEL, ENDPOINT, MAX_INPUT_BYTES, MAX_RESULT_BYTES, MAX_DURATION_SECONDS,
   normalizeResult, retrieveTranscript, transcribe, validTranscriptionId };

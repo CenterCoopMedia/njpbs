@@ -8,6 +8,7 @@ const { db } = require("./firebase");
 const { assertBillingEnabled } = require("./billing-state");
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 const { createAwsRoleCredentialProvider } = require("./aws-workload-credentials");
+const { callOutside } = require("./release-wait");
 const { MAX_RESULT_BYTES, normalizeTranscript, transcriptExports, transcriptVtt, transcriptLog, transcriptSrt } = require("./video-transcript-contract");
 const { createTranscriptAudioRuntime } = require("./video-transcript-audio-runtime");
 const { processingChanges } = require("./video-processing-status");
@@ -97,12 +98,12 @@ const PREPARED_AUDIO_FORMATS = new Set(["m4a", "mp4"]);
 function createAmazonTranscriptReader(config, transcribe = new TranscribeClient({
   region: config.region, maxAttempts: 1,
   credentials: createAwsRoleCredentialProvider({ roleArn: config.controlRoleArn, audience: config.audience, region: config.region }),
-  requestHandler: { connectionTimeout: 5000, requestTimeout: 15000, throwOnRequestTimeout: true },
 })) {
   return async job => {
     let provider;
     try {
-      provider = (await transcribe.send(new GetTranscriptionJobCommand({ TranscriptionJobName: jobName(job) }))).TranscriptionJob;
+      provider = (await callOutside("Transcribe GetTranscriptionJob", () =>
+        transcribe.send(new GetTranscriptionJobCommand({ TranscriptionJobName: jobName(job) })))).TranscriptionJob;
     } catch (error) {
       // Transcribe also uses BadRequestException when the exact job is missing.
       if (error.name === "BadRequestException" && /couldn't be found|cannot be found|not found|does not exist/i.test(error.message ?? "")) return null;

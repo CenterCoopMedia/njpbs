@@ -909,48 +909,6 @@ describe("cms publish function", () => {
     expect(newer.publishBuildQueueId).toBeUndefined();
   });
 
-  it("keeps inline reconciliation until the scheduled replacement is enabled", async () => {
-    const now = Date.parse("2026-07-09T16:00:00.000Z");
-    const oneDay = 24 * 60 * 60 * 1000;
-    const staleTriggeredAt = admin.firestore.Timestamp.fromMillis(now - oneDay);
-    const stalePublishingRef = db
-      .collection("cmsPublishQueue")
-      .doc("stale-publishing");
-    const staleContentRef = db.collection("cmsPages").doc("contact");
-
-    await Promise.all([
-      stalePublishingRef.set({
-        status: "publishing",
-        triggeredAt: staleTriggeredAt,
-        completedAt: null,
-        error: null,
-        changes: [
-          { collection: "cmsPages", id: "contact", sourceVersion: 3 },
-        ],
-      }),
-      staleContentRef.set({
-        status: "published",
-        publishBuildPending: true,
-        publishBuildQueueId: "stale-publishing",
-        published: { sourceVersion: 3 },
-      }),
-    ]);
-
-    await expect(publish.assertPublishReady({ firestore: db }, { now: () => now }))
-      .resolves.toMatchObject({ transport: "serializer", reconciledCount: 1 });
-    expect((await stalePublishingRef.get()).data()).toMatchObject({
-      status: "failed",
-      error:
-        "Publish marked failed during reconciliation because no terminal workflow status was recorded within 24 hours.",
-    });
-    expect((await staleContentRef.get()).data()).toMatchObject({
-      status: "published",
-      publishBuildPending: true,
-      publishBuildQueueId: null,
-      published: { sourceVersion: 3 },
-    });
-  });
-
   it("refuses dispatch when an admitted legacy snapshot uses an uploaded asset", async () => {
     await Promise.all([
       db

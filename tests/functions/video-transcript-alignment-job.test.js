@@ -268,22 +268,6 @@ describe("corrected transcript alignment jobs", () => {
       writeAlignment: vi.fn(), assertBillingEnabled: vi.fn() })).rejects.toMatchObject({ status: 409 });
   });
 
-  it("stops retrying after three lost worker leases", async () => {
-    const store = memoryStore();
-    const queued = await requestJob(store);
-    for (let attempt = 0; attempt < alignment.MAX_ATTEMPTS; attempt += 1) {
-      const claimed = await alignment.claimAlignmentJob({ firestore: store.firestore, source, config,
-        now: now + attempt * (alignment.LEASE_MS + 1) });
-      expect(claimed.alignment.attempt).toBe(attempt + 1);
-    }
-    expect(await alignment.claimAlignmentJob({ firestore: store.firestore, source, config,
-      now: now + alignment.MAX_ATTEMPTS * (alignment.LEASE_MS + 1) })).toBeNull();
-    expect(store.rows.get(`${alignment.ALIGNMENT_JOBS}/${queued.job.id}`)).toMatchObject({
-      phase: "needs_reconciliation", active: false, errorCode: "alignment_worker_lost",
-    });
-    expect(store.rows.get(`mediaSourceTranscriptJobs/${transcriptId}`).alignmentState).toBe("needs_reconciliation");
-  });
-
   it("requires explicit retry after cancellation while retaining the deterministic ID", async () => {
     const store = memoryStore();
     const first = await requestJob(store);
