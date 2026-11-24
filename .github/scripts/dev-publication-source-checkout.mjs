@@ -4,7 +4,9 @@ import { restoreDevelopmentTemplates } from "../../scripts/render-development-co
 
 // Run only from the trusted current main checkout, before executing selected code.
 // An accepted queue can retain an older renderer release. It cannot select code
-// from an unmerged branch or outside a verified recovery run's history.
+// from an unmerged branch or outside a verified recovery run's history, except
+// a development trial: the exact reviewed pull request head that
+// require-reviewed-dev-source.mjs verified earlier in this job.
 export function assertDevPublicationSourceHistory(env, { cwd = process.cwd() } = {}) {
   const source = env.SOURCE_SHA;
   const trusted = env.GITHUB_SHA;
@@ -15,6 +17,7 @@ export function assertDevPublicationSourceHistory(env, { cwd = process.cwd() } =
   }
   const git = args => execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
   if (git(["rev-parse", "HEAD"]) !== trusted) throw new Error("Dev source selection requires the trusted checkout");
+  if (env.DEV_REVIEWED_SOURCE === source) return source;
   try {
     if (originalRun) git(["merge-base", "--is-ancestor", originalRun, trusted]);
     git(["merge-base", "--is-ancestor", source, originalRun ?? trusted]);

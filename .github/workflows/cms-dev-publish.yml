@@ -124,6 +124,8 @@ jobs:
       contents: read
       actions: read
       id-token: write
+      pull-requests: read
+      statuses: read
     env:
       CMS_DEV_PUBLISH_ENABLED: ${{ vars.CMS_DEV_PUBLISH_ENABLED }}
     steps:
@@ -191,6 +193,16 @@ jobs:
           create_credentials_file: true
       - name: Select accepted dev source without changing ownership
         run: node --import ./site/node_modules/tsx/dist/loader.mjs site/scripts/cms-dev-publication.mjs source
+      - name: Verify a development trial source against its pull request review
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # Trusted main code; selected code has not run yet.
+          if ! git merge-base --is-ancestor "$SOURCE_SHA" "$GITHUB_SHA" 2>/dev/null; then
+            node .github/scripts/require-reviewed-dev-source.mjs "$SOURCE_SHA"
+            git fetch --no-tags origin "$SOURCE_SHA"
+          fi
       - name: Check retained source ancestry before repaired reconciliation
         run: node .github/scripts/dev-publication-source-checkout.mjs verify
       - name: Reconcile the retained candidate without rebuilding or uploading
@@ -238,6 +250,8 @@ jobs:
       contents: read
       actions: read
       id-token: write
+      pull-requests: read
+      statuses: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -335,6 +349,16 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/metered-api-gate/.github/scripts"
           cp .github/scripts/metered-api-scan.mjs "$RUNNER_TEMP/metered-api-gate/.github/scripts/metered-api-scan.mjs"
+      - name: Verify a development trial source against its pull request review
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # Trusted main code; selected code has not run yet.
+          if ! git merge-base --is-ancestor "$SOURCE_SHA" "$GITHUB_SHA" 2>/dev/null; then
+            node .github/scripts/require-reviewed-dev-source.mjs "$SOURCE_SHA"
+            git fetch --no-tags origin "$SOURCE_SHA"
+          fi
       - name: Check trusted source ancestry and restore exact code
         id: source
         run: |

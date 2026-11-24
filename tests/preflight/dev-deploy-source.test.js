@@ -175,3 +175,14 @@ printf reached > mutation`], {
     expect(result.stderr).toContain(kind === "below floor" ? "predates required floor" : "does not satisfy");
   }
 });
+
+it("deploys a development trial pin only when the trusted review step verified that exact head", () => {
+  git(releaseRoot, "checkout", "-q", "-b", "trial");
+  writeFileSync(join(releaseRoot, "trial.txt"), "Reviewed pull request change\n");
+  const trial = commit(releaseRoot);
+  expect(() => check({ DEPLOY_SHA: trial })).toThrow();
+  expect(() => check({ DEPLOY_SHA: trial, DEV_REVIEWED_SOURCE: sourceSha })).toThrow();
+  expect(check({ DEPLOY_SHA: trial, DEV_REVIEWED_SOURCE: trial }).deploySha).toBe(trial);
+  writeFileSync(join(releaseRoot, "functions/dev-index.js"), "// Unreviewed code\n");
+  expect(() => check({ DEPLOY_SHA: trial, DEV_REVIEWED_SOURCE: trial })).toThrow("clean");
+});

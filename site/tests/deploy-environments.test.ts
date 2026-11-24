@@ -117,11 +117,22 @@ describe("deploy credential environments", () => {
     // Exactly one job runs for each target.
     expect([admits(production, "production"), admits(development, "production")]).toEqual([true, false]);
     expect([admits(production, "development"), admits(development, "development")]).toEqual([false, true]);
-    expect(development.permissions).toBeUndefined();
+    expect(development.permissions).toEqual({ contents: "read", actions: "read", "pull-requests": "read", statuses: "read" });
     const step = (job: Job, prefix: string) => job.steps.find(s => s.uses?.startsWith(prefix));
     expect(step(development, "actions/create-github-app-token@")?.with).toEqual(step(production, "actions/create-github-app-token@")?.with);
     const push = development.steps[development.steps.length - 1];
-    expect(push.run).toBe('git push origin "$SELECTED_SHA:refs/heads/development"');
+    expect(push.run).toContain('git push --force-with-lease="refs/heads/development:$DEVELOPMENT_TIP" origin "$SELECTED_SHA:refs/heads/development"');
+    // A development trial must pass the trusted review check; main sources keep main CI.
+    const runs = development.steps.map(s => s.run ?? "").join("\n");
+    expect(runs).toContain('node .github/scripts/require-reviewed-dev-source.mjs "$SELECTED_SHA"');
+    // Production keeps main ancestry, the forward rule and main CI on every source.
+    const productionSteps = production.steps as (Step & { if?: string })[];
+    const productionRuns = productionSteps.map(s => s.run ?? "").join("\n");
+    expect(productionRuns).toContain('git merge-base --is-ancestor "$SELECTED_SHA" origin/main');
+    expect(productionRuns).toContain('git merge-base --is-ancestor origin/production "$SELECTED_SHA"');
+    expect(productionSteps.find(s => s.run === "node .github/scripts/require-main-ci.mjs")?.if).toBeUndefined();
+    expect(productionRuns).not.toContain("require-reviewed-dev-source");
+    expect(productionRuns).not.toContain("--force");
     expect(JSON.stringify(development)).not.toContain("production");
     for (const s of development.steps.filter(s => s.uses)) expect(s.uses).toMatch(/@[a-f0-9]{40}$/);
   });

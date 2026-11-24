@@ -20,8 +20,16 @@ export function requireDevDeploySource({ env, releaseRoot, trustedRoot }) {
   if (![
     `https://github.com/${repository}.git`, `https://github.com/${repository}`, `git@github.com:${repository}.git`,
   ].includes(origin)) throw new Error("Dev deploy canonical origin refused");
-  requireReleaseSource({ sha: sourceSha, cwd: releaseRoot });
-  git(releaseRoot, "merge-base", "--is-ancestor", sourceSha, trustedWorkflowSha);
+  if (env.DEV_REVIEWED_SOURCE === sourceSha) {
+    // A development trial: the earlier trusted step verified this exact
+    // pull request head and its review; it is not in main's history.
+    if (git(releaseRoot, "rev-parse", "HEAD") !== sourceSha || git(releaseRoot, "status", "--porcelain", "--untracked-files=no")) {
+      throw new Error("Deploy source must be clean and equal the exact deploy SHA");
+    }
+  } else {
+    requireReleaseSource({ sha: sourceSha, cwd: releaseRoot });
+    git(releaseRoot, "merge-base", "--is-ancestor", sourceSha, trustedWorkflowSha);
+  }
   // Reader installation retains its exact-workflow-source authorization contract.
   if (env.CMS_DEV_INSTALL_READER_BRIDGE === "true" && sourceSha !== trustedWorkflowSha) {
     throw new Error("Dev reader installation still requires the exact workflow source");

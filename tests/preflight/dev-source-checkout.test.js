@@ -53,3 +53,10 @@ it("refuses source selection when the checked out code is not the trusted workfl
   expect(() => checkoutDevPublicationSource({ SOURCE_SHA: first, GITHUB_SHA: trusted }, { cwd })).toThrow("trusted checkout");
   expect(git("rev-parse", "HEAD")).toBe(second);
 });
+it("checks out a development trial only when the trusted review step verified that exact head", () => {
+  checkoutDevPublicationSource({ SOURCE_SHA: unmerged, GITHUB_SHA: trusted, DEV_REVIEWED_SOURCE: unmerged }, { cwd });
+  expect(git("rev-parse", "HEAD")).toBe(unmerged);
+  git("checkout", "main");
+  expect(() => checkoutDevPublicationSource({ SOURCE_SHA: unmerged, GITHUB_SHA: trusted, DEV_REVIEWED_SOURCE: first }, { cwd })).toThrow();
+  expect(git("rev-parse", "HEAD")).toBe(trusted);
+});

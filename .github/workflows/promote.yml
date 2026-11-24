@@ -99,6 +99,12 @@ jobs:
     runs-on: ubuntu-24.04
     # Stops a hung promote. Measured 15 s (dev 45315410286).
     timeout-minutes: 5
+    # A trial reads its pull request and review statuses.
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+      statuses: read
     steps:
       - name: Validate the selected SHA
         env:
@@ -122,20 +128,47 @@ jobs:
           token: ${{ steps.app.outputs.token }}
           ref: ${{ github.sha }}
           fetch-depth: 0
-      - name: Require main ancestry and an existing development branch
+      - name: Classify the selected SHA and read the development tip
+        id: source
         env:
+          GH_TOKEN: ${{ github.token }}
           SELECTED_SHA: ${{ inputs.sha }}
         run: |
           set -euo pipefail
           git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main +refs/heads/development:refs/remotes/origin/development
-          git merge-base --is-ancestor "$SELECTED_SHA" origin/main
-          git merge-base --is-ancestor origin/development "$SELECTED_SHA"
+          echo "development_tip=$(git rev-parse --verify origin/development^{commit})" >> "$GITHUB_OUTPUT"
+          if git merge-base --is-ancestor "$SELECTED_SHA" origin/main 2>/dev/null; then
+            echo "kind=main" >> "$GITHUB_OUTPUT"
+          else
+            # A development trial: the exact reviewed head of an open pull request into main.
+            node .github/scripts/require-reviewed-dev-source.mjs "$SELECTED_SHA"
+            git fetch --no-tags origin "$SELECTED_SHA"
+            echo "kind=pr_head" >> "$GITHUB_OUTPUT"
+          fi
+          # Only a trial leaves development outside main's history.
+          if git merge-base --is-ancestor origin/development origin/main; then
+            echo "trial_tip=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "trial_tip=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Require development to move forward
+        if: steps.source.outputs.kind == 'main' && steps.source.outputs.trial_tip == 'false'
+        env:
+          SELECTED_SHA: ${{ inputs.sha }}
+        run: git merge-base --is-ancestor origin/development "$SELECTED_SHA"
       - name: Require successful main CI for this SHA
+        if: steps.source.outputs.kind == 'main'
         env:
           GH_TOKEN: ${{ github.token }}
           DEPLOY_SHA: ${{ inputs.sha }}
         run: node .github/scripts/require-main-ci.mjs
-      - name: Fast-forward development
+      - name: Move development
         env:
           SELECTED_SHA: ${{ inputs.sha }}
-        run: git push origin "$SELECTED_SHA:refs/heads/development"
+          DEVELOPMENT_TIP: ${{ steps.source.outputs.development_tip }}
+        run: |
+          set -euo pipefail
+          [[ "$DEVELOPMENT_TIP" =~ ^[0-9a-f]{40}$ ]]
+          # A trial or a return from one may rewind development; the lease
+          # holds the tip read above, and only refs/heads/development moves.
+          git push --force-with-lease="refs/heads/development:$DEVELOPMENT_TIP" origin "$SELECTED_SHA:refs/heads/development"

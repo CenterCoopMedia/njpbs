@@ -74,6 +74,8 @@ jobs:
       contents: read
       id-token: write
       actions: read
+      pull-requests: read
+      statuses: read
     env:
       DEPLOY_SHA: ${{ inputs.deploy_ref || github.sha }}
       FIREBASE_PROJECT_ID: njpbs-site-dev

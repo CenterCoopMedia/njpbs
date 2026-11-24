@@ -161,7 +161,7 @@ jobs:
       - name: Site diagnostics reporter contract
         if: steps.reuse.outputs.reused != 'true'
         # The release gate tests read yaml from the site install above.
-        run: node --test .github/scripts/site-resource-reporter.test.mjs .github/scripts/require-main-ci.test.mjs
+        run: node --test .github/scripts/site-resource-reporter.test.mjs .github/scripts/require-main-ci.test.mjs .github/scripts/require-reviewed-dev-source.test.mjs
       - name: Release surface registry and freshness contracts
         if: steps.reuse.outputs.reused != 'true'
         run: |

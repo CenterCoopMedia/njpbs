@@ -2,7 +2,7 @@ name: Dev deploy source gates
 description: Verify the pinned dev source with immutable trusted workflow checks.
 inputs:
   github-token:
-    description: Read-only token for exact main CI lookup.
+    description: Read-only token for exact main CI and trial review lookup.
     required: true
   artifact-name:
     description: Distinct identity artifact for this job.
@@ -17,12 +17,23 @@ runs:
       working-directory: .dev-deploy-gate
       shell: bash
       run: node .github/scripts/metered-api-scan.mjs
+    - name: Verify a development trial pin against its pull request review
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        # A pin outside the trusted main history must be a reviewed pull request head.
+        if ! git merge-base --is-ancestor "$DEPLOY_SHA" "$GITHUB_SHA" 2>/dev/null; then
+          node .dev-deploy-gate/.github/scripts/require-reviewed-dev-source.mjs "$DEPLOY_SHA"
+        fi
     - name: Require the exact reviewed dev pin
       env:
         CMS_DEV_INSTALL_READER_BRIDGE: ${{ inputs.install-reader-bridge }}
       shell: bash
       run: node .dev-deploy-gate/.github/scripts/require-dev-deploy-source.mjs
     - name: Require successful main CI for the exact dev pin
+      if: env.DEV_SOURCE_KIND != 'pr_head'
       env:
         GH_TOKEN: ${{ inputs.github-token }}
       shell: bash
