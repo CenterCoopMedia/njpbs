@@ -61,16 +61,6 @@ button.ui-menu-trigger[aria-expanded="true"] {
 .ui-menu[data-fit-below] { scrollbar-gutter: stable; }
 .ui-menu[data-fit-below] .ui-menu-item { padding-block: var(--cms-space-1); }
 
-/* The global reduced-motion rule gives every property a 0.01ms transition. Visibility would
-   then still read hidden when the menu is placed and focus moves in, so focus stayed on the
-   trigger. Nothing here needs a transition with reduced motion. */
-@media (prefers-reduced-motion: reduce) {
-  .ui-menu,
-  .ui-menu * {
-    transition-property: none;
-  }
-}
-
 .ui-menu-title {
   padding: var(--cms-space-2) var(--cms-space-3) var(--cms-space-1);
   color: var(--cms-ink-muted);

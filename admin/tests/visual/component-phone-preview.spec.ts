@@ -141,7 +141,8 @@ test("phone sizes use real viewports and keep the draft and table controls usabl
   await expect.poll(() => panel.evaluate(element => element.getBoundingClientRect().bottom)).toBeLessThanOrEqual(992);
 
   await page.setViewportSize({ width: 1440, height: 600 });
-  await expect.poll(() => panel.evaluate(element => element.getBoundingClientRect().bottom)).toBeLessThanOrEqual(584);
+  // The floating panel keeps an 8px margin inside the viewport (600 - 8).
+  await expect.poll(() => panel.evaluate(element => element.getBoundingClientRect().bottom)).toBeLessThanOrEqual(592);
   await panel.getByRole("button", { name: "Collapse component preview" }).click();
   await panel.getByRole("button", { name: "Expand component preview" }).click();
   await panel.getByRole("button", { name: "Close component preview" }).click();
