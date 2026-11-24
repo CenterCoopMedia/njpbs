@@ -45,12 +45,9 @@ async function authority({ firestore, transaction, rendererSha, reference, pairC
 
 /** Read the full private CODE object before final writes. Its original Home
  * publication and provider clocks remain separate from current Page rendering. */
-async function capturePageHomeCodeSources({ firestore, target, rendererSha, request,
-  now = Date.now, deadline = now() + 45_000 }) {
+async function capturePageHomeCodeSources({ firestore, target, rendererSha, request }) {
   target = pagePublicationTarget({ firestore, target });
-  if (!Number.isFinite(deadline) || deadline <= now()) refuse("The Home CODE deadline expired.");
-  const signal = AbortSignal.timeout(Math.max(1, Math.ceil(deadline - now())));
-  const readCode = createPageCurrentCodeContextReader({ firestore, rendererSha, target, request, signal });
+  const readCode = createPageCurrentCodeContextReader({ firestore, rendererSha, target, request });
   const code = await readCode();
   if (!code.publicContext.homeSources) refuse("The current CODE Home sources are unavailable.");
   const read = reference => firestore.runTransaction(transaction => authority({ firestore, transaction,
@@ -59,23 +56,20 @@ async function capturePageHomeCodeSources({ firestore, target, rendererSha, requ
   const afterCode = await readCode();
   const after = await read(afterCode.reference);
   if (!isDeepStrictEqual(code, afterCode) || !isDeepStrictEqual(before, after)) refuse("The Home CODE source moved after IO.");
-  signal.throwIfAborted();
   const capture = Object.freeze({});
   captures.set(capture, { target, rendererSha, reference: code.reference, homeSources: code.publicContext.homeSources,
-    selection: after, now, deadline, signal });
+    selection: after });
   return capture;
 }
 
 /** Replay-only capture over the owner's immutable reader facade and retained
  * qualified CODE. No current transport or provider fallback is installed. */
-async function captureHistoricalPageHomeCodeSources({ firestore, target, rendererSha, originalPair, qualifiedCode,
-  now = Date.now, deadline = now() + 45_000 }) {
+async function captureHistoricalPageHomeCodeSources({ firestore, target, rendererSha, originalPair, qualifiedCode }) {
   const pair = require("./public-release-pair").parsePublicReleasePair(originalPair);
   require("./public-release-historical-code").verifyPublicReleaseQualifiedCode(qualifiedCode);
   target = pagePublicationTarget({ firestore, target });
   if (pair.commitSha !== rendererSha || qualifiedCode.publication.commitSha !== rendererSha ||
-      !qualifiedCode.publicContext.homeSources || !Number.isFinite(deadline) || deadline <= now()) refuse("Historical Home CODE authority differs.");
-  const signal = AbortSignal.timeout(Math.max(1, Math.ceil(deadline - now())));
+      !qualifiedCode.publicContext.homeSources) refuse("Historical Home CODE authority differs.");
   // Branch on the reconstructed event's reference schema. A schema-two event
   // never probes or falls back to a mutable legacy CMS context manifest.
   const descriptor = (await firestore.doc("system/publicReleaseHistoricalCode").get()).data();
@@ -90,7 +84,7 @@ async function captureHistoricalPageHomeCodeSources({ firestore, target, rendere
     reference: qualifiedCode.reference, pairCode, qualifiedCode }), { readOnly: true });
   const capture = Object.freeze({});
   captures.set(capture, { target, rendererSha, reference: qualifiedCode.reference, pairCode, qualifiedCode,
-    homeSources: qualifiedCode.publicContext.homeSources, selection, now, deadline, signal });
+    homeSources: qualifiedCode.publicContext.homeSources, selection });
   return capture;
 }
 
@@ -99,10 +93,9 @@ async function captureHistoricalPageHomeCodeSources({ firestore, target, rendere
 async function readCapturedPageHomeCodeSourcesInTransaction({ firestore, transaction, target, rendererSha, capture }) {
   target = pagePublicationTarget({ firestore, target });
   const data = captures.get(capture);
-  if (!data || data.target !== target || data.rendererSha !== rendererSha || data.now() >= data.deadline) {
+  if (!data || data.target !== target || data.rendererSha !== rendererSha) {
     refuse("The sealed Home CODE capture is unavailable.");
   }
-  data.signal.throwIfAborted();
   const current = await authority({ firestore, transaction, rendererSha, reference: data.reference, pairCode: data.pairCode, qualifiedCode: data.qualifiedCode });
   if (!isDeepStrictEqual(current, data.selection)) refuse("The captured Home CODE authority moved.");
   return { homeSources: structuredClone(data.homeSources), codeSource: structuredClone(data.reference) };

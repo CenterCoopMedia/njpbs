@@ -5,7 +5,7 @@ import { assertNoBuild } from "./fastpub-dev-proof.mjs";
 const require = createRequire(import.meta.url);
 const { validateNoBuildPageState } = require("../functions/lib/no-build-page-ownership");
 const { readPublicPageReceipt } = require("../functions/lib/no-build-page-recovery");
-const { withinDeadline } = require("../functions/lib/no-build-post-recovery");
+const { readPublicAnswer } = require("../functions/lib/no-build-post-recovery");
 const { publicationTarget } = require("../functions/lib/publication-target");
 const target = publicationTarget("development");
 
@@ -21,7 +21,7 @@ export async function proveDevPagePublication({ state, rendererSha, contextDiges
   }
   const startedAt = now();
   const [before, authorityBefore] = await Promise.all([readBaseline(), readAuthority()]);
-  const receipt = await withinDeadline(10_000, signal => readPublicPageReceipt({ state, target, headers, fetchPublic, signal }));
+  const receipt = await readPublicAnswer("pagepub proof", signal => readPublicPageReceipt({ state, target, headers, fetchPublic, signal }));
   const [after, authorityAfter, publication] = await Promise.all([readBaseline(), readAuthority(), readPublication()]);
   assertNoBuild(before, after);
   if (JSON.stringify(authorityBefore) !== JSON.stringify(authorityAfter) || authorityAfter.operationId !== state.operationId ||

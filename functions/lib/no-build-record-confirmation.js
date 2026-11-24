@@ -11,7 +11,7 @@ const { readRecordManifest } = require("./post-background-record-manifest");
 const { createPostBackgroundStorage } = require("./post-background-storage");
 const { PUBLIC_CONTEXT_PATH, publicContextDigest } = require("./public-context-revision");
 const { pagePublicationTarget } = require("./no-build-page-target");
-const { assertReadbackTarget, publicReadbackHeaders, withinDeadline, readPublicPostAfterRefresh } = require("./no-build-post-recovery");
+const { assertReadbackTarget, publicReadbackHeaders, readPublicPostAfterRefresh } = require("./no-build-post-recovery");
 const { readSettingsProofs } = require("./no-build-post-settings-confirmation");
 function refuse() { throw Object.assign(new Error("The public record receipt is unavailable."), { status: 409 }); }
 
@@ -55,9 +55,9 @@ function legacyProgramRedirect(response, path, identity, origin) {
   } catch { return null; }
   return destination;
 }
-async function readRoute({ path, file, identity, target, headers, fetchPublic, signal }) {
+async function readRoute({ path, file, identity, target, headers, fetchPublic, signal, once }) {
   const detail = identity.ownedPaths.includes(path), visible = !detail || identity.visible;
-  const response = await readPublicPostAfterRefresh(`${target.origin}${path}`, fetchPublic, signal, headers);
+  const response = await readPublicPostAfterRefresh(`${target.origin}${path}`, fetchPublic, signal, headers, { once });
   try {
     // The production legacy edge answers /shows/ before the record reader.
     // Its matching /programs/ route is still proved in the same route set.
@@ -84,38 +84,36 @@ async function readRoute({ path, file, identity, target, headers, fetchPublic, s
 }
 
 async function prepareRecordPublicProof({ firestore, accepted, target = undefined, headers = {}, fetchPublic = fetch, artifacts = undefined,
-  now = Date.now, deadline = now() + 45_000 }) {
+  now = Date.now, once = false }) {
   target = pagePublicationTarget({ firestore, target: assertReadbackTarget(firestore, target) });
   headers = publicReadbackHeaders(target, headers);
   const identity = accepted.queue.recordPublication;
-  return withinDeadline(deadline - now(), async signal => {
-    const receipt = await firestore.runTransaction(transaction => familyAuthority({ firestore, transaction, accepted }), { readOnly: true });
-    artifacts ??= createPostBackgroundStorage(target.backgroundBucket);
-    const files = await readRecordManifest({ receipt, output: identity.family, artifacts, signal, scope: firestore.projectId });
-    const paths = [...identity.ownedPaths, ...recordIndexPaths(identity.family)];
-    if (identity.ownedPaths.some(path => files.some(file => file.path === path) !== identity.visible)) refuse();
-    const routes = await readSettingsProofs(paths, (path, routeSignal) => readRoute({ path, file: files.find(file => file.path === path),
-      identity, target, headers, fetchPublic, signal: routeSignal }), { deadline, now });
-    if (routes.some(route => route.legacyRedirect && !routes.some(candidate => candidate.path === route.location &&
-        candidate.status === (identity.visible || route.path === "/shows/" ? 200 : 410) && !candidate.legacyRedirect))) refuse();
-    const consumer = { rendererSha: identity.rendererSha, contextRevision: identity.contextRevision, contextDigest: identity.contextDigest, verifiedAt: now() };
-    return {
-      consumer,
-      receipt: { operationId: identity.originalOperationId, sourceVersion: identity.sourceVersion,
-        visible: identity.visible, snapshotDigest: identity.snapshotDigest, routes, ...consumer },
-      async assertCurrent(transaction, current) {
-        if (now() >= deadline || !isDeepStrictEqual(current.queue.recordPublication, identity)) refuse();
-        const fresh = await familyAuthority({ firestore, transaction, accepted: current });
-        if (!isDeepStrictEqual(fresh, receipt) || recordPublicationReceipt(current.queue, now()).missingConsumers.some(name => name !== "record")) refuse();
-      },
-    };
-  });
+  const receipt = await firestore.runTransaction(transaction => familyAuthority({ firestore, transaction, accepted }), { readOnly: true });
+  artifacts ??= createPostBackgroundStorage(target.backgroundBucket);
+  const files = await readRecordManifest({ receipt, output: identity.family, artifacts, scope: firestore.projectId });
+  const paths = [...identity.ownedPaths, ...recordIndexPaths(identity.family)];
+  if (identity.ownedPaths.some(path => files.some(file => file.path === path) !== identity.visible)) refuse();
+  const routes = await readSettingsProofs(paths, (path, routeSignal) => readRoute({ path, file: files.find(file => file.path === path),
+    identity, target, headers, fetchPublic, signal: routeSignal, once }));
+  if (routes.some(route => route.legacyRedirect && !routes.some(candidate => candidate.path === route.location &&
+      candidate.status === (identity.visible || route.path === "/shows/" ? 200 : 410) && !candidate.legacyRedirect))) refuse();
+  const consumer = { rendererSha: identity.rendererSha, contextRevision: identity.contextRevision, contextDigest: identity.contextDigest, verifiedAt: now() };
+  return {
+    consumer,
+    receipt: { operationId: identity.originalOperationId, sourceVersion: identity.sourceVersion,
+      visible: identity.visible, snapshotDigest: identity.snapshotDigest, routes, ...consumer },
+    async assertCurrent(transaction, current) {
+      if (!isDeepStrictEqual(current.queue.recordPublication, identity)) refuse();
+      const fresh = await familyAuthority({ firestore, transaction, accepted: current });
+      if (!isDeepStrictEqual(fresh, receipt) || recordPublicationReceipt(current.queue, now()).missingConsumers.some(name => name !== "record")) refuse();
+    },
+  };
 }
 
 /** Reuse the context owner and existing bounded public readback pool. A queue's
  * aggregate status cannot confirm staff publication without its public routes. */
 async function recoverNoBuildRecordPublication({ firestore, operationId, target, headers = {}, fetchPublic = fetch, artifacts,
-  currentCodeRequest, now = Date.now, deadline = now() + 45_000 }) {
+  currentCodeRequest, now = Date.now, once = false }) {
   target = pagePublicationTarget({ firestore, target: assertReadbackTarget(firestore, target) });
   headers = publicReadbackHeaders(target, headers);
   if (!operationId) {
@@ -126,11 +124,11 @@ async function recoverNoBuildRecordPublication({ firestore, operationId, target,
     const ids = [...new Set([...pending.docs, ...deferred.docs, ...active.docs].map(row => row.id))];
     let confirmed = false;
     const errors = [];
-    for (const id of ids) {
-      if (now() >= deadline) break;
+    // The next minute wake is this pass's wait, so each route is read once.
+    await Promise.all(ids.map(async id => {
       try {
         const result = await recoverNoBuildRecordPublication({ firestore, operationId: id, target, headers, fetchPublic, artifacts,
-          currentCodeRequest, now, deadline });
+          currentCodeRequest, now, once: true });
         confirmed ||= result.confirmed;
       } catch (error) { errors.push(error); }
       // Rotate unfinished entries so a stalled or damaged operation cannot
@@ -142,11 +140,11 @@ async function recoverNoBuildRecordPublication({ firestore, operationId, target,
             { recordConfirmationPendingAt: FieldValue.serverTimestamp() });
         });
       } catch (error) { errors.push(error); }
-    }
+    }));
     if (errors.length) throw new AggregateError(errors, "Record publication recovery is unavailable");
     return { confirmed };
   }
-  if (!/^[A-Za-z0-9]{20}$/.test(operationId ?? "") || now() >= deadline) return { confirmed: false };
+  if (!/^[A-Za-z0-9]{20}$/.test(operationId ?? "")) return { confirmed: false };
   const requested = (await firestore.doc(`cmsPublishQueue/${operationId}`).get()).data();
   if (!requested?.recordPublication) return { confirmed: false };
   // Retire replaced removal entries before the accepted-owner lookup returns.
@@ -176,7 +174,7 @@ async function recoverNoBuildRecordPublication({ firestore, operationId, target,
   if (queue.status !== "success") return { confirmed: false };
   if (accepted.publication.missingConsumers.some(name => ["pages", "home", "posts"].includes(name))) {
     await require("./no-build-page-settings-confirmation").confirmNoBuildPageSettings({ firestore, operationId,
-      target, headers, fetchPublic, currentCodeRequest, now, deadline });
+      target, headers, fetchPublic, currentCodeRequest, now, once });
     accepted = await readAccepted();
     if (!accepted || accepted.ref.id !== operationId) return { confirmed: false };
   }
@@ -189,23 +187,20 @@ async function recoverNoBuildRecordPublication({ firestore, operationId, target,
     return { confirmed: true };
   });
   if (accepted.publication.missingConsumers.some(name => name !== "record")) return { confirmed: false };
-  const proof = await prepareRecordPublicProof({ firestore, accepted, target, headers, fetchPublic, artifacts, now, deadline });
-  return withinDeadline(deadline - now(), async () => {
-    if (now() >= deadline) return { confirmed: false };
-    return firestore.runTransaction(async transaction => {
-      const current = await readRecordPublication({ firestore, transaction, operationId: identity.originalOperationId });
-      if (!current || current.ref.id !== operationId) refuse();
-      await proof.assertCurrent(transaction, current);
-      transaction.update(current.ref, { "consumerReceipts.record": proof.consumer, recordReceipt: proof.receipt,
-        ...(current.queue.recordRegeneration ? { recordRegeneration: "complete" } : {}) });
-      transaction.update(firestore.doc(`cmsPublishQueue/${identity.originalOperationId}`),
-        { recordConfirmationPendingAt: FieldValue.delete() });
-      transaction.update(firestore.doc(`cmsPosts/${identity.documentId}`), { publishBuildPending: false, publishBuildQueueId: null,
-        publicSourceVersion: identity.visible ? identity.sourceVersion : null,
-        publishBuildSettlement: { status: "success", sourceVersion: identity.sourceVersion, operation: identity.visible ? "publish" : "withdraw",
-          recordQueueId: operationId } });
-      return { confirmed: true };
-    });
+  const proof = await prepareRecordPublicProof({ firestore, accepted, target, headers, fetchPublic, artifacts, now, once });
+  return firestore.runTransaction(async transaction => {
+    const current = await readRecordPublication({ firestore, transaction, operationId: identity.originalOperationId });
+    if (!current || current.ref.id !== operationId) refuse();
+    await proof.assertCurrent(transaction, current);
+    transaction.update(current.ref, { "consumerReceipts.record": proof.consumer, recordReceipt: proof.receipt,
+      ...(current.queue.recordRegeneration ? { recordRegeneration: "complete" } : {}) });
+    transaction.update(firestore.doc(`cmsPublishQueue/${identity.originalOperationId}`),
+      { recordConfirmationPendingAt: FieldValue.delete() });
+    transaction.update(firestore.doc(`cmsPosts/${identity.documentId}`), { publishBuildPending: false, publishBuildQueueId: null,
+      publicSourceVersion: identity.visible ? identity.sourceVersion : null,
+      publishBuildSettlement: { status: "success", sourceVersion: identity.sourceVersion, operation: identity.visible ? "publish" : "withdraw",
+        recordQueueId: operationId } });
+    return { confirmed: true };
   });
 }
 module.exports = { recoverNoBuildRecordPublication, prepareRecordPublicProof };

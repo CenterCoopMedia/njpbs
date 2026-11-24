@@ -61,12 +61,9 @@ async function selectCodePost({ firestore, transaction, path }) {
 
 /** Qualify actual current code before the final SDK read. The private capture
  * cannot be supplied by an HTTP caller or reconstructed from an ordinary DTO. */
-async function captureCodePostConsumers({ firestore, target = targetFor(firestore), rendererSha, request,
-  now = Date.now, deadline = now() + 20_000 }) {
+async function captureCodePostConsumers({ firestore, target = targetFor(firestore), rendererSha, request }) {
   target = pagePublicationTarget({ firestore, target });
-  if (now() >= deadline) refuse();
-  const signal = AbortSignal.timeout(Math.max(1, Math.ceil(deadline - now())));
-  const read = createPageCurrentCodeContextReader({ firestore, target, rendererSha, request, signal });
+  const read = createPageCurrentCodeContextReader({ firestore, target, rendererSha, request });
   const reference = await read.readReference();
   const code = await readCachedCodePostContext({ firestore, identity: digest(reference), load: () => read() });
   if (!isDeepStrictEqual(code.reference, reference)) refuse();
@@ -75,9 +72,8 @@ async function captureCodePostConsumers({ firestore, target = targetFor(firestor
   const afterAuthority = await firestore.runTransaction(transaction => codeAuthority({ firestore, transaction, rendererSha,
     code: { reference: after } }), { readOnly: true });
   if (!isDeepStrictEqual(reference, after) || !isDeepStrictEqual(authority, afterAuthority)) refuse();
-  signal.throwIfAborted();
   const capture = Object.freeze({});
-  captures.set(capture, { code, authority, rendererSha, target, signal, now, deadline });
+  captures.set(capture, { code, authority, rendererSha, target });
   return capture;
 }
 
@@ -85,8 +81,7 @@ async function readCodePostConsumerInTransaction({ firestore, transaction, path,
   target = targetFor(firestore), capture, now = new Date() }) {
   target = pagePublicationTarget({ firestore, target });
   const data = captures.get(capture);
-  if (!data || data.target !== target || data.rendererSha !== rendererSha || data.now() >= data.deadline) refuse();
-  data.signal.throwIfAborted();
+  if (!data || data.target !== target || data.rendererSha !== rendererSha) refuse();
   if (!isDeepStrictEqual(await codeAuthority({ firestore, transaction, rendererSha, code: data.code }), data.authority)) refuse();
   const selected = await selectCodePost({ firestore, transaction, path });
   if (!selected) return { kind: "pass" };

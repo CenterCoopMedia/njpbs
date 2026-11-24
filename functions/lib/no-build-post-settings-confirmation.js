@@ -8,17 +8,17 @@ const { readNoBuildPostDecisionInTransaction } = require("./no-build-post-public
 const { joinedRecordIds } = require("./joined-records");
 const { contentLink } = require("./content-link");
 const { readPublicContextRevisionInTransaction, publicContextDigest } = require("./public-context-revision");
-const { withinPublicRead, REFRESH_PENDING, verifyPublicHtml, readPublicPostAfterRefresh } = require("./no-build-post-recovery");
+const { readPublicAnswer, REFRESH_PENDING, verifyPublicHtml, readPublicPostAfterRefresh } = require("./no-build-post-recovery");
 
 const { readSettingsInputs } = require("./settings-proof-transaction");
 
 const MAX_POSTS = 500;
 const PROOF_BATCH_SIZE = 8;
-const PROOF_READ_TIMEOUT_MS = 10_000;
 const digest = value => createHash("sha256").update(JSON.stringify(value)).digest("hex");
-function refuse(postId, reason) {
-  throw Object.assign(new Error(`The settings Post proof for ${postId} ${reason}.`), { status: 409 });
+function refuse(postId, reason, code = "post_coverage_moved") {
+  throw Object.assign(new Error(`The settings Post proof for ${postId} ${reason}.`), { status: 409, code });
 }
+const refuseReceipt = (postId, reason) => refuse(postId, reason, "public_receipt_refused");
 
 /** The published roster, not the admitted catalog or sitemap, defines coverage.
  * Private later drafts do not change this roster or its public source seal. */
@@ -85,12 +85,12 @@ async function postSettingsCoverage({ firestore, transaction, identity, target, 
     deploymentId: deployment.activeDeploymentId };
 }
 
-async function readPostSettingsReceipt({ entry, target, headers, fetchPublic, signal }) {
+async function readPostSettingsReceipt({ entry, target, headers, fetchPublic, signal, once = false }) {
   const expected = entry.receipt;
   const codePost = entry.kind === "code-post";
   const path = codePost ? expected.canonicalPath : postRoutePath(expected.slug);
   const status = entry.contentRedirectUrl ? 302 : 200;
-  const response = await readPublicPostAfterRefresh(`${target.origin}${path}`, fetchPublic, signal, headers);
+  const response = await readPublicPostAfterRefresh(`${target.origin}${path}`, fetchPublic, signal, headers, { once });
   try {
     if (response.status !== status || response.headers.get("cache-control") !== "no-store" ||
         response.headers.get("x-njpbs-content-source") !== (codePost ? "cms-code-post-context" : "cms-no-build") ||
@@ -100,7 +100,7 @@ async function readPostSettingsReceipt({ entry, target, headers, fetchPublic, si
         status === 200 && !response.headers.get("content-type")?.startsWith("text/html") ||
         status === 302 && (response.headers.get("location") !== entry.contentRedirectUrl ||
           response.headers.get("x-robots-tag") !== "noindex, nofollow")) {
-      refuse(entry.postId, `has an unavailable public receipt at ${path}`);
+      refuseReceipt(entry.postId, `has an unavailable public receipt at ${path}`);
     }
     if (codePost) {
       const seals = { "x-njpbs-public-context-revision": String(expected.contextRevision),
@@ -109,72 +109,82 @@ async function readPostSettingsReceipt({ entry, target, headers, fetchPublic, si
         "x-njpbs-input-source-sha256": expected.inputSourceDigest, "x-njpbs-snapshot-sha256": expected.snapshotDigest };
       if (Object.entries(seals).some(([key, value]) => response.headers.get(key) !== value) ||
           response.headers.has("x-njpbs-publication-operation") || response.headers.has("x-njpbs-admission-revision") ||
-          !/^[a-f0-9]{64}$/.test(response.headers.get("x-njpbs-input-sha256") ?? "")) refuse(entry.postId, "has a changed CODE receipt");
+          !/^[a-f0-9]{64}$/.test(response.headers.get("x-njpbs-input-sha256") ?? "")) refuseReceipt(entry.postId, "has a changed CODE receipt");
     } else if (response.headers.get("x-njpbs-publication-operation") !== expected.operationId ||
         response.headers.get("x-njpbs-admission-revision") !== String(expected.admissionRevision)) {
-      refuse(entry.postId, `has an unavailable public receipt at ${path}`);
+      refuseReceipt(entry.postId, `has an unavailable public receipt at ${path}`);
     }
     return { postId: entry.postId, path, htmlDigest: status === 200 ? await verifyPublicHtml(response, 2 * 1024 * 1024, true) : null };
   } finally { await response.body?.cancel().catch(() => {}); }
 }
 
-/** Bound concurrent public reads and header/body time together. Every read
- * must finish; a rejected or timed-out detail cannot acknowledge a subset. A
- * route that keeps refreshing waits beside the next batches, not before them. */
-async function readSettingsProofs(values, read, { deadline, now, onFailure = undefined }) {
-  const results = [], slow = [];
+/** Every read must finish with its own answer; one refused detail cannot
+ * acknowledge a subset. Eight reads run at once, and a route that reports its
+ * refresh gives its place to the next one while it waits. */
+async function readSettingsProofs(values, read, { onFailure = undefined, onDone = undefined } = {}) {
+  const results = [], waiting = new Set(values.keys()), running = [];
   const stop = new AbortController();
-  let refreshing = false;
-  const attempt = async (value, index, park) => {
+  let failed = null;
+  const stopped = new Promise((resolve, reject) => {
+    stop.signal.addEventListener("abort", () => { if (failed) reject(failed.error); else resolve(); }, { once: true });
+  });
+  stopped.catch(() => {});
+  const attempt = async (value, index, onPending) => {
     try {
-      results[index] = await withinPublicRead(deadline - now(), signal => read(value, signal), { onSlowRefresh: park, stop: stop.signal });
+      results[index] = await readPublicAnswer("settings proof read", signal => read(value, signal), { onPending, stop: stop.signal });
     } catch (error) {
-      refreshing ||= error?.code === REFRESH_PENDING;
-      if (!onFailure) throw error;
-      results[index] = await onFailure(value, error);
+      if (stop.signal.aborted) return;
+      if (!onFailure) { failed ??= { error }; stop.abort(); return; }
+      try { results[index] = await onFailure(value, error); }
+      catch (thrown) { failed ??= { error: thrown }; stop.abort(); return; }
+      onDone?.([...waiting]);
+      return;
     }
+    waiting.delete(index);
+    onDone?.([...waiting]);
   };
-  const settle = async reads => {
-    const failed = (await Promise.allSettled(reads)).find(result => result.status === "rejected");
-    if (failed) throw failed.reason;
+  const next = values.entries();
+  const worker = async () => {
+    for (const [index, value] of next) {
+      if (stop.signal.aborted) return;
+      await new Promise(resolve => {
+        const read = attempt(value, index, resolve);
+        read.then(resolve, resolve);
+        running.push(read);
+      });
+    }
   };
   try {
-    for (let offset = 0; offset < values.length; offset += PROOF_BATCH_SIZE) {
-      if (now() >= deadline) {
-        throw Object.assign(new Error("Settings consumer confirmation timed out"), refreshing ? { code: REFRESH_PENDING } : {});
-      }
-      await settle(values.slice(offset, offset + PROOF_BATCH_SIZE).map((value, index) => {
-        let park;
-        const parked = new Promise(resolve => { park = resolve; });
-        const done = attempt(value, offset + index, () => { slow.push(done); park(); });
-        done.catch(() => {});
-        return Promise.race([done, parked]);
-      }));
-    }
-    await settle(slow);
+    await Promise.race([stopped, Promise.all(Array.from({ length: PROOF_BATCH_SIZE }, worker)).then(() => Promise.all(running))]);
     return results;
   } finally { stop.abort(); }
 }
 
-/** Cover an ordered prefix of one exact roster. A wake can lose its unfinished
- * batch, but settlement of its lease saves each complete batch from that wake. */
-async function readPostSettingsProof({ coverage, target, headers, fetchPublic, now, deadline, proof }) {
+/** Cover an ordered prefix of one exact roster. A wake can end at the platform
+ * limit; the stored prefix continues at the next one. */
+async function readPostSettingsProof({ coverage, target, headers, fetchPublic, proof, once = false }) {
   const { entries } = coverage;
   const coverageDigest = digest([target.origin, coverage]);
   const prior = proof.postCheckpoint;
   const start = prior?.coverageDigest === coverageDigest && Number.isSafeInteger(prior.verified) &&
     prior.verified > 0 && prior.verified <= entries.length ? prior.verified : 0;
   if (prior && !start) proof.recordPostCheckpoint(null);
-  let verified = start;
-  while (verified < entries.length && deadline - now() > PROOF_READ_TIMEOUT_MS) {
-    const batch = entries.slice(verified, verified + PROOF_BATCH_SIZE);
-    await readSettingsProofs(batch, (entry, signal) => readPostSettingsReceipt({ entry, target, headers, fetchPublic, signal }), { deadline, now });
-    verified += batch.length;
-    proof.recordPostCheckpoint({ coverageDigest, verified });
-  }
-  const advanced = verified > start;
-  const ready = verified === entries.length && (!advanced || deadline - now() > PROOF_READ_TIMEOUT_MS);
-  return { ready, advanced };
+  let verified = start, pending = null;
+  await readSettingsProofs(entries.slice(start), (entry, signal) => readPostSettingsReceipt({ entry, target, headers, fetchPublic, signal, once }), {
+    // A refreshing detail waits for the next wake beside the rest of this pass.
+    ...(once ? { onFailure(entry, error) {
+      if (error?.code !== REFRESH_PENDING) throw error;
+      pending ??= error;
+    } } : {}),
+    onDone(waiting) {
+      const prefix = waiting.length ? start + Math.min(...waiting) : entries.length;
+      proof.waitingOn(`posts ${entries.length - start - waiting.length} of ${entries.length - start}`);
+      if (prefix < verified + PROOF_BATCH_SIZE && prefix < entries.length) return;
+      verified = prefix;
+      proof.recordPostCheckpoint({ coverageDigest, verified });
+    },
+  });
+  if (pending) throw pending;
 }
 
 module.exports = { postSettingsCoverage, readPostSettingsReceipt, readSettingsProofs, readPostSettingsProof };

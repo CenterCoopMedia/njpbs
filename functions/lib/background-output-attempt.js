@@ -1,5 +1,7 @@
 "use strict";
 
+const { platformLimit } = require("./release-wait");
+
 const SLOW_RETRY_MS = 10 * 60_000;
 const FAILURE_CLASSES = ["timeout", "storage_readback", "lease_lost", "context_changed", "validation"];
 const TRANSIENT_STORAGE_CODES = new Set([4, 8, 10, 13, 14, 408, 429, 500, 502, 503, 504,
@@ -25,29 +27,38 @@ function publicationAttempt(row, family, now) {
   if (!Number.isFinite(due) || due > now) return null;
   if (family !== "background" && (!Number.isSafeInteger(attempts) || attempts < 0 ||
       family !== "postProof" && row.claim != null && (typeof row.claim !== "string" || !row.claim))) return null;
-  if (attempts >= 4) return family === "background" ||
-    attempts === 4 && (family === "postProof" ? row.status === "pending" : row.claim) ? "exhaust" : null;
+  if (family === "background" && attempts >= 4) return "exhaust";
   return "claim";
 }
 
-function publicationClaim(row, claim, now, leaseMs = 60_000) {
-  return { claim, attempts: (row.attempts ?? 0) + 1, nextAttemptAt: now + leaseMs };
+// Readers of these rows know attempts 0 to 4, and 4 as the end. A row that is
+// still waiting stays below 4; the run journal holds the real read counts.
+const TERMINAL = 4;
+
+// Only a killed process leaves a claim behind, and it cannot outlive the
+// platform limit. The claim ID, not this time, fences every later write.
+function publicationClaim(row, claim, now, takeoverMs = undefined) {
+  if (takeoverMs !== undefined) return { claim, attempts: (row.attempts ?? 0) + 1, nextAttemptAt: now + takeoverMs };
+  return { claim, attempts: Math.min((row.attempts ?? 0) + 1, TERMINAL - 1),
+    nextAttemptAt: now + platformLimit("cloudFunctionsScheduleSeconds") * 1_000 };
 }
 
-// A route that still reports its own refresh has not refused this publication.
-// Its wait spends no attempt, within a bound from the queue's own timestamp.
-const REFRESH_WAIT_MS = 30 * 60_000;
-function waitsForRefresh(error, since, now) {
-  const started = since?.toMillis?.() ?? null;
-  return error?.code === "public_refresh_pending" && Number.isFinite(started) && now - started < REFRESH_WAIT_MS;
-}
+// The public route, or the purge it needs, answered and refused. Any other
+// error is a state that has not arrived yet, so the publication keeps waiting.
+const REFUSED = ["public_receipt_refused", "public_bytes_refused", "public_purge_refused"];
+const publicAnswerRefused = error => REFUSED.includes(error?.code);
 
-function publicationFailure(row, family, now, { error = undefined, since = undefined } = {}) {
-  if (waitsForRefresh(error, since, now)) return { status: family === "postProof" ? "failed" : "pending", claim: null,
-    attempts: row.attempts - 1, nextAttemptAt: now + 60_000, error: families[family].error };
-  const exhausted = row.attempts >= 4;
-  return { status: exhausted || ["background", "postProof"].includes(family) ? "failed" : "pending", claim: null,
-    nextAttemptAt: exhausted ? null : now + 60_000 * 2 ** (row.attempts - 1), error: families[family].error };
+function publicationFailure(row, family, now, error = undefined) {
+  if (family === "background") {
+    const exhausted = row.attempts >= 4;
+    return { status: "failed", claim: null, nextAttemptAt: exhausted ? null : now + 60_000 * 2 ** (row.attempts - 1),
+      error: families[family].error };
+  }
+  const refused = publicAnswerRefused(error);
+  return { status: refused || family === "postProof" ? "failed" : "pending", claim: null,
+    ...(refused ? { attempts: TERMINAL } : {}),
+    // The next minute wake reads again. This write must not wake itself.
+    nextAttemptAt: refused ? null : now + 60_000, error: families[family].error };
 }
 
 function publicationRetry(row, family) {
@@ -75,5 +86,5 @@ function expiredBackgroundClaim(task, time) {
     Number.isFinite(task.nextAttemptAt) && task.nextAttemptAt <= time;
 }
 
-module.exports = { waitsForRefresh, publicationAttempt, publicationClaim, publicationFailure, publicationRetry,
+module.exports = { publicAnswerRefused, publicationAttempt, publicationClaim, publicationFailure, publicationRetry,
   SLOW_RETRY_MS, FAILURE_CLASSES, backgroundFailure, slowBackgroundRetryDue, expiredBackgroundClaim };

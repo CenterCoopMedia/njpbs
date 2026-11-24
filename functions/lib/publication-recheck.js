@@ -9,7 +9,7 @@ const { settleBuildQueueInTransaction } = require("./publish-build-state");
 const { readNoBuildPageOwner } = require("./no-build-page-ownership");
 const { readNoBuildPostOwner } = require("./no-build-post-ownership");
 const { preparePageConfirmation, assertPageQueue } = require("./no-build-page-recovery");
-const { assertReadbackTarget, publicReadbackHeaders, withinPublicRead, PUBLIC_READ_BUDGET_MS,
+const { assertReadbackTarget, publicReadbackHeaders, readPublicAnswer,
   readPublicPostReceipt, assertCurrentPostReceipt } = require("./no-build-post-recovery");
 
 const PAGE = "page-no-build-v1", POST = "post-no-build-v1";
@@ -79,7 +79,8 @@ async function readRecheck({ firestore, transaction, queueId, actor, allowContex
 async function preparePostConfirmation({ firestore, state, target, headers = {}, fetchPublic = fetch }) {
   target = assertReadbackTarget(firestore, target);
   const readHeaders = publicReadbackHeaders(target, headers);
-  const receipt = await withinPublicRead(PUBLIC_READ_BUDGET_MS, signal => readPublicPostReceipt(state, fetchPublic, signal, target, readHeaders));
+  const receipt = await readPublicAnswer("public Post recheck", signal =>
+    readPublicPostReceipt(state, fetchPublic, signal, target, readHeaders, { once: true }));
   return { receipt, preflight: ({ transaction }) => assertCurrentPostReceipt(firestore, transaction, state, receipt) };
 }
 
@@ -90,7 +91,7 @@ async function recheckPublication({ firestore, queueId, actor, source = null, ..
   if (initial.context) return require("./context-publication-recheck").completeContextRecheck({ firestore, queueId, actor, source, initial: initial.context, ...network });
   let proof;
   try {
-    proof = await (initial.page ? preparePageConfirmation : preparePostConfirmation)({ firestore, state: initial.state, ...network });
+    proof = await (initial.page ? preparePageConfirmation : preparePostConfirmation)({ firestore, state: initial.state, ...network, once: true });
   } catch { /* Failed public IO is a supported outcome, with fixed staff text. */ }
   const auditRef = firestore.collection("admin_logs").doc();
   return firestore.runTransaction(async transaction => {
