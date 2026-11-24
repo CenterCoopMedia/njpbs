@@ -723,8 +723,7 @@ export async function main(argv = process.argv.slice(2)) {
       const attemptDirectory = await privateDirectory(directory, `attempt-${attempt}-`);
       const state = await readPinnedState({ signal, originalPriorAdminSha: previous?.priorAdminSha });
       await compareContractInputs({ candidateSha, baselineSha: state.identity.backend.baseline.sourceSha, cwd });
-      if (process.env.FORCE_FIREBASE === "true" || process.env.CMS_DEV_RENDERER_ONLY === "true" || process.env.CMS_DEV_RELEASE_PREVIEW_RENDERER === "true" ||
-          process.env.CMS_DEV_INSTALL_READER_BRIDGE === "true" || process.env.CMS_PRODUCTION_INSTALL_READER_BRIDGE === "true") refuse("plan-not-unchanged");
+      if (process.env.FORCE_FIREBASE === "true" || process.env.CMS_DEV_INSTALL_READER_BRIDGE === "true" || process.env.CMS_PRODUCTION_INSTALL_READER_BRIDGE === "true") refuse("plan-not-unchanged");
       const plan = environment === "production" ? await nativeProductionPlan({ candidateSha, cwd, directory: attemptDirectory, signal }) :
         await nativeDevelopmentPlan({ state, target, candidateSha, cwd, signal });
       assertUnchangedPlan(plan);

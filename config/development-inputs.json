@@ -244,7 +244,6 @@
       "placeholder": "template-dev-cms-previews",
       "files": [
         "functions/lib/publication-target.js",
-        "preview-renderer/deploy-dev.mjs",
         "scripts/assert-dev-cms-targets.mjs",
         "scripts/deploy-dev-preview-gateways.mjs",
         "scripts/fixtures/dev-targets.json",
@@ -294,16 +293,12 @@
         "scripts/lib/cms-public-contract.mjs",
         "cms-api/wrangler.dev.jsonc",
         "functions/lib/dev-preview-renderer-bootstrap.js",
-        "preview-renderer/bootstrap-dev.mjs",
-        "preview-renderer/deploy-dev.mjs",
         "preview-renderer/wrangler.dev.jsonc",
         "scripts/assert-dev-cms-targets.mjs",
         "scripts/fixtures/dev-targets.json",
         "scripts/lib/dev-inactive-bootstrap.cjs",
         "site/tests/dev-preview-output-config.test.ts",
         "tests/dev-cms-config.test.mjs",
-        "tests/dev-preview-release.test.ts",
-        "tests/functions/cms-preview-cloud-release.test.ts",
         "tests/functions/dev-inactive-bootstrap.test.ts"
       ]
     },
@@ -399,7 +394,6 @@
         "site/tests/published-resource-check.test.ts",
         "workers/src/staff-site-dev-worker.ts",
         "workers/src/staff-site-worker.ts",
-        "tests/dev-preview-release.test.ts",
         "tests/dev-preview-staff-origin.test.ts",
         "tests/dev-staff-origin.test.ts",
         "tests/development-install-command-files.test.ts",

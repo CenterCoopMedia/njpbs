@@ -10,7 +10,6 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { Resolver } from 'node:dns/promises';
 
 const ACCOUNT = (process.env.CMS_DEV_CLOUDFLARE_ACCOUNT_ID ?? "");
 const HOST = 'dev-preview.example.org';
@@ -34,18 +33,6 @@ class DevPreviewGatewayReleaseError extends Error {
 export function formatDevPreviewGatewayFailure(error) {
   return error instanceof DevPreviewGatewayReleaseError ? error.message :
     new DevPreviewGatewayReleaseError({ phase: 'inputs' }).message;
-}
-
-async function publicHostnameHasRecords() {
-  const resolver = new Resolver({ timeout: 5_000, tries: 1 });
-  const answers = await Promise.all(['resolve4', 'resolve6', 'resolveCname'].map(async method => {
-    try { return await resolver[method](HOST); }
-    catch (error) {
-      if (['ENODATA', 'ENOTFOUND'].includes(error.code)) return [];
-      throw new Error('Dev preview public DNS lookup refused');
-    }
-  }));
-  return answers.some(records => records.length > 0);
 }
 
 function requireState(value) {
@@ -127,7 +114,7 @@ export async function deployDevPreviewGateways(options = {}) {
 }
 
 async function releaseDevPreviewGateways({ env = process.env, fetchImpl = fetch,
-  spawn = spawnSync, log = console.log, hasPublicOrigin = publicHostnameHasRecords, readbackClock } = {}, diagnostic) {
+  spawn = spawnSync, log = console.log, readbackClock } = {}, diagnostic) {
   function setPhase(phase) {
     diagnostic.phase = phase;
     diagnostic.status = undefined;
@@ -137,13 +124,11 @@ async function releaseDevPreviewGateways({ env = process.env, fetchImpl = fetch,
   devAccessOrigin(env);
   const owner = deploymentOwner(env);
   const sourceSha = devDeploySourceSha(env);
-  const releasing = env.CMS_DEV_RELEASE_PREVIEW_RENDERER === 'true';
   requireState(env.GITHUB_REF === 'refs/heads/main' && repositoryMatches(env.GITHUB_REPOSITORY, env) &&
     env.GITHUB_WORKFLOW_REF === `${env.GITHUB_REPOSITORY}/.github/workflows/cms-dev-deploy.yml@refs/heads/main` &&
     env.GITHUB_ACTOR === owner && env.GITHUB_TRIGGERING_ACTOR === owner &&
     env.RUNNER_ENVIRONMENT === 'github-hosted' && /^[a-f0-9]{40}$/.test(env.GITHUB_SHA ?? '') &&
-    ['true', 'false'].includes(env.CMS_DEV_RELEASE_PREVIEW_RENDERER) &&
-    (!releasing || env.CMS_DEV_PUBLISH_ENABLED === 'false') && ID.test(ACCOUNT) && env.CLOUDFLARE_ACCOUNT_ID === ACCOUNT &&
+    ID.test(ACCOUNT) && env.CLOUDFLARE_ACCOUNT_ID === ACCOUNT &&
     /^[a-f0-9]{64}$/.test(env.DEV_PREVIEW_ACCESS_AUDIENCE ?? '') && env.CLOUDFLARE_API_TOKEN);
   const audience = env.DEV_PREVIEW_ACCESS_AUDIENCE;
   async function api(suffix, { method = 'GET', body, missing = false, newestDeployment = false } = {}) {
@@ -199,15 +184,8 @@ async function releaseDevPreviewGateways({ env = process.env, fetchImpl = fetch,
   }
   const initial = await inventory();
   setPhase('owner-check');
-  // Routine deploys can refresh an already-owned gateway, never create a host.
-  requireState(releasing || initial.owned);
-  // DNS API readback is unavailable with the approved deployment credential.
-  // For a new host, refuse any publicly resolving origin and let the
-  // provider reject a hidden existing owner; never request a forced overwrite.
-  if (!initial.owned) {
-    setPhase('public-origin');
-    requireState(!await hasPublicOrigin());
-  }
+  // The deploy refreshes an already-owned gateway and never creates a host.
+  requireState(initial.owned);
   for (const worker of [PRIVATE, STAFF]) {
     setPhase(`worker-settings:${worker}`);
     const settings = await api(`${base}/scripts/${worker}/settings`, { missing: true });
@@ -216,7 +194,7 @@ async function releaseDevPreviewGateways({ env = process.env, fetchImpl = fetch,
       setPhase(`worker-subdomain:${worker}`);
       const subdomain = await api(`${base}/scripts/${worker}/subdomain`);
       requireState(subdomain.enabled === false && subdomain.previews_enabled === false);
-    } else requireState(worker !== STAFF || !initial.owned);
+    } else requireState(worker !== STAFF);
   }
   // The shared dev API must already expose the dev project and staff RPC.
   setPhase('api-settings');
@@ -296,8 +274,7 @@ async function releaseDevPreviewGateways({ env = process.env, fetchImpl = fetch,
     for (const config of [privateConfig, staffConfig]) {
       setPhase(`config:${config.name}`);
       const filename = path.join(directory, `${config.name}.json`);
-      // Stage without any route publication; the one reviewed custom-domain
-      // write below creates only this hostname's managed DNS record.
+      // Stage without any route publication.
       // Omit routes entirely: Wrangler must preserve a custom domain managed
       // separately. An explicit [] reconciles that existing domain away.
       writeFileSync(filename, JSON.stringify({ ...config, main: new URL(config.main, new URL('workers/', ROOT)).pathname,
@@ -319,14 +296,6 @@ async function releaseDevPreviewGateways({ env = process.env, fetchImpl = fetch,
     }
     const staged = await inventory('staged-inventory');
     requireState(isDeepStrictEqual(staged, initial));
-    if (!initial.owned) {
-      setPhase('public-origin');
-      requireState(!await hasPublicOrigin());
-      setPhase('attach-domain');
-      const attached = await api(`${base}/domains`, { method: 'PUT', body: { hostname: HOST, service: STAFF,
-        zone_id: zone, zone_name: 'njpbs.org', environment: 'production', enabled: true, previews_enabled: false } });
-      verifyDomain(attached, zone);
-    }
     const after = await inventory('attached-inventory');
     requireState(after.owned && isDeepStrictEqual(after.routes, initial.routes) &&
       isDeepStrictEqual(after.domains.filter(d => d.hostname !== HOST), initial.domains.filter(d => d.hostname !== HOST)));

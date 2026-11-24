@@ -434,9 +434,9 @@ test("dev deployment writes the exact Admin source revision before Functions dep
     git(["init", "-q"]);
     git(["-c", "user.name=Fixture", "-c", "user.email=fixture@example.test", "commit", "--allow-empty", "-qm", "Fixture"]);
     const sha = git(["rev-parse", "HEAD"]);
-    const run = (revision, pin = sha, releasing = true) => spawnSync("bash", ["-e", "-c", writer.run], {
+    const run = (revision, pin = sha) => spawnSync("bash", ["-e", "-c", writer.run], {
       cwd: workspace, encoding: "utf8", env: { PATH: process.env.PATH, GITHUB_SHA: "f".repeat(40), DEPLOY_SHA: revision,
-        CMS_DEV_RENDERER_SOURCE_SHA: pin, CMS_DEV_RELEASE_PREVIEW_RENDERER: String(releasing),
+        CMS_DEV_RENDERER_SOURCE_SHA: pin,
         CMS_PUBLISH_GITHUB_TRUSTED_ACTORS: JSON.stringify(["fixture-owner"]),
         CANONICAL_GITHUB_REPOSITORY: repositoryFixture.CANONICAL_GITHUB_REPOSITORY,
         CMS_PUBLISH_GITHUB_APP_ID: "1000001", CMS_PUBLISH_GITHUB_INSTALLATION_ID: "2000002" },
@@ -446,43 +446,38 @@ test("dev deployment writes the exact Admin source revision before Functions dep
     assert.equal(readFileSync(join(workspace, "functions/.env.njpbs-site-dev"), "utf8"),
       `CMS_WRITEBACK_CONFIGURED=true\nCMS_ADMIN_BUILD_REVISION=${sha}\nCMS_PUBLISH_GITHUB_TRUSTED_ACTORS=["fixture-owner"]\nCMS_PUBLISH_GITHUB_REPOSITORY=${repositoryFixture.CANONICAL_GITHUB_REPOSITORY}\nCMS_PUBLISH_GITHUB_APP_ID=1000001\nCMS_PUBLISH_GITHUB_INSTALLATION_ID=2000002\nCMS_PREVIEW_SERIALIZER_READY=true\nCMS_PREVIEW_RENDERER_SHA=${sha}\n`);
     assert.notEqual(run("0".repeat(40)).status, 0);
-    assert.notEqual(run(sha, "b".repeat(40), true).status, 0);
-    assert.notEqual(run(sha, "", false).status, 0);
+    assert.notEqual(run(sha, "").status, 0);
     writeFileSync(join(workspace, "functions/.env.njpbs-site-dev"), "CMS_WRITEBACK_CONFIGURED=true\n");
     const pinned = "b".repeat(40);
-    assert.equal(run(sha, pinned, false).status, 0);
+    assert.equal(run(sha, pinned).status, 0);
     assert.equal(readFileSync(join(workspace, "functions/.env.njpbs-site-dev"), "utf8"),
       `CMS_WRITEBACK_CONFIGURED=true\nCMS_ADMIN_BUILD_REVISION=${sha}\nCMS_PUBLISH_GITHUB_TRUSTED_ACTORS=["fixture-owner"]\nCMS_PUBLISH_GITHUB_REPOSITORY=${repositoryFixture.CANONICAL_GITHUB_REPOSITORY}\nCMS_PUBLISH_GITHUB_APP_ID=1000001\nCMS_PUBLISH_GITHUB_INSTALLATION_ID=2000002\nCMS_PREVIEW_SERIALIZER_READY=true\nCMS_PREVIEW_RENDERER_SHA=${pinned}\n`);
   } finally { rmSync(workspace, { recursive: true, force: true }); }
 });
 
-test("dev dispatch reads the renderer component receipt and opts into image release explicitly", () => {
+test("dev deploy reads and confirms the renderer component receipt before dev credentials", () => {
   const { parse } = require("yaml");
   const workflow = parse(readFileSync(new URL("../.github/workflows/cms-dev-deploy.yml", import.meta.url), "utf8"));
-  assert.equal(workflow.on.workflow_dispatch.inputs.release_preview_renderer.type, "boolean");
-  assert.equal(workflow.on.workflow_dispatch.inputs.release_preview_renderer.default, false);
-  const pinned = "b".repeat(40), released = "a".repeat(40);
-  const context = (releasing, result, cancelled = false) => ({ format: (pattern, value) => pattern.replace("{0}", value), inputs: { release_preview_renderer: releasing },
-    needs: { renderer: { result, outputs: { renderer_sha: released } } }, vars: { CANONICAL_GITHUB_REPOSITORY: "CenterCoopMedia/njpbs", CANONICAL_GITHUB_REPOSITORY_ID: "1442374012", CMS_DEV_RENDERER_SOURCE_SHA: pinned, CMS_DEPLOY_OWNER: "fixture-owner" },
-    github: { repository_id: "1442374012", ref: "refs/heads/main", actor: "fixture-owner", triggering_actor: "fixture-owner",
-      workflow_ref: "CenterCoopMedia/njpbs/.github/workflows/cms-dev-deploy.yml@refs/heads/main" },
-    always: () => true, cancelled: () => cancelled });
-  // Evaluate the workflow's documented boolean-expression subset, including
-  // GitHub's skipped-needs behavior and jobs.needs/always semantics.
-  const evaluate = (expression, ctx) => runInNewContext(expression.replace(/^\$\{\{\s*|\s*\}\}$/g, "")
-    .replaceAll("needs.preview-renderer", "needs.renderer"), ctx);
-  const renderer = workflow.jobs["preview-renderer"];
+  const context = actor => ({ format: (pattern, value) => pattern.replace("{0}", value),
+    vars: { CANONICAL_GITHUB_REPOSITORY: "CenterCoopMedia/njpbs", CANONICAL_GITHUB_REPOSITORY_ID: "1442374012", CMS_DEPLOY_OWNER: "fixture-owner" },
+    github: { repository_id: "1442374012", ref: "refs/heads/main", actor, triggering_actor: actor,
+      workflow_ref: "CenterCoopMedia/njpbs/.github/workflows/cms-dev-deploy.yml@refs/heads/main" } });
+  const evaluate = (expression, ctx) => runInNewContext(expression.replace(/^\$\{\{\s*|\s*\}\}$/g, ""), ctx);
   const deploy = workflow.jobs.deploy;
-  assert.equal(evaluate(renderer.if, context(false, "skipped")), false);
-  assert.equal(evaluate(deploy.if, context(false, "skipped")), true);
-  assert.equal(evaluate(renderer.if, context(true, "success")), true);
-  assert.equal(evaluate(deploy.if, context(true, "success")), true);
-  for (const [releasing, result, cancelled] of [[true, "skipped", false], [true, "failure", false], [false, "failure", false], [false, "skipped", true]]) {
-    assert.equal(evaluate(deploy.if, context(releasing, result, cancelled)), false);
-  }
-  // The legacy pinned-renderer verify is gone: the dev renderer has a component receipt from cms-staging-deploy.yml.
-  assert.equal(deploy.steps.some(step => /--verify-pinned/.test(step.run ?? "")), false);
-  // The dev Functions renderer SHA comes from that receipt, confirmed live, never from a variable.
+  assert.equal(evaluate(deploy.if, context("fixture-owner")), true);
+  assert.equal(evaluate(deploy.if, context("other-actor")), false);
+  const steps = deploy.steps;
+  const receipt = steps.find(step => step.name === "Read and confirm the dev renderer component receipt");
+  assert.ok(steps.indexOf(receipt) < steps.findIndex(step => step.name === "Authenticate to dev Firebase with OIDC"));
+  assert.ok(steps.indexOf(receipt) < steps.findIndex(step => step.name === "Set the matched dev Admin revision"));
+  assert.equal(receipt.if, undefined);
+  assert.deepEqual(Object.keys(receipt.env).sort(), ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN", "CMS_PREVIEW_FIREBASE_ACCOUNT", "CMS_TARGET"]);
+  assert.equal(receipt.env.CMS_TARGET, "development");
+  assert.equal(receipt.env.CMS_PREVIEW_FIREBASE_ACCOUNT, "${{ secrets.CMS_DEV_PREVIEW_FIREBASE_ACCOUNT }}");
+  assert.equal(receipt.env.CLOUDFLARE_API_TOKEN, "${{ secrets.CLOUDFLARE_DEV_PREVIEW_RENDERER_TOKEN }}");
+  assert.match(receipt.run, /"\$RUNNER_TEMP\/cms-contract-source\/scripts\/component-runner\.mjs" renderer read/);
+  assert.match(receipt.run, /"\$RUNNER_TEMP\/cms-contract-source\/scripts\/component-runner\.mjs" renderer confirm --source-sha "\$sha"/);
+  assert.equal(steps.some(step => /--verify-pinned/.test(step.run ?? "")), false);
   assert.equal(deploy.env.CMS_DEV_RENDERER_SOURCE_SHA, undefined);
   const receiptRead = deploy.steps.findIndex(step => step.name === "Read and confirm the dev renderer component receipt");
   assert.ok(receiptRead >= 0 && receiptRead < deploy.steps.findIndex(step => step.uses?.startsWith("google-github-actions/auth@")));

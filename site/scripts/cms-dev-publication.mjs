@@ -578,7 +578,9 @@ export async function upload(db, id, reconcileOnly = false, recovery = null) {
   if (!timedOutRecovery && current.batch.status === "deployed") return finishConfirmedDevPublication(db, id);
   try {
     const api = await json(path.join(root, "cms-api/wrangler.dev.jsonc"));
-    const rendererSourceSha = process.env.CMS_DEV_RENDERER_SOURCE_SHA;
+    const { readReceipt } = await import("../../scripts/lib/cms-component-receipt.mjs");
+    const rendererReceipt = await readReceipt(db, "renderer");
+    const rendererSourceSha = rendererReceipt?.state === "complete" ? rendererReceipt.mutation?.sourceSha : undefined;
     const rendererNotDeployed = api.services === undefined && !rendererSourceSha;
     if (!process.env.CLOUDFLARE_API_TOKEN || !process.env.CMS_DEV_ACCESS_CLIENT_ID || !process.env.CMS_DEV_ACCESS_CLIENT_SECRET ||
         [process.env.CMS_DEV_CMS_SOURCE_SHA, process.env.CMS_DEV_ADMIN_SOURCE_SHA].some(value => !/^[a-f0-9]{40}$/.test(value ?? "")) ||

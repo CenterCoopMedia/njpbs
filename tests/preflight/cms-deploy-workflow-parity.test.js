@@ -154,7 +154,7 @@ describe("Route D Cut A boundary placement", () => {
   const proof = (steps, boundary) => steps.findIndex(row => row.name === `Verify the singleton public contract at ${boundary}`);
   it("isolates both contract jobs and keeps triggers and production ancestry admission", () => {
     expect(Object.keys(production.jobs).sort()).toEqual(["admin-build", "verify", "firebase-preflight", "cms-api", "firebase", "preview-renderer", "admin-contract", "live-smoke", "admin-deploy", "contract-settlement"].sort());
-    expect(Object.keys(development.jobs).sort()).toEqual(["deploy", "preview-renderer"]);
+    expect(Object.keys(development.jobs).sort()).toEqual(["deploy"]);
     expect(Object.keys(production.on)).toEqual(["workflow_dispatch"]);
     expect(Object.keys(development.on)).toEqual(["workflow_dispatch"]);
     expect(step(job(deploy, "admin-build"), "Require CMS deploy compatibility floor"))
