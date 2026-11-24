@@ -15,7 +15,11 @@ const AMBIENT = ["FIRESTORE_EMULATOR_HOST", "FIREBASE_AUTH_EMULATOR_HOST", "GOOG
 const SAFE_REFUSALS = new Set(["dev_repin_arguments_required", "dev_repin_explicit_stdin_required",
   "dev_repin_operator_source_refused", "dev_repin_target_not_on_main", "dev_operator_credential_required"]);
 const SHA = /^[a-f0-9]{40}$/;
+// The canonical GitHub repository only, over HTTPS or SSH; any other host or a local path refuses.
+const CANONICAL_ORIGIN = /^(?:https:\/\/github\.com\/|git@github\.com:|ssh:\/\/git@github\.com\/)CenterCoopMedia\/njpbs(?:\.git)?$/;
 const refuse = code => { throw new Error(code); };
+
+export const isCanonicalOrigin = url => CANONICAL_ORIGIN.test(url);
 
 export function parseRepinArguments(args, env, isTTY) {
   const [flag0, operatorCommitSha, flag1, operationId, flag2, fromCommitSha, flag3, toCommitSha, mode] = args;
@@ -36,7 +40,7 @@ const onMain = sha => { try { git(["merge-base", "--is-ancestor", sha, "origin/m
 function assertOperatorSource(operatorCommitSha, toCommitSha) {
   let canonical = false;
   try {
-    canonical = /[/:]CenterCoopMedia\/njpbs(?:\.git)?$/.test(git(["remote", "get-url", "origin"])) &&
+    canonical = isCanonicalOrigin(git(["remote", "get-url", "origin"])) &&
       git(["rev-parse", "HEAD"]) === operatorCommitSha && assertDevelopmentSource(options.cwd) &&
       git(["rev-parse", "HEAD^{tree}"]) === git(["rev-parse", `${operatorCommitSha}^{tree}`]) && onMain(operatorCommitSha);
   } catch { /* Any source error refuses. */ }

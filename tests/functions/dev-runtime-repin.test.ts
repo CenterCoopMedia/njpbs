@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { clearEmulatorFirestore } from "../helpers/emulator-firestore.js";
 import owner from "../../scripts/lib/dev-runtime-repin.cjs";
 import pointers from "../../functions/lib/public-deployment-pointer.js";
-import { parseRepinArguments } from "../../scripts/repin-dev-runtime.mjs";
+import { isCanonicalOrigin, parseRepinArguments } from "../../scripts/repin-dev-runtime.mjs";
 
 if (!/^127\.0\.0\.1:\d+$/.test(process.env.FIRESTORE_EMULATOR_HOST ?? "")) throw new Error("Isolated emulator required");
 const app = initializeApp({ projectId: "njpbs-site-dev" }, "dev-runtime-repin-test");
@@ -80,6 +80,13 @@ it("accepts only explicit arguments with the credential on stdin", () => {
   expect(() => parseRepinArguments(args, {}, true)).toThrow("dev_repin_explicit_stdin_required");
   expect(() => parseRepinArguments(args, { GOOGLE_APPLICATION_CREDENTIALS: "/tmp/key.json" }, false)).toThrow("dev_repin_explicit_stdin_required");
   expect(() => parseRepinArguments(args.slice(0, 8), {}, false)).toThrow("dev_repin_arguments_required");
+});
+
+it("accepts only the canonical GitHub origin", () => {
+  for (const url of ["https://github.com/CenterCoopMedia/njpbs.git", "https://github.com/CenterCoopMedia/njpbs",
+    "git@github.com:CenterCoopMedia/njpbs.git", "ssh://git@github.com/CenterCoopMedia/njpbs.git"]) expect(isCanonicalOrigin(url)).toBe(true);
+  for (const url of ["https://example.org/CenterCoopMedia/njpbs.git", "/tmp/CenterCoopMedia/njpbs.git",
+    "https://github.com/CenterCoopMedia/njpbs-fork.git", "https://github.com.evil/CenterCoopMedia/njpbs.git"]) expect(isCanonicalOrigin(url)).toBe(false);
 });
 
 it("refuses a checkout that is not the clean reviewed operator commit before reading a credential", () => {
