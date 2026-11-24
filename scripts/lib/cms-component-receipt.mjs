@@ -7,7 +7,6 @@ import runtimeProcess from "node:process";
 import { deploymentInputFingerprint, readDeploymentManifest, renderCommittedDeploymentSource } from "../render-development-config.mjs";
 import { fileURLToPath } from "node:url";
 import { cmsTarget } from "./cms-target.mjs";
-import { providerJson } from "./provider-call.mjs";
 import { addCommittedFunctionsContracts, contractInputs } from "./functions-contracts.mjs";
 
 const previewPair = () => createRequire(import.meta.url)("../../functions/lib/cms-preview-pair.js");
@@ -1145,9 +1144,13 @@ export function rolloutApplied(application, rollout) {
     && rolloutBoundToApplication(application, rollout);
 }
 
-const readProvider = (fetchFn, url, token, deps) => providerJson(`Cloudflare ${new URL(url).pathname.split("/").slice(5).join("/")}`,
-  () => fetchFn(url, { headers: { authorization: `Bearer ${token}` }, redirect: "error", signal: AbortSignal.timeout(15_000) }),
-  { wait: deps.sleep });
+async function readProvider(fetchFn, url, token, deps) {
+  // Provider code loads on use: the staged legacy rollback helpers start without it.
+  const { providerJson } = await import("./provider-call.mjs");
+  return providerJson(`Cloudflare ${new URL(url).pathname.split("/").slice(5).join("/")}`,
+    () => fetchFn(url, { headers: { authorization: `Bearer ${token}` }, redirect: "error", signal: AbortSignal.timeout(15_000) }),
+    { wait: deps.sleep });
+}
 
 export async function readConsistentRendererApplication(fetchFn, account, token, deps) {
   const base = `https://api.cloudflare.com/client/v4/accounts/${account}/containers/applications`;
