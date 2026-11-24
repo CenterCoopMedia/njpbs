@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { describe, expect, it, vi } from "vitest";
 import { parse } from "yaml";
-import { bindApiConfig, bindFunctionsDotenv, recordReaderCandidates, selectReaderBinding } from "../../scripts/cms-reader-binding.mjs";
+import { assertFirstApiAttempt, bindApiConfig, bindFunctionsDotenv, recordReaderCandidates, selectReaderBinding } from "../../scripts/cms-reader-binding.mjs";
 import { cmsTarget } from "../../scripts/lib/cms-target.mjs";
 
 const require = createRequire(import.meta.url);
@@ -77,8 +77,7 @@ describe("CMS reader binding for an ordinary deploy", () => {
       inputFingerprint: component.slice(0, 1).repeat(64), configurationFingerprint: "c".repeat(64), runId: "9", runAttempt: 1 });
     const firestore = { doc: path => ({ get: async () => ({ data: () => ({ schemaVersion: 1, state: "complete", mutation: mutation(path.split("/")[1]) }) }) }) };
     const calls = [];
-    const receipts = { candidateReceiptRef: () => ({ get: async () => ({ data: () => undefined }) }),
-      startCandidateReceipt: async (_f, input) => calls.push(["start", input]),
+    const receipts = { startCandidateReceipt: async (_f, input) => calls.push(["start", input]),
       verifyCandidateReceipt: async (_f, input) => calls.push(["verify", input.component]),
       commitLiveReaderReceipt: async (_f, input) => calls.push(["commit", input.component, input.supported]) };
     const mount = { SUPPORT: { adminSession: [1, 2] }, readCmsReaderMountDescriptor: async () => ({ operationId: "reader-dev-45310500950-2" }) };
@@ -88,11 +87,11 @@ describe("CMS reader binding for an ordinary deploy", () => {
       ["commit", "functions"], ["commit", "cmsApi"]]);
     expect(calls[0][1]).toEqual({ component: "functions", ...mutation("functions"), runId: "45310500950", runAttempt: 2 });
     expect(calls[4][2]).toEqual({ adminSession: [1, 2] });
-    // A rerun keeps both candidates an earlier attempt verified and only commits the receipts.
-    calls.length = 0;
-    receipts.candidateReceiptRef = () => ({ get: async () => ({ data: () => ({ state: "verified" }) }) });
-    await recordReaderCandidates({ firestore, binding, collect: vi.fn(), receipts, mount });
-    expect(calls.map(row => row.slice(0, 2))).toEqual([["commit", "functions"], ["commit", "cmsApi"]]);
+  });
+
+  it("refuses a failed-job rerun of a bound run's CMS API job", () => {
+    expect(() => assertFirstApiAttempt({ GITHUB_RUN_ATTEMPT: "1" })).not.toThrow();
+    expect(() => assertFirstApiAttempt({ GITHUB_RUN_ATTEMPT: "2" })).toThrow("dispatch a new run");
   });
 
   it("binds only a run whose binding is set and keeps production's force and Worker conditions", () => {
@@ -103,7 +102,7 @@ describe("CMS reader binding for an ordinary deploy", () => {
       "Record and verify this run's CMS reader candidates"]) expect(steps[name].if).toContain("reader_binding != ''");
     // With no binding (production today) each expression reduces to its earlier form.
     expect(steps["Plan Functions and renderer release"].env.FORCE_FIREBASE).toBe("${{ inputs.force_firebase || steps.reader_binding.outputs.binding != '' }}");
-    expect(steps["Deploy CMS API Worker"].if).toBe("(steps.cms_api_plan.outputs.mutated != 'false' || steps.reader_bind_api.outputs.redeploy == 'true') && steps.reader_bind_api.outputs.redeploy != 'false'");
-    expect(steps["Confirm the live CMS API identity"].if).toBe("(steps.cms_api_plan.outputs.mutated == 'false' && steps.reader_bind_api.outputs.redeploy != 'true') || steps.reader_bind_api.outputs.redeploy == 'false'");
+    expect(steps["Deploy CMS API Worker"].if).toBe("steps.cms_api_plan.outputs.mutated != 'false' || needs.firebase-preflight.outputs.reader_binding != ''");
+    expect(steps["Confirm the live CMS API identity"].if).toBe("steps.cms_api_plan.outputs.mutated == 'false' && needs.firebase-preflight.outputs.reader_binding == ''");
   });
 });

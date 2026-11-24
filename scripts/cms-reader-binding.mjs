@@ -53,6 +53,14 @@ export function bindFunctionsDotenv(text, binding) {
   return `${[...lines, ...Object.entries(binding).map(([key, value]) => `${key}=${value}`)].join("\n")}\n`;
 }
 
+// A failed-job rerun of a bound run's cms-api job cannot finish consistently: review of #561 found
+// that the forced paired release redeployed the Worker under verified candidates, that a skipped
+// deploy left the CMS API receipt open, and that completion then used the new run attempt. A new
+// dispatch recovers cleanly (startReceipt takes over the open receipt; the run binds anew).
+export function assertFirstApiAttempt(env) {
+  if (env.GITHUB_RUN_ATTEMPT !== "1") fail("A bound run cannot resume its CMS API job; dispatch a new run");
+}
+
 export function bindApiConfig(config, binding) {
   return { ...config, vars: { ...config.vars, ...Object.fromEntries(READER_KEYS.map(key => [key, binding[key]])) } };
 }
@@ -71,11 +79,8 @@ export async function recordReaderCandidates({ firestore, binding, collect, rece
   const inputs = [];
   for (const component of ["functions", "cmsApi"]) {
     const input = candidateInput(component, (await firestore.doc(`cmsDeploymentReceipts/${component}`).get()).data(), binding);
-    // A rerun keeps the candidate an earlier attempt verified; the Worker was not redeployed for it.
-    if ((await receipts.candidateReceiptRef(firestore, input).get()).data()?.state !== "verified") {
-      await receipts.startCandidateReceipt(firestore, input);
-      await receipts.verifyCandidateReceipt(firestore, input, { collect });
-    }
+    await receipts.startCandidateReceipt(firestore, input);
+    await receipts.verifyCandidateReceipt(firestore, input, { collect });
     inputs.push(input);
   }
   for (const input of inputs) await receipts.commitLiveReaderReceipt(firestore, { ...input, supported: mount.SUPPORT }, { collect });
@@ -97,12 +102,11 @@ async function cloudflare(path) {
   return body.result;
 }
 
-async function liveApiVersion(target) {
+async function liveApiVars(target) {
   const version = (await cloudflare(`workers/scripts/${target.cmsApiWorker}/deployments`))?.deployments?.[0]?.versions?.[0]?.version_id;
   if (!/^[a-f0-9-]{36}$/.test(version ?? "")) fail("The live CMS API version could not be read");
   const bindings = (await cloudflare(`workers/scripts/${target.cmsApiWorker}/versions/${version}`))?.resources?.bindings ?? [];
-  return { version, vars: Object.fromEntries(bindings.filter(row => row.type === "plain_text" && READER_KEYS.includes(row.name))
-    .map(row => [row.name, row.text])) };
+  return Object.fromEntries(bindings.filter(row => row.type === "plain_text" && READER_KEYS.includes(row.name)).map(row => [row.name, row.text]));
 }
 
 async function main([command, component]) {
@@ -110,7 +114,7 @@ async function main([command, component]) {
   const { withFirestore } = await import("./cms-component-receipt.mjs");
   if (command === "select") {
     const selected = await withFirestore(firestore => selectReaderBinding({ target,
-      readLiveApiVars: async () => (await liveApiVersion(target)).vars,
+      readLiveApiVars: () => liveApiVars(target),
       readInstalledProof: async operationId => (await firestore.doc(`cmsReaderBridgeInstalledProofs/${operationId}`).get()).exists,
       readCompatibilityReceipts: async () => Object.fromEntries(await Promise.all(["functions", "cmsApi"].map(async component =>
         [component, (await firestore.doc(`cmsReaderCompatibilityReceipts/${component}`).get()).data()]))),
@@ -123,16 +127,9 @@ async function main([command, component]) {
     const path = `functions/.env.${target.projectId}`;
     writeFileSync(path, bindFunctionsDotenv(readFileSync(path, "utf8"), binding()));
   } else if (command === "bind" && component === "cmsApi") {
-    const selected = binding();
+    assertFirstApiAttempt(process.env);
     const path = target.environment === "development" ? "cms-api/wrangler.dev.jsonc" : "cms-api/wrangler.jsonc";
-    writeFileSync(path, `${JSON.stringify(bindApiConfig(JSON.parse(readFileSync(path, "utf8")), selected), null, 2)}\n`);
-    // A rerun finds this binding live already and keeps that Worker version; it still completes
-    // this run's CMS API receipt if an earlier attempt left it in progress.
-    const { version, vars } = await liveApiVersion(target);
-    const receipt = await withFirestore(async firestore => (await firestore.doc("cmsDeploymentReceipts/cmsApi").get()).data());
-    const open = receipt?.state === "in_progress" && receipt.mutation?.runId === process.env.GITHUB_RUN_ID;
-    appendFileSync(process.env.GITHUB_OUTPUT, `redeploy=${READER_KEYS.some(key => vars[key] !== selected[key])}\n` +
-      `receipt_open=${open}\nlive_version=${version}\n`);
+    writeFileSync(path, `${JSON.stringify(bindApiConfig(JSON.parse(readFileSync(path, "utf8")), binding()), null, 2)}\n`);
   } else if (command === "record") {
     const selected = binding();
     const receipts = await import("./lib/cms-component-receipt.mjs");
