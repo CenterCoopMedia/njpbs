@@ -93,6 +93,9 @@ export async function recordReaderCandidates({ firestore, binding, collect, rece
 // multiline JSON secret mask "{" and "}"; the binding crosses jobs as base64.
 export const encodeBinding = selected => Buffer.from(JSON.stringify(selected)).toString("base64");
 
+// The bind and record steps run from the release source, which may predate the base64 binding.
+export const releaseSourceBinds = source => source.includes("export function decodeBinding(");
+
 export function decodeBinding(value) {
   return value ? JSON.parse(Buffer.from(value, "base64").toString("utf8")) : null;
 }
@@ -128,9 +131,12 @@ async function main([command, component]) {
       readCompatibilityReceipts: async () => Object.fromEntries(await Promise.all(["functions", "cmsApi"].map(async component =>
         [component, (await firestore.doc(`cmsReaderCompatibilityReceipts/${component}`).get()).data()]))),
     }));
-    // The bind and record steps run from the release source; refuse before any mutation if it predates them.
     if (selected) assertFirstAttempt(process.env);
-    if (selected && !existsSync("scripts/cms-reader-binding.mjs")) fail("This release source cannot keep the readers bound; deploy a source with scripts/cms-reader-binding.mjs");
+    // The bind and record steps run from the release source; refuse before any mutation if it predates them.
+    const release = "scripts/cms-reader-binding.mjs";
+    if (selected && !releaseSourceBinds(existsSync(release) ? readFileSync(release, "utf8") : "")) {
+      fail(`This release source cannot keep the readers bound; deploy a source whose ${release} decodes the base64 binding`);
+    }
     appendFileSync(process.env.GITHUB_OUTPUT, `binding=${selected ? encodeBinding(selected) : ""}\n`);
     console.log(selected ? `Readers bound to operation ${selected.CMS_READER_BRIDGE_OPERATION_ID}` : "No reader binding for this run");
   } else if (command === "bind" && component === "functions") {

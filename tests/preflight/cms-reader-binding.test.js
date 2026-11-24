@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { describe, expect, it, vi } from "vitest";
 import { parse } from "yaml";
-import { assertFirstAttempt, bindApiConfig, bindFunctionsDotenv, decodeBinding, encodeBinding, recordReaderCandidates,
+import { assertFirstAttempt, bindApiConfig, bindFunctionsDotenv, decodeBinding, encodeBinding, recordReaderCandidates, releaseSourceBinds,
   selectReaderBinding } from "../../scripts/cms-reader-binding.mjs";
 import { cmsTarget } from "../../scripts/lib/cms-target.mjs";
 
@@ -95,6 +95,10 @@ describe("CMS reader binding for an ordinary deploy", () => {
     expect(encodeBinding(binding)).not.toMatch(/[{}]/);
     expect(decodeBinding(encodeBinding(binding))).toEqual(binding);
     expect(decodeBinding("")).toBeNull();
+    // A release source from before the base64 binding (036901d parses JSON) is refused in preflight.
+    expect(releaseSourceBinds(readFileSync(new URL("../../scripts/cms-reader-binding.mjs", import.meta.url), "utf8"))).toBe(true);
+    expect(releaseSourceBinds("const parsed = value ? JSON.parse(value) : null;")).toBe(false);
+    expect(releaseSourceBinds("")).toBe(false);
   });
 
   it("refuses a rerun of a bound run before selection and before each bind", () => {
