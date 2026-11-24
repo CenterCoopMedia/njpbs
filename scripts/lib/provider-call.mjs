@@ -30,11 +30,18 @@ const PERMANENT_FAILURES = Object.freeze([
 
 // A rate quota (per second, minute or 100 seconds) or rate limit clears by itself and is retried.
 const RATE_QUOTA = /\bper (?:second|minute|100 seconds)\b|\brate limit\b/i;
+// A quota is final only when the provider names a limit that waiting cannot
+// free: a daily limit or a per-project count. Cloud Run's regional CPU and
+// memory allocation frees as revisions settle (dev run 45504015954, Nov. 24,
+// 2026: "Quota exceeded for total allowable CPU per project per region"), and
+// any other quota wording is retried and reported on each wait.
+const FINAL_QUOTA = /\bdaily limit\b|\bper day\b|limit '[^']* per project'/i;
 
 export function permanentFailure(output) {
   const lines = output.split("\n");
   for (const [kind, pattern] of PERMANENT_FAILURES) {
-    if (lines.some(line => pattern.test(line) && !(["quota", "request"].includes(kind) && RATE_QUOTA.test(line)))) return kind;
+    if (lines.some(line => pattern.test(line) && !(kind === "request" && RATE_QUOTA.test(line)) &&
+      !(kind === "quota" && (RATE_QUOTA.test(line) || !FINAL_QUOTA.test(line))))) return kind;
   }
   return null;
 }

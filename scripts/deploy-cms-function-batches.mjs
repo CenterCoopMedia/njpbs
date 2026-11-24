@@ -194,8 +194,11 @@ function runFunctionDeploy(names, launch, project) {
 }
 
 // A failed Firebase invocation is retried unless its output shows a permanent
-// failure: our source or configuration is wrong, or a permission or quota needs
-// a person (Joe, Nov. 24, 2026: fix it as a principle). Unknown and provider-side
+// failure: our source or configuration is wrong, or a permission or a final
+// quota needs a person (Joe, Nov. 24, 2026: fix it as a principle). It has no
+// attempt count: each retry deploys only the functions that failed, paced from
+// 60 s doubling to 5 min, and prints what it waits for, until Firebase confirms
+// "Deploy complete!" or answers a permanent failure. Unknown and provider-side
 // failures (any 5xx, "Authentication backend unavailable", a reset connection, a
 // timeout, an exit without "Deploy complete!") are retried. A retry is safe because
 // the deploy is idempotent: `firebase deploy --only <targets> --force` sets each
@@ -206,19 +209,20 @@ export async function deployFunctionTargets(names, launch = spawn, project = PRO
   if (!Array.isArray(names) || !names.length || !Array.isArray(manifest) ||
       names.some(name => !manifest.some(fn => fn.name === name))) throw new ComponentReceiptError("Function targets differ from the exact manifest");
   let pending = names;
-  for (let attempt = 1; attempt <= 3; attempt++) {
+  for (let attempt = 1, delay = 60_000; ; attempt++, delay = Math.min(delay * 2, 300_000)) {
     assertNoFunctionDeletions(manifest, await readFunctionsDeployInventory(project, request), { projectId: project, codebase: cmsTarget().codebase, only: pending });
     const { code, output } = await runFunctionDeploy(pending, launch, project);
     if (code === 0 && output.includes("Deploy complete!")) return;
     const permanent = permanentFailure(output);
-    if (permanent || attempt === 3) {
-      console.error(`Firebase deployment failed: class ${permanent ?? "transient"}, ${attempt} of 3 attempts, last provider line: ${lastProviderLine(output)}`);
+    if (permanent) {
+      console.error(`Firebase deployment failed: class ${permanent}, attempt ${attempt}, last provider line: ${lastProviderLine(output)}`);
       throw new ComponentReceiptError("Firebase deployment did not confirm completion");
     }
     const failed = code === 0 ? [] : failedFunctionNames(output, pending);
     if (failed.length) pending = failed;
-    console.log(`Retrying function deployment, attempt ${attempt + 1} of 3: ${pending.join(", ")}`);
-    await wait(10_000);
+    console.log(`Waiting ${delay / 1000} s for the provider, then deploying again (attempt ${attempt + 1}): ${pending.join(", ")}; ` +
+      `last provider line: ${lastProviderLine(output)}`);
+    await wait(delay);
   }
 }
 

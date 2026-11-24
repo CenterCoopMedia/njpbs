@@ -21,6 +21,8 @@ describe("provider call rule", () => {
     ["an unreadable body", new SyntaxError("Unexpected end of JSON input")],
     ["the recorded Secret Manager 503", command(secretManager503)],
     ["a rate quota", command("Error: Quota exceeded for quota metric 'Requests' and limit 'Requests per minute'")],
+    ["the Cloud Run regional CPU allocation", command("Quota exceeded for total allowable CPU per project per region.")],
+    ["an unknown quota", command("Error: Quota exceeded for a quota this test has never seen.")],
     ["an unknown command failure", command("something new")],
   ])("repeats %s and answers the next success", async (_name, fault) => {
     const call = vi.fn().mockRejectedValueOnce(fault).mockResolvedValue("answer");
@@ -36,6 +38,7 @@ describe("provider call rule", () => {
     ["permission", command("Error: Request had HTTP Error: 403, Permission 'secretmanager.secrets.get' denied on resource")],
     ["build", command("Build failed with status: FAILURE")],
     ["quota", command("Quota exceeded: daily limit")],
+    ["quota", command("Error: HTTP Error: 429, Quota exceeded for quota metric 'Functions' and limit 'Functions per project'")],
     ["request", command("gh: Not Found (HTTP 404)")],
   ])("ends at once on a permanent %s fault and names it", async (kind, fault) => {
     const call = vi.fn().mockRejectedValue(fault);
