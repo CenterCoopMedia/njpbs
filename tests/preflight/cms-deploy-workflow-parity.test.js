@@ -411,6 +411,9 @@ describe("CMS deploy target", () => {
       for (const row of steps) if (!/^inputs\.target != 'development'/.test(row.if ?? "")) collect(row);
     }
     expect(names.secrets).toEqual([...reads.secrets].sort());
+    // The admin-build credential check exits on any listed name its step does not bind.
+    const check = workflow.jobs["admin-build"].steps.find(row => row.name === "Require the target's deploy credentials");
+    for (const name of names.secrets) expect(Object.keys(check.env), name).toContain(name);
     expect(names.secrets).toEqual(["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_DEV_PREVIEW_RENDERER_TOKEN", "CMS_BUG_REPORT_GITHUB_TOKEN",
       "CMS_BUG_REPORT_GITHUB_WEBHOOK_SECRET", "CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP", "CMS_BUG_REPORT_TELEGRAM_BOT_TOKEN",
       "CMS_BUG_REPORT_TELEGRAM_CHAT_ID", "CMS_BUG_REPORT_TELEGRAM_WEBHOOK_SECRET", "CMS_DEV_ACCESS_CLIENT_ID", "CMS_DEV_ACCESS_CLIENT_SECRET",
