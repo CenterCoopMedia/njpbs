@@ -23,8 +23,6 @@ paths.input = `${paths.batch}/inputs/devFrozen`; paths.receipt = `${paths.batch}
 let db;
 beforeAll(() => { db = isolatedFirestore("dev-preupload-settlement"); });
 const read = async path => (await db.doc(path).get()).data();
-const snapshots = async () => Object.fromEntries(await Promise.all(Object.entries({ ...paths, pointer: "system/publicDeployment" })
-  .map(async ([key, path]) => [key, await read(path)])));
 // Writes the record shape the removed operator wrote, from the live reserved rows.
 async function seedRetired() {
   const [queue, batch, input] = [await read(paths.queue), await read(paths.batch), await read(paths.input)];
@@ -78,7 +76,10 @@ it("the dev pause census counts an existing pre-upload retirement and rejects a 
 });
 
 it("existing records accept only the listed failure codes", () => {
-  for (const code of Object.keys(contract.FAILURES)) {
+  // Retired records in the development database carry these codes.
+  const codes = ["retained_dev_renderer_source_differs", "dev_refresh_frozen_build_failed", "dev_refresh_content_check_failed"];
+  expect(Object.keys(contract.FAILURES).sort()).toEqual([...codes].sort());
+  for (const code of codes) {
     const value = structuredClone(request); value.failure.code = code;
     expect(contract.parseDevPreuploadSettlement(value)).toBe(value);
   }
