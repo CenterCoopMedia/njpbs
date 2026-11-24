@@ -1279,6 +1279,9 @@ jobs:
           ref: ${{ needs.admin-build.outputs.deploy_sha }}
           fetch-depth: 0
           persist-credentials: true
+      - name: Record the job start for the Functions deploy deadline
+        # The Functions deploy ends before this job's timeout (CMS_FUNCTIONS_DEPLOY_DEADLINE_MS).
+        run: echo "CMS_FIREBASE_JOB_STARTED_MS=$(date +%s%3N)" >> "$GITHUB_ENV"
       - name: Check out trusted release source gate
         uses: actions/checkout@v7
         with:
@@ -1616,8 +1619,16 @@ jobs:
           FUNCTION_TARGETS: ${{ needs.verify.outputs.function_targets }}
           CLOUD_PUBLICATION_WAKE_ENVIRONMENT: ${{ env.CMS_TARGET }}
           CLOUD_PUBLICATION_WAKE_ENABLED: ${{ inputs.target != 'development' }}
+          # Equal to this job's timeout-minutes (tests/preflight/cms-function-batches.test.js).
+          FIREBASE_JOB_TIMEOUT_MINUTES: 107
         run: |
           set -euo pipefail
+          # The deploy retry stops as a recorded failure before the job's timeout, so the
+          # failure and recovery steps still run. After this step they took 1 s in runs
+          # 44317559254 (receipt restore) and 45504015954 (credential cleanup); 60 s covers them.
+          if [ -n "${CMS_FIREBASE_JOB_STARTED_MS:-}" ]; then
+            export CMS_FUNCTIONS_DEPLOY_DEADLINE_MS=$(( CMS_FIREBASE_JOB_STARTED_MS + FIREBASE_JOB_TIMEOUT_MINUTES * 60000 - 60000 ))
+          fi
           if [[ ! "$FUNCTION_TARGETS" =~ ^functions:[A-Za-z][A-Za-z0-9]*(,functions:[A-Za-z][A-Za-z0-9]*)*$ ]]; then
             echo "The verified manifest returned an invalid Firebase function target list" >&2
             exit 1

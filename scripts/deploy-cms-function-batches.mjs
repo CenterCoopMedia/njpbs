@@ -205,13 +205,16 @@ function runFunctionDeploy(names, launch, project) {
 // named function to this exact source and configuration, so repeating it after a
 // partial attempt reaches the same state, and the inventory check before every
 // attempt still refuses any deletion.
-export async function deployFunctionTargets(names, launch = spawn, project = PROJECT, { manifest, request, wait = pause } = {}) {
+export async function deployFunctionTargets(names, launch = spawn, project = PROJECT, { manifest, request, wait = pause,
+  deadline = Number(process.env.CMS_FUNCTIONS_DEPLOY_DEADLINE_MS) || undefined, now = Date.now } = {}) {
   if (!Array.isArray(names) || !names.length || !Array.isArray(manifest) ||
       names.some(name => !manifest.some(fn => fn.name === name))) throw new ComponentReceiptError("Function targets differ from the exact manifest");
   let pending = names;
   for (let attempt = 1, delay = 60_000; ; attempt++, delay = Math.min(delay * 2, 300_000)) {
     assertNoFunctionDeletions(manifest, await readFunctionsDeployInventory(project, request), { projectId: project, codebase: cmsTarget().codebase, only: pending });
+    const started = now();
     const { code, output } = await runFunctionDeploy(pending, launch, project);
+    const took = now() - started;
     if (code === 0 && output.includes("Deploy complete!")) return;
     const permanent = permanentFailure(output);
     if (permanent) {
@@ -220,6 +223,13 @@ export async function deployFunctionTargets(names, launch = spawn, project = PRO
     }
     const failed = code === 0 ? [] : failedFunctionNames(output, pending);
     if (failed.length) pending = failed;
+    // The workflow's job deadline is the only ceiling: stop as a recorded failure when the
+    // next wait and another attempt as long as this one would cross it.
+    if (deadline !== undefined && now() + delay + took > deadline) {
+      console.error(`Firebase deployment stopped for the job deadline; still pending: ${pending.join(", ")}; ` +
+        `last provider line: ${lastProviderLine(output)}`);
+      throw new ComponentReceiptError("Firebase deployment did not confirm completion");
+    }
     console.log(`Waiting ${delay / 1000} s for the provider, then deploying again (attempt ${attempt + 1}): ${pending.join(", ")}; ` +
       `last provider line: ${lastProviderLine(output)}`);
     await wait(delay);

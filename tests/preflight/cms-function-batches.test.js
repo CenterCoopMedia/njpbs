@@ -4,6 +4,7 @@ import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } f
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
+import { parse } from "yaml";
 import { FUNCTION_SCHEDULES, functionTargets, cloudWakeFunctionPlan, assertCloudWakeRetired, assertCloudWakeSettings, explicitCloudWakeDecision, loadCloudWakeDeployment, assertFunctionsReady, assertSchedulesReady, listPages, deployFunctionTargets } from "../../scripts/deploy-cms-function-batches.mjs";
 import { meteredOffenders, scanRepositorySourceFiles } from "../../.github/scripts/metered-api-scan.mjs";
 
@@ -179,7 +180,7 @@ describe("CMS function build queue expiry recovery", () => {
     ["exampleFunctionB", "exampleFunctionC", "exampleFunctionD"],
     ["exampleFunctionE"],
   ];
-  function deployment(outputs, names, request = vi.fn().mockResolvedValue({})) {
+  function deployment(outputs, names, request = vi.fn().mockResolvedValue({}), clock = {}) {
     const launch = vi.fn(() => {
       const child = new EventEmitter(); child.stdout = new EventEmitter(); child.stderr = new EventEmitter();
       const [code, output] = outputs.shift();
@@ -192,7 +193,7 @@ describe("CMS function build queue expiry recovery", () => {
     });
     const wait = vi.fn().mockResolvedValue();
     const promise = deployFunctionTargets(names, launch, "njpbs-site", {
-      manifest: names.map(name => ({ name, region: "us-central1", platform: "gcfv2" })), request, wait,
+      manifest: names.map(name => ({ name, region: "us-central1", platform: "gcfv2" })), request, wait, ...clock,
     });
     const targets = () => launch.mock.calls.map(([, args]) => args[args.indexOf("--only") + 1]);
     return { promise, launch, wait, request, targets };
@@ -214,6 +215,34 @@ describe("CMS function build queue expiry recovery", () => {
     const run = deployment([[1, created], [0, "Deploy complete!\n"]], ["health", ...failures[1]]);
     await expect(run.promise).resolves.toBeUndefined();
     expect(run.targets()[1]).toBe(failures[1].map(name => `functions:${name}`).join(","));
+  });
+  it("stops as a recorded failure when the next wait and attempt would cross the job deadline", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    // Each attempt takes 4 min on this clock; waits advance it by their own length.
+    let clock = 0;
+    const now = () => clock;
+    const outputs = Array.from({ length: 4 }, () => [1, recordings[1]]);
+    const run = deployment(outputs, ["health", ...failures[1]], undefined, { now, deadline: 14 * 60_000 });
+    run.launch.mockImplementation((original => (...args) => { clock += 4 * 60_000; return original(...args); })(run.launch.getMockImplementation()));
+    run.wait.mockImplementation(async ms => { clock += ms; });
+    await expect(run.promise).rejects.toThrow("did not confirm completion");
+    // 4 min + 1 min wait + 4 min = 9 min; then 9 + 2 + 4 = 15 min would cross the 14 min deadline.
+    expect(run.launch).toHaveBeenCalledTimes(2);
+    expect(errors).toHaveBeenLastCalledWith(expect.stringMatching(
+      /^Firebase deployment stopped for the job deadline; still pending: exampleFunctionB, exampleFunctionC, exampleFunctionD; last provider line: /));
+    errors.mockRestore();
+  });
+  it("has no ceiling without a job deadline", async () => {
+    expect(process.env.CMS_FUNCTIONS_DEPLOY_DEADLINE_MS).toBeUndefined();
+    const run = deployment([...Array.from({ length: 8 }, () => [1, recordings[1]]), [0, "Deploy complete!\n"]], ["health", ...failures[1]]);
+    await expect(run.promise).resolves.toBeUndefined();
+    expect(run.launch).toHaveBeenCalledTimes(9);
+  });
+  it("names the firebase job's own timeout as the deploy deadline", () => {
+    const workflow = parse(readFileSync(new URL("../../.github/workflows/cms-staging-deploy.yml", import.meta.url), "utf8"));
+    const step = workflow.jobs.firebase.steps.find(item => item.name === "Deploy Firebase rules, indexes, and functions");
+    expect(step.env.FIREBASE_JOB_TIMEOUT_MINUTES).toBe(workflow.jobs.firebase["timeout-minutes"]);
+    expect(step.run).toContain("CMS_FUNCTIONS_DEPLOY_DEADLINE_MS=");
   });
   it("keeps deploying only the failed functions, paced to 5 min, until they complete", async () => {
     const run = deployment([...Array.from({ length: 5 }, () => [1, recordings[1]]), [0, "Deploy complete!\n"]], ["health", ...failures[1]]);
