@@ -27,7 +27,7 @@ export function requireDevDeploySource({ env, releaseRoot, trustedRoot }) {
     throw new Error("Dev reader installation still requires the exact workflow source");
   }
   const manifest = JSON.parse(readFileSync(resolve(releaseRoot, ".github/cms-deploy-compatibility.json"), "utf8"));
-  if (manifest.contracts?.cmsDevReleaseChecks?.version !== 1) throw new Error("Dev pin lacks cmsDevReleaseChecks version 1");
+  if (manifest.contracts?.cmsDevReleaseChecks?.version !== 2) throw new Error("Dev pin lacks cmsDevReleaseChecks version 2");
   const files = ["scripts/smoke-cms-functions.mjs", "scripts/smoke-dev-cms-functions.mjs", "scripts/check-dev-anonymous-refusal.mjs", "scripts/lib/dev-deploy-source.mjs",
     "scripts/deploy-dev-functions.mjs", "scripts/deploy-dev-reader-mounts.mjs", "scripts/deploy-dev-preview-gateways.mjs",
     "functions/dev-index.js", "functions/dev-manifest.js"];
@@ -36,7 +36,7 @@ export function requireDevDeploySource({ env, releaseRoot, trustedRoot }) {
     if (!lstatSync(resolve(releaseRoot, file)).isFile()) throw new Error("Dev release checks must be committed files");
   }
   return { schemaVersion: 1, environment: "development", deploySha: sourceSha,
-    releaseChecksSha: sourceSha, trustedWorkflowSha, releaseChecksContractVersion: 1 };
+    releaseChecksSha: sourceSha, trustedWorkflowSha, releaseChecksContractVersion: 2 };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

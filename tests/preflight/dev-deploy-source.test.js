@@ -28,7 +28,7 @@ beforeEach(() => {
     writeFileSync(join(releaseRoot, file), "// Reviewed fixture source\n");
   }
   mkdirSync(join(releaseRoot, ".github"));
-  writeFileSync(join(releaseRoot, ".github/cms-deploy-compatibility.json"), JSON.stringify({ contracts: { cmsDevReleaseChecks: { version: 1 } } }));
+  writeFileSync(join(releaseRoot, ".github/cms-deploy-compatibility.json"), JSON.stringify({ contracts: { cmsDevReleaseChecks: { version: 2 } } }));
   git(releaseRoot, "init", "-b", "main");
   git(releaseRoot, "remote", "add", "origin", "https://github.com/example-owner/example-repo.git");
   sourceSha = commit(releaseRoot);
@@ -46,7 +46,7 @@ const check = (patch = {}) => requireDevDeploySource({ env: { ...env, ...patch }
 it("keeps NEW and its checker identity after trusted main advances", () => {
   expect(sourceSha).not.toBe(trustedSha);
   expect(check()).toEqual({ schemaVersion: 1, environment: "development", deploySha: sourceSha,
-    releaseChecksSha: sourceSha, trustedWorkflowSha: trustedSha, releaseChecksContractVersion: 1 });
+    releaseChecksSha: sourceSha, trustedWorkflowSha: trustedSha, releaseChecksContractVersion: 2 });
   expect(assertDevDeployCheckout(env, releaseRoot)).toBe(sourceSha);
   expect(() => assertDevDeployCheckout({ ...env, DEPLOY_SHA: trustedSha }, releaseRoot)).toThrow("selected pin");
   git(releaseRoot, "checkout", "--detach", trustedSha);
