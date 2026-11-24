@@ -205,6 +205,44 @@ it("a reported build failure leaves a batch with a recorded candidate to its own
   expect((await batchRef().get()).data().status).toBe("ready");
 });
 
+it("the operator settle ends a killed run's never-leased row like the fail step, and refuses a leased batch (#595)", async () => {
+  await frozen();
+  expect(await dev.settleKilledDevRefresh(db, id, { readOnly: true })).toBe("pending");
+  expect((await queueRef().get()).data().status).toBe("pending");
+  expect(await dev.settleKilledDevRefresh(db, id)).toBe("failed");
+  expect((await queueRef().get()).data()).toMatchObject({ status: "failed", error: dev.DEV_BUILD_FAILED_ERROR });
+  expect((await batchRef().get()).data()).toMatchObject({ status: "retired",
+    retirementReceipt: { reason: deployment.FAILED_PUBLISH_RETIRED_REASON, queueId: id.queueId, queueStatus: "failed" } });
+  // A repeated settle reads the same terminal state and writes nothing.
+  const settled = (await queueRef().get()).data();
+  expect(await dev.settleKilledDevRefresh(db, id)).toBe("failed");
+  expect((await queueRef().get()).data()).toEqual(settled);
+});
+
+it("the settle re-reads inside its write and refuses a candidate recorded after its first read", async () => {
+  await frozen();
+  // A rerun records a candidate after the owner's first read and before its write.
+  let reads = 0;
+  const raced = new Proxy(db, { get(target, key) {
+    if (key !== "runTransaction") { const value = Reflect.get(target, key, target); return typeof value === "function" ? value.bind(target) : value; }
+    return async (fn, options) => {
+      const result = await target.runTransaction(fn, options);
+      if (options?.readOnly && reads++ === 0) await batchRef().collection("candidates").doc("worker").set({ raced: true });
+      return result;
+    };
+  } });
+  await expect(dev.settleKilledDevRefresh(raced, id)).rejects.toThrow("never-leased");
+  expect((await queueRef().get()).data().status).toBe("pending");
+  expect((await batchRef().get()).data().status).toBe("reserved");
+});
+
+it("the operator settle refuses a batch with a candidate", async () => {
+  await prepared();
+  await expect(dev.settleKilledDevRefresh(db, id)).rejects.toThrow("never-leased");
+  expect((await queueRef().get()).data().status).toBe("pending");
+  expect((await batchRef().get()).data().status).toBe("ready");
+});
+
 it("stages generic media and candidate, then activates the shared renderer and settles only the published revision", async () => {
   const { candidate } = await prepared();
   expect((await batchRef().get()).data()).toMatchObject({ status: "ready", runtime });
