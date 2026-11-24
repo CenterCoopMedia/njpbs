@@ -51,7 +51,12 @@ export async function requireReleaseCi({ repository, sha, request, emergency = f
   throw new Error(`No successful ${proof} CI/ci proof for deploy SHA ${sha}`);
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+// Development deploys any commit of this repository; the release run records
+// whether it has main CI. Production always requires it.
+const development = process.env.CMS_TARGET === "development" || process.env.RELEASE_TARGET === "development";
+if (development && process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  console.log(`Development deploy SHA ${process.env.DEPLOY_SHA}: main CI is not required.`);
+} else if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const signal = AbortSignal.timeout(30_000);
   const run = await requireReleaseCi({
     repository: process.env.GITHUB_REPOSITORY,

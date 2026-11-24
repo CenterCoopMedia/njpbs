@@ -29,11 +29,11 @@ jobs:
   image:
     if: >-
       github.event_name == 'workflow_dispatch' &&
-      github.ref == 'refs/heads/main' &&
+      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/release-run-site' && inputs.target == 'development') &&
       vars.CANONICAL_GITHUB_REPOSITORY != '' &&
       vars.CANONICAL_GITHUB_REPOSITORY_ID != '' &&
       github.repository_id == vars.CANONICAL_GITHUB_REPOSITORY_ID &&
-      github.workflow_ref == format('{0}/.github/workflows/publisher-image.yml@refs/heads/main', vars.CANONICAL_GITHUB_REPOSITORY) &&
+      github.workflow_ref == format('{0}/.github/workflows/publisher-image.yml@{1}', vars.CANONICAL_GITHUB_REPOSITORY, github.ref) &&
       vars.CMS_DEPLOY_OWNER != '' && github.triggering_actor == vars.CMS_DEPLOY_OWNER
     runs-on: ubuntu-24.04
     # Stops a hung image build; kept because it waits on the container build and push.

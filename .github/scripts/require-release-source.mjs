@@ -18,7 +18,7 @@ export function releaseAuthorization({ sha, emergency = false, authorization = "
   return { kind: match[1], liveBase: match[3], issue: match[4], reason: match[5] };
 }
 
-export function requireReleaseSource({ sha, emergency = false, authorization = "", cwd = process.cwd() }) {
+export function requireReleaseSource({ sha, emergency = false, authorization = "", development = false, cwd = process.cwd() }) {
   const approved = releaseAuthorization({ sha, emergency, authorization });
   const git = (...args) => execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
   if (git("rev-parse", "HEAD") !== sha || git("status", "--porcelain", "--untracked-files=no")) {
@@ -27,7 +27,8 @@ export function requireReleaseSource({ sha, emergency = false, authorization = "
   if (approved) {
     const chain = git("rev-list", "--first-parent", sha).split("\n");
     if (!chain.includes(approved.liveBase)) throw new Error("Emergency source first-parent chain does not reach the recorded live base");
-  } else {
+  } else if (!development) {
+    // Development deploys any commit of this repository; production needs main.
     git("merge-base", "--is-ancestor", sha, "origin/main");
   }
   return sha;
@@ -41,7 +42,7 @@ export function releaseInputs(env = process.env) {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const sha = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
-  requireReleaseSource({ sha, ...releaseInputs() });
+  requireReleaseSource({ sha, ...releaseInputs(), development: process.env.CMS_TARGET === "development" });
   if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `deploy_sha=${sha}\nsource_sha=${sha}\n`);
   console.log(`Reviewed release source: ${sha}`);
 }
