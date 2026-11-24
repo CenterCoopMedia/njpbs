@@ -34,7 +34,8 @@ const PLATFORM_LIMITS = Object.freeze({
 const NO_ANSWER_CODES = new Set(["ECONNRESET", "ECONNREFUSED", "ETIMEDOUT", "EPIPE", "EAI_AGAIN", "ENOTFOUND", "ENETUNREACH",
   "EHOSTUNREACH", "UND_ERR_SOCKET", "UND_ERR_CONNECT_TIMEOUT", "UND_ERR_HEADERS_TIMEOUT", "UND_ERR_BODY_TIMEOUT", "UND_ERR_CLOSED"]);
 
-let journalSink = line => console.log(JSON.stringify(line));
+// stderr keeps captured stdout clean; the severity field keeps Cloud Logging at INFO.
+let journalSink = line => console.error(JSON.stringify({ severity: "INFO", ...line }));
 function journal(line) { try { journalSink({ releaseWait: true, ...line }); } catch { /* A journal write never stops work. */ } }
 function setJournal(sink) { journalSink = sink; }
 

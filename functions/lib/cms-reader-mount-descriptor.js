@@ -51,12 +51,6 @@ async function readCmsReaderMountDescriptor({ firestore, environment = process.e
     return { operationId: config.operationId, readers, identities };
   };
   if (supplied) return inspect(supplied);
-  const read = firestore.runTransaction(inspect, { readOnly: true });
-  let timer;
-  try {
-    return await Promise.race([read, new Promise((_, reject) => {
-      timer = setTimeout(() => reject(new Error("CMS reader descriptor timed out")), 3000);
-    })]);
-  } finally { clearTimeout(timer); }
+  return firestore.runTransaction(inspect, { readOnly: true });
 }
 module.exports = { SUPPORT, mountConfiguration, readCmsReaderMountDescriptor };

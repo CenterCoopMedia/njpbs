@@ -1,6 +1,6 @@
 "use strict";
 
-const { platformLimit } = require("./lib/release-wait");
+const { callOutside, platformLimit } = require("./lib/release-wait");
 const { onDocumentWritten } = require("firebase-functions/v2/firestore");
 const { db } = require("./lib/firebase");
 const { publicationTarget, assertPublicationDatabase } = require("./lib/publication-target");
@@ -30,11 +30,11 @@ async function wakeNoBuildCloud({ firestore = db, fetchImpl = fetch,
   try {
     const token = getToken();
     if (!/^[A-Za-z0-9_-]{32,128}$/.test(token ?? "")) throw new Error();
-    const response = await fetchImpl(`${target.publisherOrigin}/wake`, {
+    const response = await callOutside("publisher wake", () => fetchImpl(`${target.publisherOrigin}/wake`, {
       method: "POST", headers: { Authorization: `Bearer ${token}`, "x-publication-release": control.commitSha,
         "x-publication-target": target.environment },
-      redirect: "error", signal: AbortSignal.timeout(10_000),
-    });
+      redirect: "error",
+    }));
     await response.body?.cancel();
     if (response.status !== 204) throw new Error();
   } catch {

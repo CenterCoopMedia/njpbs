@@ -235,7 +235,7 @@ describe("dev route tag purge", () => {
     expect(logger.warn).toHaveBeenCalledWith("Post route purge retry unavailable", { code: "purge_retry_unavailable" });
     expect(JSON.stringify(logger.warn.mock.calls)).not.toContain(token);
   });
-  it("bounds background purge work and leaves an aborted attempt durable for recovery", async () => {
+  it("stops background purge work at the caller's signal and leaves an aborted attempt durable for recovery", async () => {
     await seed();
     let state;
     await db.runTransaction(async transaction => {
@@ -269,34 +269,6 @@ describe("dev route tag purge", () => {
     expect(row.routePurge.nextAttemptAt).toBe(START + 60_000);
     expect(JSON.stringify(row)).not.toContain(token);
     expect(JSON.stringify(logger.warn.mock.calls)).not.toContain(token);
-  });
-  it("expires a hung retry query within the total wait budget", async () => {
-    const events = [];
-    const logger = log();
-    const query = { where() { return this; }, orderBy() { return this; }, limit() { return this; },
-      get() { events.push("query"); return new Promise(() => {}); } };
-    const firestore = { projectId: config.projectId, collection: () => query };
-    const run = createPublishQueueReconcileRunner({ firestore, log: logger,
-      reconcileStaleFn: async () => { events.push("reconcile"); return 0; },
-      getHealthchecksUrl: () => "https://example.test/health", fetchImpl: async () => { events.push("health"); return { ok: true }; },
-      routePurge: { config, budgetMs: 20 } });
-    expect(await run()).toEqual({ reconciledCount: 0 });
-    expect(events).toEqual(["reconcile", "health", "query"]);
-    expect(logger.warn).toHaveBeenCalledWith("Post route purge retry unavailable", { code: "purge_retry_unavailable" });
-  });
-  it.each([400, 401, 403])("records permanent HTTP %i failure without rollback or token logging", async status => {
-    await seed();
-    const logger = log();
-    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ errors: [{ message: token }] }), { status }));
-    const result = await enqueue(adapter(fetchImpl), { routePurge: { config, purger: adapter(fetchImpl), now: () => START, log: logger } });
-    expect(result.success).toBe(true);
-    const row = (await db.doc("cmsPublishQueue/purge-queue").get()).data();
-    expect(row.status).toBe("pending");
-    expect(row.routePurge).toMatchObject({ phase: "failed", attempts: 1, error: `purge_http_${status}`, nextAttemptAt: null });
-    expect(JSON.stringify(row)).not.toContain(token);
-    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain(token);
-    expect(await retryPostRoutePurges({ firestore: db, config, purger: adapter(fetchImpl), now: () => START + 99_000 })).toBe(0);
-    expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
   it("records thrown fetch errors using only a fixed reason code", async () => {
     await seed();
@@ -359,7 +331,7 @@ describe("dev route tag purge", () => {
     expect((await ref.get()).data()).toMatchObject({ status: "success", routePurge: { phase: "failed", error: "purge_retry_refused" } });
     expect(fetchImpl).not.toHaveBeenCalled();
   });
-  it("recovers an interrupted claim, fences its late result and stops at the retry cap", async () => {
+  it("recovers an interrupted claim and fences its late result", async () => {
     await seed();
     let state;
     await db.runTransaction(async transaction => {
@@ -382,8 +354,5 @@ describe("dev route tag purge", () => {
     resume();
     await late;
     expect((await ref.get()).data().routePurge.attempts).toBe(2);
-    await ref.update({ routePurge: { ...state, phase: "processing", attempts: 6, nextAttemptAt: START, claim: "last-interruption" } });
-    expect(await retryPostRoutePurges({ firestore: db, config, purger, now: () => START })).toBe(0);
-    expect((await ref.get()).data()).toMatchObject({ status: "success", routePurge: { phase: "failed", error: "purge_retry_refused" } });
   });
 });

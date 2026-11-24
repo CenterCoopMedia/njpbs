@@ -20,7 +20,7 @@ async function readReportingContext({firestore,transaction,now,page,readProvider
     if (context?.externalInputs) {
       const admission = await readNoBuildFamilyAdmission({firestore,transaction});
       if (admission.valid) spotlight = await readRetainedReporting({inputs:context.externalInputs,
-        read:readProviderInput ?? (key => createPostBackgroundStorage(admission.backgroundBucket).get(key,{signal:AbortSignal.timeout(10_000),maxBytes:16*1024*1024}))});
+        read:readProviderInput ?? (key => createPostBackgroundStorage(admission.backgroundBucket).get(key,{maxBytes:16*1024*1024}))});
     }
   } catch (error) { if (strictPublicReleaseInputs) throw error; /* Existing serving keeps optional reporting unavailable. */ }
   const times = [context?.changedAt?.toMillis?.(), Date.parse(page.publishedAt),

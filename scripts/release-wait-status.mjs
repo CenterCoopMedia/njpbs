@@ -6,9 +6,7 @@
 import { execFile } from "node:child_process";
 import { createRequire } from "node:module";
 
-const { callOutside, waitFor, setJournal } = createRequire(import.meta.url)("../functions/lib/release-wait.js");
-// Journal lines go to stderr so stdout carries only the status.
-setJournal(line => console.error(JSON.stringify(line)));
+const { callOutside, waitFor } = createRequire(import.meta.url)("../functions/lib/release-wait.js");
 
 function curlStatus(args) {
   return new Promise((resolve, reject) => {

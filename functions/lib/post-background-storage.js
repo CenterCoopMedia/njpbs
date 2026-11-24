@@ -30,7 +30,7 @@ function createPostBackgroundStorage(bucketName = process.env.NO_BUILD_POST_BACK
     async put(key, bytes, { contentType, signal } = {}) {
       signal?.throwIfAborted();
       try {
-        await pipeline(Readable.from(bytes), file(key).createWriteStream({ resumable: false, timeout: 10_000,
+        await pipeline(Readable.from(bytes), file(key).createWriteStream({ resumable: false,
           preconditionOpts: { ifGenerationMatch: 0 },
           metadata: { contentType, cacheControl: "private, no-store" } }), { signal });
       } catch (error) {

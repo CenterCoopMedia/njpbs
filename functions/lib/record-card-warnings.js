@@ -3,7 +3,6 @@
 const { resolveApprovedLibraryVersions } = require("./approved-library-records");
 
 const MAX_REFERENCE_CHECKS = 24;
-const WARNING_DEADLINE_MS = 1_000;
 const incompleteWarning = "Some record card references could not be checked. Reopen this content to verify them.";
 
 async function recordCardSaveWarnings(firestore, document) {
@@ -23,17 +22,8 @@ async function recordCardSaveWarnings(firestore, document) {
   if (cards.length === 0) return [];
   const allIds = [...new Set(cards.map(card => card.id))];
   const ids = allIds.slice(0, MAX_REFERENCE_CHECKS);
-  let timer;
-  try {
-    // These checks run after commit. Bound both fan-out and response latency so
-    // advisory guidance cannot turn a successful save into an apparent timeout.
-    return await Promise.race([
-      warningsForCards(firestore, cards, ids, allIds.length > ids.length),
-      new Promise(resolve => { timer = setTimeout(() => resolve([incompleteWarning]), WARNING_DEADLINE_MS); }),
-    ]);
-  } finally {
-    clearTimeout(timer);
-  }
+  // These checks run after commit. Fan-out stays bounded.
+  return warningsForCards(firestore, cards, ids, allIds.length > ids.length);
 }
 
 async function warningsForCards(firestore, cards, ids, truncated) {

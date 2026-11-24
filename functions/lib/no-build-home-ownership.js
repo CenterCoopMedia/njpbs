@@ -90,7 +90,7 @@ async function readHomeSourcesInTransaction({ firestore, transaction, state, ren
       : require("./post-background-storage").createPostBackgroundStorage(admission.backgroundBucket);
     const read = readHomeSource
       ? key => readHomeSource({ key, bucket: admission.backgroundBucket })
-      : key => artifacts.get(key, { signal: AbortSignal.timeout(10_000) });
+      : key => artifacts.get(key);
     homeSources = externalInputs != null
       ? await readers.readPreparedHomeSources({ inputs: externalInputs, read, publication })
       : await readers.readRetainedHomeSources({ source, read });

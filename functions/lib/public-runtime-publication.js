@@ -7,11 +7,9 @@ const {
   PUBLIC_SOURCE_VERSION_FIELD,
   addressedPublishChanges,
 } = require("./publish-build-state");
+const { callOutside, waitFor } = require("./release-wait");
 
 const CONTENT_SOURCE = "cms-runtime";
-const DEFAULT_MAX_WAIT_MS = 10_000;
-const DEFAULT_POLL_INTERVAL_MS = 500;
-const DEFAULT_REQUEST_TIMEOUT_MS = 1_500;
 
 // Add a surface only after its runtime HTML and assets are active together.
 // The publication boundary is shared by Pages, Posts, and public Settings;
@@ -22,10 +20,6 @@ const ACTIVE_RUNTIME_SURFACES = new Map([
     { label: "Contact", url: "https://njpbs.org/contact/" },
   ],
 ]);
-
-function sleep(milliseconds) {
-  return new Promise((resolve) => setTimeout(resolve, milliseconds));
-}
 
 function runtimeCandidate(changes) {
   if (process.env.CMS_DEPLOYMENT_ENVIRONMENT === "development") return null;
@@ -40,69 +34,25 @@ function runtimeCandidate(changes) {
   return surface ? { change, surface } : null;
 }
 
-async function boundedFetch(fetchImpl, url, timeoutMs) {
-  const controller = new AbortController();
-  let timeoutId;
-  const timeout = new Promise((resolve) => {
-    timeoutId = setTimeout(() => {
-      controller.abort();
-      resolve(null);
-    }, timeoutMs);
-  });
-  try {
-    return await Promise.race([
-      fetchImpl(url, {
-        credentials: "omit",
-        method: "GET",
-        redirect: "follow",
-        signal: controller.signal,
-      }),
-      timeout,
-    ]);
-  } catch {
-    return null;
-  } finally {
-    if (timeoutId !== undefined) clearTimeout(timeoutId);
-    controller.abort();
-  }
-}
-
+// Read until the runtime serves this exact source version. A failed read or
+// another version is still pending; the wait has no limit of ours.
 async function waitForExactRuntimeReceipt(candidate, deps = {}) {
   const fetchImpl = deps.fetchImpl ?? fetch;
-  const maxWaitMs = deps.maxWaitMs ?? DEFAULT_MAX_WAIT_MS;
-  const pollIntervalMs = deps.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
-  const requestTimeoutMs =
-    deps.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
-  const delay = deps.sleep ?? sleep;
-  const now = deps.now ?? Date.now;
-  const startedAt = now();
-  const deadline = startedAt + Math.max(0, maxWaitMs);
-  const nonce = deps.nonce ?? `${startedAt.toString(36)}-${crypto.randomUUID()}`;
+  const nonce = deps.nonce ?? `${Date.now().toString(36)}-${crypto.randomUUID()}`;
   let attempt = 0;
-
-  while (now() < deadline) {
+  await waitFor(`runtime receipt ${candidate.surface.url}`, async () => {
     const url = new URL(candidate.surface.url);
     url.searchParams.set("cms-receipt", `${nonce}-${attempt}`);
     attempt += 1;
-    const response = await boundedFetch(
-      fetchImpl,
-      url,
-      Math.max(1, Math.min(requestTimeoutMs, deadline - now())),
-    );
-    if (
-      response?.ok &&
-      response.headers.get("x-njpbs-content-source") === CONTENT_SOURCE &&
-      response.headers.get("x-njpbs-source-version") ===
-        String(candidate.change.sourceVersion)
-    ) {
-      return true;
-    }
-
-    const remaining = deadline - now();
-    if (remaining <= 0) break;
-    await delay(Math.min(pollIntervalMs, remaining));
-  }
-  return false;
+    const response = await callOutside(`runtime receipt ${url.pathname}`, () =>
+      fetchImpl(url, { credentials: "omit", method: "GET", redirect: "follow" }));
+    await response.body?.cancel?.();
+    const source = response.headers.get("x-njpbs-content-source");
+    const version = response.headers.get("x-njpbs-source-version");
+    return response.ok && source === CONTENT_SOURCE && version === String(candidate.change.sourceVersion)
+      ? { done: true } : { pending: `${response.status} ${source ?? "-"} ${version ?? "-"}` };
+  });
+  return true;
 }
 
 async function settleRuntimePublication(
@@ -171,9 +121,7 @@ async function tryRuntimePublication(fields, deps = {}) {
     sourceVersion: candidate.change.sourceVersion,
     status: "unconfirmed",
   };
-  if (!(await waitForExactRuntimeReceipt(candidate, deps))) {
-    return { confirmed: false, publicReceipt };
-  }
+  await waitForExactRuntimeReceipt(candidate, deps);
   const settlement = await settleRuntimePublication(
     { ...fields, ...candidate },
     deps,

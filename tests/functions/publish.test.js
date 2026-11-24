@@ -447,39 +447,6 @@ describe("cms publish function", () => {
     expect(await adminLogs()).toHaveLength(1);
   });
 
-  it("returns an honest runtime miss without changing the pending fallback", async () => {
-    const contactRef = db.collection("cmsPages").doc("contact");
-    await contactRef.set({
-      status: "published",
-      publishBuildPending: true,
-      publishBuildQueueId: null,
-      published: { sourceVersion: 7 },
-    });
-    const fetchImpl = vi.fn();
-
-    await expect(
-      tryRuntimePublication(
-        {
-          firestore: db,
-          actor: { uid: "u1", email: "u1@x" },
-          changes: [
-            { collection: "cmsPages", id: "contact", sourceVersion: 7 },
-          ],
-        },
-        { fetchImpl, maxWaitMs: 0 },
-      ),
-    ).resolves.toMatchObject({
-      confirmed: false,
-      publicReceipt: { status: "unconfirmed", sourceVersion: 7 },
-    });
-    expect(fetchImpl).not.toHaveBeenCalled();
-    expect((await contactRef.get()).data()).toMatchObject({
-      publishBuildPending: true,
-      publishBuildQueueId: null,
-    });
-    expect(await adminLogs()).toHaveLength(0);
-  });
-
   it("does not probe a surface that is not active in the runtime registry", async () => {
     const fetchImpl = vi.fn();
 

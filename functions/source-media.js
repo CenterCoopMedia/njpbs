@@ -256,36 +256,27 @@ async function readSourceMediaPage(firestore, source, request, documentIdField) 
 }
 
 const POSTER_SIGNING_WORKERS = 8;
-const POSTER_SIGNING_BUDGET_MS = 1500;
 
 // Sign the ready posters for one listed page, so a page needs no read call per tile. Each poster
-// keeps the same version, size and prefix checks as cmsCreateSourceMediaRead. Signing has a time
-// budget so slow storage cannot hold the list: the page returns the posters signed by then, and a
-// poster that is missing, failed or late is left out so its tile falls back to its own read.
-async function signListedPosters(createReadFn, source, assets, log, budgetMs = POSTER_SIGNING_BUDGET_MS) {
+// keeps the same version, size and prefix checks as cmsCreateSourceMediaRead. A poster that is
+// missing or failed is left out so its tile falls back to its own read.
+async function signListedPosters(createReadFn, source, assets, log) {
   const ready = assets.filter((asset) => asset.rendition?.state === "ready");
   const posters = [];
   let next = 0;
-  let open = true;
   async function worker() {
-    while (open && next < ready.length) {
+    while (next < ready.length) {
       const asset = ready[next++];
       try {
         const access = await createReadFn(source, asset, "poster");
-        if (open) posters.push({ assetId: access.assetId, url: access.url, expiresAt: access.expiresAt });
+        posters.push({ assetId: access.assetId, url: access.url, expiresAt: access.expiresAt });
       } catch (error) {
         if (!(error instanceof SourceObjectError)) log.warn("Listed poster signing failed", { assetId: asset.id });
       }
     }
   }
-  let timer;
-  await Promise.race([
-    Promise.all(Array.from({ length: Math.min(POSTER_SIGNING_WORKERS, ready.length) }, worker)),
-    new Promise((resolve) => { timer = setTimeout(resolve, budgetMs); }),
-  ]);
-  clearTimeout(timer);
-  open = false;
-  return posters.slice();
+  await Promise.all(Array.from({ length: Math.min(POSTER_SIGNING_WORKERS, ready.length) }, worker));
+  return posters;
 }
 
 async function readExactSourceTotal(firestore, sourceId) {
@@ -305,7 +296,6 @@ function createCmsListSourceMediaHandler(deps = {}) {
   const readPageFn = deps.readPageFn ?? readSourceMediaPage;
   const readTotalFn = deps.readTotalFn ?? readExactSourceTotal;
   const documentIdField = deps.documentIdField ?? FieldPath.documentId();
-  const posterBudgetMs = deps.posterBudgetMs ?? POSTER_SIGNING_BUDGET_MS;
   let defaultOriginalStorage;
   let defaultReadFn;
   const createReadFn = deps.createReadFn ?? ((...args) => {
@@ -355,7 +345,7 @@ function createCmsListSourceMediaHandler(deps = {}) {
         refreshListedOriginals({ firestore, source, assets, records: page.records, log,
           storage: deps.originalStorage ?? (defaultOriginalStorage ??= createOriginalStorage(runtimeAwsConfig())) })
           .then(records => enrichSourceMediaUploaders(firestore, records, canViewUsers)),
-        request.posters ? signListedPosters(createReadFn, source, assets, log, posterBudgetMs) : null,
+        request.posters ? signListedPosters(createReadFn, source, assets, log) : null,
       ]);
       page.records = records;
       res.status(200).json({ success: true, ...page, total, ...(posters ? { posters } : {}) });

@@ -6,8 +6,8 @@ const { isPostRouteSlug } = require("./post-slug-contract");
 const { publicationTarget, publicationPostCacheTag } = require("./publication-target");
 
 const TOKEN_SECRET = "SHADOW_POST_ROUTE_PURGE_TOKEN";
-const MAX_ATTEMPTS = 6;
-const CLAIM_MS = 60_000;
+// A claim is a lock; a lapsed claim lets the next pass purge again, which is harmless.
+const CLAIM_LEASE_MS = 60_000;
 
 function routePurgeConfig(env = process.env) {
   return { enabled: env.SHADOW_POST_ROUTE_PURGE_ENABLED === "true", environment: env.SHADOW_POST_ROUTE_PURGE_ENVIRONMENT ?? "dev",
@@ -39,7 +39,8 @@ class RoutePurgeError extends Error {
 function createCloudflareRoutePurger({ config = routePurgeConfig(), getToken = () => process.env[TOKEN_SECRET], fetchImpl = fetch } = {}) {
   return {
     enabled: devEnabled(config),
-    async purge(tags, { signal: budgetSignal } = {}) {
+    /** @param {string[]} tags @param {{ signal?: AbortSignal }} [options] */
+    async purge(tags, { signal } = {}) {
       if (!devEnabled(config)) return;
       let token;
       try { token = getToken(); }
@@ -50,8 +51,6 @@ function createCloudflareRoutePurger({ config = routePurgeConfig(), getToken = (
         throw new RoutePurgeError("purge_invalid_tags", false);
       }
       const unique = [...new Set(tags)];
-      const timeout = AbortSignal.timeout(10_000);
-      const signal = budgetSignal ? AbortSignal.any([timeout, budgetSignal]) : timeout;
       for (let offset = 0; offset < unique.length; offset += 30) {
         let response;
         try {
@@ -113,11 +112,11 @@ async function attemptPostRoutePurge({ firestore, queueId, config = routePurgeCo
       if (!row.exists || !["pending", "retry", "processing"].includes(state?.phase) ||
           !Number.isFinite(state.nextAttemptAt) || state.nextAttemptAt > time) return null;
       if (state.schemaVersion !== 1 || state.environment !== "dev" || state.zoneId !== config.zoneId ||
-          !Number.isSafeInteger(state.attempts) || state.attempts < 0 || state.attempts >= MAX_ATTEMPTS) {
+          !Number.isSafeInteger(state.attempts) || state.attempts < 0) {
         tx.update(ref, { routePurge: { ...state, phase: "failed", nextAttemptAt: null, claim: null, error: "purge_retry_refused" } });
         return null;
       }
-      const next = { ...state, attempts: state.attempts + 1, phase: "processing", claim: randomUUID(), nextAttemptAt: time + CLAIM_MS };
+      const next = { ...state, attempts: state.attempts + 1, phase: "processing", claim: randomUUID(), nextAttemptAt: time + CLAIM_LEASE_MS };
       tx.update(ref, { routePurge: next });
       return next;
     });
@@ -137,7 +136,7 @@ async function attemptPostRoutePurge({ firestore, queueId, config = routePurgeCo
       const row = await tx.get(ref);
       const current = row.data()?.routePurge;
       if (!row.exists || current?.claim !== claimed.claim || current.phase !== "processing") return;
-      const retry = failure?.retryable && claimed.attempts < MAX_ATTEMPTS;
+      const retry = failure?.retryable;
       tx.update(ref, { routePurge: { ...current, phase: failure ? (retry ? "retry" : "failed") : "success", claim: null,
         nextAttemptAt: retry ? now() + Math.min(60_000 * 2 ** (claimed.attempts - 1), 3_600_000) : null,
         error: failure?.code ?? null } });
@@ -146,37 +145,24 @@ async function attemptPostRoutePurge({ firestore, queueId, config = routePurgeCo
     return true;
   } catch {
     // The committed publication remains accepted. A recorded claim expires into
-    // the same bounded retry query if result writeback was interrupted.
+    // the same retry query if result writeback was interrupted.
     log.warn("Post route purge state unavailable", { queueId });
     return false;
   }
 }
 
 async function retryPostRoutePurges({ firestore, config = routePurgeConfig(), purger = createCloudflareRoutePurger({ config }),
-  now = () => Date.now(), log = console, budgetMs = 20_000, signal: stopSignal }) {
+  now = () => Date.now(), log = console, signal }) {
   if (!queueEnabled(firestore, config)) return 0;
-  const timeout = AbortSignal.timeout(Math.max(1, Math.min(budgetMs, 20_000)));
-  const signal = stopSignal ? AbortSignal.any([timeout, stopSignal]) : timeout;
-  if (signal.aborted) throw new RoutePurgeError("purge_retry_budget", true);
-  let abort;
-  const expired = new Promise((_, reject) => {
-    abort = () => reject(new RoutePurgeError("purge_retry_budget", true));
-    signal.addEventListener("abort", abort, { once: true });
-  });
-  const run = async () => {
-    const rows = await firestore.collection("cmsPublishQueue").where("routePurge.nextAttemptAt", "<=", now())
-      .orderBy("routePurge.nextAttemptAt").limit(20).get();
-    let count = 0;
-    for (const row of rows.docs) {
-      if (signal.aborted) break;
-      if (await attemptPostRoutePurge({ firestore, queueId: row.id, config, purger, now, log, signal })) count++;
-    }
-    return count;
-  };
-  try { return await Promise.race([run(), expired]); }
-  finally {
-    signal.removeEventListener("abort", abort);
+  const rows = await firestore.collection("cmsPublishQueue").where("routePurge.nextAttemptAt", "<=", now())
+    .orderBy("routePurge.nextAttemptAt").limit(20).get();
+  let count = 0;
+  for (const row of rows.docs) {
+    signal?.throwIfAborted();
+    if (await attemptPostRoutePurge({ firestore, queueId: row.id, config, purger, now, log, signal })) count++;
   }
+  signal?.throwIfAborted();
+  return count;
 }
 module.exports = { TOKEN_SECRET, routePurgeConfig, routeTags, devEnabled, routePurgeSecretNames, createCloudflareRoutePurger,
   prepareRoutePurgeInTransaction, attemptPostRoutePurge, retryPostRoutePurges };
