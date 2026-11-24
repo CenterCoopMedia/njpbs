@@ -11,6 +11,7 @@ import {
   functionsInventoryIdentity,
   parseProviderIdentities,
   requireComponent,
+  abandonReceipt,
   completeReceipt,
   configurationFingerprint,
   edgeOriginSecretFingerprint,
@@ -747,6 +748,24 @@ describe("CMS API Worker receipt", () => {
     providerIdentities,
     configurationFingerprint,
   }, { readPageReaderSource: async () => null }); // This fixture represents a retained API source without the v1 descriptor.
+
+  it("accepts its own landed commit when the SDK runs the completion body again", async () => {
+    const firestore = memoryFirestore(inProgress), runTransaction = firestore.runTransaction;
+    // The commit lands, then the SDK reports a retryable error and runs the body again.
+    firestore.runTransaction = async work => { await runTransaction(work); return runTransaction(work); };
+    const { receipt } = await complete(firestore, "e".repeat(64));
+    expect(receipt).toMatchObject({ state: "complete", mutation: { runId: "7", runAttempt: 1, configurationFingerprint: "e".repeat(64) } });
+    await expect(complete(firestore, "f".repeat(64))).rejects.toThrow("Receipt does not match this mutation");
+  });
+
+  it("accepts its own landed abandonment when the SDK runs the body again", async () => {
+    const firestore = memoryFirestore({ ...inProgress, lastComplete: { ...inProgress.mutation, runId: "6" } });
+    const runTransaction = firestore.runTransaction;
+    firestore.runTransaction = async work => { await runTransaction(work); return runTransaction(work); };
+    const { receipt } = await abandonReceipt(firestore, { component: "cmsApi", runId: "7", runAttempt: 1 });
+    expect(receipt).toMatchObject({ state: "complete", mutation: { runId: "6" }, abandoned: { runId: "7", runAttempt: 1 } });
+    await expect(abandonReceipt(firestore, { component: "cmsApi", runId: "7", runAttempt: 2 })).rejects.toThrow("Receipt does not match this run and attempt");
+  });
 
   it("records the secret configuration digest with the completed mutation", async () => {
     const firestore = memoryFirestore(inProgress);

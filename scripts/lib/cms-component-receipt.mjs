@@ -757,6 +757,14 @@ export async function completeReceipt(firestore, input, { readPageReaderSource =
     const snapshot = await transaction.get(ref);
     if (!snapshot.exists) fail("Receipt is not in progress");
     const current = snapshot.data();
+    // The SDK can run this body again after its commit landed; this mutation's
+    // own completed receipt is that success.
+    if (current.schemaVersion === RECEIPT_SCHEMA_VERSION && current.state === "complete" && !current.abandoned &&
+        current.mutation?.sourceSha === input.sourceSha && current.mutation?.runId === input.runId &&
+        current.mutation?.runAttempt === input.runAttempt && current.mutation.configurationFingerprint === configurationFingerprint &&
+        stableObjectFingerprint(current.mutation.providerIdentities) === stableObjectFingerprint(providerIdentities)) {
+      return { changed: true, receipt: current };
+    }
     if (
       current.schemaVersion !== RECEIPT_SCHEMA_VERSION ||
       current.state !== "in_progress" ||
@@ -800,6 +808,11 @@ export async function abandonReceipt(firestore, input) {
     const snapshot = await transaction.get(ref);
     if (!snapshot.exists) fail("Receipt is not in progress");
     const current = snapshot.data();
+    // A rerun of this body after its commit landed finds this run's own abandonment.
+    if (current.schemaVersion === RECEIPT_SCHEMA_VERSION && current.state === "complete" &&
+        current.abandoned?.runId === runId && current.abandoned?.runAttempt === runAttempt) {
+      return { changed: true, receipt: current };
+    }
     if (
       current.schemaVersion !== RECEIPT_SCHEMA_VERSION ||
       current.state !== "in_progress" ||

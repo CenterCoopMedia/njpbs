@@ -169,21 +169,21 @@ describe("cms component receipt store", () => {
       expect(stored.data().state).toBe("in_progress");
     });
 
-    it("makes a second abandon a no-op refusal", async () => {
+    it("answers a second abandon by the same run and attempt with its landed receipt", async () => {
       await withPriorCompletion();
-      await abandonReceipt(db, {
+      const first = await abandonReceipt(db, {
         component: "functions",
         runId: "35606622320",
         runAttempt: 1,
       });
-      await expect(abandonReceipt(db, {
+      // The same body runs again when the SDK retries after its commit landed.
+      expect((await abandonReceipt(db, {
         component: "functions",
         runId: "35606622320",
         runAttempt: 1,
-      })).rejects.toThrow(/does not match/i);
+      })).receipt).toEqual(first.receipt);
       const stored = await db.collection(RECEIPT_COLLECTION).doc("functions").get();
-      expect(stored.data().state).toBe("complete");
-      expect(stored.data().abandoned.runId).toBe("35606622320");
+      expect(stored.data()).toEqual(first.receipt);
     });
   });
 });
