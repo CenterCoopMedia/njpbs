@@ -1,7 +1,7 @@
 import { afterAll, beforeEach, expect, it } from "vitest";
 import { initializeApp, deleteApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
-import { spawnSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { clearEmulatorFirestore } from "../helpers/emulator-firestore.js";
 import owner from "../../scripts/lib/dev-runtime-repin.cjs";
@@ -95,10 +95,15 @@ it("accepts only the configured canonical GitHub origin", () => {
 });
 
 it("refuses a checkout that is not the clean reviewed operator commit before reading a credential", () => {
+  const cwd = join(import.meta.dirname, "../..");
+  // Configure the identity this checkout's own origin names, so only the operator-commit checks can refuse.
+  const origin = execFileSync("git", ["remote", "get-url", "origin"], { cwd, encoding: "utf8" }).trim();
+  const repository = /github\.com[/:]([^/]+\/[^/]+?)(?:\.git)?$/.exec(origin)?.[1];
+  const env = { PATH: process.env.PATH, CANONICAL_GITHUB_REPOSITORY: repository, CANONICAL_GITHUB_REPOSITORY_ID: "1" };
+  expect(isCanonicalOrigin(origin, env)).toBe(true);
   const result = spawnSync(process.execPath, ["scripts/repin-dev-runtime.mjs", "--operator-commit", "c".repeat(40),
     "--operation-id", "repin-20261124", "--from", from, "--to", to, "--read"],
-    { cwd: join(import.meta.dirname, "../.."), input: "not a credential", encoding: "utf8",
-      env: { PATH: process.env.PATH } });
+    { cwd, input: "not a credential", encoding: "utf8", env });
   expect(result.status).toBe(1);
   expect(result.stderr.trim()).toBe("dev_repin_operator_source_refused");
 });
