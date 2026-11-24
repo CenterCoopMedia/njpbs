@@ -120,6 +120,7 @@ jobs:
           .github/scripts/ci-tree-reuse.test.mjs
           .github/scripts/workflow-policy.test.mjs
           .github/scripts/publisher-image.test.mjs
+          tests/scripts/install-dev-publisher.test.mjs
           .github/scripts/report-relay.test.mjs
           .github/scripts/dev-reconcile-input.test.mjs
           scripts/lib/deployment-settings.test.mjs

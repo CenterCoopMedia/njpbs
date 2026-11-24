@@ -161,6 +161,29 @@ export function receiptFiles({ sha, image, config, runId, checkout, inputFingerp
   };
 }
 
+// Prepares the exact source for one target and returns its deployment input
+// fingerprint. The image workflow and the development installer share it.
+export function prepareTarget({ sha, target, variables, checkout, source, env }) {
+  const prepared = JSON.parse(command(process.execPath, ["scripts/prepare-cloud-publisher.mjs", sha,
+    // Older source commits accept only the SHA; production keeps that call.
+    ...(target.environment === "production" ? [] : [target.environment])], {
+    cwd: checkout,
+    env: { ...env, CLOUDFLARE_ACCOUNT_ID: variables.CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_PUBLIC_WORKER_TAG: variables.CLOUDFLARE_PUBLIC_WORKER_TAG, PUBLIC_SHARE_UPLOAD_ORIGIN: variables.PUBLIC_SHARE_UPLOAD_ORIGIN },
+  }));
+  if (prepared.commitSha !== sha) throw new ImageRefusal("Prepared source SHA differs");
+  productionConfig(source, targetSource(json(prepared.configPath), target), {
+    checkout, sha, variables, target, image: `registry.cloudflare.com/${variables.CLOUDFLARE_ACCOUNT_ID}/${target.publisherWorker}@sha256:${"0".repeat(64)}`,
+  });
+  const manifest = readDeploymentManifest(prepared.source);
+  const inputs = json(path.join(prepared.source, ".rendered-deployment-inputs.json")).inputs;
+  // Development renders every input; production renders only its own.
+  const names = target.environment === "production" ? productionDeploymentInputs : Object.keys(manifest.inputs);
+  const paths = names.flatMap(name => manifest.inputs[name].files);
+  const inputFingerprint = deploymentInputFingerprint(paths, inputs, manifest);
+  if (!/^[a-f0-9]{64}$/.test(inputFingerprint)) throw new ImageRefusal("Prepared deployment input fingerprint missing");
+  return { prepared, inputFingerprint };
+}
+
 function command(executable, args, options = {}) {
   try {
     return execFileSync(executable, args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 64 * 1024 * 1024, ...options });
@@ -188,22 +211,7 @@ async function main(mode, env = process.env) {
     // The development pin comes from its own repository variable, separate from the account in the vars JSON.
     const variables = { ...JSON.parse(env.PUBLISHER_PUBLIC_VARS_JSON),
       ...(target.environment === "development" ? { CMS_DEV_CLOUDFLARE_ACCOUNT_ID: env.CMS_DEV_CLOUDFLARE_ACCOUNT_ID ?? "" } : {}) };
-    const prepared = JSON.parse(command(process.execPath, ["scripts/prepare-cloud-publisher.mjs", sha,
-      // Older source commits accept only the SHA; production keeps that call.
-      ...(target.environment === "production" ? [] : [target.environment])], {
-      env: { ...env, CLOUDFLARE_ACCOUNT_ID: variables.CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_PUBLIC_WORKER_TAG: variables.CLOUDFLARE_PUBLIC_WORKER_TAG, PUBLIC_SHARE_UPLOAD_ORIGIN: variables.PUBLIC_SHARE_UPLOAD_ORIGIN },
-    }));
-    if (prepared.commitSha !== sha) throw new ImageRefusal("Prepared source SHA differs");
-    productionConfig(source(), targetSource(json(prepared.configPath), target), {
-      checkout, sha, variables, target, image: `registry.cloudflare.com/${variables.CLOUDFLARE_ACCOUNT_ID}/${imageName}@sha256:${"0".repeat(64)}`,
-    });
-    const manifest = readDeploymentManifest(prepared.source);
-    const inputs = json(path.join(prepared.source, ".rendered-deployment-inputs.json")).inputs;
-    // Development renders every input; production renders only its own.
-    const names = target.environment === "production" ? productionDeploymentInputs : Object.keys(manifest.inputs);
-    const paths = names.flatMap(name => manifest.inputs[name].files);
-    const inputFingerprint = deploymentInputFingerprint(paths, inputs, manifest);
-    if (!/^[a-f0-9]{64}$/.test(inputFingerprint)) throw new ImageRefusal("Prepared deployment input fingerprint missing");
+    const { prepared, inputFingerprint } = prepareTarget({ sha, target, variables, checkout, source: source(), env });
     const dockerfile = readFileSync(path.join(prepared.source, "publisher/Dockerfile"), "utf8");
     writeFileSync(path.join(prepared.directory, "Dockerfile"), `${dockerfile}\nLABEL ${inputLabel}="${inputFingerprint}"\n`);
     writeFileSync(metadataPath, bytes({ ...prepared, variables, inputFingerprint }), { mode: 0o600 });

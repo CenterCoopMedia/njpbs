@@ -1127,6 +1127,21 @@ function applicationAtRolloutTarget(application, rollout) {
   return next;
 }
 
+// A completed rollout whose target version runs on every instance and is bound to the application.
+export function rolloutApplied(application, rollout) {
+  const targetImage = rollout?.target_configuration?.image;
+  const stepsComplete = rollout?.steps == null ||
+    (Array.isArray(rollout.steps) && rollout.steps.every((step) => step?.status === "completed"));
+  return rollout?.status === "completed"
+    && stepsComplete
+    && Number.isSafeInteger(rollout.target_version)
+    && rollout.target_version > 0
+    && typeof targetImage === "string"
+    && targetImage.length > 0
+    && targetVersionApplied(rollout)
+    && rolloutBoundToApplication(application, rollout);
+}
+
 export async function readConsistentRendererApplication(fetchFn, account, token, deps) {
   const base = `https://api.cloudflare.com/client/v4/accounts/${account}/containers/applications`;
   const read = async (url, error) => {
@@ -1181,22 +1196,12 @@ export async function readConsistentRendererApplication(fetchFn, account, token,
     const datedRollouts = rollouts.map((rollout) => ({ rollout, time: Date.parse(rollout?.created_at) }));
     if (datedRollouts.some(({ time }) => !Number.isFinite(time))) fail("Renderer container rollout is invalid");
     const latest = datedRollouts.reduce((left, right) => right.time > left.time ? right : left).rollout;
-    const targetImage = latest.target_configuration?.image;
     // Application.version and configuration.image stay on the rollout's
     // current_version and current_configuration after the rollout completes.
     // target_version is the version applied to instances. version_distribution
     // reports that count; 100 with none left on the current version means the
     // target image is live. Record that image, not the application image.
-    const stepsComplete = latest.steps == null ||
-      (Array.isArray(latest.steps) && latest.steps.every((step) => step?.status === "completed"));
-    const applied = latest.status === "completed"
-      && stepsComplete
-      && Number.isSafeInteger(latest.target_version)
-      && latest.target_version > 0
-      && typeof targetImage === "string"
-      && targetImage.length > 0
-      && targetVersionApplied(latest)
-      && rolloutBoundToApplication(application, latest);
+    const applied = rolloutApplied(application, latest);
     const starts = await releases();
     if (starts.length === 0) fail("Renderer receipt does not match the live renderer commit");
     const afterRelease = rolloutAfterRelease(latest, starts);
