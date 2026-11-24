@@ -9,7 +9,7 @@ const MAX_NAVIGATION_LABEL_LENGTH = 60;
 const MAX_NAVIGATION_URL_LENGTH = 2048;
 const BUILTIN_NAVIGATION_IDS = Object.freeze([
   "home", "pages", "posts", "library", "media", "editorial-queue", "cuez-storydesk", "activity",
-  "schedule", "live-production", "resources", "staff-profiles", "staff-access", "analytics", "reports",
+  "live-production", "resources", "staff-profiles", "staff-access", "analytics", "reports",
   "admin-settings", "around-nj",
 ]);
 const ICON_NAMES = Object.freeze([
@@ -39,7 +39,7 @@ function isSafeNavigationUrl(value) {
   if (typeof value !== "string" || !value || value.length > MAX_NAVIGATION_URL_LENGTH || /[^\x21-\x7e]|\\/.test(value)) return false;
   if (/%(?:2e|2f|5c)/i.test(value) || /(?:^|\/)\.{1,2}(?:\/|[?#]|$)/.test(value)) return false;
   if (value.startsWith("/")) {
-    return /^\/(?:[?#].*)?$/.test(value) || /^\/(?:content|media|voiceovers|dashboard|activity|analytics|publish-queue|reports|guide|resources|schedule|staff-access|staff-profiles|admin|account|post-templates|premiere|live-production|cuez-storydesk)(?:[/?#].*)?$/.test(value);
+    return /^\/(?:[?#].*)?$/.test(value) || /^\/(?:content|media|voiceovers|dashboard|activity|analytics|publish-queue|reports|guide|resources|staff-access|staff-profiles|admin|account|post-templates|premiere|live-production|cuez-storydesk)(?:[/?#].*)?$/.test(value);
   }
   if (!/^https:\/\/[A-Za-z0-9.-]+(?::[0-9]+)?(?:[/?#].*)?$/.test(value)) return false;
   try {
@@ -83,6 +83,23 @@ function parseCustomNavigation(value) {
   return value;
 }
 
+// A stored link to a local workspace Boardwalk has since removed is well formed apart from its
+// first path segment. Stored reads drop it so the rest of the rail survives.
+function retiredLocalLink(entry) {
+  if (!isRecord(entry) || entry.kind !== "link" || !isRecord(entry.destination) || entry.destination.kind !== "url") return false;
+  const url = entry.destination.url;
+  if (typeof url !== "string" || !/^\/[a-z0-9-]+(?:[/?#].*)?$/.test(url)) return false;
+  return isSafeNavigationUrl(url.replace(/^\/[a-z0-9-]+/, "/content")) && !isSafeNavigationUrl(url);
+}
+
+function withoutRetiredLocalLinks(custom) {
+  if (!Array.isArray(custom)) return custom;
+  return custom.filter((item) => !retiredLocalLink(item)).map((item) =>
+    isRecord(item) && item.kind === "section" && Array.isArray(item.links) && item.links.some(retiredLocalLink)
+      ? { ...item, links: item.links.filter((link) => !retiredLocalLink(link)) }
+      : item);
+}
+
 function validArrangementIds(value, allowed) {
   return Array.isArray(value) && value.length <= allowed.size && new Set(value).size === value.length &&
     value.every((id) => typeof id === "string" && allowed.has(id));
@@ -113,19 +130,39 @@ function parseOwnedShareIds(value, custom) {
   return ids;
 }
 
-function parseNavigationPreferences(value) {
-  if (!hasExactKeys(value, ["version", "order", "hidden", "custom"], ["shared"]) || value.version !== 4) return null;
-  const custom = parseCustomNavigation(value.custom);
-  const shared = parseSharedNavigationIds(value.shared);
-  if (!custom || !shared) return null;
+function arrangementIds(custom, shared) {
   const allowed = new Set(BUILTIN_NAVIGATION_IDS);
   for (const item of custom) {
     allowed.add(item.id);
     if (item.kind === "section") for (const link of item.links) allowed.add(link.id);
   }
   for (const id of shared) allowed.add(id);
+  return allowed;
+}
+
+function parseNavigationPreferences(value) {
+  if (!hasExactKeys(value, ["version", "order", "hidden", "custom"], ["shared"]) || value.version !== 4) return null;
+  const custom = parseCustomNavigation(value.custom);
+  const shared = parseSharedNavigationIds(value.shared);
+  if (!custom || !shared) return null;
+  const allowed = arrangementIds(custom, shared);
   if (!validArrangementIds(value.order, allowed) || !validArrangementIds(value.hidden, allowed)) return null;
   return value;
+}
+
+// Read an arrangement already stored on a profile. Unlike a save request, an id or link that
+// Boardwalk has since removed is dropped and the rest of the rail is kept.
+function readStoredNavigationPreferences(value) {
+  if (!hasExactKeys(value, ["version", "order", "hidden", "custom"], ["shared"]) || value.version !== 4) return null;
+  if (!Array.isArray(value.order) || !Array.isArray(value.hidden)) return null;
+  const custom = parseCustomNavigation(withoutRetiredLocalLinks(value.custom));
+  const shared = parseSharedNavigationIds(value.shared);
+  if (!custom || !shared) return null;
+  const allowed = arrangementIds(custom, shared);
+  const known = (id) => allowed.has(id);
+  return parseNavigationPreferences({
+    ...value, custom, order: value.order.filter(known), hidden: value.hidden.filter(known),
+  });
 }
 
 module.exports = {
@@ -139,5 +176,6 @@ module.exports = {
   isSafeNavigationUrl,
   parseCustomNavigation,
   parseNavigationPreferences,
+  readStoredNavigationPreferences,
   parseOwnedShareIds,
 };

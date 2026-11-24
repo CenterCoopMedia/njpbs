@@ -72,7 +72,6 @@ describe("canOpenAdminPath", () => {
       expect(canOpenAdminPath(principal, "/")).toBe(true);
       expect(canOpenAdminPath(principal, "/account/settings")).toBe(true);
       expect(canOpenAdminPath(principal, "/account/profile")).toBe(true);
-      expect(canOpenAdminPath(principal, "/schedule")).toBe(true);
     }
   });
 
@@ -112,7 +111,7 @@ describe("canOpenAdminPath", () => {
   });
 
   it("admits only staff resources for the guide-only staff role", () => {
-    expect(canOpenAdminPath(guideStaff, "/schedule")).toBe(true);
+    expect(canOpenAdminPath(guideStaff, "/guide")).toBe(true);
     expect(canOpenAdminPath(guideStaff, "/content")).toBe(false);
     expect(canOpenAdminPath(guideStaff, "/activity")).toBe(false);
   });

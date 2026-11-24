@@ -54,12 +54,6 @@
     "heading": "Use Activity"
   },
   {
-    "id": "broadcast-schedule",
-    "title": "Read the broadcast schedule",
-    "page": "overview",
-    "heading": "Main workspaces"
-  },
-  {
     "id": "analytics",
     "title": "Read site analytics",
     "page": "analytics",

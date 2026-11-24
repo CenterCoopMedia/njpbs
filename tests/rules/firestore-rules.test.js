@@ -738,7 +738,7 @@ describe("custom navigation preferences", () => {
   });
   const navigation = (custom = [link()]) => ({
     version: 4,
-    order: ["home", ...custom.map((item) => item.id), "schedule"],
+    order: ["home", ...custom.map((item) => item.id), "activity"],
     hidden: [],
     custom,
   });
@@ -762,7 +762,7 @@ describe("custom navigation preferences", () => {
   };
 
   it("lets an owner save the gated live production navigation ID without granting studio record access", async () => {
-    const value = { ...navigation([]), order: ["home", "schedule", "live-production"] };
+    const value = { ...navigation([]), order: ["home", "activity", "live-production"] };
     await assertSucceeds(writeStored(value));
     await assertSucceeds(write({ ...value, hidden: ["live-production"] }));
     await assertFails(getDoc(doc(db("regular"), "liveProductionSessions", "rehearsal")));
@@ -856,7 +856,7 @@ describe("custom navigation preferences", () => {
     await assertSucceeds(write({ ...rearranged(navigation([section])), hidden: [links[8].id] }));
     const builtInIds = [
       "home", "pages", "posts", "library", "media", "editorial-queue", "activity",
-      "schedule", "resources", "staff-profiles", "staff-access", "analytics",
+      "resources", "staff-profiles", "staff-access", "analytics",
       "reports", "admin-settings", "around-nj",
     ];
     const allIds = [...builtInIds, section.id, ...links.map((item) => item.id)];

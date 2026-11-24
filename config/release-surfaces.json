@@ -374,10 +374,6 @@
           "module": "functions/boardwalk-usage.js"
         },
         {
-          "name": "cmsGetBroadcastSchedule",
-          "module": "functions/broadcast-schedule.js"
-        },
-        {
           "name": "cmsGetBugReport",
           "module": "functions/bug-report-triage.js"
         },

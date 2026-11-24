@@ -33,7 +33,6 @@ lazyExport("cmsCuezRetry", "./cuez-transfers");
 lazyExport("cmsCuezReconcile", "./cuez-transfers");
 lazyExport("health", "./health");
 lazyExport("donationHealth", "./donation-health");
-lazyExport("cmsGetBroadcastSchedule", "./broadcast-schedule");
 lazyExport("grantRole", "./roles");
 lazyExport("revokeRole", "./roles");
 lazyExport("setStaffAccessLevel", "./staff-access-level");

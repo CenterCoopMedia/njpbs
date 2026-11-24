@@ -5,7 +5,7 @@ const { admin, db } = require("./lib/firebase");
 const { verifyAuthToken, verifyAppCheckToken, AuthError, ForbiddenError } = require("./lib/auth");
 const { SESSION_EXPIRED_CODE } = require("./lib/session-refusal");
 const { JsonRequestError, validateBoundedJsonRequest } = require("./lib/http-json");
-const { hasExactKeys, parseNavigationPreferences, parseOwnedShareIds } = require("./lib/navigation-preferences");
+const { hasExactKeys, parseNavigationPreferences, parseOwnedShareIds, readStoredNavigationPreferences } = require("./lib/navigation-preferences");
 const logger = require("firebase-functions/logger");
 
 const MAX_NAVIGATION_REQUEST_BYTES = 32 * 1024;
@@ -151,7 +151,7 @@ function createCmsSetNavigationPreferencesHandler(deps = {}) {
           if (data && data.ownerUid === caller.uid) owned.set(entry.id, data);
         });
         if (request.action === "share") {
-          const navigation = parseNavigationPreferences(userSnap.data()?.preferences?.navigation);
+          const navigation = readStoredNavigationPreferences(userSnap.data()?.preferences?.navigation);
           const item = navigation?.custom?.find((entry) => entry.id === request.itemId);
           if (!item) throw new JsonRequestError(400, SHARE_TARGET_ERROR);
           if (!owned.has(request.itemId)) {

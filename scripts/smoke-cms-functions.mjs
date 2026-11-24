@@ -94,7 +94,6 @@ export const AUTHENTICATED_POST_FUNCTION_NAMES = Object.freeze([
   "cmsRundownReview",
   "cmsLiveProductionAgent",
   "cmsLiveProductionDevices",
-  "cmsGetBroadcastSchedule",
   "cmsGetNewsroomBanner",
   "cmsVoiceoverReview",
   "cmsGetVoiceoverAudio",

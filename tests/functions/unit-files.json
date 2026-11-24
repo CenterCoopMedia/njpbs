@@ -9,7 +9,6 @@
   "tests/functions/automation-transcript-reads.test.js",
   "tests/functions/background-asset-files.test.ts",
   "tests/functions/banner-two-links.test.ts",
-  "tests/functions/broadcast-schedule.test.js",
   "tests/functions/bug-report-contract.test.js",
   "tests/functions/bug-report-github-list.test.js",
   "tests/functions/bug-report-github-reconciliation.test.js",

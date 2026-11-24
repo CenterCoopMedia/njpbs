@@ -16,8 +16,8 @@ staff assignments or a live publication. Your role and deployed Boardwalk versio
 may show different controls. Follow the text if an image is hard to read, or
 select an image to open it at full size.
 
-If you have staff access without an editorial role, you can read **Broadcast
-schedule**, use the staff media sources available to you, and read this guide.
+If you have staff access without an editorial role, you can use the staff media
+sources available to you and read this guide.
 Ask your manager to arrange the editorial access your job needs.
 
 Use [Access and roles](../access-and-roles/) for Boardwalk sign-in, first-time
@@ -83,8 +83,7 @@ access, password recovery, and the **Preparing your workspace** checklist.
 ### 1. Find your way around
 
 Sign in to <a href="https://admin.njpbs.org/" target="_blank" rel="noopener noreferrer">Boardwalk<span class="sr-only"> (opens in new tab)</span></a>. Check your name in the account
-menu. Find **Broadcast schedule**, which is available to every signed-in
-account. Find **Pages**, **Posts**, **All content**, and **Media library** if
+menu. Find **Pages**, **Posts**, **All content**, and **Media library** if
 your account has access to them. Use this guide for the staff procedures.
 
 <figure class="admin-docs-screenshot">

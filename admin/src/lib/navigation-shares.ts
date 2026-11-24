@@ -180,7 +180,7 @@ export function parseNavigationShare(id: string, value: unknown): NavigationShar
     ? value.removedReason : undefined;
   if (value.status === "removed" && !removedReason) return null;
   const items = parseCustomNavigation([value.item]);
-  if (!items || items[0].id !== id) return null;
+  if (!items || items[0]?.id !== id) return null;
   return {
     id,
     ownerUid: value.ownerUid,

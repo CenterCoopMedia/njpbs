@@ -13,7 +13,6 @@ vi.mock("../src/lib/firebase", () => ({
 
 import { adminPerf, PERF_MEASURES } from "../src/lib/perf-receipts";
 import {
-  cmsGetBroadcastSchedule,
   cmsGetNewsroomBanner,
   cmsUploadMedia,
   postFunction,
@@ -62,7 +61,6 @@ describe("Admin performance instrumentation", () => {
       guide: async () => undefined,
       whatsNew: async () => undefined,
       resources: async () => undefined,
-      schedule: async () => undefined,
     liveProduction: async () => undefined,
       staff: async () => undefined,
     });
@@ -101,26 +99,6 @@ describe("Admin performance instrumentation", () => {
       requestId,
     });
     expect(transport.durationMs).toBeGreaterThanOrEqual(0);
-  });
-
-  it("classifies the private schedule request as a schedule read", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () =>
-        new Response(JSON.stringify({ success: true, source: {}, airings: [] }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        }),
-      ),
-    );
-
-    await cmsGetBroadcastSchedule("test-id-token");
-
-    expect(measures(PERF_MEASURES.cmsTransport).at(-1)!.detail).toEqual({
-      operation: "schedule-read",
-      outcome: "ok",
-      statusClass: "2xx",
-    });
   });
 
   it("reports a refused CMS call without its message", async () => {

@@ -247,7 +247,6 @@ const CONTEXT_HEADER_PATHS = new Set<string>([
   ROUTE_PATHS.root,
   ROUTE_PATHS.activity,
   ROUTE_PATHS.mediaLibrary,
-  ROUTE_PATHS.schedule,
   ROUTE_PATHS.publishQueue,
   ROUTE_PATHS.adminSettings,
   ROUTE_PATHS.adminCosts,
@@ -589,7 +588,6 @@ function ShellLayoutContents() {
     location.pathname === ROUTE_PATHS.guide ||
     location.pathname.startsWith(`${ROUTE_PATHS.guide}/`);
   const guideOnlyPathAllowed =
-    location.pathname === ROUTE_PATHS.schedule ||
     guidePath ||
     location.pathname.replace(/\/+$/, "") === ROUTE_PATHS.whatsNew ||
     location.pathname.replace(/\/+$/, "") === ROUTE_PATHS.politicsResource ||
@@ -750,7 +748,7 @@ function ShellLayoutContents() {
         replace
         state={{
           notice:
-            "Use the Boardwalk guide, What's new changelog, Resources, Broadcast schedule, the media library, Reports, or account settings.",
+            "Use the Boardwalk guide, What's new changelog, Resources, the media library, Reports, or account settings.",
         }}
         to={ROUTE_PATHS.guide}
       />

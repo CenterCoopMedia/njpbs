@@ -123,7 +123,7 @@ describe("primary navigation in a phone editor", () => {
   });
 
   it.each([
-    ["Home", "/"], ["Activity", "/activity"], ["schedule", "/schedule"],
+    ["Home", "/"], ["Activity", "/activity"],
     ["Resources", "/resources/nj-politics"], ["Live production", "/live-production"],
     ["directory", "/content"], ["record list", "/content/sponsor"],
     ["library", "/content/library"], ["media", "/media/images"], ["queue", "/publish-queue"],

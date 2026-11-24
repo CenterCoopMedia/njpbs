@@ -136,7 +136,7 @@ The default rail can include:
 
 - Home
 - Pages, Posts, All content, and Media library, grouped as Content
-- Editorial queue, Activity, and Broadcast schedule, grouped as Workflow
+- Editorial queue and Activity, grouped as Workflow
 - Resources, Staff profiles, and Staff access, grouped as Team
 - Analytics, Reports, and Admin settings, grouped as Administration
 - Around NJ
@@ -151,12 +151,6 @@ The order and available destinations depend on your account. Capability rules
 decide what may appear. Personal arrangement settings can change the order or
 hide an eligible destination, but they do not expand or reduce the underlying
 authorization.
-
-**Broadcast schedule** is a required, read-only destination for every signed-in
-account. It states the source packet, coverage dates, and Eastern time zone. It
-does not use or replace the public PBS listings feed. If the requested week is
-outside the verified coverage, use the closest covered week and report the data
-gap to an administrator.
 
 If you cannot find a workspace:
 
@@ -333,8 +327,8 @@ same controls as built-in destinations. Delete removes a plank or span after you
 There is a limit of ten planks and spans; each span and each plank counts as one.
 Only this account's rail changes. Access checks still apply to every plank.
 
-**Check:** Your arrangement changed; your access did not. Home, Broadcast schedule,
-and required administration destinations cannot be hidden. If a workspace is
+**Check:** Your arrangement changed; your access did not. Home and required
+administration destinations cannot be hidden. If a workspace is
 still absent, check your role rather than repeatedly resetting the layout.
 
 ## Read site analytics

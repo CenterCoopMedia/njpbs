@@ -64,7 +64,6 @@ describe("Cloud Functions startup graph", () => {
       expect(api.cmsGetNewsroomBanner).toBeTypeOf("function");
       expect(loaded).not.toContain("./media");
       expect(loaded).not.toContain("./analytics");
-      expect(loaded).not.toContain("./broadcast-schedule");
       expect(loaded).not.toContain("./navigation-preferences");
       expect(loaded).not.toContain("./lib/navigation-preferences");
       expect(loaded).not.toContain("./source-media");
@@ -75,8 +74,6 @@ describe("Cloud Functions startup graph", () => {
       expect(loaded).not.toContain("./source-media");
       expect(loaded).not.toContain("./lib/s3-media-source");
       expect(loaded).not.toContain("./s3-media-source");
-      expect(api.cmsGetBroadcastSchedule).toBeTypeOf("function");
-      expect(loaded).toContain("./broadcast-schedule");
       expect(loaded).not.toContain("./navigation-preferences");
       expect(api.cmsSetNavigationPreferences).toBeTypeOf("function");
       expect(loaded).toContain("./navigation-preferences");

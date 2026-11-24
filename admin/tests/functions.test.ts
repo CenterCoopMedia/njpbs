@@ -14,7 +14,6 @@ import {
   cmsListBinnedMedia,
   cmsRestoreMedia,
   type BinnedMediaAsset,
-  cmsGetBroadcastSchedule,
   cmsGetContent,
   cmsGetNewsroomBanner,
   cmsGetRevision,
@@ -359,33 +358,6 @@ describe("staff access request API", () => {
 });
 
 describe("newsroom settings functions", () => {
-  it("loads the private broadcast schedule through the admitted staff boundary", async () => {
-    const result = {
-      success: true as const,
-      source: {
-        coverageStart: "2026-10-01",
-        coverageEnd: "2026-11-05",
-        label: "Synthetic broadcast packet A",
-        received: "2026-09-01",
-        timezone: "America/New_York",
-      },
-      airings: [],
-    };
-    const fetchMock = vi.fn(
-      async (_url: string, _init: RequestInit): Promise<Response> =>
-        okResponse(result),
-    );
-    vi.stubGlobal("fetch", fetchMock);
-
-    await expect(cmsGetBroadcastSchedule("id-token")).resolves.toEqual(result);
-
-    const [url, init] = fetchMock.mock.calls[0]!;
-    expect(url).toBe(`${BASE}/cmsGetBroadcastSchedule`);
-    expect((init.headers as Record<string, string>).Authorization).toBe(
-      "Bearer id-token",
-    );
-    expect(JSON.parse(init.body as string)).toEqual({});
-  });
 
   it("loads the safe banner projection for every admitted homepage", async () => {
     const result = {

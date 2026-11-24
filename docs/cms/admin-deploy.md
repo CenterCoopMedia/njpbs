@@ -38,7 +38,7 @@ overrides are not the normal pinned release method.
 | --- | --- | --- |
 | 1 | Reviewed source | Clean working tree; independently configured repository name and numeric ID match origin; current main for the standalone command. A fork's main is not review evidence. |
 | 2 | Build configuration | Vite's production `loadEnv` resolves every required input, emulator mode is off, project/auth domain agree, App Check is configured and the API URL is the exact allowed HTTPS bare origin. No path, query, fragment, port or trailing slash. |
-| 3 | Backend | Account registration/request, broadcast schedule and navigation edge routes return unauthenticated 401. Direct navigation origin returns 403. Network errors or unexpected status stop upload. |
+| 3 | Backend | Account registration/request and navigation edge routes return unauthenticated 401. Direct navigation origin returns 403. Network errors or unexpected status stop upload. |
 | 4 | Status manifest | Authenticated bounded milestone catalog is valid for the configured repository and selected build contract. Unreadable or invalid data refuses deployment. |
 | 5 | Credential and Pages security | Fetch the provider credential only when needed. Production and preview both have `fail_open: false`. Resolve the pinned Wrangler package before exposing the token; deployment cannot install packages with the token in scope. |
 | 6 | Artifact | Build `admin/dist` from that source; require `index.html`; deploy with the Admin config, production branch and exact artifact. |

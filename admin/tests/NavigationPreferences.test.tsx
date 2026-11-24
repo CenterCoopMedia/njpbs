@@ -116,28 +116,13 @@ describe("navigation preferences panel", () => {
     );
   });
 
-  it("offers the live production pilot after Broadcast schedule only when the build flag is enabled", () => {
+  it("offers the live production pilot after Activity only when the build flag is enabled", () => {
     // The pilot task requires public builds to default off; that changes eligibility,
     // while preserving the existing default order of all established destinations.
     vi.stubEnv("VITE_LIVE_PRODUCTION_ENABLED", "true");
     renderPanel();
     const names = arrangedNames();
-    expect(names[names.indexOf("Broadcast schedule") + 1]).toBe("Live production");
-  });
-
-  it("keeps Broadcast schedule required in Workflow immediately after Activity", () => {
-    const activityIndex = NAV_DESTINATIONS.findIndex(
-      (destination) => destination.id === "activity",
-    );
-    const schedule = NAV_DESTINATIONS[activityIndex + 1];
-
-    expect(NAV_DESTINATIONS.find((destination) => destination.id === "schedule")?.group)
-      .toBe("Workflow");
-    expect(schedule?.id).toBe("schedule");
-    expect(schedule?.required).toBe(true);
-    expect(NAV_DESTINATIONS.some((destination) =>
-      destination.id === "schedule" && destination.group === "Content",
-    )).toBe(false);
+    expect(names[names.indexOf("Activity") + 1]).toBe("Live production");
   });
 
   it("offers only the destinations a contributor's role allows", () => {
@@ -162,7 +147,7 @@ describe("navigation preferences panel", () => {
       "Media library",
     ]);
     expect(screen.getByRole("status")).toHaveTextContent(
-      "Media library moved to position 4 of 16.",
+      "Media library moved to position 4 of 15.",
     );
   });
 
@@ -235,7 +220,6 @@ describe("navigation preferences panel", () => {
     );
     expect(screen.getByRole("button", { name: "Show: Activity" })).toBeVisible();
     expect(screen.queryByRole("button", { name: "Hide: Home" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Hide: Broadcast schedule" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Hide: Admin settings" })).toBeNull();
     const home = within(
       screen.getByRole("list", { name: "Your rail order" }),
@@ -263,7 +247,6 @@ describe("navigation preferences panel", () => {
         "editorial-queue",
         "cuez-storydesk",
         "activity",
-        "schedule",
         "resources",
         "staff-profiles",
         "staff-access",

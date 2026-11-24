@@ -58,7 +58,6 @@ function modules(): {
     guide: vi.fn(async () => undefined),
     whatsNew: vi.fn(async () => undefined),
     resources: vi.fn(async () => undefined),
-    schedule: vi.fn(async () => undefined),
     liveProduction: vi.fn(async () => undefined),
     staff: vi.fn(async () => undefined),
   };
@@ -103,7 +102,6 @@ describe("Admin route module keys", () => {
         guide: "/guide/overview",
         "whats-new": "/whats-new",
         resources: "/resources/nj-politics",
-        schedule: "/schedule",
         "live-production": "/live-production",
         "account-settings": "/account/settings",
         "account-profile": "/account/profile",

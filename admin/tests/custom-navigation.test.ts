@@ -38,6 +38,16 @@ describe("custom navigation contract", () => {
     expect(parseCustomNavigation(Array.from({ length: 11 }, (_, i) => ({ ...link, id: `custom:${i}` })))).toBeNull();
     expect(parseCustomNavigation([{ ...section, links: Array.from({ length: 10 }, (_, i) => ({ ...link, id: `custom:${i}` })) }])).toBeNull();
   });
+  it("drops a stored link to a removed workspace and keeps the rest of the rail", () => {
+    const retired = { id: "custom:old", kind: "link", label: "Old", destination: { kind: "url", url: "/schedule?week=2026-09-28" } };
+    const desk = { ...section, links: [...(section as { links: unknown[] }).links, { ...retired, id: "custom:old-child" }] };
+    const stored = { version: 4, order: ["schedule", "custom:old", "custom:station", "home", "custom:desk"], hidden: [], custom: [retired, link, desk] };
+    const parsed = parseNavigationPreferences(stored);
+    expect(parsed?.custom).toEqual([link, section]);
+    const rows = resolveNavigation(parsed, eligibleNavDestinations(principal));
+    expect(rows.map(row => row.destination.id)).not.toContain("schedule");
+    expect(rows.map(row => row.destination.id)).toContain("home");
+  });
   it("accepts the ten-entry boundary for links and section children", () => {
     const links = Array.from({ length: 10 }, (_, i) => ({ ...link, id: `custom:${i}` }));
     expect(parseCustomNavigation(links)).toEqual(links);

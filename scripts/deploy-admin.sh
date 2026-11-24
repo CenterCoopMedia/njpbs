@@ -386,7 +386,7 @@ gate_staff_admission_backend() {
       "must be confirmed on the configured backend before the front end is published."
   fi
 
-  for endpoint in registerStaffProfile submitStaffAccessRequest cmsGetBroadcastSchedule cmsSetNavigationPreferences; do
+  for endpoint in registerStaffProfile submitStaffAccessRequest cmsSetNavigationPreferences; do
     status="$(
       curl --silent --show-error \
         --output /dev/null \
