@@ -482,8 +482,6 @@ test("dev dispatch defaults to pinned renderer verification and opts into image 
   for (const [releasing, result, cancelled] of [[true, "skipped", false], [true, "failure", false], [false, "failure", false], [false, "skipped", true]]) {
     assert.equal(evaluate(deploy.if, context(releasing, result, cancelled)), false);
   }
-  const verification = deploy.steps.find(step => step.name === "Verify the pinned dev renderer for a routine deploy");
-  assert.equal(evaluate(verification.if, context(false, "skipped")), true);
-  assert.equal(evaluate(verification.if, context(true, "success")), false);
-  assert.deepEqual(Object.keys(verification.env).sort(), ["CLOUDFLARE_API_TOKEN", "CMS_DEV_PREVIEW_FIREBASE_ACCOUNT"]);
+  // The legacy pinned-renderer verify is gone: the dev renderer has a component receipt from cms-staging-deploy.yml.
+  assert.equal(deploy.steps.some(step => /--verify-pinned/.test(step.run ?? "")), false);
 });
