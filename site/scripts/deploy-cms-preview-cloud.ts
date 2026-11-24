@@ -441,7 +441,7 @@ async function main() {
   if (publicationAccess && operation === "seed-context") throw new Error("Development has no retained public context seed");
   releaseSecretValues.splice(0, releaseSecretValues.length, ...releaseSecretsFor(rawAccount, rawStorage, token),
     ...(publicationAccess ? [publicationAccess.clientId, publicationAccess.clientSecret] : []));
-  const account = parseCmsPublicationFirebaseServiceAccount(rawAccount);
+  const account = parseCmsPublicationFirebaseServiceAccount(rawAccount, cmsTarget().projectId);
   const app = firebaseAdminRuntime.initializeApp({
     credential: firebaseAdminRuntime.cert(account), projectId: cmsTarget().projectId,
   }, "preview-cloud-release");

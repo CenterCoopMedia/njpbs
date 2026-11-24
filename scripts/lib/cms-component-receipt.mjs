@@ -1256,7 +1256,7 @@ export async function collectLiveIdentities(component, deps = {}) {
     const token = deps.cloudflareToken ?? process.env.CLOUDFLARE_API_TOKEN ?? "";
     const account = deps.cloudflareAccount ?? process.env.CLOUDFLARE_ACCOUNT_ID ?? "";
     if (!token || !account) fail("Cloudflare credentials are required for renderer identities");
-    const { rendererWorker } = cmsTarget();
+    const rendererWorker = deps.applicationName ?? cmsTarget().rendererWorker;
     const application = await readConsistentRendererApplication(fetchFn, account, token, {
       ...deps,
       rendererSha: data.rendererSha,
