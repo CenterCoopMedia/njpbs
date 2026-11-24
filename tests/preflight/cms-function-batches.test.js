@@ -180,7 +180,7 @@ describe("CMS function build queue expiry recovery", () => {
     ["exampleFunctionB", "exampleFunctionC", "exampleFunctionD"],
     ["exampleFunctionE"],
   ];
-  function deployment(outputs, names, request = vi.fn().mockResolvedValue({}), clock = {}) {
+  function deployment(outputs, names, request = vi.fn().mockResolvedValue({})) {
     const launch = vi.fn(() => {
       const child = new EventEmitter(); child.stdout = new EventEmitter(); child.stderr = new EventEmitter();
       const [code, output] = outputs.shift();
@@ -193,7 +193,7 @@ describe("CMS function build queue expiry recovery", () => {
     });
     const wait = vi.fn().mockResolvedValue();
     const promise = deployFunctionTargets(names, launch, "njpbs-site", {
-      manifest: names.map(name => ({ name, region: "us-central1", platform: "gcfv2" })), request, wait, ...clock,
+      manifest: names.map(name => ({ name, region: "us-central1", platform: "gcfv2" })), request, wait,
     });
     const targets = () => launch.mock.calls.map(([, args]) => args[args.indexOf("--only") + 1]);
     return { promise, launch, wait, request, targets };
@@ -215,56 +215,6 @@ describe("CMS function build queue expiry recovery", () => {
     const run = deployment([[1, created], [0, "Deploy complete!\n"]], ["health", ...failures[1]]);
     await expect(run.promise).resolves.toBeUndefined();
     expect(run.targets()[1]).toBe(failures[1].map(name => `functions:${name}`).join(","));
-  });
-  it("stops as a recorded failure when the next wait and attempt would cross the job deadline", async () => {
-    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
-    // Each attempt takes 4 min on this clock; waits advance it by their own length.
-    let clock = 0;
-    const now = () => clock;
-    const outputs = Array.from({ length: 4 }, () => [1, recordings[1]]);
-    const run = deployment(outputs, ["health", ...failures[1]], undefined, { now, deadline: 14 * 60_000 });
-    run.launch.mockImplementation((original => (...args) => { clock += 4 * 60_000; return original(...args); })(run.launch.getMockImplementation()));
-    run.wait.mockImplementation(async ms => { clock += ms; });
-    await expect(run.promise).rejects.toThrow("did not confirm completion");
-    // 4 min + 1 min wait + 4 min = 9 min; then 9 + 2 + 4 = 15 min would cross the 14 min deadline.
-    expect(run.launch).toHaveBeenCalledTimes(2);
-    expect(errors).toHaveBeenLastCalledWith(expect.stringMatching(
-      /^Firebase deployment stopped for the job deadline; still pending: exampleFunctionB, exampleFunctionC, exampleFunctionD; last provider line: /));
-    errors.mockRestore();
-  });
-  it("has no ceiling without a job deadline", async () => {
-    expect(process.env.CMS_FUNCTIONS_DEPLOY_DEADLINE_MS).toBeUndefined();
-    const run = deployment([...Array.from({ length: 8 }, () => [1, recordings[1]]), [0, "Deploy complete!\n"]], ["health", ...failures[1]]);
-    await expect(run.promise).resolves.toBeUndefined();
-    expect(run.launch).toHaveBeenCalledTimes(9);
-  });
-  it("sets one deadline for both Functions deploy steps from the job's own start and timeout", () => {
-    const workflow = parse(readFileSync(new URL("../../.github/workflows/cms-staging-deploy.yml", import.meta.url), "utf8"));
-    const steps = workflow.jobs.firebase.steps;
-    const deadline = steps.findIndex(item => item.name === "Set the Functions deploy deadline from this job's start");
-    expect(steps[deadline].env.FIREBASE_JOB_TIMEOUT_MINUTES).toBe(workflow.jobs.firebase["timeout-minutes"]);
-    expect(steps[deadline].run).toContain(".started_at");
-    expect(steps[deadline].run).toContain('CMS_FUNCTIONS_DEPLOY_DEADLINE_MS=');
-    expect(steps[deadline].run).toContain('>> "$GITHUB_ENV"');
-    for (const name of ["Deploy ordinary Functions before the preview pause", "Deploy Firebase rules, indexes, and functions"]) {
-      expect(steps.findIndex(item => item.name === name)).toBeGreaterThan(deadline);
-    }
-  });
-  it("ends an attempt still running at the job deadline as a recorded failure", async () => {
-    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
-    const launch = vi.fn(() => {
-      const child = new EventEmitter(); child.stdout = new EventEmitter(); child.stderr = new EventEmitter();
-      // A hung Firebase invocation: it closes only when it is killed.
-      child.kill = vi.fn(() => queueMicrotask(() => child.emit("close", null)));
-      return child;
-    });
-    await expect(deployFunctionTargets(["handler"], launch, "njpbs-site", {
-      manifest: [{ name: "handler", region: "us-central1", platform: "gcfv2" }], request: async () => ({}), wait: async () => {},
-      deadline: Date.now() + 20,
-    })).rejects.toThrow("did not confirm completion");
-    expect(launch.mock.results[0].value.kill).toHaveBeenCalledWith("SIGTERM");
-    expect(errors).toHaveBeenLastCalledWith(expect.stringContaining("stopped for the job deadline during an attempt; still pending: handler"));
-    errors.mockRestore();
   });
   it("keeps deploying only the failed functions, paced to 5 min, until they complete", async () => {
     const run = deployment([...Array.from({ length: 5 }, () => [1, recordings[1]]), [0, "Deploy complete!\n"]], ["health", ...failures[1]]);
@@ -338,6 +288,15 @@ describe("CMS function build queue expiry recovery", () => {
     await expect(run.promise).resolves.toBeUndefined();
     expect(run.launch).toHaveBeenCalledTimes(3);
     expect(run.wait.mock.calls).toEqual([[60_000], [120_000]]);
+  });
+  it("bounds both Functions deploy steps inside the firebase job's timeout", () => {
+    // The retry has no count; the step timeouts are its ceiling, and a timed-out step fails
+    // so the recovery steps run. 3 minutes cover the steps before and after (measured).
+    const job = parse(readFileSync(new URL("../../.github/workflows/cms-staging-deploy.yml", import.meta.url), "utf8")).jobs.firebase;
+    const steps = ["Deploy ordinary Functions before the preview pause", "Deploy Firebase rules, indexes, and functions"]
+      .map(name => job.steps.find(item => item.name === name)["timeout-minutes"]);
+    expect(steps.every(Number.isInteger)).toBe(true);
+    expect(steps[0] + steps[1] + 3).toBeLessThanOrEqual(job["timeout-minutes"]);
   });
   it("retries a rate quota, which clears by itself", async () => {
     const rate = "Error: HTTP Error: 429, Quota exceeded for quota metric 'Write requests' and limit 'Write requests per minute'\n";

@@ -1279,24 +1279,6 @@ jobs:
           ref: ${{ needs.admin-build.outputs.deploy_sha }}
           fetch-depth: 0
           persist-credentials: true
-      - name: Set the Functions deploy deadline from this job's start
-        # Both Functions deploy steps stop as a recorded failure before this job's timeout, so
-        # the failure and recovery steps still run. After the deploy they took 1 s in runs
-        # 44317559254 (receipt restore) and 45504015954 (credential cleanup); 60 s covers them.
-        # GitHub's own job start is the base; without it the deploy has no ceiling.
-        env:
-          GH_TOKEN: ${{ github.token }}
-          # Equal to this job's timeout-minutes (tests/preflight/cms-function-batches.test.js).
-          FIREBASE_JOB_TIMEOUT_MINUTES: 107
-        run: |
-          set -euo pipefail
-          started=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT/jobs?per_page=100" \
-            --jq '.jobs[] | select(.name == "firebase") | .started_at' || true)
-          if started_ms=$(date -d "$started" +%s%3N 2>/dev/null) && [ -n "$started" ]; then
-            echo "CMS_FUNCTIONS_DEPLOY_DEADLINE_MS=$(( started_ms + FIREBASE_JOB_TIMEOUT_MINUTES * 60000 - 60000 ))" >> "$GITHUB_ENV"
-          else
-            echo "::warning::The firebase job start is unavailable; the Functions deploy runs without a deadline"
-          fi
       - name: Check out trusted release source gate
         uses: actions/checkout@v7
         with:
@@ -1598,6 +1580,14 @@ jobs:
             --non-interactive
       - name: Deploy ordinary Functions before the preview pause
         id: deploy_functions_before_preview
+        # The Functions retry has no count; this step timeout is its only ceiling. A step that
+        # passes its timeout fails, so the failure() and recovery steps after it still run;
+        # only the job's timeout cancels them. Budget, from the firebase job's 107 minutes:
+        # steps before the deploy took at most 1m57s (runs 45191230409, 44613342087,
+        # 45310500950, 45504015954, 45506446346) and the recovery steps after a failed deploy
+        # at most 6 s (45504015954, 45506446346), so 104 minutes remain, split between the
+        # two deploy steps. The full deploy took at most 36m24s (44613342087).
+        timeout-minutes: 52
         if: (inputs.target == 'development' || vars.CMS_PREVIEW_CLOUD_ENABLED == 'true') && needs.firebase-preflight.outputs.preview_pause_late == 'true' && needs.firebase-preflight.outputs.functions_before_preview != ''
         env:
           DEPLOY_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
@@ -1626,6 +1616,8 @@ jobs:
             site/scripts/deploy-cms-preview-cloud.ts pause "$RENDERER_SHA"
       - name: Deploy Firebase rules, indexes, and functions
         id: deploy_functions
+        # Same budget as "Deploy ordinary Functions before the preview pause".
+        timeout-minutes: 52
         if: needs.firebase-preflight.outputs.functions_mutated == 'true'
         env:
           FIRESTORE_DEPLOYED_BEFORE_PREVIEW: ${{ steps.deploy_rules_before_preview.outcome }}

@@ -214,12 +214,9 @@ Firebase confirms `Deploy complete!` or reports a final failure (build,
 configuration, permission, a request refusal, or a daily or per-project count
 quota). A Cloud Run regional CPU or memory quota and unknown quota wording are
 retried, and each wait prints the pending functions and the provider's last line.
-In the workflow the only ceiling is the firebase job's own timeout, counted from
-GitHub's start time for the job, less 60 s for the recovery steps. Both Functions
-deploy steps use it: a retry stops when the next wait and another attempt would
-cross it, and an attempt still running at it is ended. Either way the step stops
-as a recorded failure naming the pending functions, so the failure and recovery
-steps still run. Without the job start time there is no ceiling.
+In the workflow each Functions deploy step has its own `timeout-minutes`, which is
+the retry's only ceiling: a step that passes it fails, so the failure and recovery
+steps still run.
 
 Automatic Functions abandonment is limited to attempt one, both deployment
 phases skipped and no retirement/provider mutation started. Idempotent repairs
