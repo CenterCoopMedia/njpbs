@@ -196,7 +196,7 @@ export async function install({ sha, run, check }, io) {
     const before = await readPublisher(cloudflare);
     assertBefore(before);
     // A Worker on one version with exactly the rendered public variables (so the commit too), whose application already runs the image, is installed,
-    // including a first install with no rollout (jawn-ops records it as NoRollout); only the readback runs.
+    // including a first install with no rollout, which the release method accepts; only the readback runs.
     const rollouts = await cloudflare(`containers/applications/${before.application.id}/rollouts`);
     const applied = appliedImage(before.application, rollouts);
     const rendered = Object.fromEntries(Object.entries(config.vars).sort(([a], [b]) => a.localeCompare(b)));

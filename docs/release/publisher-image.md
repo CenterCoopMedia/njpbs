@@ -151,7 +151,7 @@ The script handles no secret values.
 The script skips the deploy and only reads back when the Worker is on one
 version naming X and the app already runs the receipt image. The image a
 completed rollout applied counts, and so does a first install's own image
-with no rollout (jawn-ops records that state as `NoRollout`). Otherwise it
+with no rollout, which the release method accepts. Otherwise it
 deploys, so Worker drift at an unchanged image is repaired. The readback
 waits up to 15 minutes for all of the following:
 
@@ -167,6 +167,6 @@ waits up to 15 minutes for all of the following:
 
 It prints one JSON receipt with the previous and current version IDs, the
 rollout ID or `noRollout: true`, and whether it deployed. After a deploy,
-jawn-ops' development first-install record (`release_target_settings.go`)
-no longer describes the live publisher. Update or delete that record from
-the printed version before the next development release run.
+the release method's development first-install record no longer describes
+the live publisher. Update or delete that record from the printed version
+before the next development release run.
