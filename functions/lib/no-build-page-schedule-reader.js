@@ -7,7 +7,6 @@ const { pagePublicationTarget } = require("./no-build-page-target");
 const { PUBLIC_CONTEXT_PATH, publicContextDigest } = require("./public-context-revision");
 const { refuse, digest, readNoBuildPageCapability } = require("./no-build-page-ownership");
 const { readCachedPageSchedule } = require("./page-schedule-immutable-cache");
-const { withinDeadline } = require("./no-build-post-recovery");
 
 const JSON_PATH = "/_schedule-sources.json";
 const PDF_PATH = "/schedule/downloads/nj-pbs-schedule.pdf";
@@ -32,7 +31,7 @@ function createPageCurrentCodeContextReader({ firestore, rendererSha, target, re
   let reader;
   const getReader = () => {
     target = pagePublicationTarget({ firestore, target });
-    // A deadline wrapper must not hide an implicit live fetch from the existing
+    // A signal wrapper must not hide an implicit live fetch from the existing
     // transport's local-fixture guard.
     if ((process.env.FUNCTIONS_EMULATOR === "true" || process.env.FIRESTORE_EMULATOR_HOST) && !request) {
       refuse("Emulated Page CODE reads require an explicit local fixture transport.");
@@ -116,15 +115,13 @@ class PageScheduleCaptureRequired extends Error {
 const captures = new WeakMap();
 function captureData(capture, target, rendererSha) {
   const data = captures.get(capture);
-  if (!data || data.target !== target || rendererSha && data.rendererSha !== rendererSha || data.now() >= data.deadline) {
+  if (!data || data.target !== target || rendererSha && data.rendererSha !== rendererSha) {
     refuse("The qualified Page schedule capture is unavailable.");
   }
-  data.signal.throwIfAborted();
   return data;
 }
-async function capturePageSchedule({ firestore, target, rendererSha, request, releaseSelector, now = Date.now, deadline = now() + 45_000 }) {
+async function capturePageSchedule({ firestore, target, rendererSha, request, releaseSelector }) {
   target = pagePublicationTarget({ firestore, target });
-  if (!Number.isFinite(deadline) || deadline <= now()) refuse("The Page schedule deadline expired.");
   if (releaseSelector !== undefined) {
     const selected = require("./public-release-media-fence").parseStoredSelector(releaseSelector);
     if (rendererSha !== undefined && rendererSha !== selected.activeCommitSha) refuse("The Page selected CODE differs.");
@@ -136,8 +133,7 @@ async function capturePageSchedule({ firestore, target, rendererSha, request, re
     rendererSha = pointer.activeCommitSha;
   }
   if (!/^[a-f0-9]{40}$/.test(rendererSha ?? "")) refuse("The Page renderer is invalid.");
-  const signal = AbortSignal.timeout(Math.max(1, Math.ceil(deadline - now())));
-  const readCurrentCodeContext = createPageCurrentCodeContextReader({ firestore, target, rendererSha, request, signal,
+  const readCurrentCodeContext = createPageCurrentCodeContextReader({ firestore, target, rendererSha, request,
     ...(releaseSelector !== undefined ? { releaseSelector } : {}) });
   const reference = await readCurrentCodeContext.readReference();
   const readSelection = reference => firestore.runTransaction(transaction => readScheduleSelectionInTransaction({
@@ -145,46 +141,40 @@ async function capturePageSchedule({ firestore, target, rendererSha, request, re
   const selection = await readSelection(reference);
   const read = qualifiedCode => firestore.runTransaction(transaction => readPageScheduleAuthorityInTransaction({
     firestore, transaction, rendererSha, qualifiedCode, target }), { readOnly: true });
-  const data = await withinDeadline(deadline - now(), () => readCachedPageSchedule({ firestore,
+  const data = await readCachedPageSchedule({ firestore,
     identity: digest({ target: target.environment, reference, selection }), load: async () => {
       const qualifiedCode = await currentCode(readCurrentCodeContext);
       const authority = await read(qualifiedCode);
       if (!isDeepStrictEqual(qualifiedCode.reference, reference) || !isDeepStrictEqual(authority.selection, selection)) refuse("The Page schedule source moved before packet IO.");
       const storage = require("./post-background-storage").createPostBackgroundStorage(target.backgroundBucket);
       const packet = await require("./home-retained-sources").readPageSchedulePacket({ authority, storage: {
-        get: (key, options) => storage.get(key, { ...options, signal: AbortSignal.any([signal, options.signal]) }),
+        get: (key, options) => storage.get(key, options),
         put: () => { refuse("A Page schedule reader cannot generate an output."); },
       } });
       const afterCode = await currentCode(readCurrentCodeContext);
       if (!isDeepStrictEqual(afterCode, qualifiedCode) || !isDeepStrictEqual(await read(afterCode), authority)) refuse("The Page schedule authority moved after packet IO.");
-      signal.throwIfAborted();
       return { qualifiedCode, authority, packet };
-    } }));
+    } });
   const afterReference = await readCurrentCodeContext.readReference();
   if (!isDeepStrictEqual(afterReference, reference) || !isDeepStrictEqual(await readSelection(afterReference), selection)) refuse("The Page schedule authority moved after cache reuse.");
-  signal.throwIfAborted();
   const capture = Object.freeze({});
-  captures.set(capture, { target, rendererSha, ...data, deadline, now, signal });
+  captures.set(capture, { target, rendererSha, ...data });
   return capture;
 }
 /** Private replay adapter. The source owner has verified immutable baseline/
  * append evidence and exact retained CODE bytes before invoking this method.
  * Its Firestore facade contains only reconstructed public source documents;
  * no current-CODE RPC or mutable-latest fallback is permitted here. */
-async function captureHistoricalPageSchedule({ firestore, target, rendererSha, originalPair, qualifiedCode, storage,
-  now = Date.now, deadline = now() + 45_000 }) {
+async function captureHistoricalPageSchedule({ firestore, target, rendererSha, originalPair, qualifiedCode, storage }) {
   const pair = require("./public-release-pair").parsePublicReleasePair(originalPair);
   require("./public-release-historical-code").verifyPublicReleaseQualifiedCode(qualifiedCode);
   target = pagePublicationTarget({ firestore, target });
-  if (pair.commitSha !== rendererSha || qualifiedCode.publication.commitSha !== rendererSha ||
-      !Number.isFinite(deadline) || deadline <= now()) refuse("Historical Schedule CODE authority differs.");
-  const signal = AbortSignal.timeout(Math.max(1, Math.ceil(deadline - now())));
+  if (pair.commitSha !== rendererSha || qualifiedCode.publication.commitSha !== rendererSha) refuse("Historical Schedule CODE authority differs.");
   const authority = await firestore.runTransaction(transaction => readPageScheduleAuthorityInTransaction({
     firestore, transaction, rendererSha, qualifiedCode, target }), { readOnly: true });
   const packet = await require("./home-retained-sources").readPageSchedulePacket({ authority, storage });
-  signal.throwIfAborted();
   const capture = Object.freeze({});
-  captures.set(capture, { target, rendererSha, qualifiedCode, authority, packet, deadline, now, signal });
+  captures.set(capture, { target, rendererSha, qualifiedCode, authority, packet });
   return capture;
 }
 async function readCapturedPageScheduleInTransaction({ firestore, transaction, target, rendererSha, capture }) {

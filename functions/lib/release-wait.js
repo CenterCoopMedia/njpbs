@@ -29,8 +29,8 @@ const PLATFORM_LIMITS = Object.freeze({
   githubHostedJobMinutes: 360,
 });
 
-// Answers that mean the service did not answer yet.
-const NO_ANSWER_STATUSES = new Set([429, 502, 503, 504]);
+// Network failures that mean the service did not answer. Any HTTP status is an
+// answer; its caller decides whether that state means ask again.
 const NO_ANSWER_CODES = new Set(["ECONNRESET", "ECONNREFUSED", "ETIMEDOUT", "EPIPE", "EAI_AGAIN", "ENOTFOUND", "ENETUNREACH",
   "EHOSTUNREACH", "UND_ERR_SOCKET", "UND_ERR_CONNECT_TIMEOUT", "UND_ERR_HEADERS_TIMEOUT", "UND_ERR_BODY_TIMEOUT", "UND_ERR_CLOSED"]);
 
@@ -71,9 +71,9 @@ function everyMinute(what, start, last) {
 }
 
 // Calls an outside service until it answers. `request` makes one attempt and
-// returns its result; a thrown network error, a Response with a no-answer
-// status, or an error marked { retry: true } is retried. Any other result or
-// error is the answer. A stop signal is the caller's own cancellation.
+// returns its result; a thrown network error or an error marked { retry: true }
+// is retried. Any other result or error is the answer. A stop signal is the
+// caller's own cancellation.
 async function callOutside(what, request, { signal } = {}) {
   const start = Date.now();
   let attempts = 0, lastProblem = null, wait = FIRST_PAUSE_MS;
@@ -81,27 +81,20 @@ async function callOutside(what, request, { signal } = {}) {
   try {
     while (true) {
       attempts += 1;
-      let result;
-      try { result = await request(); } catch (error) {
+      try {
+        const result = await request();
+        journal({ event: "call", what, start, end: Date.now(), durationMs: Date.now() - start, attempts, result: "answered" });
+        return result;
+      } catch (error) {
         if (!noAnswer(error)) {
           journal({ event: "call", what, start, end: Date.now(), durationMs: Date.now() - start, attempts, result: "error", error: describe(error?.message) });
           throw error;
         }
         lastProblem = describe(error?.cause?.code ?? error?.message);
       }
-      if (result !== undefined || lastProblem === null) {
-        const status = typeof result?.status === "number" && typeof result?.headers?.get === "function" ? result.status : null;
-        if (status === null || !NO_ANSWER_STATUSES.has(status)) {
-          journal({ event: "call", what, start, end: Date.now(), durationMs: Date.now() - start, attempts, result: status ?? "answered" });
-          return result;
-        }
-        await result.body?.cancel?.();
-        lastProblem = `status ${status}`;
-      }
       journal({ event: "retry", what, attempts, problem: lastProblem });
       await pause(wait, signal);
       wait = Math.min(wait * 2, LONGEST_PAUSE_MS);
-      lastProblem = null;
     }
   } finally { stop(); }
 }

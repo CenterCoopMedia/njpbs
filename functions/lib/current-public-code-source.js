@@ -1,6 +1,7 @@
 "use strict";
 
 const { assertPublicationTarget } = require("./publication-target");
+const { callOutside } = require("./release-wait");
 const { CURRENT_CODE_BYTES, validateCurrentCodeReference } = require("./current-public-code-reference");
 const CURRENT_CODE_REPLY_BYTES = Math.ceil(CURRENT_CODE_BYTES / 3) * 4 + 8192;
 function refuse(rpcStatus) { throw Object.assign(new Error("Private current CODE source is unavailable"),
@@ -20,26 +21,27 @@ function privateCodeTransport({ target, rendererSha, request = fetch, readSecret
       const query = { mode, rendererSha };
       const maxReplyBytes = mode === "current-code-reference" ? 8192 : CURRENT_CODE_REPLY_BYTES;
       const secret = readSecret?.(); if (typeof secret !== "string" || !secret.trim()) refuse();
-      const response = await request(`${origin}/_internal/record-code`, { method: "POST", redirect: "manual",
-        signal: AbortSignal.timeout(10_000), headers: { "content-type": "application/json", "x-njpbs-cms-edge": secret },
-        body: JSON.stringify(query) });
-      if (!response.ok || !response.body || !response.headers.get("content-type")?.toLowerCase().startsWith("application/json")) {
-        await response.body?.cancel(); refuse(response.ok ? undefined : response.status);
-      }
-      const declared = response.headers.get("content-length");
-      if (declared !== null && (!/^[1-9][0-9]*$/.test(declared) || Number(declared) > maxReplyBytes)) {
-        await response.body.cancel(); refuse();
-      }
-      const reader = response.body.getReader(), chunks = []; let size = 0;
-      try {
-        while (true) {
-          const row = await reader.read(); if (row.done) break;
-          size += row.value.length; if (size > maxReplyBytes) refuse(); chunks.push(row.value);
+      return callOutside(`record-code ${mode}`, async () => {
+        const response = await request(`${origin}/_internal/record-code`, { method: "POST", redirect: "manual",
+          headers: { "content-type": "application/json", "x-njpbs-cms-edge": secret }, body: JSON.stringify(query) });
+        if (!response.ok || !response.body || !response.headers.get("content-type")?.toLowerCase().startsWith("application/json")) {
+          await response.body?.cancel(); refuse(response.ok ? undefined : response.status);
         }
-      } finally { await reader.cancel(); }
-      if (!size || declared !== null && Number(declared) !== size) refuse();
-      let wire; try { wire = JSON.parse(Buffer.concat(chunks, size).toString("utf8")); } catch { refuse(); }
-      return wire;
+        const declared = response.headers.get("content-length");
+        if (declared !== null && (!/^[1-9][0-9]*$/.test(declared) || Number(declared) > maxReplyBytes)) {
+          await response.body.cancel(); refuse();
+        }
+        const reader = response.body.getReader(), chunks = []; let size = 0;
+        try {
+          while (true) {
+            const row = await reader.read(); if (row.done) break;
+            size += row.value.length; if (size > maxReplyBytes) refuse(); chunks.push(row.value);
+          }
+        } finally { await reader.cancel(); }
+        if (!size || declared !== null && Number(declared) !== size) refuse();
+        let wire; try { wire = JSON.parse(Buffer.concat(chunks, size).toString("utf8")); } catch { refuse(); }
+        return wire;
+      });
     },
   };
 }

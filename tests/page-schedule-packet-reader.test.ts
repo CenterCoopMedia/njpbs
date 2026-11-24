@@ -195,15 +195,6 @@ it("evicts old identities after four entries instead of retaining an unbounded p
   expect((await decision()).status).toBe(200);
   expect(codeReads).toBe(12); expect(boundary.reads).toHaveLength(12);
 });
-it("keeps the caller's original capture deadline when immutable bytes are reused", async () => {
-  let clock = Date.now(); const deadline = clock + 45_000;
-  await captureSchedule({ firestore, rendererSha, request: codeRequest, now: () => clock, deadline });
-  clock += 40_000;
-  const reused = await captureSchedule({ firestore, rendererSha, request: codeRequest, now: () => clock, deadline });
-  expect(codeReads).toBe(2); expect(boundary.reads).toHaveLength(2);
-  clock = deadline + 1;
-  await expect(readInputs({ firestore, transaction: snapshotTransaction(), rendererSha, scheduleCapture: reused })).rejects.toThrow("capture is unavailable");
-});
 it.each(["revision", "externalInputs", "otherContextField", "deployment", "CODE"])("refuses a moved %s after storage IO", async change => {
   boundary.onRead(async () => {
     boundary.onRead(null);
