@@ -48,6 +48,8 @@ function gcloud(args) {
 }
 
 export function checkSecretIam(requirements, readPolicy, deployAccount = DEPLOY_ACCOUNT) {
+  // Report every missing binding in one refusal; a fresh project lacks all of them.
+  const missing = [];
   for (const [secret, runtimes] of requirements) {
     let policy;
     try { policy = JSON.parse(readPolicy(secret)); }
@@ -59,9 +61,12 @@ export function checkSecretIam(requirements, readPolicy, deployAccount = DEPLOY_
     for (const [account, roles] of needs) {
       if (!(policy.bindings ?? []).some(binding => roles.includes(binding?.role) && !binding.condition &&
           Array.isArray(binding.members) && binding.members.includes(`serviceAccount:${account}`))) {
-        throw new FunctionsDeployInventoryError(`Secret ${secret} needs an unconditional ${roles.join(" or ")} binding for ${account === deployAccount ? "the configured deploy identity" : "its declared runtime identity"}`);
+        missing.push(`Secret ${secret} needs an unconditional ${roles.join(" or ")} binding for ${account === deployAccount ? "the configured deploy identity" : "its declared runtime identity"}`);
       }
     }
+  }
+  if (missing.length) {
+    throw new FunctionsDeployInventoryError(`${missing.join("; ")}. Explicit provision-config grants each binding (docs/cms/functions-deploy.md#development-project-setup)`);
   }
 }
 

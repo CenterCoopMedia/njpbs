@@ -127,6 +127,22 @@ the trusted workflow's committed bytes. A stale validator refuses before selecte
 code or credentials run; release fixes forward. SDK and gcloud use the same
 verified credential file when supplied, without enrolling a gcloud account.
 
+## Development project setup
+
+Seven dev CMS deploy runs on Nov. 23, 2026 (45285400512 through 45310500950)
+found these setup requirements one run at a time. A new or rebuilt dev project
+needs every row before its first deploy. Each check runs before any release
+mutation and names the fix below.
+
+| Requirement | Check that refuses | Fix |
+| --- | --- | --- |
+| Every secret and variable in `env.CMS_DEVELOPMENT_ENVIRONMENT_NAMES` exists in the GitHub `development` environment (njpbs#562) | The release runner's input check before dispatch | `gh secret set <NAME> --env development --repo CenterCoopMedia/njpbs` (or `gh variable set`) |
+| Dev secret values are at least 12 characters. GitHub masks each secret value in every log and drops any job output that contains it, so the placeholder `1` emptied the Functions configuration fingerprint (run 45306098095) | "Require the target's deploy credentials" in `cms-staging-deploy.yml` | A placeholder: `openssl rand -hex 24 \| gh secret set <NAME> --env development --repo CenterCoopMedia/njpbs`. `CMS_BUG_REPORT_TELEGRAM_CHAT_ID` must be digits: `node -p '"1" + require("crypto").randomInt(1e14, 2e14)' \| gh secret set CMS_BUG_REPORT_TELEGRAM_CHAT_ID --env development --repo CenterCoopMedia/njpbs`. A changed value that is also a Functions secret then needs explicit `provision-config` |
+| Each Functions secret exists in `njpbs-site-dev`. The deploy account holds `roles/secretmanager.admin` on every `deployAdmin` secret in [functions-configuration.json](../../config/functions-configuration.json), and each runtime account holds `roles/secretmanager.secretAccessor` (run 45287010195) | `functions verify-config` and `check-cms-secret-iam.mjs --pre-deploy` list every missing binding at once | `CMS_TARGET=development node scripts/component-runner.mjs functions provision-config`, with the requirements above. One binding: `gcloud secrets add-iam-policy-binding <secret> --project=njpbs-site-dev --member=serviceAccount:<FIREBASE_DEPLOY_SERVICE_ACCOUNT> --role=roles/secretmanager.admin --condition=None` |
+| The dev Cloudflare deploy token (`CLOUDFLARE_API_TOKEN` in the `development` environment) has the account permission Workers R2 Storage Read, which the media lifecycle read uses | `functions verify-config`: "CLOUDFLARE_API_TOKEN cannot read the njpbs-dev-media lifecycle" | The token owner adds the permission to the existing token |
+| `njpbs-dev-media` deletes `cms-media-staging/` after seven days, and no delete rule reaches `cms-media/` | `functions verify-config`, through [assert-r2-lifecycle.mjs](../../scripts/assert-r2-lifecycle.mjs) | `npx wrangler r2 bucket lifecycle add njpbs-dev-media cms-media-staging-expiry cms-media-staging/ --expire-days 7`, with a token that can edit R2 |
+| `system/noBuildPostAdmission` exists in `njpbs-site-dev` with production's shape and the dev artifact bucket | The release pause (`NJPBS_RELEASE_PAUSE_ADMISSION`) | `jawn-ops njpbs release admission --target development --install` (creates only an absent record, then reads it back) |
+
 ## Event trigger IAM
 
 [check-cms-secret-iam.mjs](../../scripts/check-cms-secret-iam.mjs) checks each

@@ -166,15 +166,27 @@ export async function nativeConfigurationProvider(env, { execute = execFileSync,
     },
     grant(name, account, role) { gcloud(["secrets", "add-iam-policy-binding", name, `--project=${project}`,
       `--member=serviceAccount:${account}`, `--role=${role}`, "--condition=None", "--quiet"]); },
-    async lifecycle(account, bucket, token) {
-      try {
-        const response = await fetch(`https://api.cloudflare.com/client/v4/accounts/${account}/r2/buckets/${bucket}/lifecycle`, {
-          headers: { authorization: `Bearer ${token}` }, redirect: "error", signal: AbortSignal.timeout(15000) });
-        if (!response.ok) throw new Error();
-        assertR2Lifecycle(await response.json());
-      } catch { fail("Could not verify media bucket retention lifecycle"); }
-    },
+    lifecycle: (account, bucket, token) => verifyMediaLifecycle(account, bucket, token),
   };
+}
+
+// Each refusal names its fix (docs/cms/functions-deploy.md#development-project-setup):
+// dev CMS runs on Nov. 23, 2026 found both by hand, one run at a time.
+export async function verifyMediaLifecycle(account, bucket, token, fetchImpl = fetch) {
+  let response, body;
+  try {
+    response = await fetchImpl(`https://api.cloudflare.com/client/v4/accounts/${account}/r2/buckets/${bucket}/lifecycle`, {
+      headers: { authorization: `Bearer ${token}` }, redirect: "error", signal: AbortSignal.timeout(15000) });
+    if (response.ok) body = await response.json();
+  } catch { fail("Could not verify media bucket retention lifecycle"); }
+  if (response.status === 401 || response.status === 403) {
+    fail(`CLOUDFLARE_API_TOKEN cannot read the ${bucket} lifecycle: give the ${target.environment} deploy token the account permission Workers R2 Storage Read`);
+  }
+  if (!response.ok) fail("Could not verify media bucket retention lifecycle");
+  try { assertR2Lifecycle(body); }
+  catch (error) {
+    fail(`${bucket}: ${error.message}. A missing staging rule is added with npx wrangler r2 bucket lifecycle add ${bucket} cms-media-staging-expiry cms-media-staging/ --expire-days 7`);
+  }
 }
 
 export async function verifyNativeResources(provider, provision) {
@@ -226,12 +238,18 @@ export function verifyConfigurationIam(requirements, provider) {
     return policies.get(name);
   };
   checkSecretIam(requirements, readPolicy, provider.account);
+  const missing = [];
   for (const name of requirements.keys()) {
     if (!FUNCTION_SECRETS[name].deployAdmin) continue;
     let policy;
     try { policy = JSON.parse(readPolicy(name)); } catch { fail(`Could not read IAM policy: ${name}`); }
     if (!policy?.bindings?.some(binding => binding.role === "roles/secretmanager.admin" && !binding.condition &&
-        binding.members?.includes(`serviceAccount:${provider.account}`))) fail(`Missing deploy roles/secretmanager.admin: ${name}`);
+        binding.members?.includes(`serviceAccount:${provider.account}`))) missing.push(name);
+  }
+  // Name every gap at once: dev CMS run 45287010195 (Nov. 23, 2026) reported one of 17.
+  if (missing.length) {
+    fail(`Missing deploy roles/secretmanager.admin in ${project}: ${missing.join(" ")}. Run explicit provision-config, or for each: ` +
+      `gcloud secrets add-iam-policy-binding <secret> --project=${project} --member=serviceAccount:$FIREBASE_DEPLOY_SERVICE_ACCOUNT --role=roles/secretmanager.admin --condition=None`);
   }
 }
 
