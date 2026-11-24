@@ -42,6 +42,7 @@ jobs:
       inputs.target != 'development'
     environment: production
     runs-on: ubuntu-24.04
+    # Stops a hung promote. Measured 14 s, 15 s (45163409825, 45127688727).
     timeout-minutes: 5
     steps:
       - name: Validate the selected SHA
@@ -96,6 +97,7 @@ jobs:
       inputs.target == 'development'
     environment: development
     runs-on: ubuntu-24.04
+    # Stops a hung promote. Measured 15 s (dev 45315410286).
     timeout-minutes: 5
     steps:
       - name: Validate the selected SHA

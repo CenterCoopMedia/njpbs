@@ -36,6 +36,8 @@ jobs:
       github.workflow_ref == format('{0}/.github/workflows/publisher-image.yml@refs/heads/main', vars.CANONICAL_GITHUB_REPOSITORY) &&
       vars.CMS_DEPLOY_OWNER != '' && github.triggering_actor == vars.CMS_DEPLOY_OWNER
     runs-on: ubuntu-24.04
+    # Stops a hung image build; kept because it waits on the container build and push.
+    # Measured 177 s, 44 s (reused image), 176 s (45162680868, 45127558717, dev 45256764191).
     timeout-minutes: 45
     environment: publisher-image
     env:
