@@ -106,6 +106,10 @@ describe("CMS reader binding for an ordinary deploy", () => {
     expect(() => assertFirstAttempt({ GITHUB_RUN_ATTEMPT: "2" })).toThrow("dispatch a new run");
     const source = readFileSync(new URL("../../scripts/cms-reader-binding.mjs", import.meta.url), "utf8");
     expect(source).toContain("if (selected) assertFirstAttempt(process.env);");
+    // The firebase job refuses before any receipt write or preview pause; the bind steps refuse again.
+    const firebase = parse(readFileSync(new URL("../../.github/workflows/cms-staging-deploy.yml", import.meta.url), "utf8")).jobs.firebase.steps;
+    expect(firebase[1]).toMatchObject({ name: "Refuse a rerun of a bound run", if: "needs.firebase-preflight.outputs.reader_binding != ''" });
+    expect(firebase[1].run).toContain('[ "$GITHUB_RUN_ATTEMPT" = 1 ] || {');
     // The workflow refuses too, so an older release-source binder never runs on a rerun.
     const workflow = parse(readFileSync(new URL("../../.github/workflows/cms-staging-deploy.yml", import.meta.url), "utf8"));
     const steps = Object.fromEntries(Object.values(workflow.jobs).flatMap(job => job.steps).filter(row => row.name).map(row => [row.name, row]));
