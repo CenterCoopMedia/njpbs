@@ -21,6 +21,9 @@ import publicContext from '../functions/lib/public-context-revision.js';
 import mediaCategories from '../functions/lib/media-categories.js';
 import { parseContentSectionDefinition, SEEDED_CONTENT_SECTIONS } from '../packages/content-core/src/content-sections.ts';
 import publicAssetHosts from '../functions/lib/public-asset-hosts.json' with { type: 'json' };
+import liveBlogContract from '../functions/lib/live-blog.js';
+import postLeadMedia from '../functions/lib/post-lead-media.js';
+import videoBlock from '../functions/lib/video-block.js';
 import authorContract from '../functions/lib/author-profile-contract.js';
 import deploymentContract from '../functions/lib/public-deployment.js';
 import { visibleLayoutBlocks } from '../packages/content-core/src/content-layout.ts';
@@ -539,8 +542,27 @@ function validateCopy(manifest, copy) {
   }
   return new Map(copy.objects.map(object => [object.sourceUrl, object]));
 }
+// A frozen live blog carries receipts that Boardwalk's draft parser refuses, so
+// the working copy keeps only what an editor saves.
+function liveBlogDraft(value) {
+  if (!value) return value;
+  return liveBlogContract.parseLiveBlogDraft({ ...pick(value, ['schemaVersion', 'branding', 'presentation', 'coverageState']),
+    updates: value.updates.map(entry => ({ ...pick(entry, ['id', 'headline', 'body', 'credits', 'keyUpdate', 'correction', 'withdrawal', 'media']),
+      ...(entry.followUps ? { followUps: entry.followUps.map(item => pick(item, ['id', 'body', 'credits', 'correction', 'withdrawal'])) } : {}) })) });
+}
+// Publishing a Post needs the public-copy record of each video it shows. Production's
+// copy stays the read-only source, as it does for images.
+function publicVideoRecords(projection) {
+  const blocks = [...(projection.blocks ?? []), ...postLeadMedia.leadVideoBlocks(projection.metadata?.leadMedia),
+    ...liveBlogContract.liveBlogVideoBlocks(projection.metadata?.liveBlog)];
+  return blocks.flatMap(videoBlock.blockVideoSelections).filter(data => videoBlock.isPublicVideoData(data.public)).map(data => {
+    if (!ID.test(data.assetId)) fail('Invalid public video identity');
+    return { path: `cmsPublicVideos/${data.assetId}`, data: { schemaVersion: 1, media: data.public } };
+  });
+}
 function editableRecords(manifest) {
   const output = [];
+  const videos = new Map();
   const dates = { createdAt: manifest.exportedAt, updatedAt: manifest.exportedAt, createdBy: ACTOR, updatedBy: ACTOR };
   for (const record of manifest.records) {
     const projection = structuredClone(record.projection); const version = record.sourceVersion;
@@ -552,7 +574,12 @@ function editableRecords(manifest) {
     });
     if (projection.authorIds) projection.authorIds = (projection.metadata.credits ?? []).filter(credit => credit.kind === 'registered').map(credit => credit.authorId);
     if (['cmsPages', 'cmsPosts'].includes(record.collection)) {
+      for (const video of publicVideoRecords(projection)) {
+        if (videos.has(video.path) && digest(videos.get(video.path).data) !== digest(video.data)) fail(`Public copies of one video differ: ${video.path}`);
+        videos.set(video.path, video);
+      }
       output.push({ path: `${record.collection}/${record.id}`, data: { ...base, ...projection.metadata,
+        ...(projection.metadata.liveBlog ? { liveBlog: liveBlogDraft(projection.metadata.liveBlog) } : {}),
         type: record.collection === 'cmsPages' ? 'page' : projection.metadata.type,
         ...(record.collection === 'cmsPages' ? { template: pageContract.publicPageDefinition(record.id)?.template ?? 'genericPage' } : {}),
         blocks: projection.blocks, contentVersion: projection.contentVersion, status: 'published', publiclyVisible: true,
@@ -580,6 +607,7 @@ function editableRecords(manifest) {
     }
   }
   if (output.some(item => item.path.startsWith('media_assets/'))) output.push({ path: 'mediaCategories/dev-seed', data: { id: 'dev-seed', label: 'Dev seed', description: 'Copied public media', order: 1000, active: true, version: 1, ...dates } });
+  output.push(...videos.values());
   const paths = output.map(item => item.path);
   if (new Set(paths).size !== paths.length) fail('Duplicate import path');
   return output.sort((a, b) => a.path.localeCompare(b.path, 'en'));
