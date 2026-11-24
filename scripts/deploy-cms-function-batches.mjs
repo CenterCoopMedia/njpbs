@@ -158,31 +158,48 @@ export async function listPages(request, url, field) {
 }
 
 
-function expiredFunctionFailures(output, names, project = PROJECT) {
+// A failed Firebase invocation is retried unless its output shows a permanent
+// failure: our source or configuration is wrong, or a permission or quota needs
+// a person (Joe, Nov. 24, 2026: fix it as a principle). Unknown and provider-side
+// failures (any 5xx, "Authentication backend unavailable", a reset connection, a
+// timeout, an exit without "Deploy complete!") are retried. A retry is safe because
+// the deploy is idempotent: `firebase deploy --only <targets> --force` sets each
+// named function to this exact source and configuration, so repeating it after a
+// partial attempt reaches the same state, and the inventory check before every
+// attempt still refuses any deletion.
+const PERMANENT_FAILURES = Object.freeze([
+  ["build", /^Build failed with status: FAILURE\b|predeploy error|Command terminated with non-zero exit code|\berror TS\d+:|^SyntaxError:|Cannot find module /],
+  ["config", /Failed to load function definition|HTTP Error: 400\b|INVALID_ARGUMENT|is not a valid|Invalid (?:function|configuration|config|trigger)\b/i],
+  ["permission", /HTTP Error: 40[13]\b|PERMISSION_DENIED|Permission denied|does not have (?:the )?(?:required )?permission|Missing (?:required )?permissions?/i],
+  ["quota", /\bquota\b.*\b(?:exceeded|exhausted)\b|\bexceed(?:s|ed)? (?:the )?quota\b/i],
+]);
+
+// A rate quota (per second, minute or 100 seconds) clears by itself and is retried.
+const RATE_QUOTA = /\bper (?:second|minute|100 seconds)\b/i;
+
+function permanentFailure(output) {
+  const lines = output.split("\n");
+  for (const [kind, pattern] of PERMANENT_FAILURES) {
+    if (lines.some(line => pattern.test(line) && !(kind === "quota" && RATE_QUOTA.test(line)))) return kind;
+  }
+  return null;
+}
+
+// The functions Firebase names as failed, when its one summary names only targets of this
+// attempt; a retry narrows to them. Otherwise the whole attempt is retried.
+function failedFunctionNames(output, names) {
   const summaries = [...output.matchAll(/^Functions deploy had errors with the following functions:\n((?:\t[^\n]+\n)+)/gm)];
   if (summaries.length !== 1) return [];
   // Firebase labels a non-default codebase's functions <codebase>:<name>(<region>).
   const { codebase } = cmsTarget();
-  const label = new RegExp(`^\\t${codebase === "default" ? "" : `${codebase}:`}([A-Za-z][A-Za-z0-9]*)\\(us-central1\\)$`);
+  const label = new RegExp(`^\\t${codebase === "default" ? "" : `${codebase}:`}([A-Za-z][A-Za-z0-9]*)\\(${REGION}\\)$`);
   const failed = summaries[0][1].trimEnd().split("\n").map(line => line.match(label)?.[1]);
-  if (failed.some(name => !names.includes(name)) || new Set(failed).size !== failed.length) return [];
+  return failed.some(name => !names.includes(name)) || new Set(failed).size !== failed.length ? [] : failed;
+}
 
-  // Firebase prints unlabelled build errors, then a separate failed-name list.
-  // Require one retryable diagnostic per failed name; unknown errors fail closed.
-  // Retryable: a Cloud Build EXPIRED build, or a refused invoker policy read of
-  // the function's Cloud Run service after its update. Redeploying the named
-  // function repeats the update and the policy write.
-  const diagnostics = output.split("\n").filter(line => /\b(?:errors?|failed|failure|denied)\b/i.test(line));
-  const expired = diagnostics.filter(line => /^Build failed with status: EXPIRED(?: and message:.*)?$/.test(line));
-  const refusedPolicy = diagnostics.filter(line => failed.some(name =>
-    line === `Failed to get the IAM Policy on the Service projects/${project}/locations/${REGION}/services/${name.toLowerCase()}`));
-  const allowed = line => expired.includes(line) || refusedPolicy.includes(line) ||
-    line === "Functions deploy had errors with the following functions:" ||
-    /^Error: There was an error deploying functions:?$/.test(line) ||
-    /^\W*functions: Deploys failed\. Skipping deletes\.$/.test(line) ||
-    failed.some(name => line === `- Error Failed to update function ${name} in region ${REGION}` ||
-      line === `- Error Failed to create function ${name} in region ${REGION}`);
-  return expired.length + refusedPolicy.length === failed.length && diagnostics.every(allowed) ? failed : [];
+function lastProviderLine(output) {
+  const line = output.split("\n").map(value => value.trim()).filter(value => /error|failed|denied|unavailable|timed? ?out|HTTP/i.test(value)).at(-1);
+  return line ? line.slice(0, 300) : "none";
 }
 
 function runFunctionDeploy(names, launch, project) {
@@ -215,9 +232,13 @@ export async function deployFunctionTargets(names, launch = spawn, project = PRO
     assertNoFunctionDeletions(manifest, await readFunctionsDeployInventory(project, request), { projectId: project, codebase: cmsTarget().codebase, only: pending });
     const { code, output } = await runFunctionDeploy(pending, launch, project);
     if (code === 0 && output.includes("Deploy complete!")) return;
-    const failed = code !== 0 ? expiredFunctionFailures(output, pending, project) : [];
-    if (attempt === 3 || !failed.length) throw new ComponentReceiptError("Firebase deployment did not confirm completion");
-    pending = failed;
+    const permanent = permanentFailure(output);
+    if (permanent || attempt === 3) {
+      console.error(`Firebase deployment failed: class ${permanent ?? "transient"}, ${attempt} of 3 attempts, last provider line: ${lastProviderLine(output)}`);
+      throw new ComponentReceiptError("Firebase deployment did not confirm completion");
+    }
+    const failed = code === 0 ? [] : failedFunctionNames(output, pending);
+    if (failed.length) pending = failed;
     console.log(`Retrying function deployment, attempt ${attempt + 1} of 3: ${pending.join(", ")}`);
     await wait(10_000);
   }

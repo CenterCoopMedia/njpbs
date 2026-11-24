@@ -152,18 +152,19 @@ describe("CMS function deployment completion", () => {
     expect(request.mock.calls[1][1]).toBe("next");
     await expect(listPages(async () => ({ nextPageToken: "same" }), "url", "functions")).rejects.toThrow("Repeated");
   });
-  it("rejects silent early exit and nonzero exit, accepts an explicit completion", async () => {
+  it("retries a silent early exit or a nonzero exit three times, accepts an explicit completion", async () => {
     for (const [code, output, accepted] of [[0, "", false], [1, "Deploy complete!", false], [0, "Deploy complete!", true]]) {
-      const launch = () => {
+      const launch = vi.fn(() => {
         const child = new EventEmitter(); child.stdout = new EventEmitter(); child.stderr = new EventEmitter();
         queueMicrotask(() => { child.stdout.emit("data", Buffer.from(output)); child.emit("close", code); });
         return child;
-      };
+      });
       const promise = deployFunctionTargets(["handler"], launch, "njpbs-site", {
-        manifest: [{ name: "handler", region: "us-central1", platform: "gcfv2" }], request: async () => ({}),
+        manifest: [{ name: "handler", region: "us-central1", platform: "gcfv2" }], request: async () => ({}), wait: async () => {},
       });
       if (accepted) await expect(promise).resolves.toBeUndefined();
       else await expect(promise).rejects.toThrow("did not confirm");
+      expect(launch).toHaveBeenCalledTimes(accepted ? 1 : 3);
     }
   });
 });
@@ -250,6 +251,52 @@ describe("CMS function build queue expiry recovery", () => {
     expect(run.targets()).toEqual([fullSet.map(name => `functions:${name}`).join(",")]);
     expect(run.wait).not.toHaveBeenCalled();
   });
+  // Recorded from dev run 45429859229 (Nov. 24, 2026): Secret Manager answered 503 while Firebase
+  // prepared the deploy, before any function was updated.
+  const providerOutage = "i  functions: Loading and analyzing source code for codebase dev to determine what to deploy\n" +
+    "\u2b22  extensions: Failed to fetch the list of extensions. Assuming for now that there are no existing extensions.\n" +
+    "i  functions: Loaded environment variables from functions/.env.example-project\n\n" +
+    "Error: Request to https://secretmanager.googleapis.com/v1/projects/example-project/secrets/EXAMPLE_SECRET " +
+    "had HTTP Error: 503, Authentication backend unavailable.\n";
+  it("deploys the same targets again after a Google API 5xx before any function result", async () => {
+    const run = deployment([[1, providerOutage], [0, "Deploy complete!\n"]], fullSet);
+    await expect(run.promise).resolves.toBeUndefined();
+    const all = fullSet.map(name => `functions:${name}`).join(",");
+    expect(run.targets()).toEqual([all, all]);
+    expect(run.wait.mock.calls).toEqual([[10_000]]);
+  });
+  it("fails after three provider 5xx attempts, naming the class, attempts and last provider line", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const run = deployment(Array.from({ length: 3 }, () => [1, providerOutage]), fullSet);
+    await expect(run.promise).rejects.toThrow("did not confirm completion");
+    expect(run.launch).toHaveBeenCalledTimes(3);
+    expect(errors).toHaveBeenLastCalledWith(expect.stringMatching(
+      /^Firebase deployment failed: class transient, 3 of 3 attempts, last provider line: Error: Request to https:\/\/secretmanager\.googleapis\.com\/.* HTTP Error: 503, Authentication backend unavailable\.$/));
+    errors.mockRestore();
+  });
+  it("retries a rate quota, which clears by itself", async () => {
+    const rate = "Error: HTTP Error: 429, Quota exceeded for quota metric 'Write requests' and limit 'Write requests per minute'\n";
+    const run = deployment([[1, rate], [0, "Deploy complete!\n"]], fullSet);
+    await expect(run.promise).resolves.toBeUndefined();
+    expect(run.launch).toHaveBeenCalledTimes(2);
+  });
+  it.each([
+    ["build", "functions: Finished running predeploy script.\nsrc/index.ts(3,7): error TS2322: Type 'string' is not assignable to type 'number'.\n" +
+      "Error: functions predeploy error: Command terminated with non-zero exit code 2\n"],
+    ["build", recordings[1].replace("EXPIRED", "FAILURE")],
+    ["config", "Error: Failed to load function definition from source: FirebaseError: Functions codebase could not be analyzed successfully.\n"],
+    ["permission", providerOutage.replace("HTTP Error: 503, Authentication backend unavailable", "HTTP Error: 403, Permission denied")],
+    ["permission", `${recordings[1]}Error: Permission denied\n`],
+    ["quota", "Error: HTTP Error: 429, Quota exceeded for quota metric 'Functions' and limit 'Functions per project'\n"],
+  ])("does not retry a permanent %s failure, and names it", async (kind, output) => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const run = deployment([[1, output]], fullSet);
+    await expect(run.promise).rejects.toThrow("did not confirm completion");
+    expect(run.launch).toHaveBeenCalledTimes(1);
+    expect(run.wait).not.toHaveBeenCalled();
+    expect(errors).toHaveBeenLastCalledWith(expect.stringContaining(`class ${kind}, 1 of 3 attempts, last provider line: `));
+    errors.mockRestore();
+  });
   it("does not retry a non-transient build failure", async () => {
     const run = deployment([[1, recordings[0].replace("EXPIRED", "FAILURE")]], failures[0]);
     await expect(run.promise).rejects.toThrow("did not confirm completion");
@@ -271,17 +318,17 @@ describe("CMS function build queue expiry recovery", () => {
     recordings[0].replace("Functions deploy had errors with the following functions:\n", ""),
     recordings[0].replace("\texampleFunctionA(us-central1)\n", ""),
     recordings[0].replace("\texampleFunctionA(us-central1)\n", "\texampleFunctionA(us-central1)\n\texampleFunctionA(us-central1)\n"),
-  ])("does not retry an unknown or incomplete failed-function list", async output => {
-    const run = deployment([[1, output]], failures[0]);
-    await expect(run.promise).rejects.toThrow("did not confirm completion");
-    expect(run.launch).toHaveBeenCalledTimes(1);
-    expect(run.wait).not.toHaveBeenCalled();
+  ])("retries the whole attempt after an unknown or incomplete failed-function list", async output => {
+    const run = deployment([[1, output], [0, "Deploy complete!\n"]], failures[0]);
+    await expect(run.promise).resolves.toBeUndefined();
+    expect(run.targets()).toEqual(Array(2).fill(failures[0].map(name => `functions:${name}`).join(",")));
+    expect(run.wait.mock.calls).toEqual([[10_000]]);
   });
   it("requires explicit deploy completion after an expired attempt", async () => {
-    const run = deployment([[1, recordings[0]], [0, ""]], failures[0]);
+    const run = deployment([[1, recordings[0]], [0, ""], [0, ""]], failures[0]);
     await expect(run.promise).rejects.toThrow("did not confirm completion");
-    expect(run.launch).toHaveBeenCalledTimes(2);
-    expect(run.wait).toHaveBeenCalledTimes(1);
+    expect(run.launch).toHaveBeenCalledTimes(3);
+    expect(run.wait).toHaveBeenCalledTimes(2);
   });
   it("rechecks the live inventory before a retry can force a deployment", async () => {
     // The first attempt reads v1 and v2; the next inventory exposes a
@@ -305,13 +352,12 @@ describe("CMS function build queue expiry recovery", () => {
     ]);
     expect(run.wait.mock.calls).toEqual([[10_000]]);
   });
-  it("does not retry a refused invoker policy read that names another service", async () => {
+  it("retries a refused invoker policy read that names another service, narrowed to the failed function", async () => {
     const refused = readFileSync(new URL("./fixtures/function-invoker-policy/attempt-1.txt", import.meta.url), "utf8")
       .replace("services/examplescheduledb", "services/examplescheduleda");
-    const run = deployment([[1, refused]], ["exampleScheduledA", "exampleScheduledB"]);
-    await expect(run.promise).rejects.toThrow("did not confirm completion");
-    expect(run.launch).toHaveBeenCalledTimes(1);
-    expect(run.wait).not.toHaveBeenCalled();
+    const run = deployment([[1, refused], [0, "Deploy complete!\n"]], ["exampleScheduledA", "exampleScheduledB"]);
+    await expect(run.promise).resolves.toBeUndefined();
+    expect(run.targets()).toEqual(["functions:exampleScheduledA,functions:exampleScheduledB", "functions:exampleScheduledB"]);
   });
 });
 
