@@ -20,14 +20,16 @@ export async function deployPreviewRenderer({ firestore, sha, name, api, pushIma
   // A refused token or a failed build ends here, while previews still work.
   await pushImage();
   const before = await serving();
+  const versions = state => state.worker?.versions.map(({ version_id }) => version_id);
   const newRollout = now => now.rollout && now.rollout.id !== before.rollout?.id ? now.rollout : null;
 
   let previous;
-  // Previews return on what Cloudflare serves. The old container with the new Worker serves
-  // none, so the old Worker version is put back. Answers false while a new container rolls out.
+  const own = control => [starting, { ...previous, phase: "paused" }].some(state => isDeepStrictEqual(control, state));
+  // Previews return on what Cloudflare serves. The old container with the new Worker serves none, so
+  // the old Worker version and container image are put back. Answers false while a new container rolls out.
   const restore = () => openPrevious().catch(error => { log(`Previews were not restored: ${error.message}`); return true; });
   async function openPrevious() {
-    if (previous?.phase !== "ready") return true;
+    if (previous?.phase !== "ready" || !own((await ref.get()).data())) return true;
     const now = await serving(), rollout = newRollout(now);
     if (rollout && rollout.status !== "reverted") return false;
     if (before.worker && now.worker?.id !== before.worker.id) {
@@ -35,9 +37,16 @@ export async function deployPreviewRenderer({ firestore, sha, name, api, pushIma
       await api(deployments, { method: "POST", body: JSON.stringify({ strategy: "percentage",
         versions: before.worker.versions.map(({ version_id, percentage }) => ({ version_id, percentage })) }) });
     }
+    const image = before.app?.configuration?.image;
+    // Wrangler names the new image in the application before it asks for the rollout.
+    if (image && now.app?.configuration?.image !== image) {
+      log("Putting the previous container image back");
+      await api(`/containers/applications/${before.app.id}`, { method: "PATCH", body: JSON.stringify({ configuration: before.app.configuration }) });
+    }
+    const served = await serving();
+    if (image !== served.app?.configuration?.image || !isDeepStrictEqual(versions(before), versions(served))) throw new Error("Cloudflare does not serve the previous renderer");
     await firestore.runTransaction(async transaction => {
-      const control = (await transaction.get(ref)).data();
-      if ([starting, { ...previous, phase: "paused" }].some(own => isDeepStrictEqual(control, own))) transaction.set(ref, previous);
+      if (own((await transaction.get(ref)).data())) transaction.set(ref, previous);
     });
     log("Previews are open on the previous renderer");
     return true;

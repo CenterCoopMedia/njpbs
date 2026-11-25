@@ -14,16 +14,19 @@ const read = async () => (await control().get()).data();
 function cloudflare() {
   const workers = [{ id: "worker-old", versions: [{ version_id: "version-old", percentage: 100 }] }];
   const rollouts = [{ id: "rollout-old", status: "completed", created_at: "2026-11-25T20:00:00Z" }];
+  const app = { id: "app", name: NAME, configuration: { image: "image-old", vcpu: 1 } };
   const api = async (path: string, init?: { method?: string; body?: string }) => {
-    if (path === "/containers/applications") return [{ id: "app", name: NAME }];
+    if (path === "/containers/applications") return [structuredClone(app)];
+    if (path === "/containers/applications/app" && init?.method === "PATCH") return Object.assign(app, JSON.parse(init.body!));
     if (path === "/containers/applications/app/rollouts?limit=10") return { rollouts: [...rollouts] };
     if (path === `/workers/scripts/${NAME}/deployments`) {
       if (init?.method === "POST") workers.unshift({ id: `worker-${workers.length}`, versions: JSON.parse(init.body!).versions });
-      return { deployments: workers };
+      return { deployments: structuredClone(workers) };
     }
     throw new Error(`unexpected ${path}`);
   };
-  return { api, workers, rollouts,
+  return { api, app, workers, rollouts,
+    nameImage: () => { app.configuration = { image: "image-new", vcpu: 1 }; },
     uploadWorker: () => workers.unshift({ id: "worker-new", versions: [{ version_id: "version-new", percentage: 100 }] }),
     rollOut: () => rollouts.push({ id: "rollout-new", status: "progressing", created_at: "2026-11-25T22:00:00Z" }) };
 }
@@ -65,6 +68,20 @@ describe("preview renderer deploy", () => {
     expect(await read()).toEqual(READY);
   });
 
+  it("puts the old container image back when the rollout was never asked for", async () => {
+    const provider = cloudflare();
+    await expect(run(provider, { deploy: async () => { provider.uploadWorker(); provider.nameImage(); throw new Error("no rollout"); } })).rejects.toThrow("no rollout");
+    expect(provider.app.configuration).toEqual({ image: "image-old", vcpu: 1 });
+    expect(await read()).toEqual(READY);
+  });
+
+  it("keeps previews closed when Cloudflare does not take the old state back", async () => {
+    const provider = cloudflare();
+    const api = async (path: string, init?: { method?: string; body?: string }) => init?.method === "PATCH" ? null : provider.api(path, init);
+    await expect(run({ ...provider, api } as never, { deploy: async () => { provider.nameImage(); throw new Error("no rollout"); } })).rejects.toThrow("no rollout");
+    expect((await read())?.phase).toBe("starting");
+  });
+
   it("opens previews without a Worker write when nothing was uploaded", async () => {
     const provider = cloudflare();
     await expect(run(provider, { deploy: async () => { throw new Error("refused"); } })).rejects.toThrow("refused");
@@ -101,8 +118,10 @@ describe("preview renderer deploy", () => {
 
   it("leaves a control that another deploy took over, and a pause it did not make", async () => {
     const other = { ...READY, phase: "starting", rendererSha: "c".repeat(40) };
-    await expect(run(cloudflare(), { deploy: async () => { await control().set(other); throw new Error("refused"); } })).rejects.toThrow("refused");
+    const provider = cloudflare();
+    await expect(run(provider, { deploy: async () => { await control().set(other); provider.uploadWorker(); throw new Error("refused"); } })).rejects.toThrow("refused");
     expect(await read()).toEqual(other);
+    expect(provider.workers[0].id).toBe("worker-new");
     await control().set({ ...READY, phase: "paused" });
     await expect(run(cloudflare(), { deploy: async () => { throw new Error("refused"); } })).rejects.toThrow("refused");
     expect((await read())?.phase).not.toBe("ready");
