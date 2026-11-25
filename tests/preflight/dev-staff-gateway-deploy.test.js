@@ -348,23 +348,6 @@ describe('isolated dev gateway deployment boundary', () => {
     expect(f.mutations().filter(change => change.method)).toEqual([]);
   });
 
-  // Cloudflare never changes a version or a deployment record, so a wrong exact one is final.
-  it.each([{ percentage: 50 }, { source: 'e'.repeat(40) }, { bindings: [] }])('ends on a deployed version whose exact record differs: %j', async options => {
-    const f = fixture(options);
-    await expect(f.execute()).rejects.toThrow(/differs from the confirmed write/);
-    expect(f.mutations().filter(change => change.method)).toEqual([]);
-  });
-
-  // These can still propagate, so the wait ends only when its caller stops it, and never with a receipt.
-  it.each([{ activeVersion: '99999999-2222-3333-4444-555555555555' }, { settingsBindings: [] }, { publicUrl: true }, { previewUrl: true }])(
-    'gives no verified receipt while the live gateway differs: %j', async options => {
-      const f = fixture(options), stop = new AbortController();
-      const result = f.execute(stop.signal);
-      setTimeout(() => stop.abort(new Error('stopped by the test')), 300);
-      await expect(result).rejects.toThrow('stopped by the test');
-      expect(f.mutations().filter(change => change.method)).toEqual([]);
-    });
-
   it.each([
     { owner: 'unexpected-worker' }, { project: 'njpbs-site' },
     { race: true }, { refusalFails: true },
@@ -380,21 +363,6 @@ describe('isolated dev gateway deployment boundary', () => {
     await expect(f.execute()).rejects.toThrow();
     expect(f.tempExists()).toBe(false);
     expect(f.mutations()).toHaveLength(1);
-  });
-
-  it('retains the staged version in the summary when a later verification fails', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'dev-gateway-summary-'));
-    try {
-      const summary = join(dir, 'summary');
-      const f = fixture({ percentage: 50, env: { GATEWAY_MODE: 'stage', GITHUB_STEP_SUMMARY: summary } });
-      await expect(f.execute()).rejects.toThrow(/100 percent/);
-      const text = readFileSync(summary, 'utf8');
-      expect(text).toContain(`Unverified staged version: ${versionId}`);
-      expect(text).toContain(`source: ${sha}`);
-      expect(text).not.toMatch(/fixture-private|fixture-token|stage verified/);
-      expect(f.mutations()).toHaveLength(1);
-      expect(f.tempExists()).toBe(false);
-    } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 
   it.each([false, true])('retains safe reconciliation IDs after a failed deploy, missing CLI version=%s', async noVersionOutput => {
@@ -445,5 +413,39 @@ describe('signed-out refusal contract', () => {
     await expect(check(403, 'Forbidden', staffHeaders)).rejects.toThrow(/Signed-out/);
     await expect(check(401, 'Unauthorized')).rejects.toThrow(/Signed-out/);
     await expect(verifySignedOut(async () => { throw new Error('private response'); })).rejects.toThrow('Signed-out refusal failed for /');
+  });
+});
+
+describe('dev staff gateway deployment identity', () => {
+  // Cloudflare never changes a version or a deployment record, so a wrong exact one is final.
+  it.each([{ percentage: 50 }, { source: 'e'.repeat(40) }, { bindings: [] }])('ends on a deployed version whose exact record differs: %j', async options => {
+    const f = fixture(options);
+    await expect(f.execute()).rejects.toThrow(/differs from the confirmed write/);
+    expect(f.mutations().filter(change => change.method)).toEqual([]);
+  });
+
+  // These can still propagate, so the wait ends only when its caller stops it, and never with a receipt.
+  it.each([{ activeVersion: '99999999-2222-3333-4444-555555555555' }, { settingsBindings: [] }, { publicUrl: true }, { previewUrl: true }])(
+    'gives no verified receipt while the live gateway differs: %j', async options => {
+      const f = fixture(options), stop = new AbortController();
+      const result = f.execute(stop.signal);
+      setTimeout(() => stop.abort(new Error('stopped by the test')), 300);
+      await expect(result).rejects.toThrow('stopped by the test');
+      expect(f.mutations().filter(change => change.method)).toEqual([]);
+    });
+
+  it('retains the staged version in the summary when a later verification fails', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'dev-gateway-summary-'));
+    try {
+      const summary = join(dir, 'summary');
+      const f = fixture({ percentage: 50, env: { GATEWAY_MODE: 'stage', GITHUB_STEP_SUMMARY: summary } });
+      await expect(f.execute()).rejects.toThrow(/100 percent/);
+      const text = readFileSync(summary, 'utf8');
+      expect(text).toContain(`Unverified staged version: ${versionId}`);
+      expect(text).toContain(`source: ${sha}`);
+      expect(text).not.toMatch(/fixture-private|fixture-token|stage verified/);
+      expect(f.mutations()).toHaveLength(1);
+      expect(f.tempExists()).toBe(false);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 });

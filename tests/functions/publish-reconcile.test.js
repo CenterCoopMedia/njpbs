@@ -283,7 +283,9 @@ describe("publish queue reconciliation schedule", () => {
     expect((await ref.get()).data()).toMatchObject(current);
     expect((await ref.get()).data().error).toBeUndefined();
   });
+});
 
+describe("publish queue orphan recovery", () => {
   const orphan = { status: "publishing", transport: "serializer", triggeredAt: new Date(NOW - REQUEST_LIMIT), completedAt: null, error: null,
     changes: [{ collection: "cmsPages", id: "contact", sourceVersion: 3 }] };
   const content = { status: "published", publishBuildPending: true, publishBuildQueueId: "row", published: { sourceVersion: 3 } };

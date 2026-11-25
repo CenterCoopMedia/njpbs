@@ -160,6 +160,11 @@ function parseManifest(
   }
   return manifest;
 }
+/** Stored manifest bytes that do not parse are refused bytes. */
+const parseRetainedManifest = (...input: Parameters<typeof parseManifest>) => {
+  try { return parseManifest(...input); }
+  catch (cause) { throw new CloudPublicationBytesRefused((cause as Error).message, { cause }); }
+};
 async function privateDirectory(directory: string) {
   const stat = await lstat(directory);
   if (
@@ -324,9 +329,7 @@ export function createCmsPublicationCloudStorage({
     const bytes = await read(`${prefix(identity.queueId)}/manifest.json`, signal);
     if (!bytes) return false;
     if (expectedDigest !== undefined && (!DIGEST.test(expectedDigest) || digest(bytes) !== expectedDigest)) throw new CloudPublicationBytesRefused("Cloud release manifest digest differs");
-    let manifest: ArtifactManifest;
-    try { manifest = parseManifest(bytes, identity, includeRenderer); }
-    catch (cause) { throw new CloudPublicationBytesRefused((cause as Error).message, { cause }); }
+    const manifest = parseRetainedManifest(bytes, identity, includeRenderer);
     const staging = await mkdtemp(path.join(directory, ".restore-"));
     try {
       await transferFiles(manifest.files, async (file) => {

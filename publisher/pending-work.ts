@@ -388,7 +388,7 @@ export async function readPublicationOwners(documents: string, headers: Record<s
 
 /** The removed attempt limit left a failed release without a due time. While it
  * holds the journal it is due, so the release runner can settle it. */
-const parkedRelease = (row: Record<string, any>) => row.status === "failed" && row.nextAttemptAt === null;
+const parkedRelease = (row: { status?: unknown; nextAttemptAt?: unknown }) => row.status === "failed" && row.nextAttemptAt === null;
 
 export async function readNoBuildPublicationWork(options: {
   account: string; commitSha: string; serializerId: string; target?: PublicationTarget;
