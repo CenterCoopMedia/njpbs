@@ -24,11 +24,13 @@ on:
         type: string
 
 permissions:
+  actions: read
   contents: read
   issues: read
 
+# The same groups as cms-staging-deploy.yml and cms-dev-deploy.yml: they write the same target.
 concurrency:
-  group: cms-deploy-${{ inputs.target }}
+  group: ${{ inputs.target == 'development' && 'cms-staging-deploy-development' || 'cms-staging-deploy' }}
   cancel-in-progress: false
 
 jobs:
@@ -48,7 +50,6 @@ jobs:
         run: '[[ "$DEPLOY_SHA" =~ ^[a-f0-9]{40}$ ]]'
       - uses: actions/checkout@v7
         with:
-          ref: ${{ inputs.ref }}
           fetch-depth: 0
           persist-credentials: false
       - name: Require a commit on main
@@ -56,8 +57,16 @@ jobs:
           DEPLOY_SHA: ${{ inputs.ref }}
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "$DEPLOY_SHA"
           git merge-base --is-ancestor "$DEPLOY_SHA" "$GITHUB_SHA"
+      - name: Require successful CI for the commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPLOY_SHA: ${{ inputs.ref }}
+        run: node .github/scripts/require-main-ci.mjs
+      - name: Check out the commit
+        env:
+          DEPLOY_SHA: ${{ inputs.ref }}
+        run: git checkout --quiet --detach "$DEPLOY_SHA"
       - name: Metered-API source scan (before any scanned code runs)
         run: node .github/scripts/metered-api-scan.mjs
       - uses: actions/setup-node@v7

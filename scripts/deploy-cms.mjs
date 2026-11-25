@@ -62,14 +62,22 @@ const npx = (args, options) => run("npx", ["--no-install", ...args], options);
 const sha = await run("git", ["rev-parse", "HEAD"], { capture: true });
 // Functions and the renderer carry the commit that last changed them, so an unchanged one is not deployed again.
 const lastChange = paths => run("git", ["log", "-1", "--format=%H", "--", ...paths], { capture: true });
-const contract = ["scripts/lib/functions-contracts.mjs", "packages", "package.json", "package-lock.json"];
+const contract = ["scripts/functions-contract-sources.json", "scripts/lib/functions-contracts.mjs", "scripts/compile-functions-contracts.mjs", "packages", "package.json", "package-lock.json"];
 const functionsSha = await lastChange(["functions"]); // a label; Firebase compares the content itself
-const rendererSha = await lastChange(["preview-renderer", "site", "functions", "config/development-inputs.json", "scripts/prepare-preview-renderer.mjs", ...contract]);
+const rendererSha = await lastChange(["preview-renderer", "site", "functions", "config/development-inputs.json",
+  "scripts/render-development-config.mjs", "scripts/prepare-preview-renderer.mjs", ...contract]);
 const secret = async name => {
   const value = await npx(["firebase", "--non-interactive", "functions:secrets:access", name, "--project", project], { capture: true });
   if (!value) throw new Error(`Secret ${name} is empty`);
   return value;
 };
+
+// Functions read this secret from Secret Manager and the CMS API gets it here; different values refuse every request.
+async function requireOneEdgeSecret() {
+  if (await secret("CMS_EDGE_ORIGIN_SECRET") !== env.CMS_EDGE_ORIGIN_SECRET?.trim()) {
+    throw new Error("CMS_EDGE_ORIGIN_SECRET differs from the Secret Manager value that Functions read");
+  }
+}
 
 async function functionSource() {
   const { loadFunctionSource } = await import("./lib/functions-deploy-inventory.mjs");
@@ -106,6 +114,7 @@ const steps = {
     await node(["scripts/seed-content-sections.mjs", "--if-needed"]);
   },
   async firebase() {
+    await requireOneEdgeSecret();
     await npx(["firebase", "functions:artifacts:setpolicy", "--project", project, "--location", "us-central1", "--days", "7", "--force"]);
     // Firebase skips each Function whose source, parameters and secrets did not change.
     // No --force: it would delete every live index and Function that the source does not name.
@@ -147,6 +156,7 @@ const steps = {
     }
   },
   async "cms-api"() {
+    await requireOneEdgeSecret();
     let config = [];
     if (dev) {
       const rendered = JSON.parse(readFileSync("cms-api/wrangler.dev.jsonc", "utf8"));
@@ -263,10 +273,11 @@ const steps = {
   },
 };
 
-// A step whose failure can follow from an earlier one; it still runs.
-const after = { render: ["install"], "functions-build": ["install", "render"], seed: ["install"], firebase: ["install", "functions-build"],
-  "event-grants": ["firebase"], "cms-api": ["render", "install"], renderer: ["install", "render"],
-  studio: ["install"], "admin-build": ["install", "render"], "admin-deploy": ["admin-build"], "admin-shell": ["install", "admin-deploy"],
+// A step whose failure can follow from an earlier one. On development it still runs, so one run shows every fault.
+// Production skips it: a new Admin or API must not go live over handlers that failed to deploy.
+const after = { render: ["install"], "functions-build": ["install", "render"], seed: ["install"], firebase: ["install", "functions-build", "seed"],
+  "event-grants": ["firebase"], "cms-api": ["render", "install", "firebase"], renderer: ["install", "render"],
+  studio: ["install"], "admin-build": ["install", "render"], "admin-deploy": ["admin-build", "firebase", "cms-api"], "admin-shell": ["install", "admin-deploy"],
   smoke: ["firebase", "cms-api", "renderer", "admin-deploy", "seed"] };
 const unknown = only.filter(name => !Object.hasOwn(steps, name));
 if (unknown.length) throw new Error(`Unknown step ${unknown.join(", ")}; steps: ${Object.keys(steps).join(", ")}`);
@@ -277,7 +288,11 @@ for (const name of Object.keys(steps).filter(step => !only.length || only.includ
   tail = log = "";
   console.log(`\n>>> START ${name}`);
   let error;
-  try { await steps[name](); } catch (caught) { error = `${caught.message}\n${tail.trim().split("\n").slice(-12).join("\n")}`.trim(); }
+  const blocked = dev || name === "smoke" ? [] : (after[name] ?? []).filter(step => report.some(row => row.name === step && row.error));
+  try {
+    if (blocked.length) throw new Error(`Not run: ${blocked.join(", ")} failed`);
+    await steps[name]();
+  } catch (caught) { error = `${caught.message}\n${tail.trim().split("\n").slice(-12).join("\n")}`.trim(); }
   const seconds = Math.round((Date.now() - started) / 1000);
   report.push({ name, seconds, error });
   console.log(`<<< ${error ? "FAILED" : "DONE"} ${name} ${seconds} s${error ? `\n${error}` : ""}`);

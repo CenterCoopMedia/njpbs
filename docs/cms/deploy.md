@@ -3,7 +3,8 @@
 `node scripts/deploy-cms.mjs <development|production>` deploys the CMS of the checked-out commit. Run it in a
 fresh clone, because it renders the target's names into tracked files. Name steps after the target to run only those.
 
-Every step runs, also after a failed one. Each prints its name and seconds. The run ends with the list of
+On development every step runs, also after a failed one. On production a step that depends on a failed one is not
+run; the smoke always runs. Each prints its name and seconds. The run ends with the list of
 failed steps and the provider's error, and exits 1 when the list is not empty.
 
 | Step | What it does |
