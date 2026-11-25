@@ -1,8 +1,9 @@
 import { CONFIGURATION_INPUTS, RUNTIME_PARAMETERS, configurationInputs, servingRuntimeParameters } from "../../scripts/lib/functions-configuration.mjs";
 import { describe, expect, it } from "vitest";
+import { createRequire } from "node:module";
 import { readFileSync } from "node:fs";
 import { parse } from "yaml";
-import { FUNCTION_RUNTIME_VARIABLES, functionsForRuntimeComparison, runtimeParametersMatch, boundSecretVersionsCurrent, boundSecretVersionChanges, runtimeParameterChanges, CMS_RELEASE_SECRET_NAMES, deploymentSecretsUnchanged, deploymentVariablesFingerprint, cloudWakeConfigurationFingerprint, decideRelease, explicitCloudWakeDecision, fingerprintExecutionSource, fingerprintFunctionsRenderSource, identitiesMatch, planCmsApiRelease, componentReceiptRunCompleted } from "../../scripts/lib/cms-release-plan.mjs";
+import { FUNCTION_RUNTIME_VARIABLES, functionsForRuntimeComparison, runtimeParametersMatch, boundSecretVersionsCurrent, boundSecretVersionChanges, runtimeParameterChanges, CMS_RELEASE_SECRET_NAMES, deploymentSecretsUnchanged, deploymentVariablesFingerprint, cloudWakeConfigurationFingerprint, decideRelease, explicitCloudWakeDecision, fingerprintExecutionSource, fingerprintFunctionsRenderSource, identitiesMatch, planCmsApiRelease, componentReceiptRunCompleted, CLOUD_WAKE_FUNCTIONS, READER_FUNCTIONS, adminRevisionChanges, omittedFunctionNames, withoutFunctions } from "../../scripts/lib/cms-release-plan.mjs";
 import { releasePlanOutputLines, desiredRuntimeParameters } from "../../scripts/cms-release-plan.mjs";
 import { correlatedDispatchAccepted } from "../../.github/scripts/require-cms-release-sources.mjs";
 
@@ -56,6 +57,71 @@ function eligible() {
     targetHasAdminRevisionIntake: true, liveHasAdminRevisionIntake: true,
   };
 }
+
+const WAKE = [...CLOUD_WAKE_FUNCTIONS];
+// The same committed graph, receipts and live inventory for both targets: the wake exports are not live.
+function targetPlan(target, overrides = {}) {
+  const decision = { environment: target, enabled: target === "production" };
+  const committed = { ...GRAPH, exports: { ...GRAPH.exports,
+    ...Object.fromEntries([...WAKE, ...READER_FUNCTIONS].map(name => [name, { fingerprint: FINGERPRINT, preview: false }])) } };
+  const omittedNames = omittedFunctionNames(decision);
+  const { edit, ...rest } = overrides;
+  const input = { ...eligible(), functionGraph: structuredClone(committed), manifestNames: Object.keys(committed.exports),
+    functionsReceipt: completeReceipt("functions", { mutation: { functionGraph: committed } }), omittedNames, ...rest };
+  edit?.(input);
+  const project = { projectId: "example-project", codebase: "default" };
+  const inventory = Object.keys(committed.exports).filter(name => !WAKE.includes(name)).map(name => ({
+    name: `projects/example-project/locations/us-central1/functions/${name}`, buildConfig: { entryPoint: name } }));
+  const live = functionsForRuntimeComparison(inventory, withoutFunctions(input.functionGraph, omittedNames), project);
+  return decideRelease({ ...input, configurationRequiresRelease: live === null });
+}
+
+describe("development and production plans from the same inputs", () => {
+  it("names the wake exports that the Functions runtime names", () => {
+    expect(CLOUD_WAKE_FUNCTIONS).toEqual(createRequire(import.meta.url)("../../functions/lib/cloud-publication-wake-deployment.js").CLOUD_WAKE_FUNCTIONS);
+  });
+  it("requires every committed export in production and only the deployed ones in development", () => {
+    expect(targetPlan("production")).toMatchObject({ functionDeployTargets: "all", releaseReason: "runtime_configuration_changed" });
+    expect(targetPlan("development")).toMatchObject({ functionDeployTargets: "", functionsMutated: false, releaseReason: "unchanged" });
+    expect(targetPlan("production")).not.toHaveProperty("readerRebind");
+  });
+  it("ignores a development source change in an export it does not deploy", () => {
+    const edit = input => {
+      input.functionGraph.exports.onNoBuildCloudState.fingerprint = "9".repeat(64);
+      input.functionsFingerprint = "9".repeat(64);
+    };
+    expect(targetPlan("development", { edit })).toMatchObject({ functionsMutated: false, releaseReason: "unchanged" });
+    expect(decideRelease({ ...eligible(), functionsFingerprint: "9".repeat(64) }).releaseReason).toBe("function_graph_unavailable");
+  });
+  it("deploys no Function for a current binding and the readers for a stale one", () => {
+    expect(targetPlan("development", { readerBinding: { required: false } }))
+      .toMatchObject({ functionsMutated: false, readerRebind: false, functionDeployTargets: "" });
+    const stale = targetPlan("development", { readerBinding: { required: true } });
+    expect(stale).toMatchObject({ functionsMutated: true, readerRebind: true, previewPaused: false,
+      releaseReason: "reader_binding_changed", configurationRequiresRelease: false });
+    expect(stale.functionDeployTargets).toBe([...READER_FUNCTIONS].sort().map(name => `functions:${name}`).join(","));
+  });
+  it("adds the readers to a changed export in development only", () => {
+    const edit = input => {
+      input.functionGraph.exports.health.fingerprint = "9".repeat(64);
+      input.functionsFingerprint = "9".repeat(64);
+    };
+    const plan = targetPlan("development", { edit, readerBinding: { required: false } });
+    expect(plan.functionDeployTargets).toBe(["health", ...READER_FUNCTIONS].sort().map(name => `functions:${name}`).join(","));
+    expect(plan).toMatchObject({ readerRebind: true, releaseReason: "functions_modules_changed",
+      functionReasons: { health: ["source_closure_changed"], cmsReaderV1: ["reader_binding_changed"], cmsPreview: ["unchanged"] } });
+    expect(releasePlanOutputLines(plan, {})).toContain("reader_rebind=true");
+    expect(releasePlanOutputLines(decideRelease(eligible()), {})).toContain("reader_rebind=false");
+    expect(decideRelease({ forceFirebase: true, readerBinding: { required: false } })).toMatchObject({ functionDeployTargets: "all", readerRebind: true });
+  });
+  it("selects only the readers of a changed development Admin revision", () => {
+    const fn = (name, revision) => ({ name, serviceConfig: { environmentVariables: { CMS_ADMIN_BUILD_REVISION: revision } } });
+    const reads = { cmsSubmitBugReport: { keys: ["CMS_ADMIN_BUILD_REVISION"] }, health: { keys: [] } };
+    expect(adminRevisionChanges([fn("cmsSubmitBugReport", SHA), fn("health", SHA)], OTHER, reads))
+      .toEqual({ cmsSubmitBugReport: ["runtime_parameter:CMS_ADMIN_BUILD_REVISION"] });
+    expect(adminRevisionChanges([fn("cmsSubmitBugReport", OTHER)], OTHER, reads)).toEqual({});
+  });
+});
 
 describe("selective Functions releases", () => {
   it.each([false, true])("emits the candidate renderer SHA on a full/forced plan (force=%s)", forceFirebase => {

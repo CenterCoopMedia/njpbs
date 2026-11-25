@@ -204,7 +204,7 @@ describe("alt-text sweep", () => {
   });
 
   it("paces the shared CMS reads and retries 429s with and without Retry-After until the read answers", async () => {
-    const reads = [];
+    const reads = [], contentReadAt = [];
     const retryHeaders = [
       { "Retry-After": "3", "X-Rate-Limit-Scope": "actor" },
       {},
@@ -212,6 +212,7 @@ describe("alt-text sweep", () => {
     const h = harness({ media: [asset("a"), asset("b", "Authored")],
       respond({ endpoint, now }) {
         if (endpoint.startsWith("cmsList") || endpoint === "cmsGetContent") reads.push([endpoint, now]);
+        if (endpoint === "cmsGetContent") contentReadAt.push(Date.now());
         if (endpoint === "cmsGetContent" && retryHeaders.length) {
           return new Response(null, { status: 429, headers: retryHeaders.shift() });
         }
@@ -225,6 +226,8 @@ describe("alt-text sweep", () => {
     ]);
     expect(report.errors).toEqual([]);
     expect(report.stopped).toBeNull();
+    // The client forwards the 3 s; without it the first pause is 1 s.
+    expect(contentReadAt[1] - contentReadAt[0]).toBeGreaterThanOrEqual(2_900);
     expect(report.changes).toHaveLength(4);
     expect(h.endpoints.filter(endpoint => ["cmsUpdateMediaMetadata", "cmsSaveContent"].includes(endpoint)))
       .toEqual(["cmsUpdateMediaMetadata", "cmsSaveContent"]);

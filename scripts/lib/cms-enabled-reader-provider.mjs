@@ -1,14 +1,13 @@
 import { readCmsReaderProviderIdentities } from "./cms-reader-provider-readback.mjs";
+import { READER_FUNCTIONS } from "./cms-release-plan.mjs";
 const refuse = () => { throw new Error("Enabled CMS reader provider readback unavailable"); };
-const readerNames = ["cmsReaderV1", "cmsReaderV2", "cmsReadPairCurrentCodeV2",
-  "cmsGetPublicPage", "cmsSaveContent", "cmsTransitionContent", "onScheduledPublish"];
 
 // Fixed native project/Worker targets; raw provider variables never leave here.
 export async function readEnabledCmsReaderProviders({ projectId, accountId, sourceSha, binding, apiVars,
   readGoogleToken, readCloudflareToken, expectedWorkerVersion, fetchImpl = fetch }) {
   const identities = await readCmsReaderProviderIdentities({ projectId, accountId,
     readCloudflareToken, readGoogleToken, expectedWorkerVersion, fetchImpl, inspectFunctions(functions) {
-      for (const name of readerNames) {
+      for (const name of READER_FUNCTIONS) {
         const fn = functions.find(row => row.name === `projects/${projectId}/locations/us-central1/functions/${name}`);
         const vars = fn?.serviceConfig?.environmentVariables;
         if (fn?.state !== "ACTIVE" || fn.buildConfig?.entryPoint !== name ||

@@ -2,8 +2,8 @@ import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { describe, expect, it, vi } from "vitest";
 import { parse } from "yaml";
-import { assertFirstAttempt, bindApiConfig, bindFunctionsDotenv, decodeBinding, encodeBinding, recordReaderCandidates, releaseSourceBinds,
-  selectReaderBinding } from "../../scripts/cms-reader-binding.mjs";
+import { assertFirstAttempt, bindApiConfig, bindFunctionsDotenv, decodeBinding, encodeBinding, liveBindingCurrent, recordReaderCandidates,
+  releaseSourceBinds, releaseSourceRebinds, selectReaderBinding } from "../../scripts/cms-reader-binding.mjs";
 import { cmsTarget } from "../../scripts/lib/cms-target.mjs";
 
 const require = createRequire(import.meta.url);
@@ -44,7 +44,26 @@ describe("CMS reader binding for an ordinary deploy", () => {
       CMS_READER_BRIDGE_FUNCTIONS_CANDIDATE: "functions-45310500950-2", CMS_READER_BRIDGE_CMS_API_CANDIDATE: "cmsApi-45310500950-2" });
   });
 
-  it("binds development every run with the binding cms-dev-deploy wrote", async () => {
+  it("keeps the live development binding only while its candidates, receipts and Worker are current", async () => {
+    const live = { CMS_READER_BRIDGE_ENABLED: "true", CMS_READER_BRIDGE_OPERATION_ID: "reader-dev-1-1" };
+    const stored = { functions: reader("functions"), cmsApi: reader("cmsApi") };
+    const input = { log: vi.fn(), readLiveApiVars: async () => live, readCompatibilityReceipts: async () => stored,
+      readDescriptor: vi.fn(async () => ({ readers: { functions: stored.functions.lastComplete, cmsApi: stored.cmsApi.lastComplete } })),
+      planWorker: async () => ({ mutated: false, reason: "unchanged" }) };
+    await expect(liveBindingCurrent(input)).resolves.toBe(true);
+    expect(input.readDescriptor).toHaveBeenCalledWith(live);
+    const moved = { ...stored.functions.lastComplete, providerIdentities: { version: "v2" } };
+    for (const change of [
+      { readLiveApiVars: async () => { throw new Error("unread"); } },
+      { readDescriptor: async () => { throw new Error("CMS reader mount unavailable"); } },
+      { readDescriptor: async () => ({ readers: { functions: moved, cmsApi: stored.cmsApi.lastComplete } }) },
+      { readCompatibilityReceipts: async () => ({ ...stored, cmsApi: { ...stored.cmsApi, state: "in_progress" } }) },
+      { planWorker: async () => ({ mutated: true, reason: "inputs_changed" }) },
+      { planWorker: async () => { throw new Error("unread"); } },
+    ]) await expect(liveBindingCurrent({ ...input, ...change })).resolves.toBe(false);
+  });
+
+  it("selects a development binding from this run for a rebind", async () => {
     const binding = await selectReaderBinding({ env: { ...run, CMS_DEV_PUBLISH_ENABLED: "false" }, target: development,
       readCompatibilityReceipts: installed, readLiveApiVars: unreachable, readInstalledProof: unreachable });
     expect(binding).toEqual(require("../../functions/lib/dev-reader-deployment.js").devReaderUpdateDeployment({ ...run,
@@ -99,6 +118,9 @@ describe("CMS reader binding for an ordinary deploy", () => {
     expect(releaseSourceBinds(readFileSync(new URL("../../scripts/cms-reader-binding.mjs", import.meta.url), "utf8"))).toBe(true);
     expect(releaseSourceBinds("const parsed = value ? JSON.parse(value) : null;")).toBe(false);
     expect(releaseSourceBinds("")).toBe(false);
+    // A release source whose plan cannot rebind keeps the forced full release.
+    expect(releaseSourceRebinds(readFileSync(new URL("../../scripts/cms-release-plan.mjs", import.meta.url), "utf8"))).toBe(true);
+    expect(releaseSourceRebinds("forceFirebase: process.env.FORCE_FIREBASE")).toBe(false);
   });
 
   it("refuses a rerun of a bound run before selection and before each bind", () => {
@@ -130,6 +152,13 @@ describe("CMS reader binding for an ordinary deploy", () => {
     expect(steps["Select the CMS reader binding"].run).toContain("$RUNNER_TEMP/cms-smoke-gate/scripts/cms-reader-binding.mjs");
     for (const name of ["Bind the CMS readers into the Functions configuration", "Bind the CMS readers into the CMS API config",
       "Record and verify this run's CMS reader candidates"]) expect(steps[name].if).toContain("reader_binding != ''");
+    const preflight = workflow.jobs["firebase-preflight"];
+    expect(preflight.outputs.reader_binding).toBe("${{ steps.reader_binding.outputs.binding || (steps.release_plan.outputs.reader_rebind == 'true' && steps.reader_binding.outputs.rebind || '') }}");
+    const api = workflow.jobs["cms-api"].steps;
+    const refusal = api.findIndex(row => row.name === "Refuse a Worker deploy that would drop the kept reader binding");
+    expect(api[refusal].if).toBe("needs.firebase-preflight.outputs.reader_rebind_mode != '' && needs.firebase-preflight.outputs.reader_binding == '' && steps.cms_api_plan.outputs.mutated != 'false'");
+    expect(refusal).toBeGreaterThan(api.findIndex(row => row.name === "Plan the CMS API Worker release"));
+    expect(refusal).toBeLessThan(api.findIndex(row => row.name === "Mark the CMS API receipt in progress"));
     // With no binding (production today) each expression reduces to its earlier form.
     expect(steps["Plan Functions and renderer release"].env.FORCE_FIREBASE).toBe("${{ inputs.force_firebase || steps.reader_binding.outputs.binding != '' }}");
     expect(steps["Deploy CMS API Worker"].if).toBe("steps.cms_api_plan.outputs.mutated != 'false' || needs.firebase-preflight.outputs.reader_binding != ''");

@@ -287,19 +287,22 @@ export async function runNoBuildCloudRelease({ firestore, storage, serializerId,
       Number.isFinite(value.nextAttemptAt) && value.nextAttemptAt <= Date.now());
   if (!due(request)) return;
   if (!Number.isSafeInteger(request.attempts) || request.attempts < 0) return;
-  const { job } = await journal.reserve({ queueId: row.id, buildBatchId: identity.buildBatchId, commitSha });
-  const claimed = await firestore.runTransaction(async tx => {
+  // The journal job and the claim are one write. A request that the operator
+  // superseded after it was read gets neither, so no job is left behind it.
+  const job = await firestore.runTransaction(async tx => {
+    const reservation = await journal.reserveInTransaction(tx, { queueId: row.id, buildBatchId: identity.buildBatchId, commitSha });
     const current = (await tx.get(row.ref)).data();
     if (!current) throw new Error("Cloud release request disappeared");
     assertPublicationOwner(current, runtime);
     if (current.artifactCheckpointDigest !== request.artifactCheckpointDigest || current.inputSha256 !== request.inputSha256) {
       throw new Error("Cloud release request changed");
     }
-    if (!due(current) || current.attempts !== request.attempts) return false;
+    if (!due(current) || current.attempts !== request.attempts) return null;
+    reservation.write();
     tx.update(row.ref, { attempts: current.attempts + 1, nextAttemptAt: Date.now() + 10 * 60_000, failureReason: null });
-    return true;
+    return reservation.job;
   });
-  if (!claimed) return;
+  if (!job) return;
   let stage: CloudReleaseFailureStage = "source check";
   try {
     await assertCmsPublicationSourceCheckout(commitSha, sourceGit);

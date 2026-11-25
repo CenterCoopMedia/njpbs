@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { Firestore } from "firebase-admin/firestore";
+import type { Firestore, Transaction } from "firebase-admin/firestore";
 import {
   CmsPublicationTokenJournalError,
   type CmsPublicationJournalJob,
@@ -97,7 +97,12 @@ export async function openCmsPublicationCloudTokenJournal({
   firestore: Firestore;
   serializerId: string;
   runtime?: Runtime;
-}): Promise<CmsPublicationTokenJournal> {
+}): Promise<CmsPublicationTokenJournal & {
+  /** The same reservation inside the caller's transaction, so the job and the
+   * caller's own claim exist together or not at all. All reads come first. */
+  reserveInTransaction(transaction: Transaction, input: Parameters<CmsPublicationTokenJournal["reserve"]>[0]):
+    Promise<{ idempotent: boolean; job: CmsPublicationJournalJob; write: () => void }>;
+}> {
   if (!matches(serializerId, SERIALIZER_ID)) {
     fail("The CMS publication cloud token journal serializer id is invalid");
   }
@@ -112,12 +117,10 @@ export async function openCmsPublicationCloudTokenJournal({
   const readSnapshot = (snapshot: { exists: boolean; data(): unknown }) =>
     snapshot.exists ? projectState(snapshot.data(), serializerId, runtime) : null;
 
-  return Object.freeze({
-    journalPath: `firestore:${COLLECTION}/${serializerId}`,
-    read: async () => readSnapshot(await ref.get()),
-    reserve: async (
-      input: Parameters<CmsPublicationTokenJournal["reserve"]>[0],
-    ) => {
+  const reserveInTransaction = async (
+    transaction: Transaction,
+    input: Parameters<CmsPublicationTokenJournal["reserve"]>[0],
+  ) => {
       if (
         !exactFields(input, ["queueId", "buildBatchId", "commitSha"]) ||
         !matches(input.queueId, QUEUE_ID) ||
@@ -131,24 +134,33 @@ export async function openCmsPublicationCloudTokenJournal({
         claimToken: randomUUID(),
         createdAt: new Date().toISOString(),
       });
-      return firestore.runTransaction(async (transaction) => {
-        const job = readSnapshot(await transaction.get(ref));
-        if (job) {
-          if (
-            job.queueId !== input.queueId ||
-            job.buildBatchId !== input.buildBatchId ||
-            job.commitSha !== input.commitSha
-          ) {
-            fail(
-              "The CMS publication cloud token journal already has another job",
-            );
-          }
-          return { idempotent: true, job };
+      const job = readSnapshot(await transaction.get(ref));
+      if (job) {
+        if (
+          job.queueId !== input.queueId ||
+          job.buildBatchId !== input.buildBatchId ||
+          job.commitSha !== input.commitSha
+        ) {
+          fail(
+            "The CMS publication cloud token journal already has another job",
+          );
         }
-        transaction.set(ref, state(candidate));
-        return { idempotent: false, job: candidate };
-      });
-    },
+        return { idempotent: true, job, write: () => {} };
+      }
+      return { idempotent: false, job: candidate, write: () => { transaction.set(ref, state(candidate)); } };
+  };
+
+  return Object.freeze({
+    reserveInTransaction,
+    journalPath: `firestore:${COLLECTION}/${serializerId}`,
+    read: async () => readSnapshot(await ref.get()),
+    reserve: async (
+      input: Parameters<CmsPublicationTokenJournal["reserve"]>[0],
+    ) => firestore.runTransaction(async (transaction) => {
+      const { idempotent, job, write } = await reserveInTransaction(transaction, input);
+      write();
+      return { idempotent, job };
+    }),
     clear: async (
       input: Parameters<CmsPublicationTokenJournal["clear"]>[0],
     ) => {

@@ -1,4 +1,6 @@
 {
+  ".github/workflows/cms-dev-deploy.yml": 2,
+  ".github/workflows/cms-staging-deploy.yml": 2,
   "functions/bug-report-delivery.js": 1,
   "functions/lib/aws-workload-credentials.js": 1,
   "functions/lib/cloud-external-refresh-state.js": 1,
@@ -34,6 +36,7 @@
   "scripts/lib/provider-call.mjs": 3,
   "scripts/measure-public-release-routing.mjs": 1,
   "scripts/publish-dev-seed.mjs": 3,
+  "scripts/smoke-signed-in-preview.mjs": 8,
   "site/scripts/activate-public-worker-candidate.ts": 2,
   "site/scripts/build-no-build-cloud-background.ts": 2,
   "site/scripts/check-public-page-renderer.ts": 1,

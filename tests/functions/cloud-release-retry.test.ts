@@ -237,3 +237,28 @@ it.each(states)("refused bytes, $state: settles $settles", async ({ batch, point
     newestEligibleGeneration: next.generation, newestEligibleBuildBatchId: `cms-${nextQueueId}` });
   expect(assertMediaLifecycleDeploymentFence((await firestore.doc(pointerPath).get()).data())).toMatchObject({ generation: next.generation });
 }));
+
+  } finally { logged.mockRestore(); guarded.mockRestore(); }
+});
+
+it("leaves no journal job behind a request the operator superseded after it was read", async () => {
+  await seed({ ...documents(), [requestPath]: { ...documents()[requestPath], attempts: 1, nextAttemptAt: 0 } });
+  const journal = await openCmsPublicationCloudTokenJournal({ firestore, serializerId: "cloudflare-publisher", runtime: { owner: "cloudflare", release: newSha } });
+  const begin = firestore.runTransaction.bind(firestore);
+  // The operator's supersession commits between the runner's read and its claim.
+  const raced = vi.spyOn(firestore, "runTransaction").mockImplementationOnce(async (...args: Parameters<typeof begin>) => {
+    await firestore.doc(requestPath).update({ status: "superseded", nextAttemptAt: null });
+    await firestore.doc(batchPath).update({ status: "retired" });
+    return begin(...args) as never;
+  });
+  const readInput = vi.fn();
+  try {
+    await runNoBuildCloudRelease({ firestore, serializerId: "cloudflare-publisher", commitSha: newSha, stateDirectory: scratch,
+      cloudflareApiToken: "fixture-token", previewStorageCredential: {} as never, storage: { readInput } as never });
+  } finally { raced.mockRestore(); }
+  expect(readInput).not.toHaveBeenCalled();
+  expect((await firestore.doc(requestPath).get()).data()).toMatchObject({ status: "superseded", nextAttemptAt: null });
+  expect(await journal.read()).toBeNull();
+  const other = "3440cccccccccccccccc";
+  expect((await journal.reserve({ queueId: other, buildBatchId: `cms-${other}`, commitSha: newSha })).job.queueId).toBe(other);
+});

@@ -15,6 +15,7 @@ import { resolveDiscovery } from "./configure-cms-functions.mjs";
 import { configurationInputs, RUNTIME_PARAMETERS, runtimeParameters, servingRuntimeParameters } from "./lib/functions-configuration.mjs";
 import {
   ADMIN_REVISION_INTAKE_FLOOR,
+  adminRevisionChanges,
   assertLegacyCmsWorkflow,
   baselineMutation,
   boundSecretVersionChanges,
@@ -26,6 +27,8 @@ import {
   fingerprintFunctionsRenderSource,
   functionsForRuntimeComparison,
   functionSourceProof,
+  omittedFunctionNames,
+  withoutFunctions,
   componentReceiptRunCompleted,
   runtimeParameterChanges,
 } from "./lib/cms-release-plan.mjs";
@@ -91,6 +94,7 @@ export function releasePlanOutputLines(plan, { deploySha, edgeFingerprint, confi
     `renderer_target_sha=${plan.rendererTargetSha ?? deploySha}`,
     `configuration_requires_release=${plan.configurationRequiresRelease}`,
     `release_reason=${plan.releaseReason}`,
+    `reader_rebind=${plan.readerRebind === true}`,
   ];
 }
 
@@ -112,6 +116,7 @@ export async function main() {
   const manifestNames = manifest === undefined ? null
     : /^functions:[A-Za-z][A-Za-z0-9]*(,functions:[A-Za-z][A-Za-z0-9]*)*$/.test(manifest)
       ? manifest.split(",").map(name => name.slice("functions:".length)) : [];
+  const omittedNames = omittedFunctionNames(decision);
   const edgeFingerprint = edgeOriginSecretFingerprint(process.env);
   const variablesFingerprint = deploymentVariablesFingerprint(process.env.CMS_DEPLOYMENT_VARIABLES_JSON);
   const configurationFingerprint = cloudWakeConfigurationFingerprint(edgeFingerprint, decision, variablesFingerprint);
@@ -166,7 +171,7 @@ export async function main() {
     let liveFunctions = null;
     const liveFunctionsIdentities = await collectLiveIdentities("functions", {
       firestore, inspectFunctions: functions => {
-        liveFunctions = functionsForRuntimeComparison(functions, functionGraph);
+        liveFunctions = functionsForRuntimeComparison(functions, withoutFunctions(functionGraph, omittedNames));
       },
     }).catch(() => null);
     // Production intake resolves the Admin revision from live status after the
@@ -174,6 +179,8 @@ export async function main() {
     const comparedParameterKeys = Object.keys(RUNTIME_PARAMETERS).filter(key =>
       key !== "CMS_ADMIN_BUILD_REVISION" && key !== "CMS_PREVIEW_RENDERER_SHA");
     const parameterChanges = runtimeParameterChanges(liveFunctions, desiredParameters, runtime?.reads, comparedParameterKeys);
+    const revisionChanges = cmsTarget().environment === "development"
+      ? adminRevisionChanges(liveFunctions, deploySha, runtime?.reads) : {};
     const secretChanges = await boundSecretVersionChanges(liveFunctions, async (project, secret) =>
       (await client.request({ url: `https://secretmanager.googleapis.com/v1/projects/${project}/secrets/${secret}/versions/latest`,
         timeout: 15_000 })).data, desiredVersions);
@@ -200,11 +207,14 @@ export async function main() {
         || parameterChanges === null
         || secretChanges === null,
       runtimeChanges: parameterChanges && secretChanges && Object.fromEntries(Object.keys(parameterChanges).map(name =>
-        [name, [...parameterChanges[name], ...secretChanges[name]]])),
+        [name, [...parameterChanges[name], ...secretChanges[name], ...(revisionChanges[name] ?? [])]])),
       sourceProof,
       deploySha,
       functionGraph,
       manifestNames,
+      omittedNames,
+      readerBinding: ["required", "current"].includes(process.env.CMS_READER_REBIND)
+        ? { required: process.env.CMS_READER_REBIND === "required" } : null,
       forceFirebase: process.env.FORCE_FIREBASE,
       functionsReceipt,
       rendererReceipt,

@@ -44,8 +44,16 @@ own OIDC identity, Worker token and dev codebase.
 The dev and production jobs use the same per-export target selector. Dev
 compares the rendered parameters and a complete live inventory to the prior
 receipt. Changed or unproven source inputs select the entire dev manifest.
-Every dev reader update also assigns new candidate IDs to the shared Functions
-configuration. That selects every dev export even when the source is unchanged.
+A `cms-staging-deploy.yml` development run keeps the live reader binding while
+it is current: the CMS API Worker carries it, its two verified candidates match
+the complete Functions and CMS API receipts and the reader compatibility
+receipts, and the Worker needs no deploy. When either component deploys, or the
+binding is not current, the run assigns new candidate IDs and redeploys the
+seven reader exports (`READER_FUNCTIONS` in
+[cms-release-plan.mjs](../../scripts/lib/cms-release-plan.mjs)) and the Worker.
+The plan leaves out the three cloud wake exports while wake is off. A dev
+export that reads the Admin revision redeploys when the deployed revision
+changes, because dev report intake compares it with the Admin bundle.
 The dev job logs each export's reasons and the Functions deploy duration.
 It reads the exact active Wrangler version before completing the CMS API
 receipt.
