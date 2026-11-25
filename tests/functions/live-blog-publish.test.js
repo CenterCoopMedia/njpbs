@@ -373,11 +373,12 @@ describe("live blogs through the existing Post publication and preview paths", (
     await expect(preview.enqueuePreview(previewFields(), previewDeps())).rejects.toMatchObject({ status: 503 });
     expect((await db.collection("cmsPreviewQueue").get()).size).toBe(0);
     const runtime = { schemaVersion: 1, phase: "ready", rendererSha: "b".repeat(40), serializerId: "fixture-preview", liveBlogVersion: 1 };
-    await db.doc("system/cmsPreviewRuntime").set(runtime);
+    await db.doc("system/cmsPreviewRuntime").set({ ...runtime, liveBlogVersion: 0 });
     await expect(preview.enqueuePreview(previewFields(), previewDeps())).rejects.toMatchObject({ status: 503 });
-    await db.doc("system/cmsPreviewRuntime").set({ ...runtime, rendererSha: sha });
+    await db.doc("system/cmsPreviewRuntime").set(runtime);
     const result = await preview.enqueuePreview(previewFields(), previewDeps());
     const queued = (await db.doc(`cmsPreviewQueue/${result.queueId}`).get()).data();
+    expect(queued.rendererSha).toBe(runtime.rendererSha);
     expect(queued.snapshot.published.metadata.liveBlog.updates[0]).toMatchObject({ publishedAt: later, updatedAt: later });
     expect(await current()).toEqual(before);
     expect((await current()).published).toBeUndefined();
