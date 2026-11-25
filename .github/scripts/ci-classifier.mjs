@@ -102,7 +102,6 @@ const SITE_FIREBASE_WORKFLOWS = new Set([
   ".github/workflows/dev-machine-receipt-proof.yml",
   ".github/workflows/dev-staff-gateway-deploy.yml",
 
-  ".github/workflows/cms-dev-deploy.yml",
   ".github/workflows/cms-dev-publish.yml",
 ]);
 

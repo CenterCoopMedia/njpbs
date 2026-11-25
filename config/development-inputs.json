@@ -139,7 +139,6 @@
         "cms-api/src/index.ts",
         "scripts/assert-dev-cms-targets.mjs",
         "scripts/fixtures/dev-targets.json",
-        "tests/dev-cms-config.test.mjs",
         "tests/functions/paired-admin-pages-http.test.ts",
         "tests/functions/paired-admin-provider-operation.test.ts"
       ]

@@ -111,7 +111,6 @@ describe("CI path classifier", () => {
     ".github/workflows/dev-anonymous-refusal.yml",
     ".github/workflows/dev-machine-receipt-proof.yml",
     ".github/workflows/dev-staff-gateway-deploy.yml",
-    ".github/workflows/cms-dev-deploy.yml",
   ]) {
     it(`routes ${path} to Site and Firebase`, () => {
       assert.deepEqual(classifyPath(path), gates(false, true, false, true));
@@ -454,10 +453,6 @@ describe("CI path classifier", () => {
     assert.deepEqual(
       classifyPath(".github/workflows/firebase-ci.yml"),
       gates(false, false, false, true),
-    );
-    assert.deepEqual(
-      classifyPath(".github/workflows/cms-staging-deploy.yml"),
-      gates(false, false, true, true),
     );
     assert.equal(classifyPath(".github/workflows/new-workflow.yml"), null);
   });
@@ -852,7 +847,7 @@ describe("Final CI aggregation", () => {
   });
 
   it("runs release-gate contracts for CMS workflow changes", () => {
-    assert.equal(classifyChangedPaths([".github/workflows/cms-staging-deploy.yml"]).gates.firebase, true);
+    assert.equal(classifyChangedPaths([".github/workflows/cms-dev-publish.yml"]).gates.firebase, true);
     const ci = readFileSync(new URL("workflows/ci.yml", githubDirectory), "utf8");
     const policy = ci.split("\n  policy:\n", 2)[1].split("\n  docs:\n", 1)[0];
     const releaseTests = policy.split(/\n      - /).find(step =>
