@@ -6,7 +6,7 @@ const { readNoBuildPageProjectionInTransaction } = require("./no-build-page-sour
 const { validateNoBuildPageSnapshot, noBuildPageOwnerPath } = require("./no-build-page-contract");
 const { publicContextRevision, publicContextDigest, PUBLIC_CONTEXT_PATH } = require("./public-context-revision");
 const { pagePublicationTarget } = require("./no-build-page-target");
-const { assertMediaLifecycleDeploymentFence, assertPublicDeploymentPointer, PublicDeploymentFenceError } = require("./public-deployment");
+const { assertMediaLifecycleFenceInTransaction, assertPublicDeploymentPointer, PublicDeploymentFenceError } = require("./public-deployment");
 const { readPublishedHomePostCards, readPublishedChrome, publicAuthorSnapshot, publicRichText } = require("../published-post-reader");
 const { PROGRAM_METADATA_FIELDS, EVENT_METADATA_FIELDS } = require("./publish-snapshot");
 const { joinedAssetIds, shapeJoinedRecord, readLibraryHistory, pairedAssetPaths, projectPairedAsset } = require("./joined-records");
@@ -125,7 +125,7 @@ async function readPageRenderDependenciesInTransaction({ firestore, transaction,
   const uploadedMediaReady = media.some((row, index) => index % 2 === 0 && row.data()?.source === "upload");
   if (uploadedMediaReady) {
     if (pointer.schemaVersion === 2) await require("./public-release-media-fence").assertPairMediaFenceInTransaction({ firestore, transaction, selector: pointer });
-    else assertMediaLifecycleDeploymentFence(pointer);
+    else await assertMediaLifecycleFenceInTransaction({ firestore, transaction, pointer });
   }
   const assets = new Map(ids.map((id, index) => [id, projectPairedAsset({ assetId: id,
     privateSnapshot: media[index * 2], publicSnapshot: media[index * 2 + 1], uploadedMediaReady })]));

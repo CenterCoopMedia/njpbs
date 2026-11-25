@@ -4,7 +4,7 @@ const { preparePublicReleaseProducerInTransaction, publicContentChange } = requi
 
 const { createHash } = require("node:crypto");
 const { FieldValue } = require("firebase-admin/firestore");
-const { assertPublicDeploymentPointer, assertMediaLifecycleDeploymentFence, assertPublishedMediaReadiness } = require("./public-deployment");
+const { assertPublicDeploymentPointer, assertMediaLifecycleFenceInTransaction, assertPublishedMediaReadiness } = require("./public-deployment");
 const { assertPublishedAssetProjection } = require("./published-media-safety");
 const { selectedAssets } = require("./public-content-projection");
 const { mediaReplacementRef } = require("./media-replacement");
@@ -81,7 +81,7 @@ async function supportsPostMediaInTransaction(transaction, firestore, document, 
     let uploadedMediaReady = false;
     if (assetIds.some((_id, index) => assets[index * 3]?.data()?.source === "upload")) {
       const pointer = (await transaction.get(firestore.doc("system/publicDeployment"))).data();
-      if (accepting) assertMediaLifecycleDeploymentFence(pointer);
+      if (accepting) await assertMediaLifecycleFenceInTransaction({ firestore, transaction, pointer });
       else assertPublishedMediaReadiness(pointer);
       uploadedMediaReady = true;
     }

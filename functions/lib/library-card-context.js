@@ -3,7 +3,7 @@
 const { createHash } = require("node:crypto");
 const { shapeJoinedRecord, joinedAssetIds } = require("./joined-records");
 const { assertPublishedAssetProjection } = require("./published-media-safety");
-const { assertMediaLifecycleDeploymentFence } = require("./public-deployment");
+const { assertMediaLifecycleFenceInTransaction } = require("./public-deployment");
 const { selectedAssets } = require("./public-content-projection");
 const { mediaReplacementRef } = require("./media-replacement");
 
@@ -17,7 +17,7 @@ async function assertLibraryCardMedia({ firestore, transaction, record }) {
   ]));
   let uploadedMediaReady = false;
   if (assetIds.some((_id, index) => rows[index * 3].data()?.source === "upload")) {
-    assertMediaLifecycleDeploymentFence((await transaction.get(firestore.doc("system/publicDeployment"))).data());
+    await assertMediaLifecycleFenceInTransaction({ firestore, transaction, pointer: (await transaction.get(firestore.doc("system/publicDeployment"))).data() });
     uploadedMediaReady = true;
   }
   const assets = new Map(assetIds.map((id, index) => {

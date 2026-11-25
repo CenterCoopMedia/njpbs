@@ -12,9 +12,7 @@ const { parseHomeHero } = require("./home-hero");
 const { mediaProjection } = require("./media-contract");
 const { isMediaAssetId } = require("./media-library");
 const { mediaReplacementRef } = require("./media-replacement");
-const {
-  assertMediaLifecycleDeploymentFence,
-} = require("./public-deployment-pointer");
+const { assertMediaLifecycleFenceInTransaction } = require("./public-deployment");
 const {
   CMS_SETTINGS_SCHEMAS,
   CmsSettingsContractError,
@@ -424,7 +422,7 @@ async function prepareMediaUsageWrites({
     try {
       if (releaseSelector !== undefined) await require("./public-release-media-fence").assertPairMediaFenceInTransaction({
         firestore, transaction, selector: releaseSelector });
-      else assertMediaLifecycleDeploymentFence(deploymentSnapshot?.data());
+      else await assertMediaLifecycleFenceInTransaction({ firestore, transaction, pointer: deploymentSnapshot?.data() });
     } catch (error) {
       if (releaseSelector !== undefined && !(error instanceof require("./public-release-pair").PublicReleaseProtocolError)) throw error;
       throw new MediaUsageError(

@@ -2,7 +2,7 @@
 
 const { shapeJoinedRecord, joinedAssetIds, pairedAssetPaths, projectPairedAsset } = require("./joined-records");
 const { PublishedMediaSafetyError } = require("./published-media-safety");
-const { assertMediaLifecycleDeploymentFence } = require("./public-deployment");
+const { assertMediaLifecycleFenceInTransaction } = require("./public-deployment");
 const { mediaReplacementRef } = require("./media-replacement");
 const { selectedAssets } = require("./public-content-projection");
 const { newsletterCardData, projectHomeNewsletterRecord } = require("./home-retained-sources");
@@ -70,7 +70,7 @@ async function readRoster({ firestore, transaction, recordIds, pointer, now }) {
   let uploadedMediaReady = false;
   if (media.some((row, index) => index % 2 === 0 && row.data()?.source === "upload")) try {
     if (pointer?.schemaVersion === 2) await require("./public-release-media-fence").assertPairMediaFenceInTransaction({ firestore, transaction, selector: pointer });
-    else assertMediaLifecycleDeploymentFence(pointer);
+    else await assertMediaLifecycleFenceInTransaction({ firestore, transaction, pointer });
     uploadedMediaReady = true;
   } catch (error) {
     // Unqualified optional art is absent. A transport failure makes the

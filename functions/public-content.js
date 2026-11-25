@@ -22,9 +22,7 @@ const {
 const {
   assertPublishedAssetProjection,
 } = require("./lib/published-media-safety");
-const {
-  assertMediaLifecycleDeploymentFence,
-} = require("./lib/public-deployment");
+const { assertMediaLifecycleFenceInTransaction } = require("./lib/public-deployment");
 const { readPublicDeploymentPointer } = require("./lib/public-deployment-pointer");
 const {
   acceptsGzip,
@@ -58,7 +56,7 @@ async function readPublicPageProjection({ firestore, pageId, now = new Date() })
       .doc("publicDeployment")
       .get();
     try {
-      assertMediaLifecycleDeploymentFence(readPublicDeploymentPointer(deploymentSnapshot?.data()));
+      await assertMediaLifecycleFenceInTransaction({ firestore, pointer: readPublicDeploymentPointer(deploymentSnapshot?.data()) });
       uploadedMediaReady = true;
     } catch {
       // The per-asset assertion below returns the same public-content refusal

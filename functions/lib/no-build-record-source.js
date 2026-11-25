@@ -1,7 +1,7 @@
 "use strict";
 
 const { pagePublicationTarget } = require("./no-build-page-target");
-const { assertPublicDeploymentPointer, assertMediaLifecycleDeploymentFence } = require("./public-deployment");
+const { assertPublicDeploymentPointer, assertMediaLifecycleFenceInTransaction } = require("./public-deployment");
 const { readPublicContextRevisionInTransaction, publicContextDigest } = require("./public-context-revision");
 const { validateNoBuildRecordSnapshot, recordSnapshotDigest, validRecordId } = require("./no-build-record-contract");
 const { publiclyVisible } = require("./public-video-references");
@@ -38,7 +38,7 @@ async function readRecordMediaInTransaction({ firestore, transaction, assetIds, 
   const uploadedMediaReady = assetIds.some((_id, index) => rows[index * 3].data()?.source === "upload");
   if (uploadedMediaReady) {
     if (pointer.schemaVersion === 2) await require("./public-release-media-fence").assertPairMediaFenceInTransaction({ firestore, transaction, selector: pointer });
-    else assertMediaLifecycleDeploymentFence(pointer);
+    else await assertMediaLifecycleFenceInTransaction({ firestore, transaction, pointer });
   }
   const assets = new Map(assetIds.map((assetId, index) => {
     if (rows[index * 3 + 2].exists) refuse("An image replacement is pending.");
