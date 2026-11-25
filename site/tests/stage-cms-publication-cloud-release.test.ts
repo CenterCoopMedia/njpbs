@@ -488,11 +488,14 @@ it("refuses scratch state inside the source checkout", async () => {
   expect(fakes.assertSourceCheckout).not.toHaveBeenCalled();
 });
 
-it("accepts exact stage, retire and prepare commands", () => {
+it("accepts exact stage, retire, prepare and failed-upload commands", () => {
   expect(parseReleaseArguments(["--apply", queueId, release])).toEqual({ action: "apply", queueId, commitSha: release });
   expect(parseReleaseArguments(["--retire", queueId, release])).toEqual({ action: "retire", queueId, commitSha: release });
   expect(parseReleaseArguments(["--prepare", queueId, release, active])).toEqual({ action: "prepare", queueId, commitSha: release, oldCommitSha: active });
-  for (const args of [["--supersede-upload-exhausted", queueId, release], ["--retry", queueId, release, active],
+  expect(parseReleaseArguments(["--supersede-upload-exhausted", queueId, release])).toEqual({ action: "supersede-upload-exhausted", queueId, commitSha: release, apply: false });
+  expect(parseReleaseArguments(["--supersede-upload-exhausted", queueId, release, "--apply"])).toEqual({ action: "supersede-upload-exhausted", queueId, commitSha: release, apply: true });
+  for (const args of [["--supersede-upload-exhausted", queueId], ["--supersede-upload-exhausted", queueId, release, "--force"],
+    ["--supersede-upload-exhausted", "short", release], ["--supersede-upload-exhausted", queueId, release, "--apply", "extra"], ["--retry", queueId, release, active],
     [], ["--apply", queueId], ["--apply", "short", release], ["--plan", queueId, release],
     ["--retire", queueId, release.toUpperCase()], ["--prepare", queueId, release, release]]) {
     expect(() => parseReleaseArguments(args)).toThrow("Usage");

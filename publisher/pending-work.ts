@@ -386,6 +386,10 @@ export async function readPublicationOwners(documents: string, headers: Record<s
   throw new Error("Cloud owner collection exceeds its page limit");
 }
 
+/** The removed attempt limit left a failed release without a due time. While it
+ * holds the journal it is due, so the release runner can settle it. */
+const parkedRelease = (row: Record<string, any>) => row.status === "failed" && row.nextAttemptAt === null;
+
 export async function readNoBuildPublicationWork(options: {
   account: string; commitSha: string; serializerId: string; target?: PublicationTarget;
 }, request = fetch): Promise<{ needsRuntime: boolean; healthy: boolean; diagnostics: Omit<PublicationHealth, "healthy"> }> {
@@ -434,7 +438,7 @@ export async function readNoBuildPublicationWork(options: {
     const retained = await read(`cmsPublicationSerializerJournals/${options.serializerId}/releases/${journal.job.queueId}`);
     // A release retries with no attempt limit, so the shared bounded retryDue does not apply.
     retainedDue = retained !== null && ["pending", "failed"].includes(retained.status) && Number.isSafeInteger(retained.attempts) &&
-      retained.attempts >= 0 && Number.isFinite(retained.nextAttemptAt) && retained.nextAttemptAt <= Date.now();
+      retained.attempts >= 0 && (Number.isFinite(retained.nextAttemptAt) ? retained.nextAttemptAt <= Date.now() : parkedRelease(retained));
   }
   let work = { maintenance: false, reconcile: false };
   let workUnreadable = false;
@@ -475,7 +479,7 @@ export async function readNoBuildPublicationWork(options: {
   const retainedUnreadable = journal?.job && !journalSettlement && (!retained ||
     retained.runtime?.owner !== "cloudflare" || retained.runtime?.release !== options.commitSha ||
     !["pending", "failed"].includes(retained.status) || !Number.isSafeInteger(retained.attempts) ||
-    retained.attempts < 0 || !(Number.isFinite(retained.nextAttemptAt) && retained.nextAttemptAt >= 0));
+    retained.attempts < 0 || !(Number.isFinite(retained.nextAttemptAt) ? retained.nextAttemptAt >= 0 : parkedRelease(retained)));
   if (retainedUnreadable) { progress.healthy = false; progress.reasons.push("state_unreadable"); }
   if (control.phase !== "ready") progress.reasons.push("runtime_not_ready");
   const previewDue = control.phase === "ready" && "previewContext" in work && work.previewContext === true;

@@ -63,9 +63,15 @@ function operatorError(message: string): never {
 }
 
 type ReleaseArguments = { action: "apply" | "retire"; queueId: string; commitSha: string } |
+  { action: "supersede-upload-exhausted"; queueId: string; commitSha: string; apply: boolean } |
   { action: "prepare"; queueId: string; commitSha: string; oldCommitSha: string };
-const RELEASE_USAGE = "Usage: stage-cms-publication-cloud-release.sh --apply|--retire <operation-id> <commit-sha> OR --prepare <operation-id> <new-commit-sha> <old-commit-sha>";
+const RELEASE_USAGE = "Usage: stage-cms-publication-cloud-release.sh --apply|--retire <operation-id> <commit-sha> OR --prepare <operation-id> <new-commit-sha> <old-commit-sha> OR --supersede-upload-exhausted <operation-id> <commit-sha> [--apply]";
 export function parseReleaseArguments(args: string[]): ReleaseArguments {
+  if (args[0] === "--supersede-upload-exhausted") {
+    if (![3, 4].includes(args.length) || !QUEUE_ID.test(args[1] ?? "") || !COMMIT_SHA.test(args[2] ?? "") ||
+        args.length === 4 && args[3] !== "--apply") operatorError(RELEASE_USAGE);
+    return { action: "supersede-upload-exhausted", queueId: args[1], commitSha: args[2], apply: args.length === 4 };
+  }
   if (args[0] === "--prepare") {
     if (args.length !== 4 || !QUEUE_ID.test(args[1] ?? "") || !COMMIT_SHA.test(args[2] ?? "") ||
         !COMMIT_SHA.test(args[3] ?? "") || args[2] === args[3]) operatorError(RELEASE_USAGE);
@@ -76,6 +82,70 @@ export function parseReleaseArguments(args: string[]): ReleaseArguments {
     operatorError(RELEASE_USAGE);
   }
   return { action: args[0] === "--apply" ? "apply" : "retire", queueId: args[1], commitSha: args[2] };
+}
+
+/** Retire only a failed upload that has no candidate or activation owner.
+ * All fences and both terminal writes share one transaction. A retained journal
+ * is cleared only when its job belongs to this exact request. */
+export async function supersedeUploadExhaustedCloudRelease({ firestore, queueId, commitSha, apply = false, target = PRODUCTION,
+  serverTimestamp = () => firebaseAdminRuntime.FieldValue.serverTimestamp() }: {
+  firestore: Firestore; queueId: string; commitSha: string; apply?: boolean; target?: PublicationTarget; serverTimestamp?: () => unknown;
+}) {
+  const CLOUD_SERIALIZER_ID = target.serializerId;
+  if (!QUEUE_ID.test(queueId ?? "") || !COMMIT_SHA.test(commitSha ?? "") || typeof apply !== "boolean") {
+    operatorError("The cloud release supersede input is invalid");
+  }
+  const buildBatchId = `cms-${queueId}`;
+  const batchRef = firestore.doc(`system/publicDeployment/buildBatches/${buildBatchId}`);
+  const requestRef = firestore.doc(`${cloudReleaseCollection(CLOUD_SERIALIZER_ID)}/${queueId}`);
+  const journalRef = firestore.doc(`cmsPublicationSerializerJournals/${CLOUD_SERIALIZER_ID}`);
+  return firestore.runTransaction(async transaction => {
+    const [requestRow, batchRow, pointerRow, runtimeRow, candidate, queue, journalRow] = await transaction.getAll(
+      requestRef, batchRef, firestore.doc("system/publicDeployment"), firestore.doc("system/cmsPublicationRuntime"),
+      batchRef.collection("candidates").doc("worker"), firestore.doc(`cmsPublishQueue/${queueId}`), journalRef);
+    const request = requestRow.data(), batch = batchRow.data(), pointer = pointerRow.data(), runtime = runtimeRow.data();
+    if (!request || !batch || !pointer || !runtime) operatorError("A required cloud release document is missing");
+    if (request.schemaVersion !== 1 || request.queueId !== queueId || request.buildBatchId !== buildBatchId ||
+        request.runtime?.owner !== "cloudflare" || request.runtime?.release !== commitSha || request.commitSha !== commitSha ||
+        !/^[a-f0-9]{64}$/.test(request.inputSha256 ?? "") || !/^[a-f0-9]{64}$/.test(request.artifactCheckpointDigest ?? "")) {
+      operatorError("The request does not belong to this cloud release");
+    }
+    if (request.status !== "failed" || !Number.isSafeInteger(request.attempts) || request.attempts < 1 ||
+        typeof request.failureReason !== "string" || !request.failureReason.startsWith("candidate upload:")) {
+      operatorError("The request is not a failed candidate upload");
+    }
+    assertPublicDeploymentReservedBatch(batch, buildBatchId);
+    if (batch.runtime?.owner !== "cloudflare" || batch.runtime?.release !== commitSha || batch.commitSha !== commitSha ||
+        batch.noBuildStaticInput !== undefined) operatorError("The reservation does not belong to this cloud release");
+    if (candidate.exists || queue.exists) operatorError("The release already has a candidate or queue row");
+    if (pointer.state !== "idle" || pointer.lease != null || pointer.leaseToken != null ||
+        pointer.activeGeneration !== batch.reservedAgainstGeneration || pointer.activeCommitSha !== batch.reservedAgainstCommitSha ||
+        pointer.activeDeploymentId !== batch.reservedAgainstDeploymentId) operatorError("The public pointer moved from the reservation");
+    if (runtime.phase !== "paused" || runtime.cloud?.phase !== "paused" || runtime.commitSha !== commitSha ||
+        runtime.cloud?.commitSha !== commitSha || runtime.cloud?.serializerId !== CLOUD_SERIALIZER_ID) {
+      operatorError("Both publication phases must be paused at this release");
+    }
+    const journal = journalRow.data();
+    const job = journal?.job;
+    if (journal && (journal.schemaVersion !== 1 || journal.serializerId !== CLOUD_SERIALIZER_ID ||
+        journal.runtime?.owner !== "cloudflare" || (job !== null && (journal.runtime?.release !== commitSha ||
+          job?.queueId !== queueId || job?.buildBatchId !== buildBatchId || job?.commitSha !== commitSha)))) {
+      operatorError("The retained journal does not belong to this request");
+    }
+    // Keep the batch receipt compatible with the active Functions validator:
+    // no public Worker candidate was staged. The request records why it ended.
+    const retirementReceipt = { schemaVersion: 1, reason: "cloud_release_not_staged", originalOwner: "cloudflare",
+      activeGeneration: pointer.activeGeneration, activeCommitSha: pointer.activeCommitSha, activeDeploymentId: pointer.activeDeploymentId };
+    if (apply) {
+      const retiredAt = serverTimestamp();
+      transaction.update(requestRef, { status: "superseded", nextAttemptAt: null, supersededAt: retiredAt,
+        supersessionReceipt: { ...retirementReceipt, reason: "cloud_release_upload_exhausted" } });
+      transaction.update(batchRef, { status: "retired", retiredAt, retirementReceipt });
+      if (job) transaction.update(journalRef, { job: null });
+    }
+    return { queueId, buildBatchId, commitSha, generation: batch.generation, activeGeneration: pointer.activeGeneration,
+      requestStatus: "superseded", batchStatus: "retired", journalCleared: Boolean(job), written: apply, dryRun: !apply };
+  }, apply ? {} : { readOnly: true });
 }
 
 /** The release runner names the target from its run record and always passes
@@ -421,6 +491,11 @@ export async function main(args = process.argv.slice(2), environment: NodeJS.Pro
       { credential: firebaseAdminRuntime.cert(serviceAccount), projectId: target.projectId },
       "cms-publication-cloud-release-operator",
     ));
+    if (parsed.action === "supersede-upload-exhausted") {
+      const result = await supersedeUploadExhaustedCloudRelease({ firestore: initialize(), queueId, commitSha, apply: parsed.apply, target });
+      process.stdout.write(`${JSON.stringify(result)}\n`);
+      return;
+    }
     if (action === "retire") {
       const retired = await retireCmsPublicationCloudReleaseReservation({ firestore: initialize(), queueId, commitSha, target });
       process.stdout.write(`${JSON.stringify(retired)}\n`);

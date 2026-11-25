@@ -541,9 +541,12 @@ it.each(["pending", "failed"])("wakes a retained %s release after its fifth atte
   vi.spyOn(Date, "now").mockReturnValue(1001);
   expect(await readNoBuildPublicationWork(options, request)).toMatchObject({ needsRuntime: true, healthy: true });
   const path = `cmsPublicationSerializerJournals/${SERIALIZER_ID}/releases/${QUEUE_ID}`;
+  // A failed release the removed attempt limit parked is due while it holds the journal.
+  docs[path] = { ...docs[path], status: "failed", attempts: 4, nextAttemptAt: null };
+  expect(await readNoBuildPublicationWork(options, request)).toMatchObject({ needsRuntime: true, healthy: true });
   const valid = { ...docs[path], status: "failed", attempts: 1, nextAttemptAt: 1002 };
   for (const invalid of [null, { ...valid, attempts: "1" }, { runtime: cloudRuntime, status: "failed", attempts: 1 },
-    { ...valid, nextAttemptAt: null }, { ...valid, runtime: { owner: "node-compute", release: COMMIT_SHA } }]) {
+    { ...valid, status: "pending", nextAttemptAt: null }, { ...valid, runtime: { owner: "node-compute", release: COMMIT_SHA } }]) {
     docs[path] = invalid;
     const result = await readNoBuildPublicationWork(options, request);
     expect(result.healthy).toBe(false);

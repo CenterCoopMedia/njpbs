@@ -3,8 +3,9 @@ set -euo pipefail
 umask 077
 
 if ! [[ ( $# -eq 3 && ( $1 == "--apply" || $1 == "--retire" ) ) ||
-        ( $# -eq 4 && $1 == "--prepare" ) ]]; then
-  echo "Usage: stage-cms-publication-cloud-release.sh --apply|--retire <operation-id> <commit-sha> OR --prepare <operation-id> <new-commit-sha> <old-commit-sha>" >&2
+        ( $# -eq 4 && $1 == "--prepare" ) ||
+        ( ( $# -eq 3 || ( $# -eq 4 && ${4:-} == "--apply" ) ) && $1 == "--supersede-upload-exhausted" ) ]]; then
+  echo "Usage: stage-cms-publication-cloud-release.sh --apply|--retire <operation-id> <commit-sha> OR --prepare <operation-id> <new-commit-sha> <old-commit-sha> OR --supersede-upload-exhausted <operation-id> <commit-sha> [--apply]" >&2
   exit 64
 fi
 

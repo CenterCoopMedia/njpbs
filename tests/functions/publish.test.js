@@ -447,6 +447,45 @@ describe("cms publish function", () => {
     expect(await adminLogs()).toHaveLength(1);
   });
 
+  it.each([
+    ["a static redirect target", () => new Response("<html>", { status: 200 }), 1],
+    ["an HTTP error", () => new Response(null, { status: 503, headers: { "x-njpbs-content-source": "cms-runtime", "x-njpbs-source-version": "7" } }), 1],
+    ["no answer", () => { throw Object.assign(new TypeError("fetch failed"), { cause: { code: "ECONNRESET" } }); }, 1],
+    ["a newer version", () => new Response(null, { headers: { "x-njpbs-content-source": "cms-runtime", "x-njpbs-source-version": "8" } }), 1],
+    ["an older version that stays", () => new Response(null, { headers: { "x-njpbs-content-source": "cms-runtime", "x-njpbs-source-version": "6" } }), 2],
+  ])("returns an honest runtime miss for %s without changing the pending fallback", async (_label, answer, reads) => {
+    const contactRef = db.collection("cmsPages").doc("contact");
+    await contactRef.set({
+      status: "published",
+      publishBuildPending: true,
+      publishBuildQueueId: null,
+      published: { sourceVersion: 7 },
+    });
+    const fetchImpl = vi.fn(async () => answer());
+
+    await expect(
+      tryRuntimePublication(
+        {
+          firestore: db,
+          actor: { uid: "u1", email: "u1@x" },
+          changes: [
+            { collection: "cmsPages", id: "contact", sourceVersion: 7 },
+          ],
+        },
+        { fetchImpl },
+      ),
+    ).resolves.toMatchObject({
+      confirmed: false,
+      publicReceipt: { status: "unconfirmed", sourceVersion: 7 },
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(reads);
+    expect((await contactRef.get()).data()).toMatchObject({
+      publishBuildPending: true,
+      publishBuildQueueId: null,
+    });
+    expect(await adminLogs()).toHaveLength(0);
+  });
+
   it("does not probe a surface that is not active in the runtime registry", async () => {
     const fetchImpl = vi.fn();
 
@@ -907,6 +946,48 @@ describe("cms publish function", () => {
     const newer = (await newerRef.get()).data();
     expect(newer.publishBuildPending).toBe(true);
     expect(newer.publishBuildQueueId).toBeUndefined();
+  });
+
+  it("keeps inline reconciliation until the scheduled replacement is enabled", async () => {
+    const now = Date.parse("2026-07-09T16:00:00.000Z");
+    const oneDay = 24 * 60 * 60 * 1000;
+    const staleTriggeredAt = admin.firestore.Timestamp.fromMillis(now - oneDay);
+    const stalePublishingRef = db
+      .collection("cmsPublishQueue")
+      .doc("stale-publishing");
+    const staleContentRef = db.collection("cmsPages").doc("contact");
+
+    await Promise.all([
+      stalePublishingRef.set({
+        status: "publishing",
+        triggeredAt: staleTriggeredAt,
+        completedAt: null,
+        error: null,
+        changes: [
+          { collection: "cmsPages", id: "contact", sourceVersion: 3 },
+        ],
+      }),
+      staleContentRef.set({
+        status: "published",
+        publishBuildPending: true,
+        publishBuildQueueId: "stale-publishing",
+        published: { sourceVersion: 3 },
+      }),
+    ]);
+
+    await expect(publish.assertPublishReady({ firestore: db }, { now: () => now }))
+      .resolves.toMatchObject({ transport: "serializer", reconciledCount: 1 });
+    expect((await stalePublishingRef.get()).data()).toMatchObject({
+      status: "failed",
+      error:
+        "Publish marked failed during reconciliation because no terminal workflow status was recorded within 24 hours.",
+    });
+    expect((await staleContentRef.get()).data()).toMatchObject({
+      status: "published",
+      publishBuildPending: true,
+      publishBuildQueueId: null,
+      published: { sourceVersion: 3 },
+    });
   });
 
   it("refuses dispatch when an admitted legacy snapshot uses an uploaded asset", async () => {

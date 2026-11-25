@@ -55,8 +55,8 @@ afterEach(() => vi.unstubAllEnvs());
 
 const binding = (firestore = db, pair = seeded.old) => scoped.createRehearsalScheduledSourceBinding({ firestore,
   configuration: scoped.CONFIGURATION, runId: "rehearsal-scheduler", pair, source, authorized: true });
-const runner = (firestore: any, sourceBinding: any) => scheduler.createScheduledPublishRunner({
-  firestore, sourceBinding, now: () => dueAt, log: quiet,
+const runner = (firestore: any, sourceBinding: any, reconcile = vi.fn(async () => {})) => scheduler.createScheduledPublishRunner({
+  firestore, sourceBinding, now: () => dueAt, log: quiet, reconcileStaleFn: reconcile,
   assertPublishReadyFn: legacy, assertPublishedMediaSafeFn: legacy, enqueuePublishFn: legacy,
 });
 
@@ -111,9 +111,11 @@ it("rechecks the exact version inside the actual acceptance transaction", async 
     };
     const value = Reflect.get(target, key); return typeof value === "function" ? value.bind(target) : value;
   } });
-  expect((await runner(racing, binding(racing))()).publishedCount).toBe(0);
+  const reconcile = vi.fn(async () => {});
+  expect((await runner(racing, binding(racing), reconcile)()).publishedCount).toBe(0);
   expect((await db.doc(`cmsPosts/${targetId}`).get()).data()).toMatchObject({ status: "scheduled", version: source.version + 1 });
   expect((await db.collection(`${admission.ADMISSIONS}/operations`).get()).empty).toBe(true);
+  expect(reconcile).not.toHaveBeenCalled();
 });
 
 it("pins the original publishAt even when a different due time is observed by the query", async () => {
@@ -136,15 +138,18 @@ it("finds the exact due source beyond a full unrelated global scan without publi
     type: 'post', status: 'scheduled', version: 1, publishAt: '2026-11-03T23:29:00.000Z',
   });
   await batch.commit();
-  expect((await runner(db, binding())()).publishedCount).toBe(1);
+  const reconcile = vi.fn(async () => {});
+  expect((await runner(db, binding(), reconcile)()).publishedCount).toBe(1);
   expect((await db.doc(`cmsPosts/${targetId}`).get()).data()).toMatchObject({ status: 'published', version: source.version + 1 });
   expect((await db.collection('cmsPosts').where('status', '==', 'scheduled').get()).size).toBe(202);
   expect((await db.collection(`${admission.ADMISSIONS}/operations`).get()).size).toBe(1);
-  expect(legacy).not.toHaveBeenCalled();
+  expect(reconcile).not.toHaveBeenCalled(); expect(legacy).not.toHaveBeenCalled();
 });
 
-it("retains the default unbound scan", async () => {
-  const unbound = runner(db, undefined);
+it("retains the default unbound scan and legacy reconciliation behavior", async () => {
+  const reconcile = vi.fn(async () => {});
+  const unbound = runner(db, undefined, reconcile);
   expect((await unbound()).publishedCount).toBe(2);
   expect((await unbound()).publishedCount).toBe(0);
+  expect(reconcile).toHaveBeenCalledOnce();
 });

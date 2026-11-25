@@ -7,7 +7,7 @@ const {
   PUBLIC_SOURCE_VERSION_FIELD,
   addressedPublishChanges,
 } = require("./publish-build-state");
-const { callOutside, waitFor } = require("./release-wait");
+const { waitFor } = require("./release-wait");
 
 const CONTENT_SOURCE = "cms-runtime";
 
@@ -34,25 +34,30 @@ function runtimeCandidate(changes) {
   return surface ? { change, surface } : null;
 }
 
-// Read until the runtime serves this exact source version. A failed read or
-// another version is still pending; the wait has no limit of ours.
-async function waitForExactRuntimeReceipt(candidate, deps = {}) {
+// Read until the runtime serves this exact source version, or an answer shows
+// that it does not. An unconfirmed receipt sends the caller to the durable
+// queue, so every definitive miss ends here: no answer, an HTTP error, an answer
+// without the runtime marker (a redirect or static page), a newer version, or an
+// older version that the next read repeats.
+async function readExactRuntimeReceipt(candidate, deps = {}) {
   const fetchImpl = deps.fetchImpl ?? fetch;
   const nonce = deps.nonce ?? `${Date.now().toString(36)}-${crypto.randomUUID()}`;
-  let attempt = 0;
-  await waitFor(`runtime receipt ${candidate.surface.url}`, async () => {
+  let attempt = 0, older = null;
+  return waitFor(`runtime receipt ${candidate.surface.url}`, async () => {
     const url = new URL(candidate.surface.url);
     url.searchParams.set("cms-receipt", `${nonce}-${attempt}`);
     attempt += 1;
-    const response = await callOutside(`runtime receipt ${url.pathname}`, () =>
-      fetchImpl(url, { credentials: "omit", method: "GET", redirect: "follow" }));
+    let response;
+    try { response = await fetchImpl(url, { credentials: "omit", method: "GET", redirect: "follow" }); }
+    catch { return { done: false }; }
     await response.body?.cancel?.();
-    const source = response.headers.get("x-njpbs-content-source");
     const version = response.headers.get("x-njpbs-source-version");
-    return response.ok && source === CONTENT_SOURCE && version === String(candidate.change.sourceVersion)
-      ? { done: true } : { pending: `${response.status} ${source ?? "-"} ${version ?? "-"}` };
+    if (!response.ok || response.headers.get("x-njpbs-content-source") !== CONTENT_SOURCE) return { done: false };
+    if (version === String(candidate.change.sourceVersion)) return { done: true };
+    if (!/^[1-9][0-9]*$/.test(version ?? "") || Number(version) > candidate.change.sourceVersion || version === older) return { done: false };
+    older = version;
+    return { pending: `source version ${version}` };
   });
-  return true;
 }
 
 async function settleRuntimePublication(
@@ -121,7 +126,7 @@ async function tryRuntimePublication(fields, deps = {}) {
     sourceVersion: candidate.change.sourceVersion,
     status: "unconfirmed",
   };
-  await waitForExactRuntimeReceipt(candidate, deps);
+  if (!(await readExactRuntimeReceipt(candidate, deps))) return { confirmed: false, publicReceipt };
   const settlement = await settleRuntimePublication(
     { ...fields, ...candidate },
     deps,
@@ -145,7 +150,7 @@ async function tryRuntimePublication(fields, deps = {}) {
 module.exports = {
   ACTIVE_RUNTIME_SURFACES,
   runtimeCandidate,
-  waitForExactRuntimeReceipt,
+  readExactRuntimeReceipt,
   settleRuntimePublication,
   tryRuntimePublication,
 };

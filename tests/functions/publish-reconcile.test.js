@@ -9,8 +9,13 @@ import {
   it,
   vi,
 } from "vitest";
+import { Query } from "firebase-admin/firestore";
 import adminPkg from "../helpers/firebase-admin.js";
 import publishReconcile from "../../functions/publish-reconcile.js";
+import reconcileCore from "../../functions/lib/publish-reconcile.js";
+import releaseWait from "../../functions/lib/release-wait.js";
+
+const { platformLimit } = releaseWait;
 
 const {
   HEALTHCHECKS_PUBLISH_RECONCILE,
@@ -18,12 +23,17 @@ const {
   createPublishQueueReconcileRunner,
   onPublishQueueReconcile,
 } = publishReconcile;
+const {
+  STALE_PUBLISH_ERROR,
+  reconcileStalePublishRows,
+} = reconcileCore;
 const admin = adminPkg;
 const PROJECT = "demo-njpbs";
 const FIRESTORE_HOST =
   process.env.FIRESTORE_EMULATOR_HOST || "127.0.0.1:8080";
 const NOW = Date.parse("2026-07-09T16:00:00.000Z");
-const ONE_DAY = 24 * 60 * 60 * 1000;
+// A request cannot outlive the platform limit, so an older row has no live request.
+const REQUEST_LIMIT = platformLimit("cloudFunctionsHttpSeconds") * 1000;
 
 let db;
 
@@ -61,16 +71,71 @@ describe("publish queue reconciliation schedule", () => {
     );
   });
 
-  it("fails no row by age and reports a successful scheduled run", async () => {
-    const oldTriggeredAt = admin.firestore.Timestamp.fromMillis(NOW - 30 * ONE_DAY);
-    const statuses = ["reserved", "pending", "publishing"];
-    const refs = statuses.map(status => db.collection("cmsPublishQueue").doc(`old-${status}`));
-    await Promise.all(refs.map((ref, index) => ref.set({
-      status: statuses[index], triggeredAt: oldTriggeredAt, completedAt: null, error: null })));
-    const contentRef = db.collection("cmsPages").doc("contact");
-    const content = { status: "published", publishBuildPending: true, publishBuildQueueId: "old-publishing",
-      published: { sourceVersion: 3 } };
-    await contentRef.set(content);
+  it("fails stale rows and then reports a successful scheduled run", async () => {
+    const staleTriggeredAt = admin.firestore.Timestamp.fromMillis(NOW - REQUEST_LIMIT);
+    const freshTriggeredAt = admin.firestore.Timestamp.fromMillis(
+      NOW - REQUEST_LIMIT + 1,
+    );
+    const terminalCompletedAt = admin.firestore.Timestamp.fromMillis(
+      NOW - REQUEST_LIMIT + 1000,
+    );
+    const stalePublishingRef = db
+      .collection("cmsPublishQueue")
+      .doc("stale-publishing");
+    const stalePendingRef = db
+      .collection("cmsPublishQueue")
+      .doc("stale-pending");
+    const staleReservedRef = db
+      .collection("cmsPublishQueue")
+      .doc("stale-reserved");
+    const freshPublishingRef = db
+      .collection("cmsPublishQueue")
+      .doc("fresh-publishing");
+    const successRef = db.collection("cmsPublishQueue").doc("success");
+    const staleContentRef = db.collection("cmsPages").doc("contact");
+    const successData = {
+      status: "success",
+      triggeredAt: staleTriggeredAt,
+      completedAt: terminalCompletedAt,
+      gitCommitSha: "success-sha",
+    };
+
+    await Promise.all([
+      stalePublishingRef.set({
+        status: "publishing",
+        triggeredAt: staleTriggeredAt,
+        completedAt: null,
+        error: null,
+        changes: [
+          { collection: "cmsPages", id: "contact", sourceVersion: 3 },
+        ],
+      }),
+      stalePendingRef.set({
+        status: "pending",
+        triggeredAt: staleTriggeredAt,
+        completedAt: null,
+        error: null,
+      }),
+      staleReservedRef.set({
+        status: "reserved",
+        triggeredAt: staleTriggeredAt,
+        completedAt: null,
+        error: null,
+      }),
+      freshPublishingRef.set({
+        status: "publishing",
+        triggeredAt: freshTriggeredAt,
+        completedAt: null,
+        error: null,
+      }),
+      successRef.set(successData),
+      staleContentRef.set({
+        status: "published",
+        publishBuildPending: true,
+        publishBuildQueueId: "stale-publishing",
+        published: { sourceVersion: 3 },
+      }),
+    ]);
 
     const log = { info: vi.fn() };
     const fetchMock = vi.fn(async () => ({ ok: true, status: 200 }));
@@ -82,7 +147,7 @@ describe("publish queue reconciliation schedule", () => {
       fetchImpl: fetchMock,
     });
 
-    await run();
+    await expect(run()).resolves.toEqual({ reconciledCount: 3 });
     expect(fetchMock).toHaveBeenCalledWith(
       "https://hc-ping.com/example-check",
       {
@@ -90,22 +155,179 @@ describe("publish queue reconciliation schedule", () => {
         headers: { "User-Agent": "njpbs-publish-queue-reconcile" },
       },
     );
-    expect(log.info).toHaveBeenCalledWith("publish queue reconcile completed");
-    for (const [index, ref] of refs.entries()) {
-      expect((await ref.get()).data()).toMatchObject({ status: statuses[index], error: null });
-    }
-    expect((await contentRef.get()).data()).toEqual(content);
-    expect((await refs[2].get()).data().status).toBe("publishing");
+    expect(log.info).toHaveBeenCalledWith(
+      "publish queue reconcile completed",
+      { count: 3 },
+    );
+    expect((await stalePublishingRef.get()).data()).toMatchObject({
+      status: "failed",
+      error: STALE_PUBLISH_ERROR,
+    });
+    expect(
+      (await stalePublishingRef.get()).data().completedAt,
+    ).toBeInstanceOf(admin.firestore.Timestamp);
+    expect((await stalePendingRef.get()).data()).toMatchObject({
+      status: "failed",
+      error: STALE_PUBLISH_ERROR,
+    });
+    expect((await staleReservedRef.get()).data()).toMatchObject({
+      status: "failed",
+      error: STALE_PUBLISH_ERROR,
+    });
+    expect((await freshPublishingRef.get()).data().status).toBe("publishing");
+    expect((await successRef.get()).data()).toEqual(successData);
+    expect((await staleContentRef.get()).data()).toMatchObject({
+      status: "published",
+      publishBuildPending: true,
+      publishBuildQueueId: null,
+      published: { sourceVersion: 3 },
+    });
   });
 
-  it("does not report success when the health ping fails", async () => {
+  it("does not report success when reconciliation fails", async () => {
+    const fetchMock = vi.fn();
     const run = createPublishQueueReconcileRunner({
-      firestore: db,
+      reconcileStaleFn: vi.fn(async () => {
+        throw new Error("Firestore unavailable");
+      }),
       getHealthchecksUrl: () => "https://hc-ping.com/example-check",
-      fetchImpl: vi.fn(async () => ({ ok: false, status: 503 })),
-      log: { info: vi.fn(), warn: vi.fn() },
+      fetchImpl: fetchMock,
     });
 
-    await expect(run()).rejects.toThrow("Healthchecks publish reconcile ping failed: 503");
+    await expect(run()).rejects.toThrow("Firestore unavailable");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("returns after one empty query without reading fresh or terminal jobs", async () => {
+    const batch = db.batch();
+    for (let index = 0; index < 150; index++) {
+      batch.set(db.collection("cmsPublishQueue").doc(`fresh-${index}`), {
+        status: ["reserved", "pending", "publishing"][index % 3],
+        triggeredAt: new Date(NOW - REQUEST_LIMIT + 1),
+      });
+    }
+    batch.set(db.collection("cmsPublishQueue").doc("finished"), {
+      status: "success", triggeredAt: new Date(NOW - REQUEST_LIMIT),
+    });
+    batch.set(db.collection("cmsPublishQueue").doc("undated"), { status: "pending" });
+    await batch.commit();
+    const get = vi.spyOn(Query.prototype, "get");
+    const transaction = vi.spyOn(db, "runTransaction");
+
+    expect(await reconcileStalePublishRows({ firestore: db, now: () => NOW })).toBe(0);
+
+    expect(get).toHaveBeenCalledOnce();
+    expect((await get.mock.results[0].value).empty).toBe(true);
+    expect(transaction).not.toHaveBeenCalled();
+  });
+
+  it("accepts the ISO clock passed through lifecycle withdrawal enqueue", async () => {
+    const stale = db.collection("cmsPublishQueue").doc("stale-withdrawal");
+    const fresh = db.collection("cmsPublishQueue").doc("fresh-withdrawal");
+    await Promise.all([
+      stale.set({ status: "pending", triggeredAt: new Date(NOW - REQUEST_LIMIT) }),
+      fresh.set({ status: "pending", triggeredAt: new Date(NOW - REQUEST_LIMIT + 1) }),
+    ]);
+
+    expect(await reconcileStalePublishRows({
+      firestore: db, now: () => new Date(NOW).toISOString(),
+    })).toBe(1);
+
+    expect((await stale.get()).data().status).toBe("failed");
+    expect((await fresh.get()).data().status).toBe("pending");
+  });
+
+  it("pages past durable no-build jobs without starving stale legacy jobs at the same timestamp", async () => {
+    const batch = db.batch();
+    const timestamp = new Date(NOW - REQUEST_LIMIT);
+    const transports = ["post-no-build-v1", "page-no-build-v1", "public-context-no-build-v1"];
+    for (let index = 0; index < 100; index++) {
+      batch.set(db.collection("cmsPublishQueue").doc(`z-durable-${String(index).padStart(3, "0")}`), {
+        status: "pending", triggeredAt: timestamp, transport: transports[index % 3],
+      });
+    }
+    const legacy = ["a-github", "a-serializer", "a-without-transport"];
+    legacy.forEach((id, index) => batch.set(db.collection("cmsPublishQueue").doc(id), {
+      status: ["reserved", "pending", "publishing"][index], triggeredAt: timestamp,
+      ...(index < 2 ? { transport: ["github", "serializer"][index] } : {}),
+    }));
+    await batch.commit();
+    const get = vi.spyOn(Query.prototype, "get");
+
+    expect(await reconcileStalePublishRows({ firestore: db, now: () => NOW })).toBe(3);
+
+    const pages = await Promise.all(get.mock.results.map(result => result.value));
+    expect(pages.map(page => page.size)).toEqual([100, 3]);
+    const rows = await db.collection("cmsPublishQueue").get();
+    expect(rows.docs.filter(row => row.id.startsWith("z-durable-")).every(row => row.data().status === "pending")).toBe(true);
+    expect(legacy.every(id => rows.docs.find(row => row.id === id).data().status === "failed")).toBe(true);
+  });
+
+  it.each([
+    { status: "success" },
+    { status: "pending", transport: "post-no-build-v1" },
+    { status: "pending", transport: "page-no-build-v1" },
+    { status: "pending", transport: "public-context-no-build-v1" },
+  ])("rechecks a candidate that became $status/$transport before failing it", async current => {
+    const ref = db.collection("cmsPublishQueue").doc("already-finished");
+    await ref.set({ status: "publishing", triggeredAt: new Date(NOW - REQUEST_LIMIT) });
+    const runTransaction = db.runTransaction.bind(db);
+    vi.spyOn(db, "runTransaction").mockImplementationOnce(async (...args) => {
+      await ref.update(current);
+      return runTransaction(...args);
+    });
+
+    await expect(
+      reconcileStalePublishRows({ firestore: db, now: () => NOW }),
+    ).resolves.toBe(0);
+    expect((await ref.get()).data()).toMatchObject(current);
+    expect((await ref.get()).data().error).toBeUndefined();
+  });
+
+  const orphan = { status: "publishing", transport: "serializer", triggeredAt: new Date(NOW - REQUEST_LIMIT), completedAt: null, error: null,
+    changes: [{ collection: "cmsPages", id: "contact", sourceVersion: 3 }] };
+  const content = { status: "published", publishBuildPending: true, publishBuildQueueId: "row", published: { sourceVersion: 3 } };
+  const batch = { status: "reserved", buildBatchId: "cms-row" };
+  const reconcileRow = async (documents, environment) => {
+    await db.doc("cmsPublishQueue/row").set(orphan);
+    await db.doc("cmsPages/contact").set(content);
+    for (const [path, value] of Object.entries(documents)) await db.doc(path).set(value);
+    if (environment) vi.stubEnv("CMS_DEPLOYMENT_ENVIRONMENT", environment);
+    try { return await reconcileStalePublishRows({ firestore: db, now: () => NOW }); } finally { vi.unstubAllEnvs(); }
+  };
+
+  it.each([
+    ["no batch", {}],
+    ["a reserved batch without a candidate", { "system/publicDeployment/buildBatches/cms-row": batch }],
+    ["a batch that already ended", { "system/publicDeployment/buildBatches/cms-row": { ...batch, status: "failed" } }],
+    ["a serializer journal for another row", { "cmsPublicationSerializerJournals/cloudflare-publisher": { job: { queueId: "other" } } }],
+    ["a github transport in production", { "cmsPublishQueue/row": { ...orphan, transport: "github" } }],
+    ["no transport", { "cmsPublishQueue/row": { ...orphan, transport: null } }],
+  ])("recovers an orphaned row with %s and its content marker together", async (_label, documents) => {
+    expect(await reconcileRow(documents)).toBe(1);
+    expect((await db.doc("cmsPublishQueue/row").get()).data()).toMatchObject({ status: "failed", error: STALE_PUBLISH_ERROR });
+    expect((await db.doc("cmsPages/contact").get()).data()).toMatchObject({ publishBuildPending: true, publishBuildQueueId: null });
+    const ended = (await db.doc("system/publicDeployment/buildBatches/cms-row").get()).data()?.status;
+    expect([undefined, "retired", "failed"]).toContain(ended);
+  });
+
+  it.each([
+    ["its serializer journal", { "cmsPublicationSerializerJournals/cloudflare-publisher": { job: { queueId: "row" } } }],
+    ["an uploaded candidate", { "system/publicDeployment/buildBatches/cms-row": batch,
+      "system/publicDeployment/buildBatches/cms-row/candidates/worker": { schemaVersion: 1 } }],
+    ...["ready", "deploying", "reconciling"].map(status => [`a ${status} batch`, { "system/publicDeployment/buildBatches/cms-row": { ...batch, status } }]),
+    ["the activating deployment", { "system/publicDeployment": { candidateBuildBatchId: "cms-row" } }],
+    ["a transport with its own owner", { "cmsPublishQueue/row": { ...orphan, transport: "library-card-no-build-v1" } }],
+    ["its development workflow run", { "cmsPublishQueue/row": { ...orphan, transport: "github" } }, "development"],
+  ])("leaves a row that %s still owns", async (_label, documents, environment) => {
+    expect(await reconcileRow(documents, environment)).toBe(0);
+    expect((await db.doc("cmsPublishQueue/row").get()).data()).toMatchObject({ status: "publishing", error: null });
+    expect((await db.doc("cmsPages/contact").get()).data()).toEqual(content);
+  });
+
+  it("lets a source baseline proceed once the orphan is recovered", async () => {
+    await reconcileRow({});
+    const active = await db.collection("cmsPublishQueue").where("status", "in", reconcileCore.NON_TERMINAL_STATUSES).get();
+    expect(active.empty).toBe(true);
   });
 });

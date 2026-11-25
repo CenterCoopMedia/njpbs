@@ -4,6 +4,9 @@ const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { defineSecret } = require("firebase-functions/params");
 const logger = require("firebase-functions/logger");
 const { db } = require("./lib/firebase");
+const {
+  reconcileStalePublishRows,
+} = require("./lib/publish-reconcile");
 
 const { routePurgeSecretNames, retryPostRoutePurges } = require("./lib/post-route-purge");
 
@@ -31,22 +34,25 @@ async function pingHealthchecks({ url, fetchImpl = fetch }) {
 function createPublishQueueReconcileRunner(deps = {}) {
   const {
     firestore = db,
+    reconcileStaleFn = reconcileStalePublishRows,
     now = () => Date.now(),
     log = logger,
     getHealthchecksUrl = () => HEALTHCHECKS_PUBLISH_RECONCILE.value(),
     fetchImpl = fetch,
   } = deps;
 
-  // Nothing here fails a publish by its age. The run pings its health check
-  // and retries Post route purges.
   return async () => {
+    const reconciledCount = await reconcileStaleFn({ firestore, now });
     await pingHealthchecks({
       url: getHealthchecksUrl(),
       fetchImpl,
     });
-    log.info("publish queue reconcile completed");
+    log.info("publish queue reconcile completed", {
+      count: reconciledCount,
+    });
     try { await retryPostRoutePurges({ firestore, now, log, ...deps.routePurge }); }
     catch { log.warn("Post route purge retry unavailable", { code: "purge_retry_unavailable" }); }
+    return { reconciledCount };
   };
 }
 
