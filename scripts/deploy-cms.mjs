@@ -211,6 +211,44 @@ const steps = {
     }
     if (faults.length) throw new Error(faults.join("; "));
   },
+  // Prints only; never stops a deploy. A missing line here is a Function that gets no events,
+  // a secret its Function cannot read, or staff requests that answer 401.
+  async notes() {
+    const { GoogleAuth } = require("google-auth-library");
+    const auth = new GoogleAuth({ scopes: ["https://www.googleapis.com/auth/cloud-platform"] });
+    const call = async (url, method = "GET", data) => (await (await auth.getClient()).request({ url, method, data })).data;
+    const note = (name, work) => work().then(text => console.log(`${name}: ${text}`), error => console.log(`${name}: not read, ${error.message.slice(0, 300)}`));
+    await note("Event receivers and secret accessors", async () => {
+      const bound = (policy, role, account) => (policy.bindings ?? []).some(b => b.role === role && !b.condition && b.members?.includes(`serviceAccount:${account}`));
+      const policy = await call(`https://cloudresourcemanager.googleapis.com/v1/projects/${project}:getIamPolicy`, "POST", {});
+      const receivers = new Set(), secrets = new Map(), missing = [];
+      for (let page = ""; page !== undefined;) {
+        const list = await call(`https://cloudfunctions.googleapis.com/v2/projects/${project}/locations/us-central1/functions?pageSize=200${page && `&pageToken=${page}`}`);
+        for (const { eventTrigger, serviceConfig } of list.functions ?? []) {
+          if (eventTrigger?.serviceAccountEmail) receivers.add(eventTrigger.serviceAccountEmail);
+          for (const { secret } of serviceConfig?.secretEnvironmentVariables ?? []) {
+            if (!secrets.has(secret)) secrets.set(secret, new Set());
+            secrets.get(secret).add(serviceConfig.serviceAccountEmail);
+          }
+        }
+        page = list.nextPageToken || undefined;
+      }
+      for (const account of receivers) if (!bound(policy, "roles/eventarc.eventReceiver", account)) missing.push(`eventReceiver for ${account}`);
+      for (const [secret, accounts] of secrets) {
+        const own = await call(`https://secretmanager.googleapis.com/v1/projects/${project}/secrets/${secret}:getIamPolicy`);
+        for (const account of accounts) {
+          if (![own, policy].some(p => bound(p, "roles/secretmanager.secretAccessor", account))) missing.push(`secretAccessor on ${secret} for ${account}`);
+        }
+      }
+      return missing.length ? `MISSING ${missing.join("; ")}` : `${receivers.size} receivers and ${secrets.size} secrets bound`;
+    });
+    await note("App Check key", async () => {
+      const id = env.VITE_FIREBASE_APP_ID ?? "", number = /^1:(\d+):web:/.exec(id)?.[1];
+      if (!number || !env.VITE_FIREBASE_APPCHECK_SITE_KEY) return "MISSING: the build has no app id or no site key";
+      const { siteKey } = await call(`https://firebaseappcheck.googleapis.com/v1/projects/${number}/apps/${id}/recaptchaEnterpriseConfig`);
+      return siteKey === env.VITE_FIREBASE_APPCHECK_SITE_KEY ? "registered key matches the build" : "DIFFERS from the registered key";
+    });
+  },
 };
 
 // A step whose failure can follow from an earlier one; it still runs.

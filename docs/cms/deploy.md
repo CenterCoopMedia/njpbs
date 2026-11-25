@@ -20,6 +20,7 @@ failed steps and the provider's error, and exits 1 when the list is not empty.
 | admin-build, admin-deploy | Builds the Admin and uploads it to Pages |
 | admin-shell | Production: opens the Admin sign-in page through Access |
 | smoke | Function boundaries, then one signed-in private preview in Chrome |
+| notes | Prints missing event receivers and secret accessors, and an App Check key that differs. Never fails the run |
 
 Inputs are environment variables: `CMS_DEPLOYMENT_VARIABLES_JSON` (the GitHub variables as one object),
 `FIREBASE_SERVICE_ACCOUNT`, `CLOUDFLARE_API_TOKEN`, `CMS_EDGE_ORIGIN_SECRET`, `CMS_PREVIEW_R2_CREDENTIAL`,
