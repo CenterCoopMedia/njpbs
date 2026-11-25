@@ -911,6 +911,7 @@
         "VITEST_SHARD_ARGS",
         "WORKERS_CI",
         "WORKERS_CI_BRANCH",
+        "WRANGLER_SEND_METRICS",
         "XDG_RUNTIME_DIR"
       ]
     },

@@ -339,6 +339,7 @@ export function classifyPath(value) {
     path === "config/functions-deployment.json" ||
     path === "config/functions-deployment.development.json" ||
     path === "scripts/lib/cms-target.mjs" ||
+    path === "scripts/lib/cms-development-settings.mjs" ||
     path === "scripts/configure-cms-functions.mjs" ||
     path === "scripts/lib/functions-configuration.mjs" ||
     path === "scripts/lib/functions-secret-versions.mjs" ||

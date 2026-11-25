@@ -1,7 +1,10 @@
 import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
-import { assertDevelopmentWorkerConfig, cmsTarget, isDevelopmentHostname, isDevelopmentName } from "../../scripts/lib/cms-target.mjs";
+import { assertDevelopmentPagesConfig, assertDevelopmentWorkerConfig, cmsTarget, isDevelopmentHostname, isDevelopmentName } from "../../scripts/lib/cms-target.mjs";
+import { assertDevelopmentSettings } from "../../scripts/lib/cms-development-settings.mjs";
 import { configurationInputs, runtimeParameters } from "../../scripts/lib/functions-configuration.mjs";
 
 const read = path => JSON.parse(readFileSync(new URL(`../../${path}`, import.meta.url), "utf8"));
@@ -37,6 +40,42 @@ describe("CMS deploy target", () => {
   });
 });
 
+describe("development deploy settings", () => {
+  const settings = {
+    ...devEnv, CLOUDFLARE_DEV_PUBLIC_WORKER: "njpbs-dev-public", CMS_DEV_MEDIA_BUCKET: "njpbs-dev-media", CMS_DEV_PREVIEW_BUCKET: "njpbs-dev-cms-previews",
+    CMS_DEV_PREVIEW_ORIGIN: "https://dev-preview.njpbs.org", CMS_DEV_PREVIEW_STAFF_WORKER: "njpbs-dev-preview-staff-sites",
+    CMS_DEV_PREVIEW_WORKER: "njpbs-dev-cms-preview", CMS_DEV_SITE_PAGES: "njpbs-dev", CMS_DEV_STUDIO_BUCKET: "njpbs-dev-media-master",
+    VITE_FIREBASE_API_KEY: "dev-key", FIREBASE_DEV_WEB_API_KEY: "dev-key", VITE_FIREBASE_APP_ID: "1:2:web:a", CMS_DEV_FIREBASE_WEB_APP_ID: "1:2:web:a",
+    VITE_FIREBASE_APPCHECK_SITE_KEY: "dev-site-key", FIREBASE_DEV_APPCHECK_SITE_KEY: "dev-site-key",
+    CMS_PREVIEW_SMOKE_TARGET: JSON.stringify({ editor: "/content/post/abc/edit", heading: "A post" }),
+  };
+
+  it("admits development values and lists every fault of a production one", () => {
+    expect(() => assertDevelopmentSettings(settings, settings)).not.toThrow();
+    const production = { VITE_FIREBASE_API_KEY: "production-key", VITE_FIREBASE_APP_ID: "1:1:web:a", VITE_FIREBASE_APPCHECK_SITE_KEY: "production-site-key",
+      CMS_DEV_STUDIO_BUCKET: "njpbs-media-master", CMS_DEV_PREVIEW_BUCKET: "njpbs-cms-previews", CMS_DEV_PREVIEW_ORIGIN: "https://preview.njpbs.org",
+      CMS_PREVIEW_SMOKE_TARGET: JSON.stringify({ editor: "https://admin.njpbs.org/content/post/abc/edit", heading: "A post" }) };
+    const switches = { AUTHOR_PAGES_LIVE: "true", VITE_VIDEO_REPLACEMENT_ENABLED: "true" };
+    const faults = name => { try { assertDevelopmentSettings({ ...settings, ...production, ...switches, ...name }, settings); } catch (error) { return error.message; } };
+    for (const name of Object.keys({ ...production, ...switches })) expect(faults()).toContain(`- ${name} must`);
+    expect(faults().split("\n- ")).toHaveLength(10);
+    expect(faults()).not.toMatch(/production-|njpbs-media-master|preview\.njpbs/);
+  });
+
+  it.each(["FIREBASE_DEV_WEB_API_KEY", "FIREBASE_DEV_APPCHECK_SITE_KEY", "CMS_DEV_FIREBASE_WEB_APP_ID"])("refuses a deploy without %s", name => {
+    expect(() => assertDevelopmentSettings({ ...settings, [name]: undefined }, settings)).toThrow(name);
+  });
+
+  it("stops the deploy before its first step", () => {
+    const root = fileURLToPath(new URL("../../", import.meta.url));
+    const run = spawnSync(process.execPath, ["scripts/deploy-cms.mjs", "development"], { cwd: root, encoding: "utf8",
+      env: { PATH: process.env.PATH, CMS_DEPLOYMENT_VARIABLES_JSON: JSON.stringify({ ...settings, VITE_FIREBASE_API_KEY: "other", CMS_DEV_STUDIO_BUCKET: "njpbs" }) } });
+    expect(run.status).not.toBe(0);
+    expect(run.stderr).toMatch(/CMS_DEV_STUDIO_BUCKET must[^]*VITE_FIREBASE_API_KEY must/);
+    expect(run.stdout).not.toContain("START");
+  });
+});
+
 describe("development Cloudflare writes", () => {
   const api = { name: "template-dev-cms-api", hostnames: ["dev-api.example.org"] };
   it("admits the committed dev CMS API config and refuses the production one", () => {
@@ -54,6 +93,27 @@ describe("development Cloudflare writes", () => {
     ["a workers.dev route", config => ({ ...config, workers_dev: true })],
   ])("refuses a dev CMS API config with %s", (_label, change) => {
     expect(() => assertDevelopmentWorkerConfig(change(read("cms-api/wrangler.dev.jsonc")), api)).toThrow(/production resource/);
+  });
+
+  const pages = { adminPages: "template-dev-admin", cmsApiWorker: "template-dev-cms-api" };
+  it("admits the committed dev Admin Pages config and refuses the production one", () => {
+    const production = JSON.parse(readFileSync(new URL("../../admin/wrangler.jsonc", import.meta.url), "utf8").replace(/^\s*\/\/.*$/gm, ""));
+    expect(production.services[0].service).toBe("njpbs-cms-api");
+    expect(() => assertDevelopmentPagesConfig(read("admin/wrangler.dev.jsonc"), pages)).not.toThrow();
+    expect(() => assertDevelopmentPagesConfig(production, pages)).toThrow(/production resource/);
+    expect(() => assertDevelopmentPagesConfig(production, { adminPages: "njpbs-admin", cmsApiWorker: "njpbs-cms-api" })).toThrow(/production resource/);
+  });
+
+  it.each([
+    ["the production CMS API", config => ({ ...config, services: [{ ...config.services[0], service: "njpbs-cms-api" }] })],
+    ["a second service", config => ({ ...config, services: [...config.services, { binding: "OTHER", service: "njpbs-production", entrypoint: "default" }] })],
+    ["no service", config => ({ ...config, services: [] })],
+    ["the production guide bucket", config => ({ ...config, r2_buckets: [{ binding: "GUIDE_VIDEOS", bucket_name: "njpbs-admin-guide" }] })],
+    ["a production database", config => ({ ...config, d1_databases: [{ binding: "DB", database_id: "production" }] })],
+    ["production settings", config => ({ ...config, env: { production: { services: [{ binding: "STAFF_ACCESS", service: "njpbs-cms-api" }] } } })],
+    ["the production project", config => ({ ...config, name: "njpbs-admin" })],
+  ])("refuses a dev Admin Pages config with %s", (_label, change) => {
+    expect(() => assertDevelopmentPagesConfig(change(read("admin/wrangler.dev.jsonc")), pages)).toThrow(/production resource/);
   });
 
   it("purges only dev media hostnames for a development target", async () => {

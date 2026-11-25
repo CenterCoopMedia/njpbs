@@ -300,6 +300,15 @@ describe("authoritative Post edge cache", () => {
     expect(h.entries.size).toBe(1);
   });
 
+  // scripts/deploy-cms.mjs refuses a CMS whose types the site does not know for this reason.
+  it.each([true, false])("answers 503 for a Post with a block type this Worker does not know (visible %s)", async visible => {
+    const h = authoritativeHarness();
+    const published = structuredClone(fixture) as { document: { published: { blocks: unknown[] } } };
+    published.document.published.blocks.push({ id: "newer", type: "newer_block", order: 99, visible, data: {} });
+    h.setReply({ kind: "post", receipt: h.receipt, published });
+    expect((await h.request())!.status).toBe(503);
+  });
+
   it("checks authority after both a cache hit and a late cache fill", async () => {
     for (const hit of [true, false]) {
       const h = authoritativeHarness();
