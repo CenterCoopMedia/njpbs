@@ -41,7 +41,7 @@ import { FUNCTION_RUNTIME_VARIABLES, CMS_RELEASE_SECRET_NAMES, RUNTIME_PARAMETER
 
 export function deploymentVariablesFingerprint(raw) {
   let values;
-  try { values = JSON.parse(raw); } catch { throw new ComponentReceiptError("Deployment variables are invalid"); }
+  try { values = JSON.parse(raw); } catch (error) { throw new ComponentReceiptError(`Deployment variables are invalid (${error.name})`); }
   if (!values || typeof values !== "object" || Array.isArray(values)
     || Object.values(values).some(value => typeof value !== "string")) throw new ComponentReceiptError("Deployment variables are invalid");
   return configurationFingerprint({ variables: JSON.stringify(Object.fromEntries(

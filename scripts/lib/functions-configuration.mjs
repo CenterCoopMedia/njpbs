@@ -91,7 +91,7 @@ export function configurationInputs(env) {
     variables = env.CMS_DEPLOYMENT_VARIABLES_JSON ? JSON.parse(env.CMS_DEPLOYMENT_VARIABLES_JSON) : {};
     if (!variables || Array.isArray(variables) || typeof variables !== "object" ||
         Object.values(variables).some(value => typeof value !== "string")) throw new Error();
-  } catch { configurationFailure("Deployment variables are invalid"); }
+  } catch (error) { configurationFailure(`Deployment variables are invalid (${error.name})`); }
   const development = cmsTarget(env).environment === "development" ? developmentInputs(env, variables) : null;
   // Process/GitHub environments contain unrelated keys. Only native bindings
   // named by this table enter the strict configuration object.
@@ -145,10 +145,10 @@ export function runtimeParameters(input, discovery = {}, target = cmsTarget()) {
     if (!map || Array.isArray(map) || !entries.length || entries.length > 20 || entries.some(([id, uid]) =>
       !/^-?[0-9]{1,20}$/.test(id) || typeof uid !== "string" || !uid || uid.length > 1500 || uid.includes("/"))) throw new Error();
     adminMap = JSON.stringify(map).replaceAll("'", "\\u0027");
-  } catch { configurationFailure("Invalid Functions configuration: CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP"); }
+  } catch (error) { configurationFailure(`Invalid Functions configuration: CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP (${error.name})`); }
   let titles;
   try { titles = studioTitleFilesParameter(values.VITE_CMS_STUDIO_CONFIGURATION, values.VITE_LIVE_PRODUCTION_ENABLED); }
-  catch { configurationFailure("Studio preset configuration is unavailable"); }
+  catch (error) { configurationFailure(`Studio preset configuration is unavailable (${error.name})`); }
   if (Object.keys(discovery).some(key => RUNTIME_PARAMETERS[key]?.format !== "discovery") ||
       Object.values(discovery).some(value => typeof value !== "string" || /[\r\n\0]/.test(value))) configurationFailure("Invalid discovery parameters");
   return Object.fromEntries(Object.entries(RUNTIME_PARAMETERS).filter(([, row]) => row.group !== "instant" || instant).map(([key, row]) => {

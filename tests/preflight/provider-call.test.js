@@ -3,7 +3,7 @@ import { request as httpRequest } from "node:http";
 import { fileURLToPath } from "node:url";
 import { inspect } from "node:util";
 import { describe, expect, it, vi } from "vitest";
-import { ABSENT_EXIT, CALLER_REFUSED, failureText, faultCause, faultLine, httpFault, main, permanentFailure, providerCall, providerCallSync, providerGcloud, providerJson } from "../../scripts/lib/provider-call.mjs";
+import { ABSENT_EXIT, CALLER_REFUSED, failureText, faultCause, faultKind, faultLine, httpFault, main, permanentFailure, providerCall, providerCallSync, providerGcloud, providerJson } from "../../scripts/lib/provider-call.mjs";
 
 const options = () => ({ wait: vi.fn().mockResolvedValue(), log: vi.fn() });
 const http = (status, headers = {}) => httpFault(new Response(null, { status, headers }));
@@ -175,6 +175,12 @@ describe("provider call rule", () => {
     const sdk = Object.assign(new Error("private"), { code: "ECONNRESET", config: { headers: { authorization: "private" } } });
     const child = Object.assign(new Error("Command failed: tool private"), { status: 2, stdout: "private", stderr: "" });
     expect([parse(), sdk, child, http(503)].map(faultLine)).toEqual(["SyntaxError", "ECONNRESET", "exit 2", "HTTP 503"]);
+  });
+
+  it("names only the category of a fault whose message can quote private input", () => {
+    const faults = [http(503), Object.assign(new Error("private"), { code: "ENOENT" }), Object.assign(new Error("private"), { code: 7 }),
+      Object.assign(new Error("private"), { status: 2, stderr: "private" }), new TypeError("private"), new (class ReferencedRecordError extends Error {})("private")];
+    expect(faults.map(faultKind)).toEqual(["HTTP 503", "ENOENT", "code 7", "exit 2", "TypeError", "Error"]);
   });
 
   it("carries a caught error's message, code and cause into the replacing error", () => {
