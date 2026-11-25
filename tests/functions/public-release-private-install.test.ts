@@ -93,7 +93,7 @@ it.each([2])("checks exact private Worker metadata after %s stale reads", async 
   for (const effect of ["create", "upload", "disableSubdomain", "deploy"]) {
     expect(provider[effect].mock.calls.filter(([name]: [string]) => name === worker)).toHaveLength(1);
   }
-}, 120_000);
+}, 60_000);
 it.each(["source", "public-route"])("refuses mismatched provider readback: %s", async kind => {
   if (kind === "version") provider.version.mockImplementation(async (name: string) => ({ ...records.get(name).version, id: "00000000-0000-4000-8000-999999999999" }));
   if (["binding", "asset-bucket"].includes(kind)) provider.version.mockImplementation(async (name: string) => {

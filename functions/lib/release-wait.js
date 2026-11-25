@@ -90,7 +90,7 @@ async function callOutside(what, request, { signal, pacing = "default" } = {}) {
   if (!Object.hasOwn(PACING, pacing)) throw new Error(`Unknown pacing ${pacing}`);
   const { first, longest } = PACING[pacing];
   const start = Date.now();
-  let attempts = 0, lastProblem = null, wait = first;
+  let attempts = 0, lastProblem = null, wait = first, floor = 0;
   const stop = everyMinute(what, start, () => ({ attempts, lastProblem }));
   try {
     while (true) {
@@ -105,9 +105,11 @@ async function callOutside(what, request, { signal, pacing = "default" } = {}) {
           throw error;
         }
         lastProblem = describe(error?.cause?.code ?? error?.message);
+        floor = Number.isFinite(error?.retryAfterMs) ? error.retryAfterMs : 0;
       }
       journal({ event: "retry", what, attempts, problem: lastProblem });
-      await pause(wait, signal);
+      // The service can name its own earliest next try.
+      await pause(Math.max(wait, floor), signal);
       wait = Math.min(wait * 2, longest);
     }
   } finally { stop(); }

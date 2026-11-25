@@ -144,7 +144,7 @@ export async function enableOldPublicReleaseIngress({ firestore, packet: raw, re
   }
   await guard(); await ledger.bindAttempt(packet.operationId, id.planDigest);
   const step = (action, callbacks) => ledger.once({ attemptId: packet.operationId, worker: id.worker, planDigest: id.planDigest, action, ...callbacks });
-  const workerStep = (action, effect, observe) => step(action, workerReadbackAfterWrite(effect, observe));
+  const workerStep = (action, effect, observe) => step(action, workerReadbackAfterWrite(effect, observe, signal));
   await guard();
   const version = await workerStep("enable-upload", () => provider.upload(name, privateWorkerMetadata(config, id.tag), source, signal), uploaded);
   await guard();

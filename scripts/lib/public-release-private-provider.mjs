@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import protocol from "../../functions/lib/public-release-pair.js";
-import { requireWorkerReadback, waitForWorkerReadback } from "./cloudflare-worker-readback.mjs";
+import { requireImmutableReadback, requireWorkerReadback, waitForWorkerReadback, WorkerWriteRefused } from "./cloudflare-worker-readback.mjs";
 const hash = bytes => createHash("sha256").update(bytes).digest("hex");
 const refuse = () => { throw new Error("Private pair provider operation was refused"); };
 export class PrivateProviderNotSent extends Error {
@@ -36,7 +36,15 @@ export function cloudflarePrivatePairProvider({ accountId, credential, fetcher =
       headers: { authorization: `Bearer ${token}`, ...(body && !(body instanceof FormData) ? { "content-type": "application/json" } : {}) },
       redirect: "error", signal }); } catch { refuse(); }
     if (missing && response.status === 404) { await response.body?.cancel(); return null; }
-    if (!response.ok) { await response.body?.cancel().catch(() => {}); refuse(); }
+    if (!response.ok) {
+      await response.body?.cancel().catch(() => {});
+      // A final answer to a write says that it did not land. Any other failed
+      // write stays uncertain.
+      if (method !== "GET" && response.status >= 400 && response.status < 500 && ![408, 425, 429].includes(response.status)) {
+        throw new WorkerWriteRefused(`Cloudflare refused a private Worker write (HTTP ${response.status})`);
+      }
+      refuse();
+    }
     if (raw) return response;
     const envelope = await response.json().catch(refuse);
     if (envelope?.success !== true || !Object.hasOwn(envelope, "result")) refuse();
@@ -115,18 +123,18 @@ export function cloudflarePrivatePairProvider({ accountId, credential, fetcher =
 
 export function checkPrivateWorkerVersion(version, metadata, versionId) {
   requireWorkerReadback(version?.id === versionId, "Worker versionId");
-  requireWorkerReadback(version.annotations?.["workers/message"] === metadata.annotations["workers/message"], "Worker version annotation");
+  requireImmutableReadback(version.annotations?.["workers/message"] === metadata.annotations["workers/message"], "Worker version annotation");
   const bindings = version.resources?.bindings;
-  requireWorkerReadback(Array.isArray(bindings) && bindings.every(binding => typeof binding?.name === "string"), "Worker version bindings");
+  requireImmutableReadback(Array.isArray(bindings) && bindings.every(binding => typeof binding?.name === "string"), "Worker version bindings");
   const normalized = bindings.map(binding => {
     const value = { ...binding };
     if (value.type === "service" && value.environment === "production") delete value.environment;
     return value;
   }).sort((a, b) => a.name.localeCompare(b.name, "en"));
-  requireWorkerReadback(protocol.publicReleaseDigest(normalized) === protocol.publicReleaseDigest(metadata.bindings), "Worker version bindings");
-  requireWorkerReadback(version.resources?.script_runtime?.compatibility_date === metadata.compatibility_date, "Worker compatibility_date");
+  requireImmutableReadback(protocol.publicReleaseDigest(normalized) === protocol.publicReleaseDigest(metadata.bindings), "Worker version bindings");
+  requireImmutableReadback(version.resources?.script_runtime?.compatibility_date === metadata.compatibility_date, "Worker compatibility_date");
   const flags = version.resources?.script_runtime?.compatibility_flags;
-  requireWorkerReadback(Array.isArray(flags) && protocol.publicReleaseDigest(flags) ===
+  requireImmutableReadback(Array.isArray(flags) && protocol.publicReleaseDigest(flags) ===
     protocol.publicReleaseDigest(metadata.compatibility_flags), "Worker compatibility_flags");
 }
 
@@ -160,7 +168,7 @@ export async function installPrivateWorker({ ledger, provider, attemptId, config
   if (dryRun) return { dryRun, attemptId, worker: config.name, planDigest, sourceDigest, metadata };
   const step = (action, effect, observe) => {
     signal?.throwIfAborted(); // Known pre-cancellation must not reserve a send.
-    return ledger.once({ attemptId, worker: config.name, planDigest, action, ...workerReadbackAfterWrite(effect, observe) });
+    return ledger.once({ attemptId, worker: config.name, planDigest, action, ...workerReadbackAfterWrite(effect, observe, signal) });
   };
   const checkWorker = async (response) => {
     const row = await provider.worker(config.name, signal);

@@ -8,6 +8,7 @@ import { pipeline } from "node:stream/promises";
 import { Readable, Transform } from "node:stream";
 import { setTimeout as sleep } from "node:timers/promises";
 import { pathToFileURL } from "node:url";
+import { isDeepStrictEqual } from "node:util";
 import { parseBrowserCredential } from "./cms-debug-browser.mjs";
 import postLeadMedia from "../functions/lib/post-lead-media.js";
 import releaseWait from "../functions/lib/release-wait.js";
@@ -136,22 +137,39 @@ export function createCmsClient({ fetchImpl, credential, apiKey, baseUrl = DEFAU
     session = { idToken, refreshToken, expiresAt: now() + expiresIn * 1000 };
     return idToken;
   }
-  return async function call(endpoint, body, headers = {}) {
+  // `landed` reads a write back after a lost reply: true when exactly this write
+  // is stored, false when the record is still the one it was made for.
+  return async function call(endpoint, body, headers = {}, { landed } = {}) {
     const rateClass = CMS_ENDPOINTS.get(endpoint);
     if (!rateClass) throw new Error("endpoint_not_allowed");
     const isRead = rateClass === "read";
+    let uncertain = false;
     return callOutside(`cms ${endpoint}`, async () => {
+      if (uncertain) {
+        const stored = await landed();
+        if (stored === true) return { confirmedByRead: true };
+        if (stored !== false) throw new Error("write_uncertain");
+        uncertain = false;
+      }
       const authorization = `Bearer ${await token()}`;
       if (isRead) {
         const remaining = Math.min(CMS_READ_INTERVAL_MS, nextReadAt - now());
         if (remaining > 0) await wait(remaining);
         nextReadAt = now() + CMS_READ_INTERVAL_MS;
       }
-      const response = await fetchImpl(`${baseUrl.replace(/\/$/, "")}/${endpoint}`, {
-        method: "POST", headers: { "Content-Type": "application/json", Authorization: authorization, ...headers },
-        body: JSON.stringify(body),
-      });
-      if (response.ok) return response.json();
+      let response, reply;
+      try {
+        response = await fetchImpl(`${baseUrl.replace(/\/$/, "")}/${endpoint}`, {
+          method: "POST", headers: { "Content-Type": "application/json", Authorization: authorization, ...headers },
+          body: JSON.stringify(body),
+        });
+        if (response.ok) reply = await response.json();
+      } catch (error) {
+        uncertain = !isRead;
+        if (uncertain && !landed) throw new Error("write_uncertain");
+        throw error;
+      }
+      if (response.ok) return reply;
       const error = new CmsHttpError(endpoint, response, now());
       await response.body?.cancel().catch(() => {});
       // A throttled read, or a write the gateway rejected by scope before it reached the Function, is asked again.
@@ -310,7 +328,11 @@ export async function runSweep({ apply = false, maxCalls = 120, call, model = cl
         const metadata = { altText: reply.alt, altTextGenerated: true };
         if (empty(asset.description) && reply.description) metadata.description = reply.description;
         if (apply) {
-          try { await call("cmsUpdateMediaMetadata", { assetId: asset.id, metadata }, { "If-Match": asset.etag }); }
+          try { await call("cmsUpdateMediaMetadata", { assetId: asset.id, metadata }, { "If-Match": asset.etag }, { landed: async () => {
+            const row = (await call("cmsListMedia", { assetIds: [asset.id] })).records?.find(record => record.id === asset.id);
+            if (row?.etag === asset.etag) return false;
+            return row && Object.entries(metadata).every(([key, value]) => row[key] === value) ? true : undefined;
+          } }); }
           catch (error) {
             if (error.status === 412) { report.skipped.push({ assetId: asset.id, reason: "etag_conflict" }); continue; }
             throw error;
@@ -392,7 +414,12 @@ export async function runSweep({ apply = false, maxCalls = 120, call, model = cl
             else if (use.path.startsWith("leadMedia.")) overlay.leadMedia = document.leadMedia;
             else overlay[use.altKey] = use.alt;
           }
-          try { await call("cmsSaveContent", { collection: item.collection, id: item.id, baseVersion: document.version, document: overlay }); }
+          try { await call("cmsSaveContent", { collection: item.collection, id: item.id, baseVersion: document.version, document: overlay }, {}, { landed: async () => {
+            const current = (await call("cmsGetContent", { collection: item.collection, id: item.id })).document;
+            if (current?.version === document.version) return false;
+            return current?.version === document.version + 1 &&
+              Object.entries(overlay).every(([key, value]) => isDeepStrictEqual(current[key], value)) ? true : undefined;
+          } }); }
           catch (error) {
             if (error.status === 409) { report.skipped.push({ collection: item.collection, id: item.id, reason: "version_conflict" }); continue; }
             throw error;

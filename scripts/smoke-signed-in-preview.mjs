@@ -62,6 +62,7 @@ export async function checkSignedInPreview(browser, { admin, preview, credential
   let phase = "admin_unavailable";
   let popup;
   let watchTab;
+  let closed;
   const saw = {};
   try {
     const context = await browser.newContext({ serviceWorkers: "block", acceptDownloads: false });
@@ -73,16 +74,22 @@ export async function checkSignedInPreview(browser, { admin, preview, credential
     if (entry?.status() !== 200 || new URL(page.url()).origin !== admin) throw new Error();
 
     phase = "staff_sign_in_failed";
-    await submitCmsSignIn(page, async () => credential, () => page
-      .getByRole("button", { name: /^Account menu for / }).waitFor({ state: "visible" }));
+    // The sign-in wait ends on the Account menu, or on the sign-in service's refusal.
+    const refusedSignIn = endedBy(page, "response", reply => reply.request().method() === "POST" &&
+      /\/accounts:signInWithPassword$/.test(new URL(reply.url()).pathname) && reply.status() >= 400);
+    await submitCmsSignIn(page, async () => credential, () => Promise.race([refusedSignIn, page
+      .getByRole("button", { name: /^Account menu for / }).waitFor({ state: "visible" })]));
     if (new URL(page.url()).origin !== admin) throw new Error();
 
     phase = "editor_unavailable";
     const editorUrl = `${admin}${editor}`;
+    // A refused content read leaves the editor without a Preview button.
+    const refusedContent = endedBy(page, "response", reply => reply.request().method() === "POST" &&
+      /\/cmsGetContent$/.test(new URL(reply.url()).pathname) && reply.status() >= 400);
     await page.goto(editorUrl, { waitUntil: "domcontentloaded" });
     if (page.url() !== editorUrl) throw new Error();
     const button = page.getByRole("button", { name: "Preview", exact: true });
-    await button.waitFor({ state: "visible" });
+    await Promise.race([refusedContent, button.waitFor({ state: "visible" })]);
 
     phase = "private_preview_unavailable";
     const session = `${preview}/__cms-session`;
@@ -104,6 +111,8 @@ export async function checkSignedInPreview(browser, { admin, preview, credential
     const [, , document] = await Promise.all([
       context.waitForEvent("page").then(value => {
         popup = value; saw.popup = true;
+        closed = endedBy(value, "close", () => true);
+        closed.catch(() => stop(new PreviewSmokeFailure("preview_tab_closed")));
         watchTab = watchAdminStop(value, () => stop(new PreviewSmokeFailure("preview_admin_stopped")));
         return value;
       }),
@@ -124,8 +133,10 @@ export async function checkSignedInPreview(browser, { admin, preview, credential
     ]);
     phase = "preview_heading_missing";
     if (document.frame() !== popup.mainFrame()) throw new Error();
-    await popup.waitForURL(url => url.href === document.url());
-    await popup.getByRole("heading", { name: heading, exact: true }).first().waitFor({ state: "visible" });
+    await Promise.race([closed, popup.waitForURL(url => url.href === document.url())]);
+    // The private preview is a complete document, so once it has loaded the heading is there or it is not.
+    await Promise.race([closed, popup.waitForLoadState("load")]);
+    if (!await popup.getByRole("heading", { name: heading, exact: true }).first().isVisible()) throw new Error();
     return { ok: true, code: "signed_in_private_preview" };
   } catch (error) {
     const code = error instanceof PreviewSmokeFailure ? error.message : phase;
@@ -136,6 +147,15 @@ export async function checkSignedInPreview(browser, { admin, preview, credential
   } finally {
     watchTab?.abort();
   }
+}
+
+// Rejects when the page or tab reports an end that no later event can change.
+function endedBy(source, event, ends) {
+  const ended = new Promise((_, reject) => {
+    source.on(event, value => { if (ends(value)) reject(new Error(event)); });
+  });
+  ended.catch(() => {});
+  return ended;
 }
 
 const jobStatuses = new Set(["pending", "building", "ready", "failed", "expired"]);
@@ -196,6 +216,7 @@ const settledStates = new Set(["refresh-failed", "error", "session-slow", "updat
 // tab to leave about:blank or for Admin to show a terminal progress state.
 async function describePopup(popup, origins) {
   if (!popup) return null;
+  if (popup.isClosed()) return { place: "closed", progress: null };
   return waitFor("preview tab settled", async () => {
     const where = place(popup.url(), origins);
     const state = where !== "about:blank" ? null : await readProgress(popup);

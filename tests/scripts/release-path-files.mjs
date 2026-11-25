@@ -49,8 +49,9 @@ function npmScriptCommands(prefix, name) {
 // Repository paths named by a workflow, shell script or npm script command.
 function namedPaths(text, prefix = "") {
   const found = [];
-  const pathPattern = /(?:^|[\s"'=/])((?:\.github\/scripts|scripts|functions|publisher|deploy|ops)\/[\w./-]+\.(?:mjs|cjs|js|ts|mts|sh))/g;
-  for (const [, path] of text.matchAll(pathPattern)) found.push(join(prefix, path));
+  const pathPattern = /(?:^|[\s"'=/])((?:site\/)?(?:\.github\/scripts|scripts|functions|publisher|deploy|ops)\/[\w./-]+\.(?:mjs|cjs|js|ts|mts|sh))/g;
+  // A command can name a site script from the root or from inside site/.
+  for (const [, path] of text.matchAll(pathPattern)) found.push(join(prefix, path), join("site", path));
   for (const [, runPrefix = "", name] of text.matchAll(/npm\s+(?:--prefix\s+([\w./-]+)\s+)?run\s+([\w:.-]+)/g)) {
     for (const script of npmScriptCommands(runPrefix || prefix, name)) found.push(...namedPaths(script.command, script.prefix));
   }

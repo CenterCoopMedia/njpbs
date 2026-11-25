@@ -2,7 +2,9 @@
 // HTTP status probes for release-path shell steps, through the one wait module.
 //   answer <what> <curl args...>          print the first HTTP status the URL answers
 //   until <what> <status> <curl args...>  wait until the URL answers that status
-// A request with no answer is asked again; any HTTP status is an answer.
+// A request with no answer is asked again; any HTTP status is an answer. A
+// success where a refusal is expected is an open endpoint, which no later read
+// can excuse, so it ends the wait.
 import { execFile } from "node:child_process";
 import releaseWait from "../functions/lib/release-wait.js";
 
@@ -27,7 +29,9 @@ if (mode === "answer" && what && rest.length) {
   const [expected, ...args] = rest;
   await waitFor(what, async () => {
     const status = await callOutside(what, () => curlStatus(args));
-    return status === expected ? { done: status } : { pending: `HTTP ${status}` };
+    if (status === expected) return { done: status };
+    if (expected.startsWith("4") && status.startsWith("2")) return { failed: new Error(`${what} answered HTTP ${status}, expected ${expected}`) };
+    return { pending: `HTTP ${status}` };
   });
 } else {
   console.error("Usage: release-wait-status.mjs answer <what> <curl args...> | until <what> <status> <curl args...>");

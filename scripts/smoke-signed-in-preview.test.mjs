@@ -48,7 +48,7 @@ test("adds Access headers on one origin and refuses to forward them on redirects
 });
 
 function fixtureBrowser(settings, { sessionStatus = 204, documentStatus = 200, headingVisible = true,
-  sessionFailure, noDocument = false, progress = "building", later, job } = {}) {
+  sessionFailure, signInStatus, contentStatus, popupClosed, noDocument = false, progress = "building", later, job } = {}) {
   const context = new EventEmitter();
   const page = new EventEmitter();
   const frame = {};
@@ -63,7 +63,9 @@ function fixtureBrowser(settings, { sessionStatus = 204, documentStatus = 200, h
     emitter.on(event, receive);
   });
   let popupUrl = "about:blank";
-  const popup = {
+  const popup = Object.assign(new EventEmitter(), {
+    isClosed: () => Boolean(popupClosed),
+    async waitForLoadState(state) { assert.equal(state, "load"); },
     mainFrame: () => frame,
     url: () => popupUrl,
     locator(selector) {
@@ -74,9 +76,9 @@ function fixtureBrowser(settings, { sessionStatus = 204, documentStatus = 200, h
     getByRole(role, options) {
       assert.equal(role, "heading");
       assert.deepEqual(options, { name: settings.heading, exact: true });
-      return { first: () => ({ async waitFor() { if (!headingVisible) throw new Error("fixture heading missing"); } }) };
+      return { first: () => ({ isVisible: async () => headingVisible }) };
     },
-  };
+  });
   const response = (url, status, method, navigation) => ({
     url: () => url, status: () => status, frame: () => frame,
     request: () => ({ url: () => url, method: () => method, isNavigationRequest: () => navigation, resourceType: () => navigation ? "document" : "fetch" }),
@@ -86,12 +88,19 @@ function fixtureBrowser(settings, { sessionStatus = 204, documentStatus = 200, h
   let password = "";
   Object.assign(page, {
     url: () => location,
-    async goto(url) { location = url; return { status: () => 200 }; },
+    async goto(url) {
+      location = url;
+      if (contentStatus && url.endsWith(settings.editor)) page.emit("response", response("https://dev-cms-api.example.test/cmsGetContent", contentStatus, "POST", false));
+      return { status: () => 200 };
+    },
     setDefaultTimeout() {},
     waitForResponse: predicate => wait(page, "response", predicate),
     locator: selector => selector === "body"
       ? { async ariaSnapshot() { assert.equal(password, ""); } }
-      : { getByRole: () => ({ async click() { assert.equal(password, credential.password); } }) },
+      : { getByRole: () => ({ async click() {
+        assert.equal(password, credential.password);
+        if (signInStatus) page.emit("response", response("https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword", signInStatus, "POST", false));
+      } }) },
     getByLabel: label => label === "Email" ? { async fill() {} } : {
       async waitFor() {},
       async elementHandle() {
@@ -99,11 +108,12 @@ function fixtureBrowser(settings, { sessionStatus = 204, documentStatus = 200, h
       },
     },
     getByRole: (_role, { name }) => ({
-      async waitFor() {},
+      waitFor: () => signInStatus || contentStatus && name === "Preview" ? new Promise(() => {}) : Promise.resolve(),
       async click() {
         assert.equal(name, "Preview");
         assert.equal(password, "");
         context.emit("page", popup);
+        if (popupClosed) { setImmediate(() => popup.emit("close", popup)); return; }
         if (sessionFailure) page.emit("requestfailed", { url: () => staffSession, method: () => "POST", failure: () => ({ errorText: sessionFailure }) });
         else page.emit("response", response(staffSession, sessionStatus, "POST", false));
         // Admin can move the tab after the smoke has already seen a refused session.
@@ -123,6 +133,15 @@ function fixtureBrowser(settings, { sessionStatus = 204, documentStatus = 200, h
     waitForEvent: (event, options) => wait(context, event, options?.predicate) });
   return { newContext: async () => context };
 }
+
+test("ends on a refused sign-in, a refused content read and a closed preview tab", async () => {
+  const settings = previewSmokeSettings("production", env);
+  assert.deepEqual(await checkSignedInPreview(fixtureBrowser(settings, { signInStatus: 400 }), settings), { ok: false, code: "staff_sign_in_failed" });
+  assert.deepEqual(await checkSignedInPreview(fixtureBrowser(settings, { contentStatus: 403 }), settings), { ok: false, code: "editor_unavailable" });
+  const closed = await checkSignedInPreview(fixtureBrowser(settings, { popupClosed: true }), settings);
+  assert.equal(closed.code, "preview_tab_closed");
+  assert.deepEqual(closed.popup, { place: "closed", progress: null });
+});
 
 test("requires staff session, first private document response and fixture heading", async () => {
   const settings = previewSmokeSettings("production", env);

@@ -62,7 +62,13 @@ const httpStatus = error => [error?.response?.status, error?.$metadata?.httpStat
 /** The thrown form of an HTTP answer the caller did not accept. */
 export const httpFault = response => Object.assign(new Error(`HTTP ${response.status}`), { response });
 
+// A child that never started (missing or unexecutable program, argument list
+// too long) is a fault of this machine, and a repeat meets it again. A busy
+// machine (EAGAIN, ENOMEM, EMFILE) can start it later.
+const localStartFault = error => error?.syscall?.startsWith?.("spawn") && !["EAGAIN", "ENOMEM", "EMFILE", "ENFILE"].includes(error.code);
+
 export function permanentFault(error) {
+  if (localStartFault(error)) return "local";
   const status = httpStatus(error);
   // A rate limit can come as 403 with the time to try again.
   if (status !== undefined) return permanentStatus(status) && !retryAfterMs(error) ? "request" : null;
@@ -93,7 +99,9 @@ function faultLine(error) {
 function retryAfterMs(error) {
   const headers = error?.response?.headers;
   const value = typeof headers?.get === "function" ? headers.get("retry-after") : headers?.["retry-after"];
-  return /^[1-9]\d{0,5}$/.test(value ?? "") ? Number(value) * 1_000 : 0;
+  if (/^[1-9]\d{0,5}$/.test(value ?? "")) return Number(value) * 1_000;
+  const date = /^[A-Za-z]{3},/.test(value ?? "") ? Date.parse(value) : NaN;
+  return Number.isFinite(date) ? Math.max(0, date - Date.now()) : 0;
 }
 
 /** Answers the wait before the next attempt, or reports the final failure and throws it. */
@@ -128,7 +136,8 @@ export async function providerCall(label, call, { readBack, permanent = permanen
     catch (error) {
       const kind = error?.name === "AbortError" ? "cancelled" : permanent(error);
       // The wait's minute line names the check and the provider's last answer.
-      if (!kind) throw Object.assign(new Error(`check=${label} got=${faultLine(error)} want=success`), { retry: true });
+      if (!kind) throw Object.assign(new Error(`check=${label} got=${faultLine(error)} want=success`),
+        { retry: true, retryAfterMs: retryAfterMs(error) });
       const landed = await readBack?.();
       if (landed !== undefined) return { value: landed };
       log(`Provider call failed: ${label}, class ${kind}, attempt ${attempt}, last provider line: ${faultLine(error)}`);
@@ -188,7 +197,7 @@ export function main([label, separator, command, ...args], launch = runCommand, 
     const result = await launch(command, args);
     process.stderr.write(result.stderr ?? "");
     if (result.error || result.status !== 0) {
-      throw Object.assign(new Error(`${command} did not succeed`), { code: result.error?.code, stdout: result.stdout, stderr: result.stderr });
+      throw Object.assign(new Error(`${command} did not succeed`), { code: result.error?.code, syscall: result.error?.syscall, stdout: result.stdout, stderr: result.stderr });
     }
     return result.stdout;
   }, { permanent: permanentGcloudFault, ...options });

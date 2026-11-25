@@ -200,6 +200,20 @@ it('accepts documented provider string ids and proves exact terminal failure thr
   expect(await http.waitForDeployment(id, request)).toMatchObject({ outcome: 'failed', proof: { deploymentId: id } });
   expect(calls.every(row => row.method === 'GET')).toBe(true);
 });
+it.each(['canceled', 'skipped'])('ends on an exact %s deployment through GET only', async status => {
+  const http = transport(async () => answer(deployment({ latest_stage: { name: 'deploy', status, ended_on: '2026-10-29T02:00:00.123456Z' } })));
+  expect(await http.waitForDeployment(newId, request)).toMatchObject({ outcome: 'failed', proof: { deploymentId: newId } });
+  expect(calls.every(row => row.method === 'GET')).toBe(true);
+});
+it('asks again after a transient status read and keeps its one POST', async () => {
+  let reads = 0;
+  const http = transport(async (_url, options) => options.method === 'POST' ? answer({ id: newId })
+    : ++reads === 1 ? new Response(null, { status: 503 }) : answer(deployment()));
+  const id = await http.createDeployment(request);
+  expect(await http.waitForDeployment(id, request)).toMatchObject({ outcome: 'uploaded' });
+  expect(reads).toBe(2);
+  expect(calls.filter(row => row.method === 'POST')).toHaveLength(1);
+});
 it.each(['empty', 'duplicate', 'truncated', 'wrong-source', 'count-mismatch'])('keeps %s recovery uncertain without a deployment write', async kind => {
   const http = transport(async () => new Response(JSON.stringify({ success: true,
     result: kind === 'empty' ? [] : kind === 'duplicate' ? [deployment(), deployment()] : [deployment(kind === 'wrong-source'

@@ -245,14 +245,16 @@ async function releaseDevPreviewGateways({ env = process.env, fetchImpl = fetch,
       throw new WorkerReadbackMismatch('deployment tuple', { versionId: expectedVersionId },
         { versionId: UUID.test(version?.id ?? '') ? version.id : null });
     }
+    // This exact version cannot change, so a wrong field in it is final.
+    const immutable = (...mismatch) => Object.assign(new WorkerReadbackMismatch(...mismatch), { immutable: true });
     const tag = version.annotations?.['workers/tag'];
-    if (tag !== sourceSha) throw new WorkerReadbackMismatch('source tag', sourceSha, SHA.test(tag ?? '') ? tag : null);
+    if (tag !== sourceSha) throw immutable('source tag', sourceSha, SHA.test(tag ?? '') ? tag : null);
     const bindings = version.resources?.bindings;
     try { verifyBindings(bindings, worker, audience); }
     catch {
-      if (worker !== PRIVATE) throw new WorkerReadbackMismatch('staff bindings', 'exact configured tuple', 'different tuple');
+      if (worker !== PRIVATE) throw immutable('staff bindings', 'exact configured tuple', 'different tuple');
       const binding = Array.isArray(bindings) ? bindings[0] : null;
-      throw new WorkerReadbackMismatch('R2 binding', { count: 1, name: 'PREVIEWS', type: 'r2_bucket', expectedBucket: true },
+      throw immutable('R2 binding', { count: 1, name: 'PREVIEWS', type: 'r2_bucket', expectedBucket: true },
         { count: Array.isArray(bindings) ? bindings.length : null, name: binding?.name === 'PREVIEWS' ? 'PREVIEWS' : null,
           type: binding?.type === 'r2_bucket' ? 'r2_bucket' : null, expectedBucket: binding?.bucket_name === 'template-dev-cms-previews' });
     }

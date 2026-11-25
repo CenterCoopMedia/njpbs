@@ -1,6 +1,6 @@
 import { repositoryMatches } from "./lib/repository-identity.mjs";
 import { devAccessOrigin } from "./lib/deployment-settings.mjs";
-import { waitForWorkerReadback, WorkerReadbackMismatch, wranglerVersion } from './lib/cloudflare-worker-readback.mjs';
+import { requireActiveVersion, requireImmutableReadback, waitForWorkerReadback, WorkerReadbackMismatch, wranglerVersion } from './lib/cloudflare-worker-readback.mjs';
 import { spawnSync } from 'node:child_process';
 import { appendFileSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
@@ -192,7 +192,7 @@ export async function verifyGuardedRouteTarget({ api, routePath, routeId, owner,
   return routes;
 }
 
-export async function run({ env = process.env, fetchImpl = fetch, spawn = spawnSync } = {}) {
+export async function run({ env = process.env, fetchImpl = fetch, spawn = spawnSync, signal = undefined } = {}) {
   devAccessOrigin(env);
   requireState(env.GITHUB_REF === 'refs/heads/main' && env.GITHUB_EVENT_NAME === 'workflow_dispatch' &&
     repositoryMatches(env.GITHUB_REPOSITORY, env) && /^[a-f0-9]{40}$/.test(env.GITHUB_SHA ?? ''),
@@ -310,22 +310,15 @@ export async function run({ env = process.env, fetchImpl = fetch, spawn = spawnS
   async function verifyVersion() {
     const read = endpoint => api(`${workerPath}/${endpoint}`);
     const deployments = await read('deployments');
-    const versions = deployments.deployments?.[0]?.versions;
-    if (!Array.isArray(versions) || versions.length !== 1 || versions[0]?.version_id !== versionId || versions[0].percentage !== 100) {
-      throw new WorkerReadbackMismatch('Expected the staged version at 100 percent traffic', versionId,
-        { count: Array.isArray(versions) ? versions.length : null,
-          versionId: UUID.test(versions?.[0]?.version_id ?? '') ? versions[0].version_id : null,
-          percentage: Number.isFinite(versions?.[0]?.percentage) ? versions[0].percentage : null });
-    }
+    requireActiveVersion(deployments.deployments, versionId, 'Expected the staged version at 100 percent traffic');
     const version = await read(`versions/${versionId}`);
-    if (version?.id !== versionId || version.annotations?.['workers/message'] !== `dev-staff-gateway:${env.GITHUB_SHA}`) {
-      throw new WorkerReadbackMismatch('Staged gateway version does not match this reviewed source', env.GITHUB_SHA, 'different identity');
-    }
+    if (version?.id !== versionId) throw new WorkerReadbackMismatch('Staged gateway version does not match this reviewed source', versionId, 'missing');
+    requireImmutableReadback(version.annotations?.['workers/message'] === `dev-staff-gateway:${env.GITHUB_SHA}`,
+      'Staged gateway version does not match this reviewed source');
+    const exactBindings = bindings => { try { verifyBindings(bindings, audience); return true; } catch { return false; } };
+    requireImmutableReadback(exactBindings(version.resources?.bindings), 'Gateway bindings must be exact dev-only bindings');
     const settings = await read('settings');
-    try {
-      verifyBindings(version.resources?.bindings, audience);
-      verifyBindings(settings?.bindings, audience);
-    } catch {
+    if (!exactBindings(settings?.bindings)) {
       throw new WorkerReadbackMismatch('Gateway bindings must be exact dev-only bindings', 'configured tuple', 'different tuple');
     }
     const subdomain = await read('subdomain');
@@ -335,7 +328,7 @@ export async function run({ env = process.env, fetchImpl = fetch, spawn = spawnS
           previewsEnabled: typeof subdomain?.previews_enabled === 'boolean' ? subdomain.previews_enabled : null });
     }
   }
-  await waitForWorkerReadback(verifyVersion);
+  await waitForWorkerReadback(verifyVersion, { signal });
   const before = await api(routePath);
   requireState(routeSnapshot(before) === initialSnapshot, 'Routes changed during verification; stop and reconcile');
   const route = devRoute(before, initialOwner);

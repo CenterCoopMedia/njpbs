@@ -13,7 +13,7 @@ import { parseArgs } from 'node:util';
 import { ACTOR, canonical, validateManifest } from './seed-dev-published.mjs';
 
 const ADMIN = 'https://dev-admin.example.org';
-const API = 'https://dev-cms-api.example.org';
+const API = 'https://dev-api.example.org';
 const SETTINGS_TRANSPORT = 'public-context-no-build-v1';
 // The transport each publish must report: the owner that writes its owner row.
 const CONTENT_TRANSPORT = { page: 'page-no-build-v1', post: 'post-no-build-v1',

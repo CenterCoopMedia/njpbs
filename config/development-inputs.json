@@ -85,6 +85,7 @@
       "kind": "origin",
       "placeholder": "https://dev-admin.example.org",
       "files": [
+        "scripts/publish-dev-seed.mjs",
         "scripts/lib/cms-public-contract.mjs",
         "admin/src/lib/staff-site-read.ts",
         "admin/tests/staff-site-read.test.ts",
@@ -148,6 +149,7 @@
       "kind": "origin",
       "placeholder": "https://dev-api.example.org",
       "files": [
+        "scripts/publish-dev-seed.mjs",
         "admin/src/lib/functions.ts",
         "admin/src/lib/versioned-reader-client.ts",
         "cms-api/src/index.ts",

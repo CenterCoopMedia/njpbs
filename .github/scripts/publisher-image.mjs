@@ -4,6 +4,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { requireReleaseSource } from "./require-release-source.mjs";
+import { httpFault, providerCall } from "../../scripts/lib/provider-call.mjs";
 import { requireMainCi } from "./require-main-ci.mjs";
 import { repositoryMatches, workflowMatches } from "../../scripts/lib/repository-identity.mjs";
 import { deploymentInputFingerprint, productionDeploymentInputs, readDeploymentManifest } from "../../scripts/render-development-config.mjs";
@@ -51,7 +52,17 @@ export async function verifySource({ sha, cwd = process.cwd(), env = process.env
 
 // Wrangler's managed-registry API issues a short-lived pull credential. Keep it
 // in memory; response bodies and authorization headers never enter logs/files.
-export async function registryReader(account, token, imageName, request = fetch) {
+export async function registryReader(account, token, imageName, send = fetch) {
+  // A registry read that failed at the provider is asked again. Every other
+  // answer, a missing tag among them, belongs to the caller.
+  const request = (url, options) => providerCall("registry read", async () => {
+    const answer = await send(url, options);
+    if (answer.status >= 500 || [408, 425, 429].includes(answer.status)) {
+      await answer.body?.cancel?.();
+      throw httpFault(answer);
+    }
+    return answer;
+  });
   const response = await request(`https://api.cloudflare.com/client/v4/accounts/${account}/containers/registries/registry.cloudflare.com/credentials`, {
     method: "POST", redirect: "error",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },

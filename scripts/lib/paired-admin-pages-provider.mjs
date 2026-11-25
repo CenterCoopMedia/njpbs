@@ -6,7 +6,7 @@ import { listPages } from '../deploy-cms-function-batches.mjs';
 import { pairedAdminArtifactContents } from './paired-admin-pages-artifact.mjs';
 import { ADMIN_PROVIDER_OPERATIONS, createPairedAdminOperationJournal, refuseAdminProvider, isAdminProviderId } from './paired-admin-provider-operation.mjs';
 import releaseWait from '../../functions/lib/release-wait.js';
-const { waitFor } = releaseWait;
+const { callOutside, waitFor } = releaseWait;
 
 const api = createRequire(import.meta.url)('../../functions/lib/cms-preview-pair.js');
 const HEX = /^[a-f0-9]{64}$/;
@@ -58,20 +58,32 @@ export function createPairedAdminPagesHttp({ target, prepared, readCloudflareTok
   const targetDigest = api.digest(target);
   const base = `/accounts/${target.accountId}/pages/projects/${names.pagesProject}`;
   const requestSignal = other => AbortSignal.any([...(signal ? [signal] : []), ...(other ? [other] : [])]);
-  async function json(url, { method = 'GET', body, authorization, requestHeaders = {}, requestSignal: other, onDispatch } = {}) {
+  // A read that failed at Cloudflare is asked again. A write is sent once; its
+  // journal reconciles an uncertain one.
+  async function json(url, options = {}) {
+    const stop = requestSignal(options.requestSignal);
     try {
-      const stop = requestSignal(other);
+      return (options.method ?? 'GET') === 'GET'
+        ? await callOutside('Admin Pages read', () => request(url, options, stop), { signal: stop }) : await request(url, options, stop);
+    } catch { refuseAdminProvider('provider-http-unavailable'); }
+  }
+  async function request(url, { method = 'GET', body, authorization, requestHeaders = {}, onDispatch }, stop) {
       const credential = authorization ?? await boundaryValue(readCloudflareToken, stop);
       if (!token(credential)) refuseAdminProvider('credential-unavailable');
       stop.throwIfAborted();
       onDispatch?.();
       const response = await fetchImpl(url, { method, body, headers: { ...requestHeaders, authorization: `Bearer ${credential}` },
         redirect: 'error', cache: 'no-store', signal: stop });
-      if (!response.ok) { await response.body?.cancel(); refuseAdminProvider('provider-http-refused'); }
+      if (!response.ok) {
+        await response.body?.cancel();
+        if (response.status >= 500 || [408, 425, 429].includes(response.status)) {
+          throw Object.assign(new Error(`Admin Pages answered ${response.status}`), { retry: true });
+        }
+        refuseAdminProvider('provider-http-refused');
+      }
       const value = JSON.parse((await bounded(response, 8 * 1024 * 1024)).toString('utf8'));
       if (value.success === false || Array.isArray(value.errors) && value.errors.length) refuseAdminProvider('provider-http-refused');
       return value;
-    } catch { refuseAdminProvider('provider-http-unavailable'); }
   }
   const pages = (path = '', options) => json(`https://api.cloudflare.com/client/v4${base}${path}`, options);
   function project(value) {
@@ -144,7 +156,8 @@ export function createPairedAdminPagesHttp({ target, prepared, readCloudflareTok
           if (stage.name === 'deploy' && stage.status === 'success') {
             return { done: { outcome: 'uploaded', proof: { deploymentId: id, providerReceiptDigest: receipt(row, prepared) } } };
           }
-          if (stage.status === 'failure' && typeof stage.ended_on === 'string' && Number.isFinite(Date.parse(stage.ended_on))) {
+          // A canceled or skipped stage ends the deployment as a failed one does.
+          if (['failure', 'canceled', 'skipped'].includes(stage.status) && typeof stage.ended_on === 'string' && Number.isFinite(Date.parse(stage.ended_on))) {
             return { done: { outcome: 'failed', proof: { deploymentId: id, providerReceiptDigest: api.digest({ targetDigest,
               deploymentId: id, sourceSha: row.sourceSha, manifestDigest: prepared.manifestDigest,
               stage: { name: stage.name, status: stage.status, endedOn: stage.ended_on } }) } } };

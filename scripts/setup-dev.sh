@@ -65,9 +65,18 @@ admission_read() { "$JAWN_OPS" njpbs release admission --target development; }
 functions_provision() { CMS_TARGET=development node scripts/component-runner.mjs functions provision-config; }
 functions_verify() { CMS_TARGET=development node scripts/component-runner.mjs functions verify-config; }
 grants_check() { node scripts/check-dev-setup.mjs 3< <(pass show "$DEV_PUBLISHER_KEY_ENTRY"); }
+# The check exits 0 for an installed publisher and for one that still needs its
+# deploy, so the result decides. Its secret names include ACTIVATION_TOKEN.
 publisher_check() {
-  node scripts/install-dev-publisher.mjs --sha "$PUBLISHER_SHA" --image-run "$PUBLISHER_IMAGE_RUN" --check \
-    3< <(pass show "$DEV_OPERATOR_CREDENTIAL_ENTRY") 5< <(pass show "$DEV_CLOUDFLARE_READ_ENTRY")
+  local result
+  result="$(node scripts/install-dev-publisher.mjs --sha "$PUBLISHER_SHA" --image-run "$PUBLISHER_IMAGE_RUN" --check \
+    3< <(pass show "$DEV_OPERATOR_CREDENTIAL_ENTRY") 5< <(pass show "$DEV_CLOUDFLARE_READ_ENTRY"))" || return
+  printf '%s\n' "$result"
+  jq -e --arg sha "$PUBLISHER_SHA" '.check == true and .source_sha == $sha and .deploy_needed == false and
+    .live.commit == $sha and (.live.version | type) == "string"' <<<"$result" >/dev/null || {
+    echo "setup-dev: the publisher does not run this commit and image on one version; run install-dev-publisher.mjs first" >&2
+    return 1
+  }
 }
 # Every read an activation makes before its lease, with the activation's own development assertions.
 activation_read() {

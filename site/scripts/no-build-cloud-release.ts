@@ -93,7 +93,7 @@ async function verifyRelease(directory: string, identity: CloudPublicationIdenti
   try { return await verifyReleaseBytes(directory, identity); }
   catch (error) {
     if ((error as NodeJS.ErrnoException)?.code !== undefined) throw error;
-    throw new CloudPublicationBytesRefused("Cloud release bytes were refused", { cause: error });
+    throw new CloudPublicationBytesRefused((error as Error).message, { cause: error });
   }
 }
 

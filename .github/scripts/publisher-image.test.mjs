@@ -57,6 +57,21 @@ test("SHA admission requires successful main source CI and its ci aggregate", as
   await assert.rejects(verifySource({ sha: main, cwd, env: { ...env, GITHUB_WORKFLOW_REF: env.GITHUB_WORKFLOW_REF.replace("main", "feature") }, request: ciRequest(main) }), /identity refused/);
 });
 
+test("a registry read that fails at the provider is asked again, and a missing tag stays an answer", async () => {
+  const statuses = [503, 200, 503, 404], asked = [];
+  const reader = async url => {
+    asked.push(url);
+    const status = statuses.shift();
+    return status === 200 ? Response.json({ success: true, result: { password: "fixture" } }) : new Response(null, { status });
+  };
+  const lookup = await registryReader(account, "fixture-token", imageName, reader);
+  assert.equal(await lookup(sha), null);
+  assert.equal(asked.length, 4);
+  let refused = 0;
+  await assert.rejects(registryReader(account, "fixture-token", imageName, async () => { refused += 1; return new Response(null, { status: 403 }); }), /credential refused/);
+  assert.equal(refused, 1);
+});
+
 test("a rerun reuses the SHA digest; a new image builds once and reads back by digest", async () => {
   for (const existing of [true, false]) {
     let builds = 0, lookups = 0;

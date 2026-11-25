@@ -246,6 +246,40 @@ describe("alt-text sweep", () => {
     expect(report.stopped).toBe(gateway ? null : "cms_rate_limit");
   });
 
+  it.each([["landed", true, 1], ["did not land", false, 2]])("confirms by readback a metadata write whose reply was lost and that %s", async (_label, landed, sends) => {
+    let attempts = 0, written;
+    const original = asset("a");
+    const h = harness({ media: [original], doc: null,
+      respond({ endpoint, body }) {
+        if (endpoint === "cmsListMedia" && body.assetIds && landed) return Response.json({ records: [{ ...original, etag: "next",
+          altText: "A generic description", altTextGenerated: true, ...written }] });
+        if (endpoint === "cmsListMedia" && body.assetIds) return Response.json({ records: [original] });
+        if (endpoint !== "cmsUpdateMediaMetadata") return;
+        attempts += 1;
+        written = body.metadata;
+        if (attempts === 1) throw Object.assign(new TypeError("fetch failed"), { cause: { code: "ECONNRESET" } });
+      } });
+    const report = await runSweep({ apply: true, call: h.call, fetchImpl: h.fetchImpl, model: h.model });
+    expect(attempts).toBe(sends);
+    expect(report.skipped).toEqual([]);
+    expect(report.changes.length).toBeGreaterThan(0);
+  });
+
+  it("reports a lost write as uncertain when the record changed another way", async () => {
+    let attempts = 0;
+    const h = harness({ media: [asset("a")], doc: null,
+      respond({ endpoint, body }) {
+        if (endpoint === "cmsListMedia" && body.assetIds) return Response.json({ records: [{ ...asset("a"), etag: "other", altText: "Someone else" }] });
+        if (endpoint !== "cmsUpdateMediaMetadata") return;
+        attempts += 1;
+        throw Object.assign(new TypeError("fetch failed"), { cause: { code: "ECONNRESET" } });
+      } });
+    const report = await runSweep({ apply: true, call: h.call, fetchImpl: h.fetchImpl, model: h.model });
+    expect(attempts).toBe(1);
+    expect(report.changes).toEqual([]);
+    expect(report.errors).not.toEqual([]);
+  });
+
   it("skips reviewed content before a model call and skips an oversized original", async () => {
     const oversized = { ...asset("a"), sizeBytes: 21 * 1024 * 1024 };
     const h = harness({ media: [oversized], doc: document({ status: "approved" }) });

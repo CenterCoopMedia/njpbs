@@ -11,6 +11,24 @@ const command = stderr => Object.assign(new Error("Command failed"), { status: 1
 const secretManager503 = "Error: Request to https://secretmanager.googleapis.com/v1/projects/example-project/secrets/EXAMPLE_SECRET had HTTP Error: 503, Authentication backend unavailable.";
 
 describe("provider call rule", () => {
+  it.each(["ENOENT", "EACCES", "ENOEXEC", "E2BIG"])("ends on a program that cannot start (%s)", async code => {
+    const launch = vi.fn(async () => ({ status: null, error: Object.assign(new Error("spawn"), { code, syscall: "spawn gcloud" }), stdout: "", stderr: "" }));
+    await expect(main(["label", "--", "gcloud"], launch, options())).rejects.toMatchObject({ code });
+    expect(launch).toHaveBeenCalledTimes(1);
+  });
+  it.each([["seconds", () => "90"], ["an HTTP date", () => new Date(Date.now() + 90_000).toUTCString()]])(
+    "waits at least the provider's Retry-After given as %s", async (_label, value) => {
+      vi.useFakeTimers({ now: 1_800_000_000_000 });
+      try {
+        const call = vi.fn().mockRejectedValueOnce(http(403, { "retry-after": value() })).mockResolvedValue("answer");
+        const result = providerCall("paced", call, options());
+        await vi.advanceTimersByTimeAsync(88_000);
+        expect(call).toHaveBeenCalledTimes(1);
+        await vi.advanceTimersByTimeAsync(3_000);
+        expect(call).toHaveBeenCalledTimes(2);
+        await expect(result).resolves.toBe("answer");
+      } finally { vi.useRealTimers(); }
+    });
   it("names the check, the provider's last line and the wanted answer while it waits", async () => {
     const { setJournal } = releaseWait, lines = [];
     setJournal(line => lines.push(line));

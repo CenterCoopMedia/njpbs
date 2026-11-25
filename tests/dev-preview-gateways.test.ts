@@ -312,6 +312,20 @@ it('requires a complete route inventory for the staff-site release operator', as
   await expect(boundary.api(`/zones/${zone}/workers/routes`)).rejects.toThrow('Public release operator refused');
 });
 
+it.each([
+  { drift: 'wrong-source', check: 'source tag' },
+  { drift: 'wrong-r2', check: 'R2 binding' },
+])('ends on a persistent $check mismatch before hostname attachment', async ({ drift, check }) => {
+  const boundary = provider(drift, 0);
+  const error = await deployDevPreviewGateways({ ...boundary, env: environment(), log: () => undefined }).catch(error => error);
+  const message = formatDevPreviewGatewayFailure(error);
+  expect(message).toContain(`${check}: expected `);
+  expect(message).toContain(', actual ');
+  expect(message).not.toContain('fixture-private-bucket');
+  expect(boundary.staged()).toBe(1);
+  expect(boundary.writes).toEqual([]);
+});
+
 describe('custom-domain provisioning readiness (#2957)', () => {
   it('waits through DNS/TLS and transient provider failures before requiring all Access refusals', async () => {
     let calls = 0;

@@ -27,6 +27,10 @@ test("no release-path file outside the wait module adds a time construct", () =>
   assert.deepEqual(shrunk, [], `Sites were removed: run node tests/scripts/release-path-files.mjs --write-remaining`);
 });
 
+test("the release path includes the workflow commands under site/scripts", () => {
+  for (const path of ["site/scripts/cms-dev-publication.mjs", "site/scripts/activate-public-worker-candidate.ts"]) assert.ok(files.includes(path), `${path} is on the release path`);
+});
+
 test("the wait module holds no number that stops a wait", () => {
   const source = readFileSync(join(ROOT, WAIT_MODULE), "utf8");
   const code = source.split("\n").filter(line => !/^\s*\/\//.test(line)).join("\n");

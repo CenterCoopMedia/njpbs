@@ -24,12 +24,25 @@ const run = (args = [], extra = {}) => spawnSync('bash', [script, ...args], { en
   env: { PATH: `${bin}:/usr/bin:/bin`, HOME: bin, JAWN_OPS: join(bin, 'jawn-ops'), ...env, ...extra } });
 const calls = () => readFileSync(log, 'utf8').trim().split('\n').filter(line => !line.startsWith('pass '));
 
+const publisher = (change = {}) => JSON.stringify({ schema: 1, check: true, source_sha: 'a'.repeat(40), deploy_needed: false,
+  live: { version: 'v1', commit: 'a'.repeat(40) }, ...change });
+
 beforeEach(() => {
   bin = mkdtempSync(join(tmpdir(), 'setup-dev-')); log = join(bin, 'calls.log'); writeFileSync(log, '');
-  stub('jawn-ops'); stub('node', `[ "$1" = node_modules/wrangler/bin/wrangler.js ] && cat > "${log}.stdin"; exit 0`);
+  stub('jawn-ops'); stub('node', `[ "$1" = node_modules/wrangler/bin/wrangler.js ] && cat > "${log}.stdin"; [ "$1" = scripts/install-dev-publisher.mjs ] && echo '${publisher()}'; exit 0`);
   stub('pass', 'echo "secret-value-$2"');
 });
 afterEach(() => rmSync(bin, { recursive: true }));
+
+it.each([['still needs its deploy', { deploy_needed: true }], ['runs another commit', { live: { version: 'v1', commit: 'b'.repeat(40) } }],
+  ['has no single live version', { live: { version: null, commit: 'a'.repeat(40) } }]])('refuses a publisher check that succeeds for a publisher that %s', (_label, change) => {
+  stub('node', `[ "$1" = scripts/install-dev-publisher.mjs ] && echo '${publisher(change)}'; exit 0`);
+  const result = run();
+  expect(result.status).toBe(1);
+  expect(result.stderr).toContain('run install-dev-publisher.mjs first');
+  expect(result.stderr).toContain('setup-dev: publisher check: refused (exit 1)');
+  expect(result.stdout).not.toContain('every step passed');
+});
 
 it('installs, then reads back every step in order', () => {
   const result = run();

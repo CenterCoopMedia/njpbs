@@ -23,6 +23,27 @@ export function requireWorkerReadback(condition, field) {
 // error. Neither clears on a later read.
 export class WorkerReadbackFinal extends Error {}
 
+// Cloudflare never changes a Worker version or a deployment record. Once the
+// exact one is read, a wrong field in it cannot clear on a later read.
+export function requireImmutableReadback(condition, field) {
+  if (!condition) throw new WorkerReadbackFinal(`${field}: the exact immutable record differs from the confirmed write`);
+}
+
+// Deployments are listed newest first. `versionId` alone and at 100 percent in
+// the newest one is active; a mixed deployment of it is an exact record, and one
+// below the newest was superseded. Absent, it may still appear.
+export function requireActiveVersion(rows, versionId, field) {
+  const versions = row => Array.isArray(row?.versions) ? row.versions : [];
+  const holds = row => versions(row).some(version => version?.version_id === versionId);
+  const top = Array.isArray(rows) ? rows[0] : undefined;
+  if (holds(top)) {
+    requireImmutableReadback(versions(top).length === 1 && versions(top)[0].percentage === 100, field);
+    return;
+  }
+  if (Array.isArray(rows) && rows.slice(1).some(holds)) throw new WorkerReadbackFinal(`${field}: version ${versionId} was superseded`);
+  throw new WorkerReadbackMismatch(field, versionId, versionId === undefined ? null : "another version or none");
+}
+
 // The provider answered a write with a refusal (HTTP 4xx other than 408 and
 // 429), so nothing from that call will appear in a readback.
 export class WorkerWriteRefused extends WorkerReadbackFinal {}
@@ -47,7 +68,7 @@ export async function waitForWorkerReadback(collect, { signal } = {}) {
     try {
       return { done: await collect() };
     } catch (error) {
-      if (error instanceof WorkerReadbackFinal) return { failed: error };
+      if (error instanceof WorkerReadbackFinal || error?.immutable === true) return { failed: error };
       if (!(error instanceof WorkerReadbackMismatch)) throw error;
       return { pending: error.message };
     }
@@ -67,6 +88,7 @@ export async function readCmsApiDeployment(script, readDeployment, expected) {
       if (expected) throw new WorkerReadbackMismatch("CMS API deploymentId", "valid deployment identity", "missing or invalid");
       throw new CmsApiReadbackError("CMS API deployment identity is invalid");
     }
+    if (expected) requireActiveVersion(body?.result?.deployments ?? body?.result, expected, "CMS API versionId");
     if (expected && active?.version_id !== expected) {
       throw new WorkerReadbackMismatch("CMS API versionId", expected, versionId.test(active?.version_id ?? "") ? active.version_id : null);
     }
