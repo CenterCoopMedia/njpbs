@@ -59,13 +59,13 @@ describe("public Data Hub figure embeds (#5093)", () => {
 
   it("keeps dated source values independent from later latest documents", async () => {
     const current = pages.find(page => page.id === "unemployment" && page.snapshot === undefined)!;
-    const frozen = pages.find(page => page.id === "unemployment" && page.snapshot === "2026-11-19/chart")!;
+    const frozen = pages.find(page => page.id === "unemployment" && page.snapshot === "2026-11-25/chart")!;
     expect(current.html).toBe(frozen.html);
     const original = current.html;
     try {
       current.html = "A later approved data release";
       expect(await (await request("/data/figures/unemployment/embed/"))!.text()).toBe(current.html);
-      expect(await (await request("/data/figures/unemployment/embed/?revision=2026-11-19"))!.text()).toBe(original);
+      expect(await (await request("/data/figures/unemployment/embed/?revision=2026-11-25"))!.text()).toBe(original);
     } finally { current.html = original; }
   });
 
