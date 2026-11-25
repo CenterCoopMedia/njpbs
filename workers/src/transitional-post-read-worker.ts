@@ -15,6 +15,9 @@ import { isVerifiedLastGoodResponse, readAssetCodeGeneration, reportLastGoodRete
 const TTL_MS = 10_000;
 const STALE_MS = 30_000;
 const FAILURE_TTL_MS = 1_000;
+// A slow or stalled authority must not hold a page view: past this the reader
+// gets the last-good copy, or 503 for a Post that has none. The CMS API ends
+// the same read only after 10 s.
 const AUTHORITY_TIMEOUT_MS = 3_000;
 const DTO_BYTES_MAX = 2 * 1024 * 1024;
 // One background file may contain 16 MiB of raw bytes. Its base64 response and
