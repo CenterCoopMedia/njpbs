@@ -1,6 +1,5 @@
 import { pathToFileURL } from "node:url";
 import { createHash } from "node:crypto";
-import { faultLine } from "./lib/provider-call.mjs";
 
 const receiptUrl = "https://dev-public.example.org/_publication.json";
 
@@ -39,8 +38,8 @@ export async function checkDevMachineReceipt({ env = process.env, fetchImpl = fe
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  checkDevMachineReceipt().catch(error => {
-    console.error(`Dev machine receipt proof failed: ${faultLine(error)}`);
+  checkDevMachineReceipt().catch(() => {
+    console.error("Dev machine receipt proof failed");
     process.exitCode = 1;
   });
 }
