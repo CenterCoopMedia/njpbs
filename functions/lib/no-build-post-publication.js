@@ -346,26 +346,31 @@ async function readNoBuildPostDecisionInTransaction({ firestore, transaction, pa
     .readPublicContextBackgroundInTransaction({ firestore, transaction, path, rendererSha });
   if (contextBackground) return contextBackground;
   if (background === VIDEO_CATALOG_OUTPUT) return { kind: "pass" };
+  const readLease = async () => {
+    const pointer = require("./public-deployment-pointer").readPublicDeploymentPointer(
+      (await transaction.get(firestore.doc("system/publicDeployment"))).data());
+    const candidate = pointer.state !== "idle" && rendererSha === pointer.candidateCommitSha ?
+      (await transaction.get(firestore.doc(`system/publicDeployment/buildBatches/${pointer.candidateBuildBatchId}/candidates/worker`))).data() : null;
+    return { pointer, candidate };
+  };
+  // The artifact probe asks only for the exact candidate lease. Lease
+  // acquisition and settlement each qualify every Post owner in their own
+  // transaction; reading every owner here too outlasts the Worker's reader
+  // limit (476 reads for 183 Posts), so the probe would never answer.
+  if (receipts && probe) {
+    const { pointer, candidate } = await readLease();
+    if (pointer.state === "idle" || pointer.candidateBuildBatchId !== probe.buildBatchId ||
+        candidate?.workerVersionId !== probe.versionId || candidate.commitSha !== rendererSha) refuse();
+    return { kind: "baseline-probe" };
+  }
   const malformedOwners = [];
   const owners = (slug ? await findNoBuildPostOwnersForSlug({ firestore, transaction, slug })
     : await listNoBuildPostOwners({ firestore, transaction,
-      onMalformedOwner: probe ? undefined : owner => malformedOwners.push(owner) })).filter(owner => owner.state.operationId);
-  // A first renderer activation has no Post owners yet. Its artifact probe
-  // still requires the exact candidate lease before Assets can answer it.
-  if (!owners.length && !malformedOwners.length && !(receipts && probe)) return { kind: "pass" };
-  if (slug && owners.length !== 1) refuse("Two Posts claim the same public route.");
-  const readPointer = require("./public-deployment-pointer").readPublicDeploymentPointer;
-  const pointer = readPointer((await transaction.get(firestore.doc("system/publicDeployment"))).data());
-  const capability = await readNoBuildPostCapability({ firestore, transaction });
-  const candidate = pointer.state !== "idle" && rendererSha === pointer.candidateCommitSha ?
-    (await transaction.get(firestore.doc(`system/publicDeployment/buildBatches/${pointer.candidateBuildBatchId}/candidates/worker`))).data() : null;
-  if (receipts && probe) {
-    if (pointer.state === "idle" || pointer.candidateBuildBatchId !== probe.buildBatchId ||
-        candidate?.workerVersionId !== probe.versionId || candidate.commitSha !== rendererSha) refuse();
-    await assertNoBuildCandidateInTransaction({ firestore, transaction, candidate });
-    return { kind: "baseline-probe" };
-  }
+      onMalformedOwner: owner => malformedOwners.push(owner) })).filter(owner => owner.state.operationId);
   if (!owners.length && !malformedOwners.length) return { kind: "pass" };
+  if (slug && owners.length !== 1) refuse("Two Posts claim the same public route.");
+  const { pointer, candidate } = await readLease();
+  const capability = await readNoBuildPostCapability({ firestore, transaction });
   if (background === "home") {
     if (!malformedOwners.length && owners.every(owner => owner.state.mode === "static")) return { kind: "pass" };
     const homeState = (await transaction.get(firestore.doc("cmsBackgroundOutputs/home"))).data();
@@ -388,20 +393,20 @@ async function readNoBuildPostDecisionInTransaction({ firestore, transaction, pa
     log.warn?.("Public Post catalog owner refused", { postId, reason });
   };
   for (const owner of malformedOwners) refuseOwner(owner, "malformed_owner");
-  // Reconcile every owner within the same bounded read transaction. Ordinary
-  // catalogs can omit a bad snapshot while preserving its existing route claims.
-  for (let offset = 0; offset < owners.length; offset += 8) {
-    const replies = await Promise.all(owners.slice(offset, offset + 8).map(owner =>
-      readOwnedPostDecision({ ...context, owner, path: single ? path : postRoutePath(owner.state.slug),
-        catalog: !single, canSkipUnverifiedSnapshot })));
-    for (const reply of replies) {
-      if (reply.kind === "unverified-snapshot") {
-        refuseOwner(reply, "snapshot_mismatch");
-      } else {
-        if (single) return reply;
-        posts.push(reply.receipt);
-        generation = Math.max(generation, reply.receipt.generation);
-      }
+  // Reconcile every owner in one read transaction, all at once: a switch turns
+  // the decision cache off, and the Worker ends a catalog read after 3 s. Eight
+  // owners at a time took 3 s for 147 Posts, and newer Posts then answered 404.
+  // Ordinary catalogs can omit a bad snapshot while preserving its route claims.
+  const replies = await Promise.all(owners.map(owner =>
+    readOwnedPostDecision({ ...context, owner, path: single ? path : postRoutePath(owner.state.slug),
+      catalog: !single, canSkipUnverifiedSnapshot })));
+  for (const reply of replies) {
+    if (reply.kind === "unverified-snapshot") {
+      refuseOwner(reply, "snapshot_mismatch");
+    } else {
+      if (single) return reply;
+      posts.push(reply.receipt);
+      generation = Math.max(generation, reply.receipt.generation);
     }
   }
   if (!admission.valid) refuse("Instant publication admission is unavailable.");
@@ -415,7 +420,7 @@ async function readNoBuildPostDecisionInTransaction({ firestore, transaction, pa
 }
 
 async function readOwnedPostDecision({ firestore, transaction, owner, pointer, capability, candidate, rendererSha,
-  admission, contextDigest, path, slug, catalog = false, canSkipUnverifiedSnapshot = false }) {
+  admission, contextDigest, path, slug = undefined, catalog = false, canSkipUnverifiedSnapshot = false }) {
   const state = effectiveNoBuildPostState(owner.state, capability);
   const staticCandidate = candidate?.noBuildStatic?.postId === state.postId ? candidate : null;
   if (state.mode === "static" || staticCandidate) {
@@ -486,7 +491,7 @@ async function assertNoBuildCandidateInTransaction({ firestore, transaction, can
   if (candidate.noBuildStatic && !staticOwner) refuse();
   let staticReturn;
   // Every active owner must qualify before the candidate can take the public
-  // pointer, and the probe must answer inside the Worker's authority deadline.
+  // pointer.
   // Overlap independent owner reads in this same transaction without issuing
   // an unbounded burst as the owner set grows. Settle each batch in owner
   // order so the first refusal is the same one a serial pass would raise.

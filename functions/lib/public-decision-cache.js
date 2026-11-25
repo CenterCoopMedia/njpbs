@@ -26,11 +26,18 @@ function documentVersion(snapshot) {
   return `${time.seconds}.${time.nanoseconds}`;
 }
 
-/** One small batch read per request. A deployment in progress is never cached. */
+/** One small batch read per request. A version switch is not cacheable, except
+ * for a Post decision: it depends on these documents and the candidate record,
+ * so switchKey names both. Without it every catalog read in a switch reads each
+ * Post owner again, and the Worker's 3 s limit ends that read. */
 async function readPublicDecisionValidator(firestore) {
   const snapshots = await firestore.getAll(...VALIDATOR_PATHS.map(path => firestore.doc(path)));
   const pointer = snapshots[1]?.data();
-  return { key: snapshots.map(documentVersion).join("|"), cacheable: pointer?.state === "idle" };
+  const key = snapshots.map(documentVersion).join("|");
+  if (pointer?.state === "idle") return { key, cacheable: true };
+  if (!["deploying", "reconciling"].includes(pointer?.state) || typeof pointer.candidateBuildBatchId !== "string") return { key, cacheable: false };
+  const candidate = await firestore.doc(`system/publicDeployment/buildBatches/${pointer.candidateBuildBatchId}/candidates/worker`).get();
+  return { key, cacheable: false, switchKey: `${key}|${documentVersion(candidate)}` };
 }
 
 /** In-instance reply cache. An entry serves only while every validator

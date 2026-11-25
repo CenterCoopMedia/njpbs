@@ -8,7 +8,10 @@ import {
   assertUploadOnlyProductionTrigger,
   projectActivationOperatorResult,
   parseApplyArguments,
+  requestCloudflareJson,
   requestPublicPublicationReceipt,
+  RefusedRequestError,
+  UnansweredRequestError,
   runPublicWorkerActivationOperator,
 } from "../../site/scripts/activate-public-worker-candidate";
 
@@ -436,6 +439,103 @@ describe("public Worker activation operator", () => {
     expect(fixture.settleOutcomeFn.mock.calls[0][0].evidence).toEqual({
       action: "reconcile",
     });
+  });
+
+  const predecessorServes = () => deploymentsResponse({
+    deploymentId: PREDECESSOR_DEPLOYMENT_ID,
+    versionId: "55555555-5555-4555-8555-555555555555",
+  });
+  const writes = (requestJson: ReturnType<typeof vi.fn>) => requestJson.mock.calls.filter(
+    ([request]) => request.method === "POST" && request.url.endsWith("/deployments"),
+  ).length;
+
+  it("writes from the attempt that acquired the lease only, also while that write is paused", async () => {
+    const started = Promise.withResolvers<void>(), answer = Promise.withResolvers<unknown>();
+    const queue = requestQueue([workersResponse(), triggersResponse(), triggersResponse(), disabledSubdomainResponse(),
+      null, deploymentsResponse(), triggersResponse()]);
+    const first = operator({ requestJson: vi.fn(async (request: { method: string; url: string }) => {
+      const next = await queue(request);
+      if (request.method !== "POST" || !request.url.endsWith("/deployments")) return next;
+      started.resolve();
+      return answer.promise;
+    }) });
+    const running = runPublicWorkerActivationOperator(first.input);
+    await started.promise;
+    for (const list of [predecessorServes(), new Error("refused")]) {
+      const retry = operator({
+        requestJson: requestQueue([workersResponse(), triggersResponse(), list]),
+        acquireLeaseFn: vi.fn(async () => acquired({ idempotent: true })),
+      });
+      expect((await runPublicWorkerActivationOperator(retry.input)).outcome).toBe("reconciling");
+      expect(writes(retry.requestJson)).toBe(0);
+    }
+    answer.resolve({ success: true, result: deploymentStatus() });
+    expect((await running).outcome).toBe("deployed");
+    expect(writes(first.requestJson)).toBe(1);
+  });
+
+  it.each([
+    ["another attempt settled it", async () => ({ outcome: "superseded" as const, idempotent: true })],
+    ["another lease replaced it", async () => { const next = acquired(); return { ...next, lease: { ...next.lease, leaseToken: "77777777-7777-4777-8777-777777777777" } }; }],
+    ["the lease read fails", async () => { throw new Error("unread"); }],
+  ])("writes nothing after waiting when %s", async (_name, later) => {
+    const fixture = operator({
+      acquireLeaseFn: vi.fn<() => Promise<unknown>>(later).mockResolvedValueOnce(acquired()),
+      requestJson: requestQueue([workersResponse(), triggersResponse(), triggersResponse(), disabledSubdomainResponse()]),
+    });
+
+    expect((await runPublicWorkerActivationOperator(fixture.input)).outcome).toBe("reconciling");
+    expect(writes(fixture.requestJson)).toBe(0);
+  });
+
+  it("sends a refused write again and never a lost one", async () => {
+    const run = async (answers: unknown[]) => {
+      const fixture = operator({
+        requestJson: requestQueue([workersResponse(), triggersResponse(), triggersResponse(), disabledSubdomainResponse(), ...answers]),
+      });
+      const { outcome } = await runPublicWorkerActivationOperator(fixture.input);
+      return { outcome, writes: writes(fixture.requestJson) };
+    };
+    const answered = { success: true, result: deploymentStatus() };
+
+    await expect(run([new RefusedRequestError("HTTP 429"), answered, deploymentsResponse(), triggersResponse()]))
+      .resolves.toEqual({ outcome: "deployed", writes: 2 });
+    await expect(run([new UnansweredRequestError("lost"), deploymentsResponse(), triggersResponse()]))
+      .resolves.toEqual({ outcome: "deployed", writes: 1 });
+    await expect(run([new UnansweredRequestError("lost"), predecessorServes()]))
+      .resolves.toEqual({ outcome: "reconciling", writes: 1 });
+  });
+
+  it("asks a lost read again, sends a write once, and stops on a refusal", async () => {
+    const url = `https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts`;
+    const lost = () => Promise.reject(new TypeError("fetch failed", { cause: Object.assign(new Error("reset"), { code: "ECONNRESET" }) }));
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    const ask = async (method: "GET" | "POST", answers: (() => Promise<Response>)[]) => {
+      const fetchMock = vi.fn(() => answers.shift()!());
+      vi.stubGlobal("fetch", fetchMock);
+      const result = await requestCloudflareJson({ url, method, token: TOKEN }).catch(error => error);
+      return { result, sent: fetchMock.mock.calls.length };
+    };
+    try {
+      const ok = async () => Response.json({ success: true });
+      await expect(ask("GET", [lost, async () => new Response("", { status: 503 }), ok]))
+        .resolves.toEqual({ result: { success: true }, sent: 3 });
+      expect(log.mock.calls.flat().join("\n")).toMatch(/ECONNRESET[^]*HTTP 503/);
+      expect(log.mock.calls.flat().join("\n")).not.toContain(TOKEN);
+      const write = await ask("POST", [lost]);
+      expect(write.sent).toBe(1);
+      expect(write.result).toBeInstanceOf(UnansweredRequestError);
+      expect(write.result).not.toBeInstanceOf(RefusedRequestError);
+      const refused = async (status: number) => (await ask("POST", [async () => new Response("", { status })])).result;
+      expect(await refused(429)).toBeInstanceOf(RefusedRequestError);
+      expect(await refused(503)).not.toBeInstanceOf(RefusedRequestError);
+      expect((await ask("GET", [async () => new Response("", { status: 403 })])).sent).toBe(1);
+      const redirected = await ask("GET", [() => Promise.reject(new TypeError("fetch failed", { cause: new Error("unexpected redirect") }))]);
+      expect(redirected.sent).toBe(1);
+    } finally {
+      vi.unstubAllGlobals();
+      log.mockRestore();
+    }
   });
 
   it("trusts exact active evidence after an ambiguous POST response", async () => {

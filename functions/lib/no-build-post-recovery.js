@@ -36,19 +36,22 @@ function publicReadbackHeaders(target, value) {
   return headers;
 }
 
+const PUBLIC_READ_TIMEOUT = "public-read-timeout";
+
 // Bound headers AND body consumption. Aborting alone need not settle a stalled
 // stream; the deadline also prevents any late result from reaching settlement.
-async function withinDeadline(milliseconds, work) {
+async function withinDeadline(milliseconds, work, stopped) {
+  stopped?.throwIfAborted();
   const controller = new AbortController();
-  let timer;
-  const timeout = new Promise((resolve, reject) => {
-    timer = setTimeout(() => {
-      controller.abort();
-      reject(new Error("Public Post confirmation timed out"));
-    }, milliseconds);
+  let timer, stop;
+  const ended = new Promise((resolve, reject) => {
+    const end = error => { controller.abort(error); reject(error); };
+    timer = setTimeout(() => end(Object.assign(new Error("Public Post confirmation timed out"), { code: PUBLIC_READ_TIMEOUT })), milliseconds);
+    stop = () => end(stopped.reason);
+    stopped?.addEventListener("abort", stop);
   });
-  try { return await Promise.race([work(controller.signal), timeout]); }
-  finally { clearTimeout(timer); controller.abort(); }
+  try { return await Promise.race([work(controller.signal), ended]); }
+  finally { clearTimeout(timer); stopped?.removeEventListener("abort", stop); controller.abort(); }
 }
 
 async function purgePostRoutes(state, config, fetchImpl, target) {
@@ -84,13 +87,16 @@ async function purgePublicHome({ target, fetchPurge = fetch, purgeConfig } = {})
   await purgePublicCacheTags([publicationPostCacheTag(target, "background")], config, fetchPurge);
 }
 
+const isPublicRefreshPending = response => response.headers.get("x-njpbs-publication-refresh") === "pending" &&
+  response.headers.get("retry-after") === "1";
+
 async function readPublicPostAfterRefresh(url, fetchPublic, signal, headers) {
   headers = new Headers(headers);
   while (!signal.aborted) {
     const response = await fetchPublic(url, {
       method: "GET", redirect: "manual", signal, ...(headers.keys().next().done ? {} : { headers }),
     });
-    if (response.headers.get("x-njpbs-publication-refresh") !== "pending" || response.headers.get("retry-after") !== "1") return response;
+    if (!isPublicRefreshPending(response)) return response;
     await response.body?.cancel();
     // Public reads return Assets while their edge refresh runs. This polling is
     // inside the existing ten-second deadline and retains the same operation.
@@ -400,11 +406,12 @@ async function existingNoBuildPostPublication({ firestore, changes, retry = fals
 // switch landed at 14:07:16.9Z, edges still answered from the previous version
 // 4 to 6 s later, and a single read at about 9.5 s failed a working deploy.
 // A read answered by the previous renderer is read again; the first answer
-// from any other renderer is judged once. The backstop ends only a rollout
-// that never arrives, at ten times the longest skew observed.
-const OWNED_ROUTE_ROLLOUT_BACKSTOP_MS = 60_000;
+// from any other renderer is judged once. The wait ends on that answer; what it
+// waits for is logged each notice interval.
+const OWNED_ROUTE_ROLLOUT_NOTICE_MS = 60_000;
 const OWNED_ROUTE_ROLLOUT_INTERVAL_MS = 1_000;
-const CANDIDATE_ROLLOUT = Object.freeze({ backstopMs: OWNED_ROUTE_ROLLOUT_BACKSTOP_MS, now: Date.now,
+const CANDIDATE_ROLLOUT = Object.freeze({ noticeMs: OWNED_ROUTE_ROLLOUT_NOTICE_MS, now: Date.now,
+  report: notice => console.warn(JSON.stringify({ event: "public_route_wait", ...notice })),
   wait: () => delay(OWNED_ROUTE_ROLLOUT_INTERVAL_MS) });
 
 // The dev staff gateway in front of dev.njpbs.org rebuilds every answer with
@@ -426,32 +433,78 @@ async function refuseFirstMismatch(response, message, checks) {
   }
 }
 
+// A read that got no answer proves nothing about the candidate. A refused
+// redirect or a judged mismatch is an answer.
+function unansweredRead(error) {
+  return error?.code === PUBLIC_READ_TIMEOUT || (error instanceof TypeError && ["fetch failed", "terminated"].includes(error.message));
+}
+
 // Reads one public path until an answer comes from a renderer other than the
-// previous one, then lets judge decide that answer once.
-async function judgeCandidateAnswer({ url, fetchPublic, headers, candidate, previousRendererSha, rollout = CANDIDATE_ROLLOUT }, judge) {
+// previous one, then lets judge decide that answer once. Each unanswered read
+// doubles the time the next one gets, so a slow answer is waited for.
+async function judgeCandidateAnswer({ url, fetchPublic, headers, candidate, previousRendererSha, stopped, rollout = CANDIDATE_ROLLOUT }, judge) {
   const previous = previousRendererSha && previousRendererSha !== candidate.commitSha ? previousRendererSha : null;
-  const backstop = rollout.now() + rollout.backstopMs;
+  const started = rollout.now();
+  let noticeAt = started + rollout.noticeMs, readMs = 10_000, waitingFor;
   // Read the body inside the deadline; the deadline aborts the request when it settles.
-  while (await withinDeadline(10_000, async signal => {
-    const response = await readPublicPostAfterRefresh(url, fetchPublic, signal, new Headers(headers));
-    if (previous && response.headers.get("x-njpbs-renderer-sha") === previous) {
-      await response.body?.cancel();
-      return true;
+  const read = () => withinDeadline(readMs, async signal => {
+    const response = await fetchPublic(url, { method: "GET", redirect: "manual", signal, headers: new Headers(headers) });
+    // Assets answer while the Post authority read is still out: not an answer yet.
+    const pending = isPublicRefreshPending(response) ? `The public route still waits for its Post authority (${response.status})`
+      : previous && response.headers.get("x-njpbs-renderer-sha") === previous
+        ? "The public route still answers from the previous renderer; the candidate version has not reached it" : null;
+    if (pending) await response.body?.cancel();
+    else await judge(response);
+    return pending;
+  }, stopped);
+  for (;;) {
+    try {
+      waitingFor = await read();
+      if (!waitingFor) return;
+    } catch (error) {
+      if (!unansweredRead(error)) throw error;
+      waitingFor = `The public route did not answer: ${error.message}${error.cause?.code ? ` (${error.cause.code})` : ""}`;
+      readMs = Math.min(readMs * 2, 30 * 60_000);
     }
-    await judge(response);
-    return false;
-  })) {
-    if (rollout.now() >= backstop) throw new Error("The public route still answers from the previous renderer; the candidate version has not reached it");
+    if (rollout.now() >= noticeAt) {
+      rollout.report({ path: new URL(url).pathname, waitedMs: rollout.now() - started, waitingFor });
+      noticeAt = rollout.now() + rollout.noticeMs;
+    }
     await rollout.wait();
+    stopped?.throwIfAborted();
+  }
+}
+
+// Each route is one slow read. This many run together, which is what the
+// public Worker and its Function are asked to answer at once.
+const ROUTE_READS_TOGETHER = 8;
+
+// Ends on the first failure: the other waits stop, because a wait for a route
+// has no limit of its own.
+async function readTogether(items, read) {
+  const stop = new AbortController();
+  let next = 0;
+  const lane = async () => {
+    while (next < items.length) {
+      const item = items[next++];
+      stop.signal.throwIfAborted();
+      await read(item, stop.signal);
+    }
+  };
+  try {
+    await Promise.all(Array.from({ length: Math.min(ROUTE_READS_TOGETHER, items.length) }, lane));
+  } catch (error) {
+    stop.abort(error);
+    throw error;
   }
 }
 
 async function verifyOwnedPostRoutes({ state, staticProof, contentRedirectUrl, candidate, admission, fetchPublic, target, headers,
-  previousRendererSha, rollout = CANDIDATE_ROLLOUT }) {
+  previousRendererSha, stopped, rollout = CANDIDATE_ROLLOUT }) {
   const slugs = staticProof?.ownedSlugs ?? state.ownedSlugs;
   for (const slug of slugs) {
     await judgeCandidateAnswer({ url: `${target.origin}${postRoutePath(slug)}?cms-code=${candidate.workerVersionId}`,
-      fetchPublic, headers, candidate, previousRendererSha, rollout }, async response => {
+      fetchPublic, headers, candidate, previousRendererSha, stopped, rollout }, async response => {
     // New-admission selection cannot discard an already accepted route.
     // Invalid metadata still refuses visible proof; retained withdrawals stay absent.
     const enabled = !!staticProof || !state.visible || (candidate.noBuildPost.enabled &&
@@ -477,7 +530,7 @@ async function verifyOwnedPostRoutes({ state, staticProof, contentRedirectUrl, c
   }
 }
 
-async function verifyStaticPostOutputs({ staticProof, candidate, fetchPublic, target, headers, previousRendererSha, rollout = CANDIDATE_ROLLOUT }) {
+async function verifyStaticPostOutputs({ staticProof, candidate, fetchPublic, target, headers, previousRendererSha, stopped, rollout = CANDIDATE_ROLLOUT }) {
   const proof = require("./no-build-post-static-return").projectStaticProof(staticProof);
   const paths = ["/_publication.json", "/_content-status.json", "/posts/", "/feeds/news.xml", "/api/v1/content.json",
     "/pagefind/pagefind.js", "/search/meaning-index.json",
@@ -486,7 +539,7 @@ async function verifyStaticPostOutputs({ staticProof, candidate, fetchPublic, ta
   for (const path of paths) {
     const file = proof.files.find(file => file.path === path);
     await judgeCandidateAnswer({ url: `${target.origin}${path}?cms-code=${candidate.workerVersionId}`,
-      fetchPublic, headers, candidate, previousRendererSha, rollout }, async response => {
+      fetchPublic, headers, candidate, previousRendererSha, stopped, rollout }, async response => {
     const header = name => response.headers.get(name);
     await refuseFirstMismatch(response, `The static Post candidate did not prove its complete public outputs (${path})`, [
       ["status", file ? 200 : 404, response.status],
@@ -518,7 +571,7 @@ async function verifyNoBuildPostPublicRoute({ firestore, candidate, fetchPublic 
   const admission = await readNoBuildFamilyAdmission({ firestore });
   const options = { candidate, admission, fetchPublic, target, previousRendererSha,
     headers: { ...Object.fromEntries(readHeaders), "cache-control": "no-cache" } };
-  for (const { state } of owners) {
+  await readTogether(owners, async ({ state }, stopped) => {
     const staticProof = candidate.noBuildStatic?.postId === state.postId ? candidate.noBuildStatic
       : state.mode === "static" ? state.staticProof : null;
     let contentRedirectUrl = state.contentRedirectUrl;
@@ -526,9 +579,9 @@ async function verifyNoBuildPostPublicRoute({ firestore, candidate, fetchPublic 
       const link = staticProof.visible ? contentLink((await firestore.doc(`cmsPosts/${state.postId}`).get()).data()?.published?.metadata ?? {}, postRoutePath(staticProof.slug)) : null;
       contentRedirectUrl = link?.external ? link.href : undefined;
     }
-    await verifyOwnedPostRoutes({ ...options, state, staticProof, contentRedirectUrl });
-    if (staticProof) await verifyStaticPostOutputs({ ...options, staticProof });
-  }
+    await verifyOwnedPostRoutes({ ...options, stopped, state, staticProof, contentRedirectUrl });
+    if (staticProof) await verifyStaticPostOutputs({ ...options, stopped, staticProof });
+  });
   if (JSON.stringify(await readNoBuildFamilyAdmission({ firestore })) !== JSON.stringify(admission)) {
     throw new Error("Public admission changed during code verification");
   }

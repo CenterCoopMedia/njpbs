@@ -364,9 +364,10 @@ describe("public Worker candidate receipts", () => {
       .rejects.toThrow("does not preserve published live blogs");
   });
 
-  it.each([54, 120])("keeps candidate probes within the reader budget with %i retained Posts", async count => {
+  it.each([54, 120, 2_000])("keeps candidate probes within the reader budget with %i retained Posts", async count => {
     // The incident saw about 60 ms per serial owner. Reserve 500 ms of the
     // three-second Worker deadline for work outside the Firestore reads.
+    // Lease acquisition and settlement qualify every owner; the probe reads only the lease.
     vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
     try {
       const { probe } = ownerSetBoundary({ count, readMs: 60 });

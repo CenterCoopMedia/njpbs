@@ -635,10 +635,10 @@ describe("transitional public Post authority", () => {
     h.assets(404);
     h.authority(async () => { throw new Error("Private provider error details"); });
     const failed = await h.request();
-    expect(failed!.status).toBe(404);
+    expect(failed!.status).toBe(503);
     expect(failed!.headers.get("x-njpbs-publication-refresh")).toBe("pending");
     await h.drain();
-    for (let index = 0; index < 4; index++) expect((await h.request())!.status).toBe(404);
+    for (let index = 0; index < 4; index++) expect((await h.request())!.status).toBe(503);
     expect(h.calls).toHaveLength(1);
     for (const entry of h.cache.values()) expect(await entry.text()).not.toContain("Private provider error");
     h.catalog(catalog);
@@ -682,7 +682,7 @@ describe("transitional public Post authority", () => {
     await started.promise;
     await vi.advanceTimersByTimeAsync(3_000);
     const failed = await request;
-    expect(failed!.status).toBe(404);
+    expect(failed!.status).toBe(503);
     expect(failed!.headers.get("x-njpbs-publication-refresh")).toBe("pending");
     await h.drain();
     held.resolve(catalog);
@@ -700,8 +700,8 @@ describe("transitional public Post authority", () => {
       if (route === "/_publication.json") return catalog;
       throw new Error("Private route outage");
     });
-    expect((await h.request())!.status).toBe(404);
-    for (let index = 0; index < 3; index++) expect((await h.request())!.status).toBe(404);
+    expect((await h.request())!.status).toBe(503);
+    for (let index = 0; index < 3; index++) expect((await h.request())!.status).toBe(503);
     expect(h.calls.map(call => call.path)).toEqual(["/_publication.json", path]);
     for (const entry of h.cache.values()) expect(await entry.text()).not.toContain("Private route outage");
     h.authority(undefined);
@@ -772,7 +772,7 @@ describe("transitional public Post authority", () => {
     expect((await h.request())!.status).toBe(200);
     await h.drain();
     h.advance(1);
-    expect((await h.request())!.status).toBe(404);
+    expect((await h.request())!.status).toBe(503);
     await h.drain();
   });
 

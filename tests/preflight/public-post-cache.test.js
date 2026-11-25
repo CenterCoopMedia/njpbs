@@ -11,7 +11,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 const root = fileURLToPath(new URL("../..", import.meta.url));
 const postUrl = "https://njpbs.org/posts/cache-test/";
@@ -140,14 +140,26 @@ describe("public Post asset delivery", () => {
     expect(CMS_API).toBeDefined();
     try {
       await runtime.setOptions({ workers: [{ ...worker, config: { ...worker.config, env: withoutReader } }, ...options.workers.slice(1)] });
-      for (const path of ["/posts/cache-test/", "/feeds/news.xml", "/authors/cache-test/", "/_publication.json"]) {
+      for (const path of ["/feeds/news.xml", "/authors/cache-test/", "/_publication.json"]) {
         const response = await runtime.dispatchFetch(`https://njpbs.org${path}`);
         // Serve the existing Assets result during authority outages.
         expect(response.status).toBe(404);
         expect(response.headers.get("cache-control")).toBe("no-store");
         expect(await response.text()).toBe(notFound);
       }
+      // An unread authority cannot prove that a Post is absent.
+      const post = await runtime.dispatchFetch(postUrl);
+      expect(post.status).toBe(503);
+      expect(post.headers.get("cache-control")).toBe("no-store");
+      expect(post.headers.get("x-njpbs-publication-refresh")).toBe("pending");
+      await post.text();
     } finally { await runtime.setOptions(options); }
+    // The failed read is remembered for a second, then the reader decides again.
+    await vi.waitFor(async () => {
+      const response = await runtime.dispatchFetch(postUrl);
+      await response.text();
+      expect(response.status).toBe(404);
+    }, { timeout: 10_000, interval: 250 });
   });
 
   it("uses the reader for retained ownership and passes unowned routes to Assets", async () => {
