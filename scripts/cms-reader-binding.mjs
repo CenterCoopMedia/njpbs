@@ -14,6 +14,7 @@ import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import { cmsTarget } from "./lib/cms-target.mjs";
+import { failureText } from "./lib/provider-call.mjs";
 
 const require = createRequire(import.meta.url);
 export const READER_KEYS = Object.freeze(["CMS_READER_BRIDGE_ENABLED", "CMS_READER_BRIDGE_OPERATION_ID",
@@ -206,5 +207,5 @@ async function main([command, component]) {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  main(process.argv.slice(2)).catch(error => { console.error(error.message); process.exitCode = 1; });
+  main(process.argv.slice(2)).catch(error => { console.error(failureText(error)); process.exitCode = 1; });
 }
