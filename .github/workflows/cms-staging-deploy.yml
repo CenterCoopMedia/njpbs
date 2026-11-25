@@ -1807,7 +1807,6 @@ jobs:
       (vars.CMS_DEPLOY_OWNER != '' && github.triggering_actor == vars.CMS_DEPLOY_OWNER) && github.ref == 'refs/heads/main'
     # Wrangler builds the renderer container image and needs a Docker engine.
     runs-on: ubuntu-24.04
-    # GitHub's own six-hour job limit is the only bound; every wait ends on a named state.
     steps:
       - uses: actions/checkout@v7
         if: (inputs.target == 'development' || vars.CMS_PREVIEW_CLOUD_ENABLED == 'true')
@@ -1876,6 +1875,10 @@ jobs:
             --run-id "$GITHUB_RUN_ID" \
             --run-attempt "$GITHUB_RUN_ATTEMPT"
       - name: Deploy and verify the matched cloud preview renderer
+        id: renderer_deploy
+        # Hang backstop, derived from GitHub's 360-minute hosted job limit: past
+        # it the pause below would not run. Every wait in the step ends on a named state.
+        timeout-minutes: 330
         if: (inputs.target == 'development' || vars.CMS_PREVIEW_CLOUD_ENABLED == 'true') && needs.firebase-preflight.outputs.preview_paused == 'true'
         env:
           CMS_PREVIEW_FIREBASE_ACCOUNT: ${{ inputs.target == 'development' && secrets.CMS_DEV_PREVIEW_FIREBASE_ACCOUNT || inputs.target != 'development' && secrets.FIREBASE_SERVICE_ACCOUNT || '' }}
@@ -1888,6 +1891,20 @@ jobs:
         run: |
           node --import ./site/node_modules/tsx/dist/loader.mjs \
             site/scripts/deploy-cms-preview-cloud.ts deploy "$RENDERER_SHA"
+      # A killed deploy cannot pause the runtime itself.
+      - name: Pause the preview runtime after an unfinished renderer deploy
+        if: always() && (steps.renderer_deploy.outcome == 'failure' || steps.renderer_deploy.outcome == 'cancelled')
+        env:
+          CMS_PREVIEW_FIREBASE_ACCOUNT: ${{ inputs.target == 'development' && secrets.CMS_DEV_PREVIEW_FIREBASE_ACCOUNT || inputs.target != 'development' && secrets.FIREBASE_SERVICE_ACCOUNT || '' }}
+          CMS_PREVIEW_R2_CREDENTIAL: ${{ inputs.target == 'development' && secrets.CMS_DEV_PREVIEW_R2_CREDENTIAL || inputs.target != 'development' && secrets.CMS_PREVIEW_R2_CREDENTIAL || '' }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ inputs.target == 'development' && secrets.CLOUDFLARE_DEV_PREVIEW_RENDERER_TOKEN || inputs.target != 'development' && secrets.CLOUDFLARE_API_TOKEN || '' }}
+          CMS_DEV_ACCESS_CLIENT_ID: ${{ inputs.target == 'development' && secrets.CMS_DEV_ACCESS_CLIENT_ID || '' }}
+          CMS_DEV_ACCESS_CLIENT_SECRET: ${{ inputs.target == 'development' && secrets.CMS_DEV_ACCESS_CLIENT_SECRET || '' }}
+          RENDERER_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
+        run: |
+          node --import ./site/node_modules/tsx/dist/loader.mjs \
+            site/scripts/deploy-cms-preview-cloud.ts pause "$RENDERER_SHA"
       - name: Record the completed renderer receipt
         if: (inputs.target == 'development' || vars.CMS_PREVIEW_CLOUD_ENABLED == 'true') && needs.firebase-preflight.outputs.preview_paused == 'true'
         env:

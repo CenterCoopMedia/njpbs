@@ -656,6 +656,20 @@ describe("cms staging deploy surface", () => {
     }
   });
 
+  it("pauses the preview runtime after every renderer deploy that can be stopped", () => {
+    const { jobs } = parse(readFileSync(stagingDeployWorkflowPath, "utf8"));
+    const steps = Object.values(jobs).flatMap((job: any) => (job.steps ?? []).map((step: any, index: number) => ({ job, step, next: job.steps[index + 1] })));
+    const deploys = steps.filter(({ step }) => /deploy-cms-preview-cloud\.ts deploy /.test(step.run ?? ""));
+    expect(deploys.length).toBeGreaterThan(0);
+    for (const { job, step, next } of deploys) {
+      expect(step["timeout-minutes"]).toBe(330);
+      expect(job["timeout-minutes"]).toBeUndefined();
+      expect(next.if).toBe(`always() && (steps.${step.id}.outcome == 'failure' || steps.${step.id}.outcome == 'cancelled')`);
+      expect(next.run).toContain('deploy-cms-preview-cloud.ts pause "$RENDERER_SHA"');
+      expect(next.env).toEqual(step.env);
+    }
+  });
+
   it("writes explicit bootstrap and account-email values without admission lists", () => {
     const stagingDeployWorkflow = readCmsDeployWorkflow();
 

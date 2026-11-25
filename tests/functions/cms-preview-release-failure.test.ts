@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
-import { CloudPreviewProviderReadError, describeCloudPreviewReleaseFailure, releaseCredentials, readCloudPreviewRollouts, releaseSecretsFor, retryCloudPreviewRead, retryWrangler, waitForCloudPreviewStartup, withHangBackstop, wrangler } from "../../site/scripts/deploy-cms-preview-cloud";
+import { CloudPreviewProviderReadError, describeCloudPreviewReleaseFailure, releaseCredentials, readCloudPreviewRollouts, releaseSecretsFor, retryCloudPreviewRead, retryWrangler, waitForCloudPreviewStartup, wrangler } from "../../site/scripts/deploy-cms-preview-cloud";
 
 vi.mock("node:child_process", async importOriginal => ({
   ...await importOriginal<typeof import("node:child_process")>(),
@@ -110,20 +110,6 @@ describe("Wrangler failure summaries", () => {
     expect(await result).toMatchObject({ name: "CloudPreviewPlacementError" });
     expect(killGroup).toHaveBeenCalledWith(-123456, "SIGKILL");
     expect(child.kill).not.toHaveBeenCalled();
-  });
-});
-
-describe("release hang backstop", () => {
-  it("ends hung work before the 360-minute job limit and leaves finished work alone", async () => {
-    vi.useFakeTimers();
-    const hung = withHangBackstop(new Promise(() => undefined)).catch(error => error);
-    await vi.advanceTimersByTimeAsync(329 * 60_000);
-    const finished = withHangBackstop(Promise.resolve("done"));
-    await expect(finished).resolves.toBe("done");
-    expect(vi.getTimerCount()).toBe(1);
-    await vi.advanceTimersByTimeAsync(60_000);
-    expect((await hung).message).toContain("Cloud preview release hung. Keep previews paused");
-    expect(vi.getTimerCount()).toBe(0);
   });
 });
 

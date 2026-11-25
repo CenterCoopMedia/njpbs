@@ -49,11 +49,6 @@ export function releaseCredentials(env: NodeJS.ProcessEnv = process.env) {
   return { rawAccount, rawStorage, token, publicationAccess };
 }
 const releaseSecretValues: string[] = [];
-// A hosted runner ends a job after 360 minutes, which would skip the pause a
-// failed release owes. 330 leaves 30 for the job's other steps. Nothing else
-// in a release ends by a clock: each wait ends on a state it reads.
-// https://docs.github.com/en/actions/reference/limits
-const HANG_BACKSTOP_MS = 330 * 60_000;
 // Pacing between reads; it never ends a wait.
 const READ_PAUSE_MS = 10_000;
 const pause = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
@@ -222,15 +217,8 @@ export function releaseSecretsFor(rawAccount: string, rawStorage: string, token:
   return secrets;
 }
 
-/** Ends work that has not ended when the job limit is near, so its failure path still runs. */
-export function withHangBackstop<T>(work: Promise<T>, milliseconds = HANG_BACKSTOP_MS): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const backstop = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error(`Cloud preview release hung. ${STARTUP_RECOVERY}`)), milliseconds);
-  });
-  return Promise.race([work, backstop]).finally(() => clearTimeout(timer));
-}
-
+// Neither wait has a limit of its own: each ends on the state it reads. The
+// workflow step's limit ends a hang and the next step pauses the runtime.
 async function waitFor(description: string, check: () => Promise<boolean>) {
   const started = Date.now();
   while (!await check()) {
@@ -474,7 +462,7 @@ async function main() {
     }
     else {
       if (!token) throw new Error("Cloud preview deploy credential is required");
-      try { await withHangBackstop(deployPreviewRuntime({ firestore, rendererSha, token, rawAccount, rawStorage, publicationAccess })); }
+      try { await deployPreviewRuntime({ firestore, rendererSha, token, rawAccount, rawStorage, publicationAccess }); }
       catch (error) {
         await pausePreviewRuntime(firestore, rendererSha);
         throw error;
@@ -492,7 +480,6 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     releaseSecretValues.length = 0;
     process.stderr.write(`${line}\n`);
     process.stderr.write("Cloud preview release stopped without a verified result; check the private release control before retrying\n");
-    // A release that hung still has its child and its reads open.
-    process.exit(1);
+    process.exitCode = 1;
   });
 }
