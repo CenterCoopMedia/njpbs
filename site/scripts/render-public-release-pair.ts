@@ -10,6 +10,7 @@ import input from "../../functions/lib/public-release-pair-input.js";
 import views from "../../functions/lib/public-release-pair-view.js";
 import { openPublicReleasePairRenderPlans } from "./public-release-pair-render-plans";
 import { parsePublicReleasePairRenderRequest, type PairRenderRequest } from "./public-release-pair-render-request";
+import { exitWithPairRenderFailure } from "./public-release-pair-child-exit";
 import { verifyPublicReleasePairRenderer } from "./public-release-pair-renderer-release.mjs";
 import { projectPublicReleasePairReplay, isPublicReleasePairProjection, PAIR_REPLAY_PROVENANCE_FILE } from "./public-release-pair-replay";
 import { renderPublicReleasePairAggregates } from "./render-public-release-pair-aggregates";
@@ -19,6 +20,7 @@ import composite from "../../functions/lib/public-release-pair-composite-view.js
 import type { PairAuthorOwner } from "../../functions/lib/public-release-pair-author";
 
 /** This entry is bundled into the sealed graph and runs only in bubblewrap. */
+exitWithPairRenderFailure();
 const childStarted = performance.now(), childTimings: Record<string, number> = {};
 let childMarked = childStarted;
 const childMark = (name: string) => { const now = performance.now(); childTimings[name] = now - childMarked; childMarked = now; };

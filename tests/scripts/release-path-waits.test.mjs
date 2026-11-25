@@ -5,7 +5,8 @@
 // for 30 days of releases.
 // Each slice that removes sites runs
 //   node tests/scripts/release-path-files.mjs --write-remaining
-// so the remaining counts only go down. The file goes when it reaches {}.
+// so the remaining counts only go down. The file goes when it reaches {}:
+// https://github.com/CenterCoopMedia/njpbs/issues/651 names each site.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -29,6 +30,17 @@ test("no release-path file outside the wait module adds a time construct", () =>
 
 test("the release path includes the workflow commands under site/scripts", () => {
   for (const path of ["site/scripts/cms-dev-publication.mjs", "site/scripts/activate-public-worker-candidate.ts"]) assert.ok(files.includes(path), `${path} is on the release path`);
+});
+
+test("the release path includes every adapter the component runner loads by name", async () => {
+  const { DEPLOYMENT_COMPONENTS } = await import(join(ROOT, "scripts/lib/deployment-components.mjs"));
+  const adapters = new Set(Object.values(DEPLOYMENT_COMPONENTS).flatMap(row => Object.values(row.operations)).flatMap(adapter => adapter.module ?? []));
+  assert.ok(adapters.size > 1);
+  for (const module of adapters) assert.ok(files.includes(`scripts/${module}`), `scripts/${module} is on the release path`);
+});
+
+test("the release path includes a child process script named by a URL", () => {
+  assert.ok(files.includes("scripts/lib/rehearsal-qualification-child.mjs"));
 });
 
 test("the wait module holds no number that stops a wait", () => {

@@ -563,9 +563,21 @@ function publicVideoRecords(projection) {
     return { path: `cmsPublicVideos/${data.assetId}`, data: { schemaVersion: 1, media: data.public } };
   });
 }
+// A snapshot keeps the copy it was published with, so two can name different
+// versions of one video. The newest snapshot holds production's current copy.
+export function publicVideoCopies(records) {
+  const newest = new Map();
+  for (const { collection, projection } of records) {
+    if (!['cmsPages', 'cmsPosts'].includes(collection)) continue;
+    const publishedAt = Date.parse(projection.publishedAt);
+    for (const video of publicVideoRecords(projection)) {
+      if (!(newest.get(video.path)?.publishedAt >= publishedAt)) newest.set(video.path, { publishedAt, video });
+    }
+  }
+  return [...newest.values()].map(({ video }) => video);
+}
 function editableRecords(manifest) {
   const output = [];
-  const videos = new Map();
   const dates = { createdAt: manifest.exportedAt, updatedAt: manifest.exportedAt, createdBy: ACTOR, updatedBy: ACTOR };
   for (const record of manifest.records) {
     const projection = structuredClone(record.projection); const version = record.sourceVersion;
@@ -577,10 +589,6 @@ function editableRecords(manifest) {
     });
     if (projection.authorIds) projection.authorIds = (projection.metadata.credits ?? []).filter(credit => credit.kind === 'registered').map(credit => credit.authorId);
     if (['cmsPages', 'cmsPosts'].includes(record.collection)) {
-      for (const video of publicVideoRecords(projection)) {
-        if (videos.has(video.path) && digest(videos.get(video.path).data) !== digest(video.data)) fail(`Public copies of one video differ: ${video.path}`);
-        videos.set(video.path, video);
-      }
       output.push({ path: `${record.collection}/${record.id}`, data: { ...base, ...projection.metadata,
         ...(projection.metadata.liveBlog ? { liveBlog: liveBlogDraft(projection.metadata.liveBlog) } : {}),
         type: record.collection === 'cmsPages' ? 'page' : projection.metadata.type,
@@ -610,7 +618,7 @@ function editableRecords(manifest) {
     }
   }
   if (output.some(item => item.path.startsWith('media_assets/'))) output.push({ path: 'mediaCategories/dev-seed', data: { id: 'dev-seed', label: 'Dev seed', description: 'Copied public media', order: 1000, active: true, version: 1, ...dates } });
-  output.push(...videos.values());
+  output.push(...publicVideoCopies(manifest.records));
   const paths = output.map(item => item.path);
   if (new Set(paths).size !== paths.length) fail('Duplicate import path');
   return output.sort((a, b) => a.path.localeCompare(b.path, 'en'));

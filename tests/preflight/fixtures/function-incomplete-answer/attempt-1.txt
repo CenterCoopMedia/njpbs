@@ -1,0 +1,13 @@
+^[[33m^[[1m⚠  functions:^[[22m^[[39m Request to https://cloudfunctions.googleapis.com/v2/projects/njpbs-site/locations/us-central1/functions/onNavigationShareOwnerWrite?updateMask=name%2CbuildConfig.runtime%2CbuildConfig.entryPoint%2CbuildConfig.source.storageSource.bucket%2CbuildConfig.source.storageSource.object%2CbuildConfig.environmentVariables%2CbuildConfig.sourceToken%2CserviceConfig.environmentVariables%2CserviceConfig.ingressSettings%2CserviceConfig.timeoutSeconds%2CserviceConfig.serviceAccountEmail%2CserviceConfig.availableMemory%2CserviceConfig.minInstanceCount%2CserviceConfig.maxInstanceCount%2CserviceConfig.maxInstanceRequestConcurrency%2CserviceConfig.availableCpu%2CserviceConfig.vpcConnector%2CserviceConfig.vpcConnectorEgressSettings%2CserviceConfig.directVpcNetworkInterface%2CserviceConfig.directVpcEgress%2Clabels%2CeventTrigger.eventType%2CeventTrigger.retryPolicy%2CeventTrigger.eventFilters%2CeventTrigger.triggerRegion had HTTP Error: 429, Quota exceeded for quota metric 'Per project mutation requests' and limit 'Per project mutation requests per minute per region' of service 'cloudfunctions.googleapis.com' for consumer 'project_number:123456789012'.
+^[[33m^[[1m⚠  functions:^[[22m^[[39m Got "Quota Exceeded" error while trying to update projects/njpbs-site/locations/us-central1/functions/onNavigationShareOwnerWrite. Waiting to retry...
+^[[33m^[[1m⚠  functions:^[[22m^[[39m  failed to update function projects/njpbs-site/locations/us-central1/functions/onNavigationShareOwnerWrite
+^[[33m^[[1m⚠  functions:^[[22m^[[39m Updated function is not associated with a service. This deployment is in an unexpected state - please re-deploy your functions.
+Request to https://cloudscheduler.googleapis.com/v1/projects/njpbs-site/locations/us-central1/jobs/firebase-schedule-onNoBuildPostConfirmationRecovery-us-central1?updateMask=name%2CtimeZone%2ChttpTarget%2Cschedule%2CattemptDeadline%2CretryConfig.retryCount had HTTP Error: 400, URL cannot be empty: invalid argument
+^[[32m^[[1m✔ ^[[22m^[[39m ^[[1m^[[32mfunctions[onNavigationShareOwnerWrite(us-central1)]^[[39m^[[22m Successful update operation.
+^[[33m^[[1m⚠  functions:^[[22m^[[39m Deploys failed. Skipping deletes.
+
+Functions deploy had errors with the following functions:
+	onNoBuildPostConfirmationRecovery(us-central1)
+^[[1mFunction URL^[[22m (cmsGetAnalytics(us-central1)): https://cmsgetanalytics-example-uc.a.run.app
+
+^[[1m^[[31mError:^[[39m^[[22m There was an error deploying functions

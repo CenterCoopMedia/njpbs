@@ -19,6 +19,7 @@ import { openPublicReleasePairInput } from "./public-release-pair-input-storage"
 import { openPublicReleasePairRenderPlans } from "./public-release-pair-render-plans";
 import { writePublicReleasePairView, type PairViewStore } from "./public-release-pair-view-storage";
 import { stagePublicReleasePairView } from "./public-release-pair-view-staging";
+import { pairRenderFailure } from "./public-release-pair-child-exit";
 import { verifyPublicReleasePairRenderer } from "./public-release-pair-renderer-release.mjs";
 import { privatePreviewSandbox } from "./process-cms-preview";
 import { PAIR_REPLAY_PROVENANCE_FILE, isPublicReleasePairProjection, projectPublicReleasePairReplay,
@@ -228,7 +229,7 @@ export function createPublicReleasePairExecutor({ firestore, store, pair: rawPai
       (async () => {
         const started = performance.now();
         try { await verifyPublicReleasePairRenderer(compiled, pair); }
-        catch { throw new work.PairExecutionError("byte-mismatch"); }
+        catch (error) { work.rethrowPairTransport(error); throw new work.PairExecutionError("byte-mismatch"); }
         finally { timings.compiledVerificationMs = performance.now() - started; }
       })(),
     ] as const);
@@ -340,9 +341,8 @@ export function createPublicReleasePairExecutor({ firestore, store, pair: rawPai
           let failed = false;
           child.once("error", () => { failed = true; });
           // Wait for close even after abort, before removing the job directory.
-          // bwrap reports a render killed by a signal as 128 plus that signal.
-          child.once("close", code => !failed && code === 0 ? resolve() : reject(new work.PairExecutionError(
-            failed || code === null || code > 128 ? "render-interrupted" : "render-failed")));
+          child.once("close", code => !failed && code === 0 ? resolve() :
+            reject(new work.PairExecutionError(pairRenderFailure(code, failed))));
         });
       } finally {
         clearInterval(timer); signal.removeEventListener("abort", abort); await renewal;

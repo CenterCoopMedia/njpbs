@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { DEPLOYMENT_COMPONENTS } from "./lib/deployment-components.mjs";
 import { ComponentReceiptError, fingerprintPaths, requireSha } from "./lib/cms-component-receipt.mjs";
+import { failureText } from "./lib/provider-call.mjs";
 
 // This dispatcher supplies neither credentials nor authorization. The existing
 // source gates, workflow permission boundaries, locks and adapter checks still
@@ -30,12 +31,12 @@ const scrubbed = message => String(message).replace(/(["'`]).*?\1/g, "<value>").
   .replace(/[A-Za-z0-9_+/=.-]{24,}/g, "<value>").replace(/\s+/g, " ").trim().slice(0, 200);
 
 export function componentFailureDiagnostic(error) {
-  // Deliberate adapter refusals are shown whole. Any other error shows only its
-  // class and code, plus the structured message of a Firestore or Firebase
-  // error, never its raw text: native parse and subprocess messages can contain credentials or
-  // secret-derived inputs.
+  // Deliberate adapter refusals are shown whole, with the public line of their
+  // cause. Any other error shows only its class and code, plus the structured
+  // message of a Firestore or Firebase error, never its raw text: native parse and
+  // subprocess messages can contain credentials or secret-derived inputs.
   if (error instanceof ComponentReceiptError || ["CmsSmokeError", "FunctionsDeployInventoryError", "FunctionsConfigurationError"].includes(error?.name)) {
-    return error.message;
+    return failureText(error);
   }
   const name = /^[A-Za-z]{1,40}$/.test(error?.name ?? "") ? error.name : "unknown";
   const code = Number.isSafeInteger(error?.code) || /^[A-Za-z0-9/_-]{1,60}$/.test(error?.code ?? "") ? error.code : null;

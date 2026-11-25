@@ -18,7 +18,7 @@ const SETTINGS_TRANSPORT = 'public-context-no-build-v1';
 // The transport each publish must report: the owner that writes its owner row.
 const CONTENT_TRANSPORT = { page: 'page-no-build-v1', post: 'post-no-build-v1',
   program: 'public-context-no-build-v1', event: 'public-context-no-build-v1' };
-// Chrome is last: its receipt proves the whole published site.
+// Chrome is published last, so that its context holds every other setting.
 const LAST_SETTING = 'public-site-chrome';
 // These change what Node or Playwright print or load, and could expose the sign-in.
 const REFUSED_ENVIRONMENT = ['DEBUG', 'PWDEBUG', 'NODE_OPTIONS'];
@@ -129,13 +129,42 @@ export async function publishSettings({ targets, call, wait, report = () => {}, 
     }
     report({ setting: id, published: true });
   }
-  // Only the last receipt is awaited: a newer context replaces the earlier ones.
-  const id = targets.at(-1)?.id;
-  if (!id) return null;
+  // A settled receipt covers only its own context and everything before it, so the
+  // receipt of the newest context is the one to await. An unchanged setting keeps
+  // the receipt of an earlier run.
+  let newest = null;
+  for (const { id } of targets) {
+    const revision = (await call('cmsGetSettings', { id })).body?.publication?.contextRevision ?? 0;
+    if (!newest || revision >= newest.revision) newest = { id, revision };
+  }
+  if (!newest) return null;
+  const { id } = newest;
   for (const end = now() + RECEIPT_WAIT_MS; ; await wait(10_000)) {
     const publication = (await call('cmsGetSettings', { id })).body?.publication;
     if (settled(publication)) return publication;
     if (publication?.status === 'failed' || now() > end) throw authored(`${id} receipt: ${publication?.status} missing ${publication?.missingConsumers?.join()}`);
+  }
+}
+
+// Each record has its own publication, which no settings receipt covers. A rerun
+// waits for the records an earlier run published as well.
+export async function awaitContent({ targets, call, wait, now = Date.now }) {
+  let pending = targets;
+  for (let end; pending.length; await wait(10_000)) {
+    const next = [];
+    for (const target of pending) {
+      const { collection, id } = target;
+      const read = await call('cmsGetContent', { collection, id, publicationOnly: true });
+      const publication = read.body?.publication;
+      if (read.status !== 200 || !publication) throw refused(`${collection}/${id}`, read);
+      // A record also reads as failed while it is only late; its receipt names the outcome.
+      const status = publication.recordPublication?.status ?? publication.queueStatus;
+      if (['failed', 'cancelled', 'public_unconfirmed'].includes(status)) throw authored(`${collection}/${id} publication: ${status}`);
+      if (publication.publicUpdatePending !== false) next.push(target);
+    }
+    end ??= now() + RECEIPT_WAIT_MS;
+    if (next.length && now() > end) throw authored(`${next.length} publications did not settle: ${next[0].collection}/${next[0].id}`);
+    pending = next;
   }
 }
 
@@ -185,7 +214,10 @@ async function main() {
     const content = await publishContent({ targets: contentTargets(manifest), call, journal, record });
     say({ content });
     if (content.failed.length) throw authored(`${content.failed.length} records were not published`);
-    say({ receipt: await publishSettings({ targets: settingsTargets(manifest), call, wait: ms => page.waitForTimeout(ms), report: say }) });
+    const wait = ms => page.waitForTimeout(ms);
+    say({ receipt: await publishSettings({ targets: settingsTargets(manifest), call, wait, report: say }) });
+    await awaitContent({ targets: contentTargets(manifest), call, wait });
+    say({ contentSettled: true });
   } finally { await browser.close().catch(() => {}); }
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

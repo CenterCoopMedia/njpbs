@@ -22,5 +22,5 @@ export async function readPublicReleasePairOutputFile(name: string, limit: numbe
       if (length !== before.size || after.size !== before.size || after.mtimeMs !== before.mtimeMs) refuse();
       return bytes.subarray(0, length);
     } finally { await handle.close(); }
-  } catch { return refuse(); }
+  } catch (error) { work.rethrowPairTransport(error); return refuse(); }
 }

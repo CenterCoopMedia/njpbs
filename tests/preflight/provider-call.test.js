@@ -1,8 +1,9 @@
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { inspect } from "node:util";
 import { describe, expect, it, vi } from "vitest";
 import releaseWait from "../../functions/lib/release-wait.js";
-import { ABSENT_EXIT, httpFault, main, permanentFailure, providerCall, providerCallSync, providerGcloud, providerJson } from "../../scripts/lib/provider-call.mjs";
+import { ABSENT_EXIT, CALLER_REFUSED, failureText, faultCause, faultLine, httpFault, main, permanentFailure, providerCall, providerCallSync, providerGcloud, providerJson } from "../../scripts/lib/provider-call.mjs";
 
 const options = () => ({ log: vi.fn() });
 const http = (status, headers = {}) => httpFault(new Response(null, { status, headers }));
@@ -96,6 +97,96 @@ describe("provider call rule", () => {
     const child = Object.assign(new Error("private arguments"), { status: 1, stdout: "private secret value", stderr: "PERMISSION_DENIED" });
     await expect(providerCall("label", () => { throw child; }, o)).rejects.toBe(child);
     expect(o.log.mock.calls.flat().join("\n")).not.toContain("private");
+  });
+
+  it("ends at once on a caller's own refusal and prints its message", async () => {
+    const fault = Object.assign(new Error("method HEAD not allowed by the caller's request callback"), { code: CALLER_REFUSED });
+    const o = options(), call = vi.fn().mockRejectedValue(fault);
+    await expect(providerCall("label", call, o)).rejects.toBe(fault);
+    expect(call).toHaveBeenCalledTimes(1);
+    expect(o.log.mock.calls).toEqual([[`Provider call failed: label, class caller, attempt 1, last provider line: CALLER_REFUSED: ${fault.message}`]]);
+    const sync = { ...options(), wait: vi.fn() }, syncCall = vi.fn(() => { throw fault; });
+    expect(() => providerCallSync("label", syncCall, sync)).toThrow(fault);
+    expect(syncCall).toHaveBeenCalledTimes(1);
+    expect(sync.wait).not.toHaveBeenCalled();
+    expect(sync.log.mock.calls).toEqual([[`Provider call failed: label, class caller, 1 of 5 attempts, last provider line: CALLER_REFUSED: ${fault.message}`]]);
+  });
+
+  // The last three are thrown by google-auth-library 9.15.1 and gcp-metadata 6.1.1 after a provider answered.
+  it.each([
+    ["an unmarked error", new Error("something new")],
+    ["a TypeError", new TypeError("Cannot read properties of null (reading 'expires_in')")],
+    ["a refused token refresh", new Error("Could not refresh access token.")],
+    ["an unreadable subject token", new Error("Unable to parse the subject_token from the credential_source URL")],
+    ["a metadata answer without its header", new Error("Invalid response from metadata service: incorrect Metadata-Flavor header.")],
+  ])("repeats %s until the provider answers and keeps its message in each retry line", async (_name, fault) => {
+    vi.useFakeTimers();
+    const lines = [];
+    releaseWait.setJournal(line => lines.push(line));
+    try {
+      const o = options(), call = vi.fn();
+      for (let failed = 0; failed < 6; failed++) call.mockRejectedValueOnce(fault);
+      call.mockResolvedValue("answer");
+      const answer = providerCall("label", call, o);
+      await vi.advanceTimersByTimeAsync(5 * 60_000);
+      await expect(answer).resolves.toBe("answer");
+      expect(call).toHaveBeenCalledTimes(7);
+      expect(o.log).not.toHaveBeenCalled();
+      const retries = lines.filter(line => line.event === "retry");
+      expect(retries).toHaveLength(6);
+      for (const line of retries) expect(line.problem).toContain(fault.message);
+    } finally {
+      vi.useRealTimers();
+      releaseWait.setJournal(line => console.error(JSON.stringify({ severity: "INFO", ...line })));
+    }
+  });
+  it("keeps an unmarked error's message in the final line of the synchronous form", () => {
+    const fault = new Error("something new"), o = { ...options(), wait: vi.fn() }, call = vi.fn(() => { throw fault; });
+    expect(() => providerCallSync("label", call, o)).toThrow(fault);
+    expect(call).toHaveBeenCalledTimes(5);
+    expect(o.log.mock.calls[0][0]).toContain("class transient, 5 of 5 attempts");
+    expect(o.log.mock.calls[0][0]).toContain(fault.message);
+  });
+
+  // The log is public, so this is the boundary: none of these may reach a line.
+  const opaque = "Zm9vYmFyYmF6cXV4MTIzNDU2Nzg5MEFCQ0RFRkdISUo";
+  const hex = "0123456789abcdef0123456789abcdef";
+  const account = { type: "service_account", project_id: "example-project", private_key_id: hex,
+    private_key: "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASC\n-----END PRIVATE KEY-----\n", client_email: "deploy@example-project.iam.gserviceaccount.com" };
+  it.each([
+    ["a bearer token", `refused authorization: Bearer ${opaque}`, [opaque]],
+    ["a short bearer token", "refused Bearer abc.def", ["abc.def"]],
+    ["a JWT", "token eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.c2lnbmF0dXJlMTIzNDU2Nzg5", ["eyJ", "c2lnbmF0"]],
+    ["a GitHub token", "refused ghp_abcdefghijklmnopqrst0123456789", ["ghp_"]],
+    ["a signed URL", `GET https://bucket.example.org/object?X-Amz-Credential=AKIAEXAMPLE&X-Amz-Signature=${hex} refused`, ["AKIA", hex, "X-Amz"]],
+    ["URL credentials", "GET https://user:pass@example.org/path refused", ["user:pass"]],
+    ["a service account", `bad credential ${JSON.stringify(account)}`, [hex, "BEGIN PRIVATE", "MIIE", "deploy@"]],
+    ["a service account fragment", JSON.stringify(account).slice(20, 250).replaceAll("{", ""), [hex, "BEGIN PRIVATE", "MIIE"]],
+    ["base64 with slashes", "bad MIIEvQIBADAN/BgkqhkiG9w0/BAQEFAASC", ["MIIE", "BAQE"]],
+    ["a later line", `first\n${opaque}`, [opaque]],
+    ["secret assignments", "api_key=hunter2&password: two words", ["hunter2", "two", "words"]],
+    ["a cookie", "refused Cookie: a=first; b=second", ["first;", "second"]],
+    ["another authorization scheme", "refused Authorization: Custom abc def", ["abc", "def"]],
+  ])("keeps %s out of every line about a fault", (_name, message, secrets) => {
+    const wrapped = new Error("What failed", faultCause(new Error("outer", { cause: new Error(message) })));
+    for (const text of [faultLine(new Error(message)), faultLine(Object.assign(new Error(message), { code: "ENOENT" })), failureText(wrapped), inspect(wrapped, { depth: 9 }),
+      faultLine({ stderr: `error ${message}`, status: 1 })]) {
+      for (const secret of secrets) expect(text).not.toContain(secret);
+    }
+  });
+
+  it("reports the kind, not the text, of an error that can quote private input", () => {
+    const parse = () => { try { JSON.parse("private"); } catch (error) { return error; } };
+    const sdk = Object.assign(new Error("private"), { code: "ECONNRESET", config: { headers: { authorization: "private" } } });
+    const child = Object.assign(new Error("Command failed: tool private"), { status: 2, stdout: "private", stderr: "" });
+    expect([parse(), sdk, child, http(503)].map(faultLine)).toEqual(["SyntaxError", "ECONNRESET", "exit 2", "HTTP 503"]);
+  });
+
+  it("carries a caught error's message, code and cause into the replacing error", () => {
+    const missing = Object.assign(new Error("ENOENT: no such file, open 'config/example.json'"), { code: "ENOENT" });
+    const replaced = new Error("Could not read it", faultCause(new Error("step two", { cause: missing })));
+    expect(failureText(replaced)).toBe("Could not read it; cause: step two; cause: ENOENT: no such file, open 'config/example.json'");
+    expect(failureText(new Error("Plain", { cause: new Error("not from faultCause") }))).toBe("Plain");
   });
 
   it("repeats a JSON read on an unaccepted status and on an unreadable body", async () => {

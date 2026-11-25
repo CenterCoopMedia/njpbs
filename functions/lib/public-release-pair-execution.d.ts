@@ -7,6 +7,7 @@ export type PairFailureCode = "input-unavailable" | "render-failed" | "byte-mism
 export function isPairFailureCode(code: unknown): code is PairFailureCode;
 export const WAITING_FAILURE_CODES: readonly PairFailureCode[];
 export function isPairFinalFailure(code: unknown): boolean;
+export function isHostCapacityFailure(error: unknown): boolean;
 export function isPairTransportFailure(error: unknown): boolean;
 export function rethrowPairTransport(error: unknown): void;
 export class PairExecutionError extends Error {

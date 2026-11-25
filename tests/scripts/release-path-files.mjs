@@ -70,6 +70,22 @@ function codeImports(file, text) {
   return specs;
 }
 
+// Code can also run a file that it names in a table, a URL or a process
+// argument, so a quoted file name counts as a call. A relative name starts at
+// the file. A bare name is any file of that name in its directory or one above. A root
+// path counts only as the script of a child process: other root paths are data.
+function namedCode(file, text) {
+  const found = [];
+  for (const [, name] of text.matchAll(/["'`]((?:\.{1,2}\/)?[\w@.-]+(?:\/[\w@.-]+)*\.(?:c|m)?[jt]s)["'`]/g)) {
+    if (name.startsWith(".")) found.push(relative(ROOT, resolve(dirname(join(ROOT, file)), name)));
+    else if (!name.includes("/")) for (let directory = dirname(file); directory !== "."; directory = dirname(directory)) {
+      found.push(join(directory, name));
+    }
+  }
+  for (const [, name] of text.matchAll(/process\.execPath,\s*\[\s*["']([\w@./-]+)["']/g)) found.push(name);
+  return found.filter(path => TRACKED.has(path) && !path.startsWith("tests/"));
+}
+
 export function listReleasePathFiles() {
   const seen = new Set(), queue = [...RELEASE_ENTRIES];
   while (queue.length) {
@@ -77,7 +93,7 @@ export function listReleasePathFiles() {
     if (seen.has(file) || !TRACKED.has(file)) continue;
     seen.add(file);
     const text = readFileSync(join(ROOT, file), "utf8");
-    if (CODE.test(file)) queue.push(...codeImports(file, text));
+    if (CODE.test(file)) queue.push(...codeImports(file, text), ...namedCode(file, text));
     else queue.push(...namedPaths(text));
   }
   return [...seen].sort();

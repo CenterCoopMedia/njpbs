@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync } from "nod
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { configurationFingerprint, fingerprintFunctionGraph, fingerprintInputs, fingerprintPaths, functionGraphSource, readCommittedBlobs, startReceipt, completeReceipt } from "../../scripts/lib/cms-component-receipt.mjs";
+import { configurationFingerprint, fingerprintFunctionGraph, FUNCTION_DEPLOY_TOOLS, fingerprintInputs, fingerprintPaths, functionGraphSource, readCommittedBlobs, startReceipt, completeReceipt } from "../../scripts/lib/cms-component-receipt.mjs";
 import { INDEPENDENT_INPUTS } from "../../scripts/lib/deployment-components.mjs";
 import { functionDeploymentPhase, selectedFunctionNames } from "../../scripts/deploy-cms-function-batches.mjs";
 import { contractRecipe } from "../../scripts/lib/functions-contracts.mjs";
@@ -46,7 +46,6 @@ async function releaseInputs(before, after, cwd) {
       functionsFingerprint, configurationFingerprint, rendererFingerprint, rendererGraphAvailable: true,
       renderFingerprint: configurationFingerprint, receiptRenderFingerprint: configurationFingerprint,
       liveFunctionsIdentities: funcs, liveRendererIdentities: renderer,
-      targetHasAdminRevisionIntake: true, liveHasAdminRevisionIntake: true,
       functionsReceipt: receipt({ sourceSha: before, inputFingerprint: oldFingerprint, configurationFingerprint,
         functionGraph: prior.graph, providerIdentities: funcs }),
       rendererReceipt: receipt({ sourceSha: before, inputFingerprint: rendererFingerprint, providerIdentities: renderer }),
@@ -299,6 +298,24 @@ describe("committed Functions module graph", () => {
     const repo = repository();
     repo.write("functions/health.js", source);
     expect(await repo.graph(repo.commit())).toBeNull();
+  });
+
+  // Dev run 45562533334 deployed all 187 Functions after #641 changed four lines of the deploy script.
+  it("selects no Function when only deploy tools change", async () => {
+    const repo = repository();
+    for (const path of FUNCTION_DEPLOY_TOOLS) repo.write(path, "export const before = 1;");
+    const before = repo.commit();
+    for (const path of FUNCTION_DEPLOY_TOOLS) repo.write(path, "export const after = 2;");
+    const tools = repo.commit();
+    const { plan, prior, target } = await releaseInputs(before, tools, repo.cwd);
+    expect(decideRelease(plan)).toMatchObject({ functionsMutated: false, functionDeployTargets: "", releaseReason: "unchanged" });
+    // Receipts store these two values, so both still count the tools.
+    expect(plan.functionsFingerprint).not.toBe(plan.functionsReceipt.mutation.inputFingerprint);
+    expect(target.graph.globalFingerprint).not.toBe(prior.graph.globalFingerprint);
+    for (const path of FUNCTION_DEPLOY_TOOLS) repo.write(path, "export const after = 3;");
+    repo.write("functions/health.js", "exports.health = 2;");
+    const { plan: both } = await releaseInputs(tools, repo.commit(), repo.cwd);
+    expect(decideRelease(both)).toMatchObject({ functionsMutated: true, functionDeployTargets: "functions:health" });
   });
 
   it("invalidates the full-release configuration for assets, manifests and index changes", async () => {

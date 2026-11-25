@@ -7,7 +7,7 @@ import { stripVTControlCharacters } from "node:util";
 import { CLOUD_WAKE_FUNCTIONS, explicitCloudWakeDecision } from "./lib/cms-release-plan.mjs";
 import { assertNoFunctionDeletions, loadFunctionDeployManifest, readFunctionsDeployInventory, requestDeploymentInventory } from "./lib/functions-deploy-inventory.mjs";
 import { cmsTarget } from "./lib/cms-target.mjs";
-import { lastProviderLine, permanentFailure } from "./lib/provider-call.mjs";
+import { emptyScheduleUrls, lastProviderLine, permanentFailure, permanentFailureLine } from "./lib/provider-call.mjs";
 import releaseWait from "../functions/lib/release-wait.js";
 
 const { callOutside } = releaseWait;
@@ -210,18 +210,22 @@ export async function deployFunctionTargets(names, launch = spawn, project = PRO
   if (!Array.isArray(names) || !names.length || !Array.isArray(manifest) ||
       names.some(name => !manifest.some(fn => fn.name === name))) throw new ComponentReceiptError("Function targets differ from the exact manifest");
   let pending = names, attempt = 0;
+  // A function's empty schedule URL is retried once in a deploy.
+  const retriedSchedules = new Set();
   // Capacity pacing: a Cloud Run regional CPU quota frees as revisions settle.
   await callOutside("Firebase function deployment", async () => {
     attempt += 1;
     assertNoFunctionDeletions(manifest, await readFunctionsDeployInventory(project, request), { projectId: project, codebase: cmsTarget().codebase, only: pending });
     const { code, output } = await runFunctionDeploy(pending, launch, project);
     if (code === 0 && output.includes("Deploy complete!")) return;
-    const permanent = permanentFailure(output);
+    const failed = code === 0 ? [] : failedFunctionNames(output, pending);
+    const retryable = failed.filter(name => !retriedSchedules.has(name));
+    const permanent = permanentFailure(output, retryable);
     if (permanent) {
-      console.error(`Firebase deployment failed: class ${permanent}, attempt ${attempt}, last provider line: ${lastProviderLine(output)}`);
+      console.error(`Firebase deployment failed: class ${permanent}, attempt ${attempt}, last provider line: ${lastProviderLine(output)}; class from: ${permanentFailureLine(output, retryable)}`);
       throw new ComponentReceiptError("Firebase deployment did not confirm completion");
     }
-    const failed = code === 0 ? [] : failedFunctionNames(output, pending);
+    for (const name of emptyScheduleUrls(output)) retriedSchedules.add(name);
     if (failed.length) pending = failed;
     console.log(`Waiting for the provider, then deploying again (attempt ${attempt + 1}): ${pending.join(", ")}; ` +
       `last provider line: ${lastProviderLine(output)}`);

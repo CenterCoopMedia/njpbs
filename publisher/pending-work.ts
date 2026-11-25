@@ -390,6 +390,9 @@ export async function readPublicationOwners(documents: string, headers: Record<s
  * holds the journal it is due, so the release runner can settle it. */
 const parkedRelease = (row: { status?: unknown; nextAttemptAt?: unknown }) => row.status === "failed" && row.nextAttemptAt === null;
 
+// Failed attempts before a retained release reads as stalled. It stops nothing.
+const STALLED_RELEASE_ATTEMPT = 4;
+
 export async function readNoBuildPublicationWork(options: {
   account: string; commitSha: string; serializerId: string; target?: PublicationTarget;
 }, request = fetch): Promise<{ needsRuntime: boolean; healthy: boolean; diagnostics: Omit<PublicationHealth, "healthy"> }> {
@@ -481,6 +484,11 @@ export async function readNoBuildPublicationWork(options: {
     !["pending", "failed"].includes(retained.status) || !Number.isSafeInteger(retained.attempts) ||
     retained.attempts < 0 || !(Number.isFinite(retained.nextAttemptAt) ? retained.nextAttemptAt >= 0 : parkedRelease(retained)));
   if (retainedUnreadable) { progress.healthy = false; progress.reasons.push("state_unreadable"); }
+  // Retries have no attempt limit, so a request that keeps failing stays due. The
+  // fourth failed attempt reports it; the retry goes on and ends the report.
+  const releaseStalled = Boolean(retained) && !retainedUnreadable && (parkedRelease(retained!) || retained!.attempts >= STALLED_RELEASE_ATTEMPT &&
+    (retained!.status === "failed" || retained!.nextAttemptAt <= Date.now()));
+  if (releaseStalled) { progress.healthy = false; progress.reasons.push("release_stalled"); }
   if (control.phase !== "ready") progress.reasons.push("runtime_not_ready");
   const previewDue = control.phase === "ready" && "previewContext" in work && work.previewContext === true;
   return { needsRuntime: control.phase === "starting" || refreshDue || previewDue || work.maintenance || work.reconcile || (idle && (releaseDue || journalSettlement || retainedDue)),
