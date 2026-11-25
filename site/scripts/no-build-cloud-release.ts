@@ -20,7 +20,7 @@ import type { PublicationAccess } from "./activate-public-worker-candidate";
 const require = createRequire(import.meta.url);
 const { assertPublicationOwner } = require("../../functions/lib/publication-runtime-owner");
 const { noAnswer } = require("../../functions/lib/release-wait");
-const { assertPublicDeploymentReservedBatch } = require("../../functions/lib/public-deployment");
+const { assertPublicDeploymentLeaseBatch, assertPublicDeploymentReservedBatch, REFUSED_CLOUD_RELEASE_REASON } = require("../../functions/lib/public-deployment");
 const { readPreparedReleaseProof } = require("../../functions/lib/public-release-promotion");
 const { projectPublicWorkerCandidate } = require("../../functions/lib/public-worker-candidate");
 const { digest: metadataDigest } = require("../../functions/lib/no-build-page-ownership");
@@ -230,6 +230,13 @@ async function settleRefusedCloudRelease({ firestore, serializerId, commitSha, i
       assertPublicDeploymentReservedBatch(batch, identity.buildBatchId);
       tx.update(batchRef, { status: "retired", retiredAt: settledAt,
         retirementReceipt: { schemaVersion: 1, reason: "cloud_release_not_staged", originalOwner: "cloudflare",
+          activeGeneration: pointer.activeGeneration, activeCommitSha: pointer.activeCommitSha,
+          activeDeploymentId: pointer.activeDeploymentId } });
+    }
+    else if (batch.status === "ready") {
+      assertPublicDeploymentLeaseBatch(batch, identity.buildBatchId);
+      tx.update(batchRef, { status: "retired", retiredAt: settledAt,
+        retirementReceipt: { schemaVersion: 1, reason: REFUSED_CLOUD_RELEASE_REASON, originalOwner: "cloudflare",
           activeGeneration: pointer.activeGeneration, activeCommitSha: pointer.activeCommitSha,
           activeDeploymentId: pointer.activeDeploymentId } });
     }

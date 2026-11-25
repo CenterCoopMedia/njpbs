@@ -1,3 +1,4 @@
+import { firebaseAdminRuntime } from "../../site/scripts/firebase-admin-runtime";
 import { afterAll, beforeEach, expect, it, vi } from "vitest";
 import { initializeApp, deleteApp } from "firebase-admin/app";
 import { getFirestore, FieldValue, Timestamp } from "firebase-admin/firestore";
@@ -325,6 +326,19 @@ it.each([1, 4])("preserves an original native output claim on attempt %s while p
   await expect(apply()).rejects.toThrow();
   expect(await read()).toMatchObject({ pauseCommitted: true, drainCommitted: false, ownsClosedFence: false });
   expect((await ref.get()).data()).toEqual(task);
+});
+it.each([["a refused ready release", {}, true], ["a leftover ready release", { status: "ready" }, false],
+  ["a refused release with another reason", { reason: "other" }, false]])("drains %s: %s", async (_label, change: { status?: string; reason?: string }, drains) => {
+  await acceptNativeContext(); await finishNativeContext();
+  const pointer = (await db.doc("system/publicDeployment").get()).data()!, time = firebaseAdminRuntime.Timestamp.fromMillis(1_700_000_000_000);
+  const batch = { schemaVersion: 1, buildBatchId: "cms-66666666666666666666", status: "ready", runtime: { owner: "cloudflare", release: "d".repeat(40) },
+    commitSha: "d".repeat(40), generation: pointer.activeGeneration + 1, cutoffAt: time, reservedAt: time, readyAt: time,
+    reservedAgainstGeneration: pointer.activeGeneration, reservedAgainstCommitSha: pointer.activeCommitSha, reservedAgainstDeploymentId: pointer.activeDeploymentId };
+  await db.doc("system/publicDeployment/buildBatches/cms-66666666666666666666").set(change.status ? batch : { ...batch, status: "retired", retiredAt: time,
+    retirementReceipt: { schemaVersion: 1, reason: change.reason ?? "cloud_release_input_refused", originalOwner: "cloudflare",
+      activeGeneration: pointer.activeGeneration, activeCommitSha: pointer.activeCommitSha, activeDeploymentId: pointer.activeDeploymentId } });
+  if (drains) expect(await apply()).toMatchObject({ drainCommitted: true });
+  else await expect(apply()).rejects.toThrow();
 });
 it("pauses admission while a background task waits for its retry past four attempts", async () => {
   await acceptNativeContext();
