@@ -306,6 +306,7 @@ export function createPublicReleasePairExecutor({ firestore, store, pair: rawPai
         catch (error) {
           signal.throwIfAborted();
           if (error instanceof work.PairExecutionError) throw error;
+          work.rethrowPairTransport(error);
           throw new work.PairExecutionError("render-failed");
         }
         await renew();

@@ -1,3 +1,4 @@
+import work from "../../functions/lib/public-release-pair-work.js";
 import { freezePublicReleasePairStaticSource } from "./public-release-pair-static-source-storage";
 import { soleStaticPostOwner, PairStaticSourceError } from "./public-release-pair-static-source";
 import { createHash } from "node:crypto";
@@ -64,7 +65,7 @@ export async function freezePublicReleaseSourceDependencies(options: { firestore
     await freezePublicReleasePairStaticSource({ state: options.state, originalPublication: qualifiedCode.publication,
       environment: options.pair.environment, files, chunk, readContentObject: async (key, limit) => {
         try { return await objectBytes(options.contentStore!, key, limit, options.signal); }
-        catch { throw new PairStaticSourceError("pair-static-source-missing"); }
+        catch (error) { work.rethrowPairTransport(error); throw new PairStaticSourceError("pair-static-source-missing"); }
       } });
   }
   const providerStore: PairViewStore = { put: async () => { refuse(); }, async get(key) {

@@ -477,6 +477,8 @@ async function derivePairInput(options: SourceOptions, retained?: HistoricalPubl
       files.set(file, retainedResource); resources.push({ url, file, contentType: mime }); continue;
     }
     const response = await (options.resourceRequest ?? fetch)(url, { signal, credentials: "omit", redirect: "error" });
+    // The media host could not serve now; a later read can differ.
+    if ([408, 429].includes(response.status) || response.status >= 500) throw new work.PairExecutionError("storage-unavailable");
     if (!response.ok || response.headers.get("content-type")?.split(";")[0] !== mime) refuse();
     const reader = response.body?.getReader();
     if (!reader) refuse();

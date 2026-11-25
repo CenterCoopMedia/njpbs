@@ -6,7 +6,7 @@ const { parsePublicReleasePair, publicReleasePairReference, parseVersionedPublic
   PublicReleaseProtocolError, publicReleaseDigest, exact, digest, positive, freeze } = require("./public-release-pair");
 const { publicationTarget, assertPublicationDatabase } = require("./publication-target");
 const pairInputs = require("./public-release-pair-input");
-const { isPairFailureCode, PairExecutionError, assertPrivatePairResources } = require("./public-release-pair-execution");
+const { isPairFailureCode, isPairTransportFailure, rethrowPairTransport, PairExecutionError, assertPrivatePairResources } = require("./public-release-pair-execution");
 
 const PAIRS = "system/publicReleasePairs";
 const KINDS = new Set(["accepted", "qualification", "recovery"]);
@@ -409,6 +409,6 @@ async function assertPublicReleasePairCompletedReceiptInTransaction({ firestore,
 
 module.exports = { PAIRS, LEASE_MS, registerPublicReleasePair, enqueuePublicReleasePairWorkInTransaction,
   claimPublicReleasePairWork, settlePublicReleasePairWork, publicReleasePairTaskDue, readPublicReleasePairWork,
-  renewPublicReleasePairWork, assertPublicReleasePairDatabase: database, assertPrivatePairResources, PairExecutionError,
+  renewPublicReleasePairWork, assertPublicReleasePairDatabase: database, assertPrivatePairResources, PairExecutionError, isPairTransportFailure, rethrowPairTransport,
   readPublicReleasePairWorkHint, publicReleasePairPath, publicReleasePairKey, assertPublicReleasePairCompletedReceiptInTransaction,
   assertPublicReleasePairInputOwnerInTransaction };

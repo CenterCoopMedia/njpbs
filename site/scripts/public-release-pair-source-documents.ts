@@ -9,7 +9,8 @@ const exact = (value: any, keys: string[]) => {
  * apply all documents in a bundled body: another member may have changed later.
  * H's file digest and the source owner's canonical contentDigest are distinct. */
 export async function openPublicReleasePairSourceDocuments(root: PairInputRoot, read: (name: string) => Promise<Uint8Array>) {
-  const json = async (name: string) => { try { return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(await read(name))); } catch { return refuse(); } };
+  const json = async (name: string) => { try { return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(await read(name))); }
+    catch (error) { work.rethrowPairTransport(error); return refuse(); } };
   const census = await json("source-census.json");
   exact(census, ["schemaVersion", "kind", "baseline", "cursor", "documents", "changes"]);
   exact(census.baseline, ["logBaselineDigest", "receipt", "sourceMembers"]);

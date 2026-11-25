@@ -7,6 +7,7 @@ import proofParser from "../../functions/lib/no-build-post-static-proof.js";
 import staticReturn from "../../functions/lib/no-build-post-static-return.js";
 import { baselineManifestKey, baselineObjectKey, BASELINE_MANIFEST_BYTES, validateContentBaseline } from "../../packages/content-core/src/public-content-baseline";
 import { canonicalPublicationReceipt } from "../src/lib/public-publication-receipt";
+import work from "../../functions/lib/public-release-pair-work.js";
 import { publicationTarget } from "../../functions/lib/publication-target";
 import type { HistoricalPublicReleaseState } from "../../functions/lib/public-release-historical-state";
 import { PAIR_STATIC_SOURCE_FILE, staticSourceBaselineFile, staticProofArtifactFile, soleStaticPostOwner, openFrozenPublicReleasePairStaticSource, PairStaticSourceError } from "./public-release-pair-static-source";
@@ -47,6 +48,7 @@ export async function freezePublicReleasePairStaticSource({ state, originalPubli
       readFrozenFile: async name => { const bytes = files.get(name); if (!bytes) throw new PairStaticSourceError("pair-static-source-missing"); return bytes; } });
   } catch (error) {
     if (error instanceof PairStaticSourceError) throw error;
+    work.rethrowPairTransport(error);
     throw new PairStaticSourceError("pair-static-source-mismatch");
   }
 }
@@ -78,6 +80,7 @@ export async function openPublicReleasePairStaticSourceInputs(root: import("../.
     return { documents, source: await openFrozenPublicReleasePairStaticSource({ documents, originalPublication: code.publication, readFrozenFile }) };
   } catch (error) {
     if (error instanceof PairStaticSourceError) throw error;
+    work.rethrowPairTransport(error);
     throw new PairStaticSourceError("pair-static-source-mismatch");
   }
 }

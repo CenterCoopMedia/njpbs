@@ -14,7 +14,7 @@ export type PairClaim = Readonly<{ taskId: string; token: string; leaseUntil: nu
 export const PAIRS: "system/publicReleasePairs";
 export const LEASE_MS: 60000;
 import type { PairFailureCode } from "./public-release-pair-execution";
-export { PairExecutionError, assertPrivatePairResources, type PairFailureCode } from "./public-release-pair-execution";
+export { PairExecutionError, isPairTransportFailure, rethrowPairTransport, assertPrivatePairResources, type PairFailureCode } from "./public-release-pair-execution";
 export function publicReleasePairKey(pairId: string): string;
 export function publicReleasePairPath(pairId: string): string;
 export function readPublicReleasePairWorkHint(input: {

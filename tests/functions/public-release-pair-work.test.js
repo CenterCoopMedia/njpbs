@@ -164,6 +164,35 @@ it("prioritizes an accepted retry ahead of more than one page of pending qualifi
   expect((await work.readPublicReleasePairWork({ firestore: db, pair: next, now: 2001 })).taskIds).toEqual([accepted.taskId]);
 });
 
+it.each([
+  ["a Firestore UNAVAILABLE", Object.assign(new Error("14 UNAVAILABLE: synthetic"), { code: 14, details: "synthetic" })],
+  ["a connection reset under fetch", Object.assign(new TypeError("fetch failed"), { cause: Object.assign(new Error("read ECONNRESET"), { code: "ECONNRESET" }) })],
+  ["a storage 503", Object.assign(new Error("synthetic"), { $metadata: { httpStatusCode: 503 } })],
+  ["a provider 429", Object.assign(new Error("synthetic"), { response: { status: 429 } })],
+  ["a wrapped transport failure", Object.assign(new Error("synthetic"), { cause: new work.PairExecutionError("storage-unavailable") })],
+  ["an ended request", new DOMException("synthetic", "TimeoutError")],
+])("keeps %s retryable as storage-unavailable", async (_name, error) => {
+  await register(next);
+  const { taskId } = await enqueue(next, input());
+  expect(await runPublicReleasePairWorkOnce({ firestore: db, pair: next, clock: () => 1000, execute: async () => { throw error; } })).toBe("retry-recorded");
+  expect(await stored(next, taskId)).toMatchObject({ status: "failed", lastFailure: "storage-unavailable", nextAttemptAt: 2000 });
+  expect(() => work.rethrowPairTransport(error)).toThrow(expect.objectContaining({ code: "storage-unavailable" }));
+});
+
+it.each([
+  ["a plain error", new Error("synthetic")],
+  ["a 404", Object.assign(new Error("synthetic"), { status: 404 })],
+  ["a child process exit", Object.assign(new Error("synthetic"), { code: 14, cmd: "synthetic" })],
+  ["a content failure with a transport cause", Object.assign(new work.PairExecutionError("byte-mismatch"), { cause: Object.assign(new Error("synthetic"), { code: 14 }) })],
+])("does not call %s a transport failure", async (_name, error) => {
+  const content = error instanceof work.PairExecutionError;
+  if (!content) expect(work.isPairTransportFailure(error)).toBe(false);
+  await register(next);
+  const { taskId } = await enqueue(next, input());
+  await runPublicReleasePairWorkOnce({ firestore: db, pair: next, clock: () => 1000, execute: async () => { throw error; } });
+  expect((await stored(next, taskId)).lastFailure).toBe(content ? "byte-mismatch" : "unexpected-executor-error");
+});
+
 it("runs and retries private work without activating a release or claiming publication success", async () => {
   await register(next);
   const { taskId } = await enqueue(next, input());

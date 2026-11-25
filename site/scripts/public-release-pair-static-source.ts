@@ -88,6 +88,7 @@ export async function openFrozenPublicReleasePairStaticSource({ documents, origi
       publicationDigest: hash(publicationBytes), statusDigest: hash(statusBytes), proofDigest: hash(new TextEncoder().encode(JSON.stringify(proof))) };
   } catch (error) {
     if (error instanceof PairStaticSourceError) throw error;
+    work.rethrowPairTransport(error);
     return mismatch();
   }
 }

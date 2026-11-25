@@ -138,6 +138,7 @@ export async function recomputePublicReleasePairStaticArtifact(options: Paramete
   try { return await recomputeStaticArtifact(options); }
   catch (error) {
     options.signal?.throwIfAborted(); if (error instanceof work.PairExecutionError) throw error;
+    work.rethrowPairTransport(error);
     const failure = new work.PairExecutionError(options.verifyReceipts ? "byte-mismatch" : "input-unavailable");
     Object.defineProperty(failure, "cause", { value: error });
     throw failure;

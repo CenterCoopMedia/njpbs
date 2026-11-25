@@ -82,7 +82,8 @@ export async function runPublicReleasePairWorkOnce({ firestore, pair, execute, c
       } });
   } catch (error) {
     const now = clock();
-    const failureCode = error instanceof work.PairExecutionError ? error.code : "unexpected-executor-error";
+    const failureCode = error instanceof work.PairExecutionError ? error.code
+      : work.isPairTransportFailure(error) ? "storage-unavailable" : "unexpected-executor-error";
     try {
       await work.settlePublicReleasePairWork({ firestore, pair, taskId: claim.taskId, token: claim.token,
         manifestDigest: null, retryAt: now + 1_000, failureCode, now });

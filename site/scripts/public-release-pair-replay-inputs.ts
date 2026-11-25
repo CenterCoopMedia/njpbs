@@ -16,7 +16,7 @@ const fail = (family: Family, reason: "missing" | "mismatch"): never => { throw 
 async function json(read: FrozenReplayFileReader | undefined, name: string, family: Family) {
   if (!read) return fail(family, "missing");
   let bytes: Uint8Array;
-  try { bytes = await read(name); } catch (error) { return fail(family, error instanceof work.PairExecutionError && error.code === "byte-mismatch" ? "mismatch" : "missing"); }
+  try { bytes = await read(name); } catch (error) { work.rethrowPairTransport(error); return fail(family, error instanceof work.PairExecutionError && error.code === "byte-mismatch" ? "mismatch" : "missing"); }
   try { return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)); }
   catch { return fail(family, "mismatch"); }
 }
@@ -90,6 +90,7 @@ export async function rederiveFrozenReplaySchedule(input: Record<string, any>, o
     return result.schedule;
   } catch (error) {
     if (error instanceof PairReplayFrozenInputError) throw error;
+    work.rethrowPairTransport(error);
     return fail("schedule", "mismatch");
   }
 }

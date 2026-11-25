@@ -4,5 +4,7 @@ export type PairFailureCode = "input-unavailable" | "render-failed" | "byte-mism
   `replay-frozen-${"request" | "code" | "schedule" | "program-images"}-${"missing" | "mismatch"}` |
   "unsupported-cross-source-schedule" | "unsupported-cross-source-record-images" | "reader-mismatch" | "lease-lost" | "lease-expired" | "unexpected-executor-error";
 export function isPairFailureCode(code: unknown): code is PairFailureCode;
+export function isPairTransportFailure(error: unknown): boolean;
+export function rethrowPairTransport(error: unknown): void;
 export class PairExecutionError extends Error { constructor(code: PairFailureCode); readonly code: PairFailureCode }
 export function assertPrivatePairResources(pair: PublicReleasePair): void;
