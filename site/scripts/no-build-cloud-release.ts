@@ -190,8 +190,10 @@ async function materializePreparedRelease(firestore: Firestore, preparationId: s
 
 /** Settle a request whose sealed bytes are refused before any activation. The
  * request, its reservation and its own journal job end in one transaction, so
- * a later release can start. A batch with a lease or an uncertain activation
- * keeps its owner, and an uploaded candidate stays until a newer one replaces it. */
+ * a later release can start. An uploaded candidate also loses its eligibility,
+ * which returns to the active release. The reservation counter only moves
+ * forward, and the publisher pins stay. A batch with a lease or an uncertain
+ * activation keeps its owner. */
 async function settleRefusedCloudRelease({ firestore, serializerId, commitSha, identity, request, claimToken, failureReason }: {
   firestore: Firestore; serializerId: string; commitSha: string; identity: CloudPublicationIdentity;
   request: DocumentData; claimToken: string; failureReason: string;
@@ -199,9 +201,10 @@ async function settleRefusedCloudRelease({ firestore, serializerId, commitSha, i
   const requestRef = firestore.doc(`${cloudReleaseCollection(serializerId)}/${identity.queueId}`);
   const batchRef = firestore.doc(`system/publicDeployment/buildBatches/${identity.buildBatchId}`);
   const journalRef = firestore.doc(`cmsPublicationSerializerJournals/${serializerId}`);
+  const pointerRef = firestore.doc("system/publicDeployment");
   return firestore.runTransaction(async tx => {
     const [requestRow, batchRow, pointerRow, candidate, queue, journalRow] = await tx.getAll(requestRef, batchRef,
-      firestore.doc("system/publicDeployment"), batchRef.collection("candidates").doc("worker"),
+      pointerRef, batchRef.collection("candidates").doc("worker"),
       firestore.doc(`cmsPublishQueue/${identity.queueId}`), journalRef);
     const current = requestRow.data(), batch = batchRow.data(), pointer = pointerRow.data(), job = journalRow.data()?.job;
     if (!current || !batch || !pointer) return false;
@@ -214,6 +217,11 @@ async function settleRefusedCloudRelease({ firestore, serializerId, commitSha, i
         !["reserved", "ready"].includes(batch.status) || batch.leaseToken !== undefined ||
         pointer.state !== "idle" || pointer.leaseToken != null || pointer.activeGeneration >= batch.generation ||
         pointer.candidateBuildBatchId === identity.buildBatchId) return false;
+    const eligible = pointer.newestEligibleBuildBatchId === identity.buildBatchId && pointer.newestEligibleGeneration === batch.generation;
+    const active = eligible ? (await tx.get(firestore.collection("system/publicDeployment/buildBatches")
+      .where("generation", "==", pointer.activeGeneration).where("status", "==", "deployed").limit(2))).docs : [];
+    if (eligible && (active.length !== 1 || active[0].data().commitSha !== pointer.activeCommitSha ||
+        active[0].data().deploymentId !== pointer.activeDeploymentId)) return false;
     const settledAt = firebaseAdminRuntime.FieldValue.serverTimestamp();
     tx.update(requestRef, { status: "failed", nextAttemptAt: null, failureReason,
       refusalReceipt: { schemaVersion: 1, reason: "cloud_release_input_refused", settledAt } });
@@ -224,6 +232,8 @@ async function settleRefusedCloudRelease({ firestore, serializerId, commitSha, i
           activeGeneration: pointer.activeGeneration, activeCommitSha: pointer.activeCommitSha,
           activeDeploymentId: pointer.activeDeploymentId } });
     }
+    if (eligible) tx.update(pointerRef, { newestEligibleGeneration: pointer.activeGeneration,
+      newestEligibleBuildBatchId: active[0].id, updatedAt: settledAt });
     tx.update(journalRef, { job: null });
     return true;
   });
