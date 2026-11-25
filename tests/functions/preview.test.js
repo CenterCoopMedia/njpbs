@@ -445,7 +445,6 @@ describe("CMS preview request", () => {
   it.each([
     ["paused", { ...readyRuntime, phase: "paused" }],
     ["starting", { ...readyRuntime, phase: "starting" }],
-    ["another renderer", { ...readyRuntime, rendererSha: "f".repeat(40) }],
     ["invalid schema", { ...readyRuntime, schemaVersion: 2 }],
     ["missing fields", {}],
     ["invalid serializer", { ...readyRuntime, serializerId: "invalid/path" }],
@@ -463,6 +462,13 @@ describe("CMS preview request", () => {
     for (const collection of ["cmsPreviewQueue", "admin_logs", "cmsPreviewHeads"]) {
       expect((await db.collection(collection).get()).empty).toBe(true);
     }
+  });
+
+  it("names the live renderer's commit in the request, whatever commit the Functions were built from", async () => {
+    await db.doc("cmsPages/contact").set(page());
+    await db.doc("system/cmsPreviewRuntime").set({ ...readyRuntime, rendererSha: "f".repeat(40) });
+    const { queueId } = await enqueuePreview(cloudFields, cloudDeps());
+    expect((await db.doc(`cmsPreviewQueue/${queueId}`).get()).data().rendererSha).toBe("f".repeat(40));
   });
 
   it("projects the renderer-updating code through the HTTP boundary", async () => {
