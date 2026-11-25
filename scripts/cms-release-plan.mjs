@@ -214,6 +214,7 @@ export async function main() {
         : null,
       rendererFingerprint,
       rendererGraphAvailable: rendererGraph !== null,
+      rendererReaders: runtime?.rendererReaders,
       rendererSourceMatches: rendererSourceProof(priorRenderer, rendererGraph, rendererBaseline?.inputFingerprint),
       renderFingerprint,
       receiptRenderFingerprint,

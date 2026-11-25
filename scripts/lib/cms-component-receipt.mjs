@@ -581,6 +581,7 @@ async function buildFunctionGraph(sourceSha, deps, env, manifest) {
     const reachable = new Set(startup);
     const exports = {};
     const reads = {};
+    const rendererReaders = [];
     for (const [name, root] of Object.entries(roots)) {
       const paths = new Set([...startup, ...closure(root)]);
       if (deps.includeRuntimeInputs) for (const path of paths) reachable.add(path);
@@ -590,6 +591,7 @@ async function buildFunctionGraph(sourceSha, deps, env, manifest) {
         preview: sources.some(source => /CMS_PREVIEW_RENDERER_SHA|cmsPreviewRuntime/.test(source)),
       };
       if (deps.includeRuntimeInputs) {
+        if (sources.some(source => source.includes("CMS_PREVIEW_RENDERER_SHA"))) rendererReaders.push(name);
         const inputs = [...paths].map(path => runtimeReads.get(path)).filter(Boolean);
         reads[name] = { keys: [...new Set(inputs.flatMap(input => input.keys))].sort(),
           unknown: inputs.some(input => input.unknown) };
@@ -605,7 +607,7 @@ async function buildFunctionGraph(sourceSha, deps, env, manifest) {
     const comparedPath = path => path.startsWith("functions/") || reachable.has(path) || FUNCTION_BUILD_INPUTS.includes(path);
     const comparedPaths = receiptPaths.filter(comparedPath);
     const { parameters, secrets, provider } = JSON.parse(await read(FUNCTIONS_CONFIGURATION_TABLE));
-    return { graph, reads, sharedFingerprint: digest(shared.filter(path =>
+    return { graph, reads, rendererReaders, sharedFingerprint: digest(shared.filter(path =>
       comparedPath(path) && (path !== FUNCTIONS_CONFIGURATION_TABLE || startup.has(path)))),
       configurationContract: stableObjectFingerprint({ parameters, secrets, provider }),
       unattributedFingerprint: digest(comparedPaths.filter(path => path !== FUNCTIONS_CONFIGURATION_TABLE && !reachable.has(path))),

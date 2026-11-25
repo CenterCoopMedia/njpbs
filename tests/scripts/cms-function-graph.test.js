@@ -56,6 +56,35 @@ async function releaseInputs(before, after, cwd) {
 // Edits functions/media-collections.js and its library, and nothing else that a Function contains.
 const FUNCTION_EDIT = { before: "489a896edcdef0caaa3f8ce932855e9e9d14e4b5", after: "a51a0b8ddba16d734aa5ddb1b8d13e7d4df3e2ef" };
 
+// A second reading of the committed modules, without esbuild, so an expected target
+// list does not come from the graph under test.
+function exportsReaching(sha, reaches) {
+  const git = (...args) => execFileSync("git", args, { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+  const files = new Set(git("ls-tree", "-r", "--name-only", sha, "--", "functions").split("\n"));
+  const sources = new Map(), imports = new Map();
+  const read = path => { if (!sources.has(path)) sources.set(path, git("show", `${sha}:${path}`)); return sources.get(path); };
+  const resolve = (from, specifier) => {
+    const base = join(dirname(from), specifier);
+    return [base, `${base}.js`, `${base}.json`, `${base}.mjs`, join(base, "index.js")].find(path => files.has(path));
+  };
+  const edges = path => {
+    if (!imports.has(path)) imports.set(path, path.endsWith(".json") ? [] : [...read(path)
+      .matchAll(/(?:require\(|import\(|from\s+|import\s+)\s*["'](\.[^"']+)["']/g)].map(match => resolve(path, match[1])).filter(Boolean));
+    return imports.get(path);
+  };
+  const index = read("functions/index.js");
+  return [...index.matchAll(/^lazyExport\("(\w+)", "(\.\/[^"]+)"/gm)].filter(([, , specifier]) => {
+    const seen = new Set(), queue = [resolve("functions/index.js", specifier)];
+    while (queue.length) {
+      const path = queue.pop();
+      if (seen.has(path)) continue;
+      seen.add(path);
+      queue.push(...edges(path));
+    }
+    return [...seen].some(path => reaches(path, read));
+  }).map(([, name]) => name).sort();
+}
+
 describe("committed Functions module graph", () => {
   it("replays the November 19 rollout from both committed sources", async () => {
     const { before, after, removedVariable, count } =
@@ -94,6 +123,27 @@ describe("committed Functions module graph", () => {
       "CMS_READER_BRIDGE_CMS_API_CANDIDATE"].some(key => reads[name].keys.includes(key)));
     expect(readers.length).toBeGreaterThan(0);
     expect(READER_FUNCTIONS).toEqual(expect.arrayContaining(readers));
+  });
+
+  // A renderer rollout selects these exports, so a reader outside the set would keep the old pin.
+  it("selects each export that reaches the renderer pin at this commit", async () => {
+    const head = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+    const selected = (await fingerprintFunctionGraph(head, { includeRuntimeInputs: true })).rendererReaders.sort();
+    expect(selected.length).toBeGreaterThan(0);
+    expect(selected).toEqual(exportsReaching(head, (path, read) => /CMS_PREVIEW_RENDERER_SHA/.test(read(path))));
+  });
+  it.each([
+    'exports.health = process.env.CMS_PREVIEW_RENDERER_SHA;',
+    'const { CMS_PREVIEW_RENDERER_SHA: sha } = process.env; exports.health = sha;',
+    'const { defineString } = require("firebase-functions/params"); exports.health = defineString("CMS_PREVIEW_RENDERER_SHA");',
+    'const read = (env = process.env) => env["CMS_PREVIEW_RENDERER_SHA"]; exports.health = read;',
+  ])("adds a Function to the renderer rollout when it starts to read the pin: %s", async source => {
+    const repo = repository();
+    repo.write("functions/package.json", '{"dependencies":{"firebase-functions":"1"}}');
+    const graph = () => fingerprintFunctionGraph(repo.commit(), { cwd: repo.cwd, includeRuntimeInputs: true });
+    expect((await graph()).rendererReaders).not.toContain("health");
+    repo.write("functions/lib/shared.js", source);
+    expect((await graph()).rendererReaders).toContain("health");
   });
 
   it("skips a variable-list edit when the committed closures and deployed values agree", async () => {
@@ -362,11 +412,11 @@ describe("committed Functions module graph", () => {
     expect(tools.target.graph.globalFingerprint).not.toBe(tools.prior.graph.globalFingerprint);
     expect(decideRelease(tools.plan)).toMatchObject({ functionsMutated: false, functionDeployTargets: "", releaseReason: "unchanged" });
     const { before, after } = FUNCTION_EDIT;
-    const { plan, prior, target } = await releaseInputs(before, after);
-    const changed = Object.keys(target.graph.exports).filter(name =>
-      target.graph.exports[name].fingerprint !== prior.graph.exports[name].fingerprint).sort();
-    expect(changed.length).toBeGreaterThan(0);
-    expect(changed.length).toBeLessThan(Object.keys(target.graph.exports).length);
+    const { plan } = await releaseInputs(before, after);
+    const edited = ["functions/media-collections.js", "functions/lib/media-collections.js"];
+    const changed = exportsReaching(after, path => edited.includes(path));
+    expect(changed).toEqual(expect.arrayContaining(["cmsListMediaCollections", "cmsSetMediaCollectionItems"]));
+    expect(changed).not.toContain("health");
     expect(decideRelease(plan)).toMatchObject({ functionDeployTargets: changed.map(name => `functions:${name}`).join(",") });
   });
 

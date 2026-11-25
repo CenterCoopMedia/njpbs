@@ -9,7 +9,7 @@ import { readCmsDeployWorkflow } from "../helpers/cms-deploy-workflow.mjs";
 import { copyImportClosure } from "../helpers/isolated-checkout.mjs";
 import { CMS_FUNCTION_CONTRACT_FILES, CMS_RELEASE_CHECK_FILES, requireCmsReleaseSources } from "../../.github/scripts/require-cms-release-sources.mjs";
 import { requireReleaseSource } from "../../.github/scripts/require-release-source.mjs";
-import { fingerprintExecutionSource, fingerprintFunctionsRenderSource, fingerprintReceiptExecutionSource } from "../../scripts/lib/cms-release-plan.mjs";
+import { fingerprintFunctionsRenderSource, fingerprintReceiptWorkerUpload, fingerprintWorkerUpload } from "../../scripts/lib/cms-release-plan.mjs";
 
 const repoRoot = fileURLToPath(new URL("../../", import.meta.url));
 const workflow = parse(readCmsDeployWorkflow());
@@ -108,28 +108,36 @@ describe("CMS release source contract", () => {
     expect(authorize(compatibleLiveBase)).toBe(releaseSha);
     expect(requireCmsReleaseSources({ releaseSha, trustedWorkflowSha, releaseRoot, trustedRoot }).releaseChecksSha).toBe(releaseSha);
   });
-  it.each(["missing source", "missing workflow", "unavailable source object", "unavailable workflow object"])("cannot fingerprint an unavailable execution-source baseline: %s", async kind => {
+  it.each(["missing source", "missing workflow", "unavailable source object", "unavailable workflow object"])("cannot fingerprint an unavailable Worker upload baseline: %s", async kind => {
     const mutation = { sourceSha: releaseSha, trustedWorkflowSha };
     if (kind === "missing source") delete mutation.sourceSha;
     if (kind === "missing workflow") delete mutation.trustedWorkflowSha;
     if (kind === "unavailable source object") mutation.sourceSha = "f".repeat(40);
     if (kind === "unavailable workflow object") mutation.trustedWorkflowSha = "f".repeat(40);
-    const trustedReceiptFingerprint = await fingerprintReceiptExecutionSource(mutation, { cwd: releaseRoot });
+    const trustedReceiptFingerprint = await fingerprintReceiptWorkerUpload(mutation, { cwd: releaseRoot });
     expect(trustedReceiptFingerprint).toBeNull();
   });
   it.each([undefined, "f".repeat(40)])("treats unavailable Functions render source %s as an unknown baseline", async workflowSha => {
     expect(await fingerprintFunctionsRenderSource(workflowSha, { cwd: releaseRoot })).toBeNull();
   });
-  it("fingerprints release helpers at NEW and trusted gates at their separate workflow SHA", async () => {
+  it("fingerprints the Worker upload step at NEW and the render step at its separate workflow SHA", async () => {
     const deps = { cwd: releaseRoot };
-    const original = await fingerprintExecutionSource(releaseSha, releaseSha, deps);
-    const laterMainHelper = await fingerprintExecutionSource(releaseSha, trustedWorkflowSha, deps);
-    expect(laterMainHelper).toBe(original);
-    expect(await fingerprintExecutionSource(trustedWorkflowSha, trustedWorkflowSha, deps)).not.toBe(original);
-    writeFileSync(join(trustedRoot, ".github/scripts/require-cms-release-sources.mjs"), "// Changed trusted gate\n");
-    const changedGate = commit(trustedRoot, "Changed trusted authorization gate");
-    git(releaseRoot, "fetch", trustedRoot, "main:refs/remotes/origin/main");
-    expect(await fingerprintExecutionSource(releaseSha, changedGate, deps)).not.toBe(original);
+    const original = await fingerprintWorkerUpload(releaseSha, releaseSha, deps);
+    expect(await fingerprintWorkerUpload(releaseSha, trustedWorkflowSha, deps)).toBe(original);
+    const write = (path, message) => {
+      mkdirSync(join(trustedRoot, path, ".."), { recursive: true });
+      writeFileSync(join(trustedRoot, path), `// ${message}\n`);
+      const sha = commit(trustedRoot, message);
+      git(releaseRoot, "fetch", trustedRoot, "main:refs/remotes/origin/main");
+      return sha;
+    };
+    // Gates and release helpers upload nothing.
+    const changedGate = write(".github/scripts/require-cms-release-sources.mjs", "Changed trusted authorization gate");
+    expect(await fingerprintWorkerUpload(changedGate, changedGate, deps)).toBe(original);
+    const changedRender = write("scripts/render-development-config.mjs", "Changed render step");
+    expect(await fingerprintWorkerUpload(releaseSha, changedRender, deps)).not.toBe(original);
+    const changedUpload = write("scripts/deploy-cms-api-worker.mjs", "Changed upload step");
+    expect(await fingerprintWorkerUpload(changedUpload, releaseSha, deps)).not.toBe(original);
   });
   it("keeps a reviewed ancestor NEW and its release checks after trusted main advances", () => {
     expect(requireReleaseSource({ sha: releaseSha, cwd: releaseRoot })).toBe(releaseSha);

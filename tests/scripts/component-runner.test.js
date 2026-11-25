@@ -7,7 +7,6 @@ import { DEPLOYMENT_COMPONENTS, RECEIPT_INPUT_PATHS } from "../../scripts/lib/de
 import { ComponentReceiptError, RECEIPT_INPUT_PATHS as receiptPaths } from "../../scripts/lib/cms-component-receipt.mjs";
 import { componentFailureDiagnostic, main, runComponentOperation } from "../../scripts/component-runner.mjs";
 import { CMS_RELEASE_CHECK_FILES } from "../../.github/scripts/require-cms-release-sources.mjs";
-import { RELEASE_CHECK_PATHS } from "../../scripts/lib/cms-release-plan.mjs";
 
 describe("component runner", () => {
   it("uses the same immutable selection paths as the receipt owner", () => {
@@ -65,7 +64,6 @@ describe("component runner", () => {
   it("tracks the dispatcher and table at the selected source pin", () => {
     for (const file of ["scripts/component-runner.mjs", "scripts/lib/deployment-components.mjs"]) {
       expect(CMS_RELEASE_CHECK_FILES).toContain(file);
-      expect(RELEASE_CHECK_PATHS).toContain(file);
     }
   });
 

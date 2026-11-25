@@ -455,9 +455,9 @@ test("panel release builds refuse templates while test artifacts cannot claim re
   assert.ok(readFileSync(join(panel, "dist/index.js"), "utf8").includes(inputs.CMS_PRODUCTION_API_ORIGIN));
 }));
 
-test("renderer or manifest source changes invalidate every component and trusted release fingerprint", async () => {
+test("renderer or manifest source changes invalidate every component and Worker upload fingerprint", async () => {
   const { fingerprintInputs } = await import("../../scripts/lib/cms-component-receipt.mjs");
-  const { fingerprintTrustedSource } = await import("../../scripts/lib/cms-release-plan.mjs");
+  const { fingerprintWorkerUpload } = await import("../../scripts/lib/cms-release-plan.mjs");
   const directory = mkdtempSync(join(tmpdir(), "render-receipt-inputs-"));
   try {
     mkdirSync(join(directory, "scripts")); mkdirSync(join(directory, "config"));
@@ -477,7 +477,7 @@ test("renderer or manifest source changes invalidate every component and trusted
     };
     const fingerprints = sha => Promise.all([
       ...["functions", "renderer", "cmsApi"].map(component => fingerprintInputs(sha, component, { cwd: directory })),
-      fingerprintTrustedSource(sha, { cwd: directory }),
+      fingerprintWorkerUpload(sha, sha, { cwd: directory }),
     ]);
     let before = await fingerprints(checkpoint());
     for (const [name, content] of [["scripts/render-development-config.mjs", "export const mode = 2;\n"],
