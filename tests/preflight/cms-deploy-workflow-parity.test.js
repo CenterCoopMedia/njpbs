@@ -191,7 +191,9 @@ describe("Route D Cut A boundary placement", () => {
       const capture = steps[captureAt];
       const planner = production.jobs["firebase-preflight"].steps.find(row => row.name === "Plan Functions and renderer release");
       // Read-only contract capture proves its own graph from the pinned checkout.
-      const { FUNCTION_TARGETS: functionTargets, ...providerEnvironment } = planner.env;
+      // Only the deploy plan selects a development reader rebind.
+      const { FUNCTION_TARGETS: functionTargets, CMS_READER_REBIND: rebind, ...providerEnvironment } = planner.env;
+      expect(rebind).toBe("${{ steps.reader_binding.outputs.rebind_mode }}");
       // Later jobs read the same reader binding through the preflight job's output.
       if (jobName !== "firebase-preflight") providerEnvironment.FORCE_FIREBASE = providerEnvironment.FORCE_FIREBASE
         .replace("steps.reader_binding.outputs.binding", "needs.firebase-preflight.outputs.reader_binding");

@@ -2,6 +2,24 @@ import { repositoryMatches } from "./repository-identity.mjs";
 import { ComponentReceiptError, assertLegacyPreviewProtocol, configurationFingerprint, fingerprintPaths, functionGraphsMatch, FUNCTION_GRAPH_VERSION } from "./cms-component-receipt.mjs";
 import { contractInputs } from "./functions-contracts.mjs";
 import { cmsTarget } from "./cms-target.mjs";
+import cloudWake from "../../functions/lib/cloud-publication-wake-deployment.js";
+
+const { CLOUD_WAKE_FUNCTIONS } = cloudWake;
+
+// The exports that carry the reader binding. The record step verifies it on each one.
+export const READER_FUNCTIONS = Object.freeze(["cmsReaderV1", "cmsReaderV2", "cmsReadPairCurrentCodeV2",
+  "cmsGetPublicPage", "cmsSaveContent", "cmsTransitionContent", "onScheduledPublish"]);
+
+// Exports in the committed graph that this target does not deploy.
+export function omittedFunctionNames(decision) {
+  return decision.enabled ? [] : CLOUD_WAKE_FUNCTIONS;
+}
+
+// Only the plan comparison drops them; receipts keep the complete committed graph.
+export function withoutFunctions(graph, omitted) {
+  return graph?.exports && omitted.length
+    ? { ...graph, exports: Object.fromEntries(Object.entries(graph.exports).filter(([name]) => !omitted.includes(name))) } : graph;
+}
 
 export async function assertLegacyCmsWorkflow(firestore) {
   const row = await firestore.doc("system/cmsPreviewRuntime").get();
@@ -131,7 +149,17 @@ export function runtimeParametersMatch(functions, expected) {
       fn?.serviceConfig?.environmentVariables?.[key] === value));
 }
 
-export function selectFunctionTargets(names, { sourceChanged = [], runtimeChanges = {}, rendererAffected = [] } = {}) {
+// A development Function compares the Admin bundle with its own Admin revision
+// (functions/dev-bug-report.js). Production reads the live Admin revision instead.
+export function adminRevisionChanges(functions, revision, reads) {
+  if (!Array.isArray(functions) || !reads) return {};
+  return Object.fromEntries(functions.map(fn => [fn.name.split("/").at(-1), fn])
+    .filter(([name, fn]) => reads[name]?.keys.includes("CMS_ADMIN_BUILD_REVISION")
+      && fn.serviceConfig?.environmentVariables?.CMS_ADMIN_BUILD_REVISION !== revision)
+    .map(([name]) => [name, ["runtime_parameter:CMS_ADMIN_BUILD_REVISION"]]));
+}
+
+export function selectFunctionTargets(names, { sourceChanged = [], runtimeChanges = {}, rendererAffected = [], readerBinding = null } = {}) {
   const targets = [], reasons = {};
   for (const name of [...names].sort()) {
     const changes = [
@@ -141,6 +169,14 @@ export function selectFunctionTargets(names, { sourceChanged = [], runtimeChange
     ];
     if (changes.length) targets.push(name);
     reasons[name] = changes.length ? changes : ["unchanged"];
+  }
+  // A deploy changes the receipt that the live reader candidates match, so it needs a new binding.
+  if (readerBinding && (readerBinding.required || targets.length)) {
+    for (const name of names.filter(row => READER_FUNCTIONS.includes(row))) {
+      if (!targets.includes(name)) targets.push(name);
+      reasons[name] = [...reasons[name].filter(reason => reason !== "unchanged"), "reader_binding_changed"];
+    }
+    targets.sort();
   }
   return { targets, reasons };
 }
@@ -379,8 +415,10 @@ export function decideRelease({
   configurationRequiresRelease = false,
   variablesFingerprint = null,
   deploySha = null,
-  functionGraph = null,
-  manifestNames = null,
+  functionGraph: committedGraph = null,
+  manifestNames: committedNames = null,
+  omittedNames = [],
+  readerBinding = null,
   forceFirebase = false,
   functionsReceipt = null,
   rendererReceipt = null,
@@ -401,8 +439,11 @@ export function decideRelease({
   targetHasAdminRevisionIntake = false,
   liveHasAdminRevisionIntake = false,
 }) {
+  const functionGraph = withoutFunctions(committedGraph, omittedNames);
+  const manifestNames = committedNames && committedNames.filter(name => !omittedNames.includes(name));
   const full = (reason, liveFunctionsSha = null) => ({
     abort: false,
+    ...(readerBinding ? { readerRebind: true } : {}),
     functionsMutated: true,
     previewPaused: true,
     liveFunctionsSha,
@@ -480,7 +521,8 @@ export function decideRelease({
   ) {
     return full("paired_release_mismatch", functionsBase.mutation.sourceSha);
   }
-  const priorGraph = functionsBase.mutation.functionGraph;
+  const committedPrior = functionsBase.mutation.functionGraph;
+  const priorGraph = withoutFunctions(committedPrior, omittedNames);
   const validGraph = graph => graph?.version === FUNCTION_GRAPH_VERSION
     && FINGERPRINT_PATTERN.test(graph.globalFingerprint ?? "")
     && graph.exports && Object.keys(graph.exports).length > 0
@@ -511,13 +553,16 @@ export function decideRelease({
   if (!rendererGraphAvailable) return full("renderer_graph_unavailable", functionsBase.mutation.sourceSha);
   const rendererChanged = rendererFingerprint !== rendererBase.mutation.inputFingerprint;
   const sourceChanged = names.filter(name => functionGraph.exports[name].fingerprint !== priorGraph.exports[name].fingerprint);
+  // A changed export that this target omits still accounts for the changed Functions input.
+  const omittedChanged = omittedNames.some(name =>
+    committedGraph.exports[name]?.fingerprint !== committedPrior.exports[name]?.fingerprint);
   const { targets, reasons: functionReasons } = selectFunctionTargets(names, {
-    sourceChanged, runtimeChanges,
+    sourceChanged, runtimeChanges, readerBinding,
     rendererAffected: rendererChanged ? names.filter(name => functionGraph.exports[name].preview) : [],
   });
   // A runtime or renderer target cannot account for a change to Functions source.
   if ((functionsFingerprint !== functionsBase.mutation.inputFingerprint
-      && ((!sourceChanged.length && !sourceProof?.sourceWithoutConfigurationTableMatches)
+      && ((!sourceChanged.length && !omittedChanged && !sourceProof?.sourceWithoutConfigurationTableMatches)
         || (sourceProof && !sourceProof.unattributedInputsMatch)))
     || (rendererChanged && !names.some(name => functionGraph.exports[name].preview))
     || ((targets.length || rendererChanged) && !SHA_PATTERN.test(deploySha ?? ""))) {
@@ -525,13 +570,15 @@ export function decideRelease({
   }
   return {
     abort: false,
+    ...(readerBinding ? { readerRebind: targets.length > 0 } : {}),
     functionsMutated: targets.length > 0,
     previewPaused: rendererChanged,
     liveFunctionsSha: functionsBase.mutation.sourceSha,
     rendererTargetSha: rendererChanged ? deploySha : rendererBase.mutation.sourceSha,
     configurationRequiresRelease: false,
     releaseReason: rendererChanged ? "renderer_inputs_changed" : sourceChanged.length ? "functions_modules_changed"
-      : targets.length ? "functions_runtime_inputs_changed" : "unchanged",
+      : targets.some(name => functionReasons[name].some(reason => reason !== "reader_binding_changed")) ? "functions_runtime_inputs_changed"
+      : targets.length ? "reader_binding_changed" : "unchanged",
     functionReasons,
     functionDeployTargets: targets.map(name => `functions:${name}`).join(","),
     previewPauseLate: rendererChanged,

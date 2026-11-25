@@ -3,11 +3,12 @@
 // table and deploys the committed CMS API config; neither holds the reader
 // bridge binding. This step binds the readers for the run instead
 // (CenterCoopMedia/njpbs#561):
-// - development binds every run (the binding cms-dev-deploy wrote every run);
+// - development keeps the live binding while nothing that it names deploys;
+//   the plan redeploys the reader Functions and the Worker when it must change;
 // - production carries a live binding that has no installed proof. Production
 //   has none today, so its runs change nothing. A binding with an installed
 //   proof keeps today's behavior and is only logged (CenterCoopMedia/njpbs#584).
-// After both receipts complete, the run records and verifies this run's
+// After both receipts complete, a bound run records and verifies this run's
 // reader candidates, which the mount descriptor reads on every request.
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -46,6 +47,31 @@ export async function selectReaderBinding({ env = process.env, target = cmsTarge
     CMS_READER_BRIDGE_OPERATION_ID: operationId,
     CMS_READER_BRIDGE_FUNCTIONS_CANDIDATE: `functions-${env.GITHUB_RUN_ID}-${env.GITHUB_RUN_ATTEMPT}`,
     CMS_READER_BRIDGE_CMS_API_CANDIDATE: `cmsApi-${env.GITHUB_RUN_ID}-${env.GITHUB_RUN_ATTEMPT}` };
+}
+
+// The live binding is current when the CMS API carries it, its two verified candidates match the
+// complete component receipts and the recorded compatibility, and the Worker itself needs no deploy.
+// Live Functions drift is the release plan's own check.
+export async function liveBindingCurrent({ readLiveApiVars, readDescriptor, readCompatibilityReceipts, planWorker, log = console.log }) {
+  const { currentReader, digest } = require("../functions/lib/cms-preview-pair.js");
+  const identity = ({ sourceSha, inputFingerprint, configurationFingerprint, providerIdentities }) =>
+    digest({ sourceSha, inputFingerprint, configurationFingerprint, providerIdentities });
+  try {
+    const { readers } = await readDescriptor(await readLiveApiVars());
+    const receipts = await readCompatibilityReceipts();
+    for (const component of ["functions", "cmsApi"]) {
+      if (identity(currentReader(receipts[component], component)) !== identity(readers[component])) fail("stale compatibility");
+    }
+  } catch {
+    log("The live reader binding is not current; this deploy binds the readers again");
+    return false;
+  }
+  const worker = await planWorker().catch(() => ({ mutated: true, reason: "plan_unavailable" }));
+  if (worker.mutated !== false) {
+    log(`The CMS API Worker changes (${worker.reason}); this deploy binds the readers again`);
+    return false;
+  }
+  return true;
 }
 
 export function bindFunctionsDotenv(text, binding) {
@@ -95,6 +121,8 @@ export const encodeBinding = selected => Buffer.from(JSON.stringify(selected)).t
 
 // The bind and record steps run from the release source, which may predate the base64 binding.
 export const releaseSourceBinds = source => source.includes("export function decodeBinding(");
+// The release source plans the rebind; one that predates it needs a full release.
+export const releaseSourceRebinds = source => source.includes("CMS_READER_REBIND");
 
 export function decodeBinding(value) {
   return value ? JSON.parse(Buffer.from(value, "base64").toString("utf8")) : null;
@@ -125,20 +153,32 @@ async function main([command, component]) {
   const target = cmsTarget();
   const { withFirestore } = await import("./cms-component-receipt.mjs");
   if (command === "select") {
-    const selected = await withFirestore(firestore => selectReaderBinding({ target,
-      readLiveApiVars: () => liveApiVars(target),
-      readInstalledProof: async operationId => (await firestore.doc(`cmsReaderBridgeInstalledProofs/${operationId}`).get()).exists,
-      readCompatibilityReceipts: async () => Object.fromEntries(await Promise.all(["functions", "cmsApi"].map(async component =>
-        [component, (await firestore.doc(`cmsReaderCompatibilityReceipts/${component}`).get()).data()]))),
-    }));
+    const plan = "scripts/cms-release-plan.mjs";
+    const rebinds = target.environment === "development" && releaseSourceRebinds(existsSync(plan) ? readFileSync(plan, "utf8") : "");
+    const { selected, current } = await withFirestore(async firestore => {
+      const readLiveApiVars = () => liveApiVars(target);
+      const readCompatibilityReceipts = async () => Object.fromEntries(await Promise.all(["functions", "cmsApi"].map(async component =>
+        [component, (await firestore.doc(`cmsReaderCompatibilityReceipts/${component}`).get()).data()])));
+      const selected = await selectReaderBinding({ target, readLiveApiVars, readCompatibilityReceipts,
+        readInstalledProof: async operationId => (await firestore.doc(`cmsReaderBridgeInstalledProofs/${operationId}`).get()).exists });
+      const current = Boolean(selected) && rebinds && await liveBindingCurrent({ readLiveApiVars, readCompatibilityReceipts,
+        readDescriptor: environment => require("../functions/lib/cms-reader-mount-descriptor.js").readCmsReaderMountDescriptor({ firestore, environment }),
+        planWorker: async () => (await import("./cms-component-receipt.mjs")).planUnpairedWorker(firestore, {
+          cwd: process.env.GITHUB_WORKSPACE, sourceSha: process.env.DEPLOY_SHA, trustedWorkflowSha: process.env.GITHUB_SHA,
+          secrets: { CMS_EDGE_ORIGIN_SECRET: process.env.CMS_EDGE_ORIGIN_SECRET, FIREBASE_WEB_API_KEY: process.env.FIREBASE_WEB_API_KEY?.trim() } }) });
+      return { selected, current };
+    });
     if (selected) assertFirstAttempt(process.env);
     // The bind and record steps run from the release source; refuse before any mutation if it predates them.
     const release = "scripts/cms-reader-binding.mjs";
     if (selected && !releaseSourceBinds(existsSync(release) ? readFileSync(release, "utf8") : "")) {
       fail(`This release source cannot keep the readers bound; deploy a source whose ${release} decodes the base64 binding`);
     }
-    appendFileSync(process.env.GITHUB_OUTPUT, `binding=${selected ? encodeBinding(selected) : ""}\n`);
-    console.log(selected ? `Readers bound to operation ${selected.CMS_READER_BRIDGE_OPERATION_ID}` : "No reader binding for this run");
+    // `binding` forces a full release; `rebind` is used only when the plan deploys.
+    appendFileSync(process.env.GITHUB_OUTPUT, `${rebinds ? "rebind" : "binding"}=${selected ? encodeBinding(selected) : ""}\n` +
+      `rebind_mode=${rebinds && selected ? (current ? "current" : "required") : ""}\n`);
+    console.log(!selected ? "No reader binding for this run" : current ? "The live reader binding is current; the plan decides whether it changes"
+      : `Readers bound to operation ${selected.CMS_READER_BRIDGE_OPERATION_ID}`);
   } else if (command === "bind" && component === "functions") {
     assertFirstAttempt(process.env);
     const path = `functions/.env.${target.projectId}`;

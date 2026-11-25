@@ -13,7 +13,7 @@ import { lastProviderLine, permanentFailure } from "./lib/provider-call.mjs";
 const PROJECT = cmsTarget().projectId;
 const REGION = "us-central1";
 export { REGION as FUNCTION_DEPLOY_REGION };
-const CLOUD_WAKE_FUNCTIONS = ["onNoBuildCloudState", "onNoBuildCloudCandidate", "onNoBuildCloudRelease"];
+const { CLOUD_WAKE_FUNCTIONS } = createRequire(import.meta.url)("../functions/lib/cloud-publication-wake-deployment.js");
 
 export { explicitCloudWakeDecision, requestDeploymentInventory };
 
