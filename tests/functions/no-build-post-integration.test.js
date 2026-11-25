@@ -12,7 +12,6 @@ import path, { join } from "node:path";
 import { runNoBuildCloudRelease } from "../../site/scripts/no-build-cloud-release";
 import { openCmsPublicationCloudTokenJournal } from "../../site/scripts/cms-publication-cloud-token-journal";
 import * as sourceGuard from "../../site/scripts/cms-publication-runtime-guard";
-import { firebaseAdminRuntime } from "../../site/scripts/firebase-admin-runtime";
 import baseline from "../../functions/lib/cms-publication-baseline.js";
 import artifactOwner from "../../functions/lib/cms-publish-artifact.js";
 import serializer from "../../functions/lib/cms-publication-serializer.js";
