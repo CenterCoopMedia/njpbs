@@ -70,6 +70,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           DEPLOY_SHA: ${{ inputs.ref }}
+          CANONICAL_GITHUB_REPOSITORY: ${{ vars.CANONICAL_GITHUB_REPOSITORY }}
+          CANONICAL_GITHUB_REPOSITORY_ID: ${{ vars.CANONICAL_GITHUB_REPOSITORY_ID }}
         run: node .github/scripts/require-main-ci.mjs
       - name: Check out the commit
         env:

@@ -291,6 +291,7 @@ describe("metered-API source scan runs before any scanned code executes", () => 
     const scan = "run: node .github/scripts/metered-api-scan.mjs";
     expectOrdered(job, "- name: Require a full commit SHA", "uses: actions/checkout@v7");
     expectOrdered(job, "- name: Require a commit on main", "run: node .github/scripts/require-main-ci.mjs");
+    expectOrdered(job, "CANONICAL_GITHUB_REPOSITORY_ID: ${{ vars.CANONICAL_GITHUB_REPOSITORY_ID }}", "run: node .github/scripts/require-main-ci.mjs");
     // The CI check runs main's copy, before the selected commit is checked out.
     expectOrdered(job, "run: node .github/scripts/require-main-ci.mjs", 'git checkout --quiet --detach "$DEPLOY_SHA"');
     expectOrdered(job, 'git checkout --quiet --detach "$DEPLOY_SHA"', scan);
