@@ -5,7 +5,8 @@
 // jobs whose last worker did not die go first, then the one that died longest ago.
 const interrupted = (job, now) => Boolean(job.leaseToken) && job.leaseUntil <= now;
 
-/** The next jobs to try, at most `size`. `query` is ordered oldest first. */
+/** The next jobs to try, at most `size`. `query` is ordered oldest first.
+ * @param {{ query: any, now: number, size: number, skip?: (job: any) => boolean }} options */
 async function jobClaimWindow({ query, now, size, skip = () => false }) {
   for (let limit = size; ; limit *= 2) {
     const page = await query.limit(limit).get();

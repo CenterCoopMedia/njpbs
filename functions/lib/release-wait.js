@@ -73,6 +73,13 @@ function describe(value) {
   try { return JSON.stringify(value).slice(0, 200); } catch { return String(value).slice(0, 200); }
 }
 
+// A message can repeat provider or private text, so the journal holds an error's
+// code, or its name. A caller that marks its own error to retry wrote its message.
+function describeError(error) {
+  const code = [error?.code, error?.cause?.code].find(value => /^[A-Za-z][A-Za-z0-9_/-]{1,60}$/.test(value ?? ""));
+  return describe(error?.retry === true ? error.message : code ?? (/^[A-Za-z]{1,40}$/.test(error?.name ?? "") ? error.name : "Error"));
+}
+
 // Journals "still waiting" each minute while work runs; returns its stop.
 function everyMinute(what, start, last) {
   const ticker = setInterval(() => journal({ event: "waiting", what, start, waitedMs: Date.now() - start, last: describe(last()) }),
@@ -101,10 +108,10 @@ async function callOutside(what, request, { signal, pacing = "default" } = {}) {
         return result;
       } catch (error) {
         if (!noAnswer(error)) {
-          journal({ event: "call", what, start, end: Date.now(), durationMs: Date.now() - start, attempts, result: "error", error: describe(error?.message) });
+          journal({ event: "call", what, start, end: Date.now(), durationMs: Date.now() - start, attempts, result: "error", error: describeError(error) });
           throw error;
         }
-        lastProblem = describe(error?.cause?.code ?? error?.message);
+        lastProblem = describeError(error);
         floor = Number.isFinite(error?.retryAfterMs) ? error.retryAfterMs : 0;
       }
       journal({ event: "retry", what, attempts, problem: lastProblem });
@@ -130,9 +137,9 @@ async function waitFor(what, read, { signal } = {}) {
     while (true) {
       reads += 1;
       let row;
-      try { row = await read(); } catch (error) { finish("error", { error: describe(error?.message) }); throw error; }
+      try { row = await read(); } catch (error) { finish("error", { error: describeError(error) }); throw error; }
       if (row && "done" in row) { finish("done"); return row.done; }
-      if (row && "failed" in row) { finish("failed", { error: describe(row.failed?.message ?? row.failed) }); throw row.failed; }
+      if (row && "failed" in row) { finish("failed", { error: describeError(row.failed) }); throw row.failed; }
       const state = describe(row?.pending);
       if (state !== last) { last = state; wait = FIRST_PAUSE_MS; } else wait = Math.min(wait * 2, LONGEST_PAUSE_MS);
       await pause(wait, signal);

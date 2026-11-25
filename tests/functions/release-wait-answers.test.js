@@ -37,3 +37,20 @@ it("goes on without an optional read that does not answer, and keeps one that do
   expect(await releaseWait.optionalRead("answered", async () => "value", "fallback")).toBe("value");
   await expect(releaseWait.optionalRead("failed", async () => { throw new Error("refused"); }, "fallback")).rejects.toThrow("refused");
 });
+
+it("keeps arbitrary error text out of the journal", async () => {
+  const lines = [];
+  releaseWait.setJournal(line => lines.push(line));
+  const secret = "private provider body";
+  try {
+    await expect(releaseWait.callOutside("refused", async () => { throw new Error(secret); })).rejects.toThrow(secret);
+    await expect(releaseWait.waitFor("failed", async () => ({ failed: new Error(secret) }))).rejects.toThrow(secret);
+    let calls = 0;
+    await releaseWait.callOutside("lost", async () => {
+      calls += 1;
+      if (calls === 1) throw Object.assign(new Error(secret), { code: "ECONNRESET" });
+    });
+  } finally { releaseWait.setJournal(line => console.error(JSON.stringify({ severity: "INFO", ...line }))); }
+  expect(JSON.stringify(lines)).not.toContain(secret);
+  expect(lines.find(line => line.event === "retry").problem).toBe("ECONNRESET");
+});
