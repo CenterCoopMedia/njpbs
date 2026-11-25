@@ -1,13 +1,14 @@
 // Deploys the preview renderer Worker and its container, then waits until the container reports ready.
 // Run through deploy-cms.mjs; needs the tsx loader.
 import { spawn } from "node:child_process";
-import { readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join } from "node:path";
-import { isDeepStrictEqual } from "node:util";
 import { cmsTarget } from "./lib/cms-target.mjs";
 import { prepareDevPreviewRenderer, preparePreviewRenderer } from "./prepare-preview-renderer.mjs";
-import { PREVIEW_RUNTIME_DOCUMENT, pausePreviewRuntime, previewRuntimeDrained } from "../site/scripts/cms-preview-cloud-control.ts";
+import { repeatNetworkFault } from "./lib/network-fault.mjs";
+import { deployPreviewRenderer } from "./lib/preview-renderer-deploy.mjs";
+import { PREVIEW_RUNTIME_DOCUMENT } from "../site/scripts/cms-preview-cloud-control.ts";
 
 const require = createRequire(import.meta.url);
 const { initializeApp, applicationDefault } = require("firebase-admin/app");
@@ -28,61 +29,47 @@ if (dev) {
     headers: { "CF-Access-Client-Id": env.CMS_DEV_ACCESS_CLIENT_ID, "CF-Access-Client-Secret": env.CMS_DEV_ACCESS_CLIENT_SECRET } });
   if (reply.status !== 200) throw new Error(`CMS_DEV_ACCESS_CLIENT_ID cannot read ${target.publicOrigin}: HTTP ${reply.status}`);
 }
-const api = async path => {
+const api = (path, init) => repeatNetworkFault(`Cloudflare ${path}`, async () => {
   const reply = await fetch(`https://api.cloudflare.com/client/v4/accounts/${env.CLOUDFLARE_ACCOUNT_ID}${path}`,
-    { headers: { authorization: `Bearer ${env.CLOUDFLARE_API_TOKEN}` } });
+    { ...init, headers: { authorization: `Bearer ${env.CLOUDFLARE_API_TOKEN}`, "content-type": "application/json" }, signal: AbortSignal.timeout(60_000) });
   const body = await reply.json().catch(() => null);
-  if (reply.status >= 500 || reply.status === 429) return null; // read again on the next turn
+  if (reply.status === 404) return null;
   if (!reply.ok) throw new Error(`Cloudflare HTTP ${reply.status}: ${JSON.stringify(body?.errors)}`);
   return body.result;
-};
-const containers = "/containers/applications";
-const deployed = async () => (await api(`/workers/scripts/${target.rendererWorker}/deployments`))?.deployments?.[0]?.id;
+});
 const prepared = await (dev ? prepareDevPreviewRenderer : preparePreviewRenderer)(sha);
+const run = (command, args) => new Promise((done, reject) => {
+  let output = "";
+  const child = spawn(command, args, { cwd: prepared.source, stdio: ["ignore", "pipe", "pipe"], env: { PATH: env.PATH, HOME: env.HOME, CI: "true", WRANGLER_SEND_METRICS: "false",
+    CLOUDFLARE_API_TOKEN: env.CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID: env.CLOUDFLARE_ACCOUNT_ID } });
+  for (const stream of ["stdout", "stderr"]) child[stream].on("data", chunk => { process[stream].write(chunk); output = (output + chunk).slice(-6000); });
+  child.on("error", reject).on("close", code => code === 0 ? done()
+    : reject(Object.assign(new Error(`${args.slice(1, 3).join(" ")} exited ${code}`), { output })));
+});
+const wrangler = (...args) => repeatNetworkFault(`wrangler ${args[0]}`, () => run(process.execPath, [prepared.wrangler, ...args]));
+const config = JSON.parse(readFileSync(prepared.configPath, "utf8"));
+const image = `${config.containers[0].name}:${sha.slice(0, 12)}-${Date.now()}`;
+const registryImage = `registry.cloudflare.com/${env.CLOUDFLARE_ACCOUNT_ID}/${image}`;
 try {
-  // A refused token ends here, while previews still work.
-  const before = live && await deployed();
-  const starting = { schemaVersion: 1, phase: "starting", rendererSha: sha, serializerId: "cloudflare-preview" };
-  let uploading = false;
-  try {
-    // Admission stays closed until the new renderer reports ready; admitted work finishes on the old one.
-    await pausePreviewRuntime(firestore, sha);
-    while (!await previewRuntimeDrained(firestore)) { console.log("Waiting for admitted previews"); await sleep(10); }
-    const config = JSON.parse(readFileSync(prepared.configPath, "utf8"));
-    config.vars.PREVIEW_RENDERER_ENABLED = "true";
-    writeFileSync(prepared.configPath, JSON.stringify(config));
-    const secrets = join(prepared.directory, "secrets.json");
-    writeFileSync(secrets, JSON.stringify({ FIREBASE_SERVICE_ACCOUNT: env.CMS_PREVIEW_FIREBASE_ACCOUNT, R2_PREVIEW_CREDENTIAL: env.CMS_PREVIEW_R2_CREDENTIAL,
-      ...(dev ? { CMS_DEV_ACCESS_CLIENT_ID: env.CMS_DEV_ACCESS_CLIENT_ID, CMS_DEV_ACCESS_CLIENT_SECRET: env.CMS_DEV_ACCESS_CLIENT_SECRET } : {}) }), { mode: 0o600 });
-    await firestore.doc(PREVIEW_RUNTIME_DOCUMENT).set(starting);
-    uploading = true;
-    await new Promise((done, reject) => spawn(process.execPath, [prepared.wrangler, "deploy", "--config", prepared.configPath, "--secrets-file", secrets],
-      { cwd: prepared.source, stdio: ["ignore", "inherit", "inherit"], env: { PATH: env.PATH, HOME: env.HOME, CI: "true", WRANGLER_SEND_METRICS: "false",
-        CLOUDFLARE_API_TOKEN: env.CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID: env.CLOUDFLARE_ACCOUNT_ID } })
-      .on("error", reject).on("close", code => code === 0 ? done() : reject(new Error(`wrangler deploy exited ${code}`))));
-  } catch (error) {
-    // While Cloudflare still serves the old version, the old renderer takes previews again.
-    if (live?.phase === "ready" && (!uploading || before && await deployed() === before)) await firestore.runTransaction(async transaction => {
-      const ref = firestore.doc(PREVIEW_RUNTIME_DOCUMENT), now = (await transaction.get(ref)).data();
-      if ([starting, { ...live, phase: "paused" }].some(own => isDeepStrictEqual(now, own))) transaction.set(ref, live);
-    });
-    throw error;
-  }
-
-  for (let last = ""; ;) {
-    const control = (await firestore.doc(PREVIEW_RUNTIME_DOCUMENT).get()).data();
-    if (control?.rendererSha !== sha) throw new Error("Another renderer took over the release");
-    if (control.phase === "ready") break;
-    const app = (await api(containers))?.find(row => row.name === target.rendererWorker);
-    const rollouts = app && await api(`${containers}/${app.id}/rollouts?limit=10`);
-    const rollout = (Array.isArray(rollouts) ? rollouts : rollouts?.rollouts ?? [])
-      .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))[0];
-    const errors = rollout?.health?.errors?.map(row => row.event?.message).filter(Boolean).slice(-2).join("; ");
-    const line = `control ${control.phase}, rollout ${rollout?.status ?? "none"}, instances ${JSON.stringify(app?.health?.instances ?? {})}${errors ? `, ${errors}` : ""}`;
-    if (line !== last) console.log(last = line);
-    if (rollout?.status === "reverted") throw new Error(`Container rollout reverted: ${errors}`);
-    await sleep(10);
-  }
+  await deployPreviewRenderer({ firestore, sha, name: target.rendererWorker, api, sleep,
+    async pushImage() {
+      copyFileSync(config.containers[0].image, join(prepared.directory, "Dockerfile"));
+      await wrangler("containers", "build", prepared.directory, "--tag", image);
+      await wrangler("containers", "push", image);
+      config.vars.PREVIEW_RENDERER_ENABLED = "true";
+      config.containers[0].image = registryImage;
+      delete config.containers[0].image_build_context;
+      writeFileSync(prepared.configPath, JSON.stringify(config));
+    },
+    async deploy() {
+      const secrets = join(prepared.directory, "secrets.json");
+      writeFileSync(secrets, JSON.stringify({ FIREBASE_SERVICE_ACCOUNT: env.CMS_PREVIEW_FIREBASE_ACCOUNT, R2_PREVIEW_CREDENTIAL: env.CMS_PREVIEW_R2_CREDENTIAL,
+        ...(dev ? { CMS_DEV_ACCESS_CLIENT_ID: env.CMS_DEV_ACCESS_CLIENT_ID, CMS_DEV_ACCESS_CLIENT_SECRET: env.CMS_DEV_ACCESS_CLIENT_SECRET } : {}) }), { mode: 0o600 });
+      await wrangler("deploy", "--config", prepared.configPath, "--secrets-file", secrets);
+    } });
   console.log(`Preview renderer ready at ${sha}`);
-} finally { rmSync(prepared.directory, { recursive: true, force: true }); }
+} finally {
+  await run("docker", ["image", "rm", image, registryImage]).catch(() => {}); // absent after a failed build
+  rmSync(prepared.directory, { recursive: true, force: true });
+}
 process.exit(0);
