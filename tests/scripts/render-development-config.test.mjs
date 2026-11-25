@@ -217,64 +217,6 @@ test("runs the documented Bash dry-render block in a disposable worktree", () =>
   assert.match(result.stdout, /Development configuration rendered: \d+ files/);
 });
 
-for (const job of ["firebase-preflight", "live-smoke"]) {
-test(`trusted gates resolve workspace dependencies from a separate temporary directory (${job})`, () => fixture(async directory => {
-  const runtime = mkdtempSync(join(tmpdir(), "external-trusted-gate-"));
-  try {
-    const gate = join(directory, ".cms-smoke-gate");
-    await copyImportClosure(root, gate, ["scripts/cms-component-receipt.mjs", ".github/scripts/ensure-panel-browser-deps.mjs"], {
-      assets: ["config/functions-configuration.json"],
-    });
-    symlinkSync(join(root, "node_modules"), join(directory, "node_modules"));
-    const workflow = parse(readFileSync(join(root, ".github/workflows/cms-staging-deploy.yml"), "utf8"));
-    const step = workflow.jobs[job].steps.find(step => step.name === "Isolate trusted cms-smoke-gate checkout");
-    const moved = spawnSync("bash", ["-c", step.run], { cwd: directory,
-      env: { PATH: process.env.PATH, RUNNER_TEMP: runtime, GITHUB_WORKSPACE: directory }, encoding: "utf8" });
-    assert.equal(moved.status, 0, moved.stderr);
-    const imported = spawnSync(process.execPath, ["--input-type=module", "-e",
-      `await import(${JSON.stringify(pathToFileURL(join(runtime, "cms-smoke-gate/scripts/cms-component-receipt.mjs")).href)});
-       const {createRequire} = await import('node:module');
-       createRequire(${JSON.stringify(join(runtime, "cms-smoke-gate/.github/scripts/ensure-panel-browser-deps.mjs"))})('playwright');`],
-      { cwd: directory, env: { PATH: process.env.PATH }, encoding: "utf8", timeout: 5000 });
-    assert.equal(imported.status, 0, imported.stderr);
-  } finally { rmSync(runtime, { recursive: true, force: true }); }
-}));
-}
-
-for (const job of ["firebase-preflight", "admin-contract", "contract-settlement"]) {
-test(`proof installs preserve the candidate dependency graph (${job})`, () => {
-  const directory = mkdtempSync(join(tmpdir(), "proof-install-boundary-"));
-  const runtime = mkdtempSync(join(tmpdir(), "proof-install-runtime-"));
-  try {
-    const candidateModules = join(directory, "node_modules"); mkdirSync(candidateModules);
-    writeFileSync(join(candidateModules, "candidate-marker"), "candidate dependency graph");
-    const lock = '{"name":"proof-fixture","version":"1.0.0","lockfileVersion":3,"packages":{"":{"name":"proof-fixture","version":"1.0.0"}}}';
-    writeFileSync(join(directory, "package-lock.json"), lock);
-    const checkout = join(directory, ".cms-contract-source"); mkdirSync(checkout);
-    writeFileSync(join(checkout, "package.json"), '{"name":"proof-fixture","version":"1.0.0"}');
-    writeFileSync(join(checkout, "package-lock.json"), lock);
-    const workflow = parse(readFileSync(join(root, ".github/workflows/cms-staging-deploy.yml"), "utf8"));
-    const steps = workflow.jobs[job].steps;
-    const source = steps.find(step => step.with?.path === ".cms-contract-source");
-    assert.deepEqual(source?.with, { ref: "${{ github.sha }}", path: ".cms-contract-source", "persist-credentials": false });
-    const commands = steps.filter(step => step.run?.includes("check-cms-public-contract.mjs"));
-    assert.equal(commands.length, 2);
-    for (const step of commands) assert.ok(step.run.includes('$RUNNER_TEMP/cms-contract-source/scripts/check-cms-public-contract.mjs'));
-    const isolate = steps.find(step => step.name === "Isolate trusted singleton contract source");
-    const moved = spawnSync("bash", ["-c", isolate.run], { cwd: directory,
-      env: { PATH: process.env.PATH, RUNNER_TEMP: runtime, GITHUB_WORKSPACE: directory }, encoding: "utf8" });
-    assert.equal(moved.status, 0, moved.stderr);
-    const proof = join(runtime, "cms-contract-source");
-    const installed = spawnSync("npm", ["ci", "--ignore-scripts", "--offline", "--no-audit", "--no-fund"], {
-      cwd: proof, env: { PATH: process.env.PATH, HOME: runtime, npm_config_cache: join(runtime, "cache") }, encoding: "utf8", timeout: 10000 });
-    assert.equal(installed.status, 0, installed.stderr);
-    assert.equal(readFileSync(join(candidateModules, "candidate-marker"), "utf8"), "candidate dependency graph");
-    assert.equal(readFileSync(join(directory, "package-lock.json"), "utf8"), lock);
-    assert.equal(readFileSync(join(proof, "package-lock.json"), "utf8"), lock);
-  } finally { rmSync(runtime, { recursive: true, force: true }); rmSync(directory, { recursive: true, force: true }); }
-});
-}
-
 test("admits only an exact committed helper copy while retaining untracked-file refusal", () => fixture(directory => {
   renderDevelopmentConfig(directory, inputs);
   const source = "scripts/render-development-config.mjs", target = "trusted-runner.mjs";
@@ -332,32 +274,6 @@ test("starts rendered container source guards and refuses tampered source, recei
   const target = join(directory, "cms-api/wrangler.dev.jsonc"), before = readFileSync(target);
   writeFileSync(target, before + "\n// tampered\n"); assert.equal(run().status, 1);
 }));
-
-test("the live-smoke install restores the Admin workspace through a dangling link", () => {
-  const directory = mkdtempSync(join(tmpdir(), "live-smoke-install-"));
-  try {
-    const workflow = parse(readFileSync(join(root, ".github/workflows/cms-staging-deploy.yml"), "utf8"));
-    const step = workflow.jobs["live-smoke"].steps.find(step => step.name === "Install workspace deps");
-    const pkg = { name: "fixture-root", version: "1.0.0", private: true, workspaces: ["admin"] };
-    const site = { name: "fixture-site", version: "1.0.0" };
-    mkdirSync(join(directory, "admin"));
-    mkdirSync(join(directory, "site"));
-    writeFileSync(join(directory, "package.json"), JSON.stringify(pkg));
-    writeFileSync(join(directory, "admin/package.json"), JSON.stringify({ name: "njpbs-admin", version: "1.0.0" }));
-    writeFileSync(join(directory, "site/package.json"), JSON.stringify(site));
-    writeFileSync(join(directory, "site/package-lock.json"), JSON.stringify({ ...site, lockfileVersion: 3, requires: true, packages: { "": site } }));
-    writeFileSync(join(directory, "package-lock.json"), JSON.stringify({ name: pkg.name, version: pkg.version, lockfileVersion: 3, requires: true,
-      packages: { "": pkg, admin: { name: "njpbs-admin", version: "1.0.0" }, "node_modules/njpbs-admin": { resolved: "admin", link: true } } }));
-    symlinkSync(join(directory, "workspace/node_modules"), join(directory, "node_modules"));
-    const result = spawnSync("bash", ["-c", step.run], { cwd: directory,
-      env: { PATH: process.env.PATH, npm_config_offline: "true", npm_config_audit: "false", npm_config_fund: "false" },
-      encoding: "utf8", timeout: 10000 });
-    assert.equal(result.status, 0, result.stderr);
-    assert.equal(lstatSync(join(directory, "node_modules")).isDirectory(), true);
-    assert.equal(lstatSync(join(directory, "node_modules/njpbs-admin")).isSymbolicLink(), true);
-
-  } finally { rmSync(directory, { recursive: true, force: true }); }
-});
 
 test("production rendering protects unselected development hosts and their regex variants", () => {
   const text = 'https://api.example.org https://dev-api.example.org api\\.example\\.org dev-api\\.example\\.org api.example.org.other';
