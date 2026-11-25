@@ -1,7 +1,5 @@
-import { parse } from "yaml";
 // @vitest-environment node
 import { readFileSync } from "node:fs";
-import { readCmsDeployWorkflow } from "../../tests/helpers/cms-deploy-workflow.mjs";
 import { describe, expect, it } from "vitest";
 import {
   classifyChangedPaths,
@@ -95,7 +93,7 @@ describe("metered-API source scan runs before any scanned code executes", () => 
   );
   const adminCi = read("../../.github/workflows/admin-ci.yml");
   const firebaseCi = read("../../.github/workflows/firebase-ci.yml");
-  const cmsStaging = readCmsDeployWorkflow();
+  const cmsDeploy = read("../../.github/workflows/cms-deploy.yml");
   const packageJsonSource = read("../package.json");
   const rootPackageJsonSource = read("../../package.json");
   const bootstrap = read("../../.github/scripts/metered-api-scan.mjs");
@@ -238,140 +236,17 @@ describe("metered-API source scan runs before any scanned code executes", () => 
     );
   });
 
-  it("scans every selected staging tree with the current trusted scanner", () => {
-    const stagingJobs = [
-      ["verify", ".release-gate", "run: npm ci --ignore-scripts"],
-      ["admin-build", ".admin-status-gate", "run: npm ci --ignore-scripts"],
-      [
-        "firebase-preflight",
-        ".cms-smoke-gate",
-        "uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3",
-      ],
-      ["cms-api", ".release-gate", "run: npm ci --ignore-scripts"],
-      ["firebase", ".release-gate", "run: npm ci --ignore-scripts"],
-      ["preview-renderer", ".release-gate", "npm ci --ignore-scripts --no-audit --no-fund"],
-      [
-        "live-smoke",
-        ".cms-smoke-gate",
-        "node scripts/component-runner.mjs functions smoke",
-      ],
-      [
-        "admin-deploy",
-        ".metered-api-gate",
-        "uses: cloudflare/wrangler-action@953926a2e2182532811c01a25e53647d93bf07c0 # v4.1.3",
-      ],
-    ] as const;
-
-    for (const [name, gateDirectory, execution] of stagingJobs) {
-      const job = workflowJob(cmsStaging, name);
-      const scan = workflowStep(
-        job,
-        "Metered-API source scan (before any scanned code runs)",
-      );
-      const trustedCommand = `run: node "$RUNNER_TEMP/${gateDirectory.slice(1)}"/.github/scripts/metered-api-scan.mjs --target-root "$GITHUB_WORKSPACE"`;
-      expect(job, `${name} job missing`).not.toBe("");
-      expect(job).toContain(`ref: \${{ github.sha }}`);
-      expectOrdered(job, `path: ${gateDirectory}`, trustedCommand);
-      expectOrdered(
-        job,
-        "name: Metered-API source scan (before any scanned code runs)",
-        execution,
-      );
-      expect(scan).toContain(trustedCommand);
-      expect(scan).not.toContain("run: node .github/scripts/metered-api-scan.mjs");
-    }
+  it("checks the CMS deploy's owner and commit, then scans, before code or secrets can run", () => {
+    const job = workflowJob(cmsDeploy, "deploy");
+    for (const check of ["github.repository_id == vars.CANONICAL_GITHUB_REPOSITORY_ID",
+      "github.triggering_actor == vars.CMS_DEPLOY_OWNER", "github.ref == 'refs/heads/main'"]) expect(job).toContain(check);
+    expect(job).toContain('git merge-base --is-ancestor "$DEPLOY_SHA" "$GITHUB_SHA"');
+    const scan = "run: node .github/scripts/metered-api-scan.mjs";
+    expectOrdered(job, "- name: Require a full commit SHA", "uses: actions/checkout@v7");
+    expectOrdered(job, "- name: Require a commit on main", scan);
+    expectOrdered(job, scan, "run: node scripts/deploy-cms.mjs production");
+    expect(job.slice(0, job.indexOf(scan))).not.toContain("secrets.");
   });
-
-  it("checks the selected CMS rollback floor before code or secrets can run", () => {
-    const adminBuild = workflowJob(cmsStaging, "admin-build");
-    const compatibilityCommand =
-      "run: node \"$RUNNER_TEMP/admin-status-gate\"/.github/scripts/cms-deploy-compatibility.mjs --target-root \"$GITHUB_WORKSPACE\"";
-    expect(adminBuild).toContain(`ref: \${{ github.sha }}`);
-    expectOrdered(adminBuild, "path: .admin-status-gate", compatibilityCommand);
-    expectOrdered(
-      adminBuild,
-      "name: Require reviewed deploy ref",
-      "name: Require CMS deploy compatibility floor",
-    );
-    expectOrdered(
-      adminBuild,
-      "name: Metered-API source scan (before any scanned code runs)",
-      "name: Require CMS deploy compatibility floor",
-    );
-    expectOrdered(
-      adminBuild,
-      "name: Metered-API source scan for current Admin status gate",
-      "name: Require CMS deploy compatibility floor",
-    );
-    expectOrdered(
-      adminBuild,
-      "name: Require CMS deploy compatibility floor",
-      "uses: actions/setup-node@v7",
-    );
-    expectOrdered(
-      adminBuild,
-      "name: Require CMS deploy compatibility floor",
-      "name: Preflight admin env",
-    );
-  });
-
-  it.each([["cms-api", ".release-gate"], ["firebase", ".release-gate"], ["preview-renderer", ".release-gate"], ["admin-deploy", ".metered-api-gate"]])(
-    "keeps trusted scripts separate from release operators in the gate checkout for %s",
-    (name, directory) => {
-      const job = workflowJob(cmsStaging, name);
-      const checkout = parse(cmsStaging).jobs[name].steps.find((step: { with?: { path?: string } }) => step.with?.path === directory);
-      expect(checkout.with.ref).toBe("${{ github.sha }}");
-      expect(checkout.with["persist-credentials"]).toBe(false);
-      const paths = checkout.with["sparse-checkout"].trim().split("\n");
-      expect(paths).toEqual(directory === ".release-gate"
-        ? [".github/scripts", "scripts/render-development-config.mjs", "config/development-inputs.json"]
-        : [".github/scripts"]);
-    },
-  );
-
-  it.each(["verify", "admin-build", "firebase-preflight", "cms-api", "firebase"])(
-    "validates the selected staging ref before its scanner runs in %s",
-    (name) => {
-      const job = workflowJob(cmsStaging, name);
-      expectOrdered(
-        job,
-        "name: Require reviewed deploy ref",
-        "name: Metered-API source scan (before any scanned code runs)",
-      );
-    },
-  );
-
-  it.each([
-    [
-      "admin-build",
-      ".admin-status-gate",
-      "node \"$RUNNER_TEMP/admin-status-gate\"/.github/scripts/cms-deploy-compatibility.mjs",
-    ],
-    [
-      "verify",
-      ".release-gate",
-      "node scripts/component-runner.mjs functions manifest",
-    ],
-    [
-      "firebase-preflight",
-      ".cms-smoke-gate",
-      "node scripts/component-runner.mjs functions verify-config",
-    ],
-    [
-      "live-smoke",
-      ".cms-smoke-gate",
-      "node scripts/component-runner.mjs functions smoke",
-    ],
-  ])(
-    "scans the nested current gate checkout before it runs in %s",
-    (jobName, gateDirectory, execution) => {
-      const job = workflowJob(cmsStaging, jobName);
-      const nestedScan = `working-directory: \${{ runner.temp }}/${gateDirectory.slice(1)}\n        run: node .github/scripts/metered-api-scan.mjs`;
-      expectOrdered(job, `path: ${gateDirectory}`, nestedScan);
-      expectOrdered(job, nestedScan, execution);
-    },
-  );
-
 
   it("keeps only isolated Admin changes out of the Astro consumer gate", () => {
     expect(classifyPath("admin/src/App.tsx")).toEqual({ docs: false, site: false, admin: true, firebase: false });
