@@ -262,7 +262,7 @@ it("recovers a missed CODE wake through actual leased H, completed G and private
   expect(writes.some(key => key.startsWith(`release-pair-inputs/v2/${pair.pairId}/`))).toBe(true);
   expect(writes.some(key => key.startsWith(`release-pair-replay/v2/${p.publicReleaseDigest(pair)}/`))).toBe(true);
   expect((await firestore.doc(`${work.publicReleasePairPath(pair.pairId)}/switchCodePending/${codeOperationId}`).get()).exists).toBe(false);
-}, 240_000);
+}, 120_000);
 
 it("verifies the original completed activation without storage/replay work on subsequent polls", async () => {
   const { firestore, pair } = fixture;
