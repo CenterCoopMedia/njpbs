@@ -310,6 +310,8 @@ async function drain(firestore, transaction, attempt, beforePause = false, initi
           : value.retirementReceipt?.reason === "dev_publish_failed_before_upload"
           ? require("./dev-publication-preupload").assertDevPreuploadRetiredBatch
           : value.retirementReceipt?.reason === "cloud_release_not_staged" ? validators.assertPublicDeploymentRetiredCloudReleaseBatch
+          : value.retirementReceipt?.reason === validators.REFUSED_CLOUD_RELEASE_REASON
+            ? validators.assertPublicDeploymentRefusedCloudReleaseBatch
           : value.retirementReceipt?.reason === validators.FAILED_PUBLISH_RETIRED_REASON
             ? validators.assertPublicDeploymentFailedPublishRetiredBatch
             : validators.assertPublicDeploymentRetiredBatch;

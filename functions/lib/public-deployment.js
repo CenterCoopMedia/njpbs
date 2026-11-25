@@ -277,6 +277,25 @@ function assertPublicDeploymentRetiredCloudReleaseBatch(value, expectedBuildBatc
   return value;
 }
 
+// A cloud release whose sealed bytes were refused after its batch was ready and
+// before any lease. It keeps readyAt and its candidate; nothing activated it.
+const REFUSED_CLOUD_RELEASE_REASON = "cloud_release_input_refused";
+function assertPublicDeploymentRefusedCloudReleaseBatch(value, expectedBuildBatchId = null) {
+  const receiptFields = ["schemaVersion", "reason", "originalOwner", "activeGeneration", "activeCommitSha", "activeDeploymentId"];
+  const { retiredAt, retirementReceipt: receipt, ...original } = value ?? {};
+  assertPublicDeploymentLeaseBatch({ ...original, status: "ready" }, expectedBuildBatchId);
+  if (value.status !== "retired" || value.runtime?.owner !== "cloudflare" || value.noBuildStaticInput !== undefined ||
+      timestampMillis(retiredAt) === null || timestampMillis(retiredAt) < timestampMillis(value.readyAt) ||
+      !plainObject(receipt) || Object.keys(receipt).length !== receiptFields.length ||
+      !hasOnlyFields(receipt, new Set(receiptFields)) || receipt.schemaVersion !== 1 ||
+      receipt.reason !== REFUSED_CLOUD_RELEASE_REASON || receipt.originalOwner !== "cloudflare" ||
+      !Number.isSafeInteger(receipt.activeGeneration) || receipt.activeGeneration < 0 || receipt.activeGeneration >= value.generation ||
+      !validDeploymentReceipt(receipt.activeGeneration, receipt.activeDeploymentId, receipt.activeCommitSha)) {
+    throw new PublicDeploymentStateError("The refused cloud release batch is invalid");
+  }
+  return value;
+}
+
 // A publish row that failed or was cancelled before its batch was leased
 // retires the batch in the same transaction (publish-build-state.js).
 const FAILED_PUBLISH_RETIRED_REASON = "publish_failed_before_lease";
@@ -660,6 +679,8 @@ function projectPublicBuildSupersession(value, expectedBuildBatchId = null) {
 module.exports = {
   assertPublicDeploymentRetiredBatch,
   assertPublicDeploymentRetiredCloudReleaseBatch,
+  REFUSED_CLOUD_RELEASE_REASON,
+  assertPublicDeploymentRefusedCloudReleaseBatch,
   assertPublicDeploymentFailedPublishRetiredBatch,
   FAILED_PUBLISH_RETIRED_REASON,
   PUBLIC_DEPLOYMENT_SCHEMA_VERSION,
