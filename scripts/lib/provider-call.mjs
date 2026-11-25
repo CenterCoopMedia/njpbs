@@ -38,30 +38,36 @@ const RATE_QUOTA = /\bper (?:second|minute|100 seconds)\b|\brate limit\b/i;
 const FINAL_QUOTA = /\bdaily limit\b|\bper day\b|limit '[^']* per project'/i;
 
 // Firebase prints this when the provider answers an update without the
-// function's service. Firebase then uses the missing values in its next
-// requests, so a 400 in that output can be the provider's fault. Dev run
-// 45562533334 (Nov. 25, 2026) sent Cloud Scheduler an empty URL this way. The
-// retry deploys the failed functions, and a 400 of ours is final in its output.
-// A 400 on a function update itself stays final.
+// function's service. Firebase takes a schedule's URL from that answer, so it
+// then sends Cloud Scheduler an empty URL (dev run 45562533334, Nov. 25, 2026).
+// Our configuration holds no schedule URL, so that one 400 is the provider's
+// fault. The deploy names the functions it can still retry for it. Every other 400
+// is final.
 const INCOMPLETE_ANSWER = /unexpected state - please re-deploy your functions/;
-const FOLLOWING_REQUEST = /^(?!.*\bcloudfunctions\.googleapis\.com\b).*HTTP Error: 400\b/;
+const EMPTY_SCHEDULE_URL = /^Request to https:\/\/cloudscheduler\.googleapis\.com\/\S+\/jobs\/firebase-schedule-([A-Za-z][A-Za-z0-9]*)-[a-z0-9-]+(?:\?\S*)? had HTTP Error: 400, URL cannot be empty\b/;
 
-function permanentMatch(output) {
+/** The functions whose schedule Firebase sent with an empty URL after an incomplete answer. */
+export function emptyScheduleUrls(output) {
   const lines = output.split("\n");
-  const incomplete = lines.some(line => INCOMPLETE_ANSWER.test(line));
+  return lines.some(line => INCOMPLETE_ANSWER.test(line)) ? lines.flatMap(line => line.match(EMPTY_SCHEDULE_URL)?.[1] ?? []) : [];
+}
+
+function permanentMatch(output, retryableSchedules = []) {
+  const lines = output.split("\n");
+  const retryable = emptyScheduleUrls(output).filter(name => retryableSchedules.includes(name));
   for (const [kind, pattern] of PERMANENT_FAILURES) {
     const line = lines.find(line => pattern.test(line) && !(kind === "request" && RATE_QUOTA.test(line)) &&
       !(kind === "quota" && (RATE_QUOTA.test(line) || !FINAL_QUOTA.test(line))) &&
-      !(kind === "config" && incomplete && FOLLOWING_REQUEST.test(line)));
+      !(kind === "config" && retryable.includes(line.match(EMPTY_SCHEDULE_URL)?.[1])));
     if (line !== undefined) return { kind, line: line.trim().slice(0, 300) };
   }
   return null;
 }
 
-export const permanentFailure = output => permanentMatch(output)?.kind ?? null;
+export const permanentFailure = (output, retryableSchedules) => permanentMatch(output, retryableSchedules)?.kind ?? null;
 
 /** The output line that gave permanentFailure its class. */
-export const permanentFailureLine = output => permanentMatch(output)?.line ?? "none";
+export const permanentFailureLine = (output, retryableSchedules) => permanentMatch(output, retryableSchedules)?.line ?? "none";
 
 export function lastProviderLine(output) {
   const line = output.split("\n").map(value => value.trim()).filter(value => /error|failed|denied|unavailable|timed? ?out|HTTP/i.test(value)).at(-1);

@@ -333,6 +333,22 @@ describe("CMS function build queue expiry recovery", () => {
     ]);
     expect(run.wait.mock.calls).toEqual([[60_000]]);
   });
+  it("ends when the same function's schedule URL is empty again after its retry", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const run = deployment([[1, incompleteAnswer], [1, incompleteAnswer]], ["onNavigationShareOwnerWrite", "onNoBuildPostConfirmationRecovery"]);
+    await expect(run.promise).rejects.toThrow("did not confirm completion");
+    expect(run.launch).toHaveBeenCalledTimes(2);
+    expect(errors).toHaveBeenLastCalledWith(expect.stringContaining("class config, attempt 2, "));
+    errors.mockRestore();
+  });
+  it("ends on an empty schedule URL of a function that the summary does not name", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const other = incompleteAnswer.replace("\tonNoBuildPostConfirmationRecovery(", "\tonNavigationShareOwnerWrite(");
+    const run = deployment([[1, other]], ["onNavigationShareOwnerWrite", "onNoBuildPostConfirmationRecovery"]);
+    await expect(run.promise).rejects.toThrow("did not confirm completion");
+    expect(run.launch).toHaveBeenCalledTimes(1);
+    errors.mockRestore();
+  });
   it("ends on a refused request when no answer was incomplete, and names its line", async () => {
     const errors = vi.spyOn(console, "error").mockImplementation(() => {});
     const refused = incompleteAnswer.split("\n").filter(line => !line.includes("please re-deploy")).join("\n");
@@ -345,6 +361,7 @@ describe("CMS function build queue expiry recovery", () => {
   it.each([
     ["config", "Error: Failed to load function definition from source: FirebaseError: Functions codebase could not be analyzed successfully.\n"],
     ["config", "Request to https://cloudfunctions.googleapis.com/v2/projects/njpbs-site/locations/us-central1/functions/onNoBuildPostConfirmationRecovery had HTTP Error: 400, Invalid value\n"],
+    ["config", "Request to https://cloudscheduler.googleapis.com/v1/projects/njpbs-site/locations/us-central1/jobs/firebase-schedule-onNavigationShareOwnerWrite-us-central1 had HTTP Error: 400, Schedule or time zone is invalid.\n"],
     ["permission", "Error: Permission denied\n"],
   ])("keeps a permanent %s failure final beside an incomplete answer", async (kind, line) => {
     const errors = vi.spyOn(console, "error").mockImplementation(() => {});

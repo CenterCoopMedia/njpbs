@@ -8,7 +8,7 @@ import { cert, initializeApp, deleteApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import mount from "../functions/lib/cms-reader-mount-descriptor.js";
 import cms from "../functions/lib/cms-preview-pair.js";
-import { fingerprintInputs, fingerprintPaths, FUNCTION_DEPLOY_TOOLS, RECEIPT_INPUT_PATHS, configurationFingerprint, startReceipt, startCandidateReceipt,
+import { fingerprintInputs, fingerprintPaths, RECEIPT_INPUT_PATHS, configurationFingerprint, startReceipt, startCandidateReceipt,
   candidateReceiptRef, verifyCandidateReceipt, completeReceipt, commitLiveReaderReceipt } from "./lib/cms-component-receipt.mjs";
 import { readEnabledCmsReaderProviders } from "./lib/cms-enabled-reader-provider.mjs";
 
@@ -124,7 +124,7 @@ export async function readProductionReaderResult({ firestore, env, root = new UR
     sourceSha: env.DEPLOY_SHA, provider: consumerProvider, cwd: fileURLToPath(root) });
   const deploymentInputs = {};
   for (const component of ["functions", "cmsApi"]) deploymentInputs[component] = await fingerprintPaths(env.DEPLOY_SHA,
-    [...RECEIPT_INPUT_PATHS[component], ...(component === "functions" ? FUNCTION_DEPLOY_TOOLS : []), ".github/workflows/cms-staging-deploy.yml", "scripts/production-reader-deployment.mjs",
+    [...RECEIPT_INPUT_PATHS[component], ".github/workflows/cms-staging-deploy.yml", "scripts/production-reader-deployment.mjs",
       "scripts/lib/repository-identity.mjs",
       "scripts/lib/production-reader-authorization.mjs", "scripts/lib/cms-enabled-reader-provider.mjs",
       "scripts/lib/cms-reader-provider-readback.mjs", "scripts/lib/cms-component-receipt.mjs",

@@ -306,8 +306,16 @@ describe("committed Functions module graph", () => {
     for (const path of FUNCTION_DEPLOY_TOOLS) repo.write(path, "export const before = 1;");
     const before = repo.commit();
     for (const path of FUNCTION_DEPLOY_TOOLS) repo.write(path, "export const after = 2;");
-    const { plan } = await releaseInputs(before, repo.commit(), repo.cwd);
+    const tools = repo.commit();
+    const { plan, prior, target } = await releaseInputs(before, tools, repo.cwd);
     expect(decideRelease(plan)).toMatchObject({ functionsMutated: false, functionDeployTargets: "", releaseReason: "unchanged" });
+    // Receipts store these two values, so both still count the tools.
+    expect(plan.functionsFingerprint).not.toBe(plan.functionsReceipt.mutation.inputFingerprint);
+    expect(target.graph.globalFingerprint).not.toBe(prior.graph.globalFingerprint);
+    for (const path of FUNCTION_DEPLOY_TOOLS) repo.write(path, "export const after = 3;");
+    repo.write("functions/health.js", "exports.health = 2;");
+    const { plan: both } = await releaseInputs(tools, repo.commit(), repo.cwd);
+    expect(decideRelease(both)).toMatchObject({ functionsMutated: true, functionDeployTargets: "functions:health" });
   });
 
   it("invalidates the full-release configuration for assets, manifests and index changes", async () => {

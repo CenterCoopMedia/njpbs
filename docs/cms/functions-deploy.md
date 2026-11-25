@@ -275,8 +275,9 @@ deploys all selected exports in one Firebase invocation. The CLI updates up to
 no-deletion manifests before every attempt, complete intended export inventory
 and final scheduler/readiness smoke; the inventory and scheduler checks catch a
 run that reports success without updating every export. When the provider answers an update
-without its service ("please re-deploy your functions"), a 400 on a later
-request is not final: the next attempt deploys the failed exports. Known Cloud Build
+without its service ("please re-deploy your functions"), Cloud Scheduler's 400
+for the empty URL of a failed export is retried once for that export. Every other
+400 is final. Known Cloud Build
 `EXPIRED` failures and exact refused Cloud Run invoker-policy reads permit
 bounded retry of only the named failed exports after ten seconds, up to two
 retries. Require one allowed diagnostic per failed name with no other error

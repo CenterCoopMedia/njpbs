@@ -21,7 +21,9 @@ export const FUNCTION_GRAPH_VERSION = 2;
 const FUNCTIONS_CONFIGURATION_TABLE = "config/functions-configuration.json";
 export const RECEIPT_COMPONENTS = Object.freeze(["functions", "renderer", "cmsApi"]);
 // These tools run or check a deployment; a Function contains none of them, so a
-// change to one never redeploys Functions.
+// change to one never redeploys Functions. They stay in RECEIPT_INPUT_PATHS,
+// because stored receipts hold fingerprints of that list. Only the plan's own
+// comparison of two commits leaves them out.
 export const FUNCTION_DEPLOY_TOOLS = Object.freeze([
   "scripts/deploy-cms-function-batches.mjs", "scripts/lib/provider-call.mjs", "scripts/smoke-cms-functions.mjs",
 ]);
@@ -40,7 +42,9 @@ export const RECEIPT_INPUT_PATHS = Object.freeze({
     "cms-api/package.json",
     "firebase.json",
     ".firebaserc",
-    "scripts/lib/functions-deploy-inventory.mjs",
+    "scripts/deploy-cms-function-batches.mjs",
+    "scripts/lib/functions-deploy-inventory.mjs", "scripts/lib/provider-call.mjs",
+    "scripts/smoke-cms-functions.mjs",
     "scripts/resolve-media-purge.sh",
     "scripts/resolve-cost-ledger-pulls.sh",
     "scripts/prepare-cloud-publication-wake.mjs",
@@ -588,12 +592,14 @@ async function buildFunctionGraph(sourceSha, deps, env, manifest) {
     const shared = [...new Set([...globalPaths, ...startup])];
     const graph = { version: FUNCTION_GRAPH_VERSION, globalFingerprint: digest([...shared]), exports };
     if (!deps.includeRuntimeInputs) return graph;
+    const comparedPath = path => !FUNCTION_DEPLOY_TOOLS.includes(path) || reachable.has(path);
+    const comparedPaths = receiptPaths.filter(comparedPath);
     const { parameters, secrets, provider } = JSON.parse(await read(FUNCTIONS_CONFIGURATION_TABLE));
     return { graph, reads, sharedFingerprint: digest(shared.filter(path =>
-      path !== FUNCTIONS_CONFIGURATION_TABLE || startup.has(path))),
+      comparedPath(path) && (path !== FUNCTIONS_CONFIGURATION_TABLE || startup.has(path)))),
       configurationContract: stableObjectFingerprint({ parameters, secrets, provider }),
-      unattributedFingerprint: digest(receiptPaths.filter(path => path !== FUNCTIONS_CONFIGURATION_TABLE && !reachable.has(path))),
-      sourceWithoutConfigurationTable: digest(receiptPaths.filter(path => path !== FUNCTIONS_CONFIGURATION_TABLE)) };
+      unattributedFingerprint: digest(comparedPaths.filter(path => path !== FUNCTIONS_CONFIGURATION_TABLE && !reachable.has(path))),
+      sourceWithoutConfigurationTable: digest(comparedPaths.filter(path => path !== FUNCTIONS_CONFIGURATION_TABLE)) };
   } catch {
     // Discovery uncertainty chooses a full deploy, including at receipt write.
     return null;
