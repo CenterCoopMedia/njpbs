@@ -334,12 +334,62 @@ function candidateMatchesPrepared(
     candidate.artifactBytes === prepared.artifactBytes;
 }
 
+/** The request got no answer: whether it took effect is unknown. */
+export class UnansweredRequestError extends Error {}
+
+const ASK_AGAIN_MS = 1_000;
+const LONGEST_ATTEMPT_MS = 30 * 60_000;
+
+// Only a lost or late answer is asked again. Every other fetch error (a refused
+// redirect, an invalid header) repeats forever, and its message can carry a
+// header value, so only the error name and provider code are kept.
+function unansweredReason(error: unknown): string | null {
+  if (!(error instanceof Error)) return null;
+  const cause = error.cause instanceof Error ? error.cause as Error & { code?: unknown } : undefined;
+  if (error.name === "TimeoutError" || error.name === "AbortError") return error.name;
+  if (error.name !== "TypeError" || !["fetch failed", "terminated"].includes(error.message) ||
+      cause?.message === "unexpected redirect") return null;
+  return `${error.message} (${typeof cause?.code === "string" ? cause.code : cause?.name ?? "no code"})`;
+}
+
+async function answered<T>(label: string, work: () => Promise<T>): Promise<T> {
+  try {
+    return await work();
+  } catch (error) {
+    if (error instanceof PublicWorkerActivationOperatorError || error instanceof UnansweredRequestError) throw error;
+    const reason = unansweredReason(error);
+    if (reason) throw new UnansweredRequestError(`${label} did not complete: ${reason}`);
+    operatorError(`${label} did not complete`);
+  }
+}
+
+// A read ends on its answer. Each repeat gets twice the time, so a slow answer
+// is waited for and every unanswered attempt is named in the log.
+async function readUntilAnswered<T>(firstAttemptMs: number, read: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await read(AbortSignal.timeout(Math.min(firstAttemptMs * 2 ** attempt, LONGEST_ATTEMPT_MS)));
+    } catch (error) {
+      if (!(error instanceof UnansweredRequestError)) throw error;
+      reportActivationFault(`asking again after attempt ${attempt + 1}`, error);
+      await new Promise(resolve => setTimeout(resolve, ASK_AGAIN_MS));
+    }
+  }
+}
+
+/** A read is asked again until Cloudflare answers. A write is sent once: its
+ * caller reads the resulting state before it repeats the write. */
 export async function requestCloudflareJson(
   request: CloudflareRequest,
 ): Promise<unknown> {
-  let response: Response;
-  try {
-    response = await fetch(request.url, {
+  const attempt = (signal: AbortSignal) => sendCloudflareRequest(request, signal);
+  return request.method === "GET" ? readUntilAnswered(15_000, attempt) : attempt(AbortSignal.timeout(15_000));
+}
+
+async function sendCloudflareRequest(request: CloudflareRequest, signal: AbortSignal): Promise<unknown> {
+  const label = `The Cloudflare API request ${request.method} ${new URL(request.url).pathname.replace(/^.*\/accounts\/[^/]+/, "")}`;
+  const text = await answered(label, async () => {
+    const response = await fetch(request.url, {
       method: request.method,
       headers: {
         Accept: "application/json",
@@ -352,15 +402,16 @@ export async function requestCloudflareJson(
         ? undefined
         : JSON.stringify(request.body),
       redirect: "error",
-      signal: AbortSignal.timeout(15_000),
+      signal,
     });
-  } catch {
-    operatorError("The Cloudflare API request did not complete");
-  }
-  if (!response.ok) {
-    operatorError(`The Cloudflare API returned HTTP ${response.status}`);
-  }
-  const text = await response.text();
+    if (response.status === 429 || response.status >= 500) {
+      throw new UnansweredRequestError(`${label} did not complete: HTTP ${response.status}`);
+    }
+    if (!response.ok) {
+      operatorError(`The Cloudflare API returned HTTP ${response.status}`);
+    }
+    return response.text();
+  });
   if (Buffer.byteLength(text, "utf8") > MAX_CLOUDFLARE_RESPONSE_BYTES) {
     operatorError("The Cloudflare API response was too large");
   }
@@ -381,9 +432,9 @@ export async function requestPublicPublicationReceipt(
   url: string,
   access?: PublicationAccess,
 ): Promise<string> {
-  let response: Response;
-  try {
-    response = await fetch(url, {
+  const label = "The public publication receipt request";
+  const body = await readUntilAnswered(10_000, signal => answered(label, async () => {
+    const response = await fetch(url, {
       method: "GET",
       headers: {
         Accept: "application/json",
@@ -391,22 +442,20 @@ export async function requestPublicPublicationReceipt(
         ...(access ? { "CF-Access-Client-Id": access.clientId, "CF-Access-Client-Secret": access.clientSecret } : {}),
       },
       redirect: "error",
-      signal: AbortSignal.timeout(10_000),
+      signal,
     });
-  } catch {
-    operatorError("The public publication receipt request did not complete");
-  }
-  if (
-    !response.ok ||
-    response.headers.get(PUBLICATION_ORIGIN_HEADER) !==
-      publicationOriginValue(url) ||
-    !response.headers.get("content-type")?.toLowerCase().startsWith(
-      "application/json",
-    )
-  ) {
-    operatorError("The public publication receipt response is invalid");
-  }
-  const body = await response.text();
+    if (
+      !response.ok ||
+      response.headers.get(PUBLICATION_ORIGIN_HEADER) !==
+        publicationOriginValue(url) ||
+      !response.headers.get("content-type")?.toLowerCase().startsWith(
+        "application/json",
+      )
+    ) {
+      operatorError(`The public publication receipt response is invalid (HTTP ${response.status})`);
+    }
+    return response.text();
+  }));
   if (Buffer.byteLength(body, "utf8") > MAX_PUBLICATION_RECEIPT_BYTES) {
     operatorError("The public publication receipt response is invalid");
   }
@@ -523,7 +572,26 @@ export async function runPublicWorkerActivationOperator({
     });
   }
 
-  if (!acquisition.idempotent) {
+  const deploymentsUrl = workerApiPath(`/workers/scripts/${selected.workerName}/deployments`);
+  const readDeployments = async (): Promise<unknown> => {
+    try {
+      return await requestJson({ url: deploymentsUrl, method: "GET", token: cloudflareApiToken });
+    } catch (error) {
+      reportActivationFault("deployment list", error);
+      return {};
+    }
+  };
+  // The switch has not happened while the lease's predecessor still serves. An
+  // unread list or any other deployment never permits a write.
+  const predecessorServes = (response: unknown): boolean => {
+    const active = activeDeployment(response);
+    return plainObject(active) && typeof active.id === "string" && active.id === lease.predecessorDeploymentId;
+  };
+
+  // A lease survives a fault before or at the deployment write, so a held lease
+  // writes again when its predecessor still serves.
+  let deploymentResponse: unknown = acquisition.idempotent ? await readDeployments() : undefined;
+  if (!acquisition.idempotent || predecessorServes(deploymentResponse)) {
     try {
       const preDeployTriggerResponse = await requestJson({
         url: workerApiPath(`/builds/workers/${workerTag}/triggers`),
@@ -541,7 +609,8 @@ export async function runPublicWorkerActivationOperator({
       });
       assertProductionWorkerSubdomainDisabled(subdomainResponse);
       await assertDevelopmentWorkerPrivate(selected, requestJson, cloudflareApiToken);
-    } catch {
+    } catch (error) {
+      reportActivationFault("before the deployment write", error);
       return settleWithFallback({
         firestore,
         lease,
@@ -549,42 +618,37 @@ export async function runPublicWorkerActivationOperator({
         settleOutcomeFn: settleOwned,
       });
     }
-    try {
-      const deploymentResponse = await requestJson({
-        url: workerApiPath(
-          `/workers/scripts/${selected.workerName}/deployments`,
-        ),
-        method: "POST",
-        token: cloudflareApiToken,
-        body: {
-          strategy: "percentage",
-          versions: [{
-            version_id: candidate.workerVersionId,
-            percentage: 100,
-          }],
-        },
-      });
-      if (!responseSucceeded(deploymentResponse)) {
-        operatorError("The Cloudflare deployment response is invalid");
+    for (let unanswered = true; unanswered;) {
+      unanswered = false;
+      try {
+        const writeResponse = await requestJson({
+          url: deploymentsUrl,
+          method: "POST",
+          token: cloudflareApiToken,
+          body: {
+            strategy: "percentage",
+            versions: [{
+              version_id: candidate.workerVersionId,
+              percentage: 100,
+            }],
+          },
+        });
+        if (!responseSucceeded(writeResponse)) {
+          operatorError("The Cloudflare deployment response is invalid");
+        }
+      } catch (error) {
+        // The response is ambiguous. The authoritative active-deployment read
+        // below decides whether the exact version is live, the write is
+        // repeated, or the lease must reconcile.
+        reportActivationFault("deployment write", error);
+        unanswered = error instanceof UnansweredRequestError;
       }
-    } catch {
-      // The response is ambiguous. The authoritative active-deployment read
-      // below decides whether the exact version is live or must reconcile.
+      deploymentResponse = await readDeployments();
+      unanswered &&= predecessorServes(deploymentResponse);
+      if (unanswered) await new Promise(resolve => setTimeout(resolve, ASK_AGAIN_MS));
     }
   }
 
-  let deploymentResponse: unknown = {};
-  try {
-    deploymentResponse = await requestJson({
-      url: workerApiPath(
-        `/workers/scripts/${selected.workerName}/deployments`,
-      ),
-      method: "GET",
-      token: cloudflareApiToken,
-    });
-  } catch {
-    deploymentResponse = {};
-  }
   let evidence = planPublicWorkerActivationEvidence({
     lease,
     candidate,
@@ -600,12 +664,14 @@ export async function runPublicWorkerActivationOperator({
     try {
       const body = await (access ? requestPublication(probe.toString(), access) : requestPublication(probe.toString()));
       if (!publicPublicationReceiptMatchesPreparedArtifact(body, prepared)) {
+        reportActivationFault("public receipt", new Error("The public publication receipt names another artifact"));
         evidence = { action: "reconcile" };
       } else {
         await verifyNoBuildPostPublicRoute({ firestore, candidate,
           ...(target ? { target: selected, headers: publicationReadHeaders(access) } : {}) });
       }
-    } catch {
+    } catch (error) {
+      reportActivationFault("public readback", error);
       evidence = { action: "reconcile" };
     }
   }
@@ -619,7 +685,8 @@ export async function runPublicWorkerActivationOperator({
       });
       assertPublicWorkerTriggers(finalTriggerResponse, workerTag, selected);
       await assertDevelopmentWorkerPrivate(selected, requestJson, cloudflareApiToken);
-    } catch {
+    } catch (error) {
+      reportActivationFault("after the readback", error);
       evidence = { action: "reconcile" };
     }
   }
@@ -630,6 +697,11 @@ export async function runPublicWorkerActivationOperator({
     evidence,
     settleOutcomeFn: settleOwned,
   });
+}
+
+/** The operator settles a fault as "reconcile"; this names it in the log. */
+export function reportActivationFault(step: string, error: unknown): void {
+  console.error(JSON.stringify({ event: "public_activation_fault", step, message: error instanceof Error ? error.message : "unknown" }));
 }
 
 export function projectActivationOperatorResult(

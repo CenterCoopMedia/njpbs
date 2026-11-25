@@ -22,13 +22,14 @@ function answer(renderer, status = 200, extra = {}) {
   } });
 }
 
-function verify(answers, backstopMs = 60_000) {
+function verify(answers, noticeMs = 60_000) {
   let clock = 0, reads = 0;
+  const notices = [];
   const fetchPublic = async () => answers[Math.min(reads++, answers.length - 1)]();
-  const rollout = { backstopMs, now: () => clock, wait: async () => { clock += 1_000; } };
+  const rollout = { noticeMs, now: () => clock, report: notice => notices.push(notice), wait: async () => { clock += 1_000; } };
   const run = verifyOwnedPostRoutes({ state, candidate, admission, fetchPublic, target: publicationTarget("production"),
     headers: {}, previousRendererSha: previous, rollout });
-  return { run, reads: () => reads, clock: () => clock };
+  return { run, reads: () => reads, clock: () => clock, notices };
 }
 
 it("reads again while the previous renderer answers, then judges the candidate once", async () => {
@@ -49,11 +50,20 @@ it("refuses an answer without the candidate renderer at once", async () => {
   expect(check.reads()).toBe(1);
 });
 
-it("stops at the backstop when the candidate version never arrives", async () => {
-  const check = verify([() => answer(previous)], 5_000);
-  await expect(check.run).rejects.toThrow("still answers from the previous renderer");
-  expect(check.clock()).toBe(5_000);
-  expect(check.reads()).toBe(6);
+it("names what it waits for each notice interval and goes on until the candidate answers", async () => {
+  const check = verify([...Array(12).fill(() => answer(previous)), () => answer(candidateSha)], 5_000);
+  await expect(check.run).resolves.toBeUndefined();
+  expect(check.reads()).toBe(13);
+  expect(check.notices.map(notice => notice.waitedMs)).toEqual([5_000, 10_000]);
+  expect(check.notices[0]).toMatchObject({ path: "/posts/owned-story/", waitingFor: expect.stringContaining("still answers from the previous renderer") });
+});
+
+it("reads again after a lost answer and keeps its error", async () => {
+  const lost = () => { throw new TypeError("fetch failed", { cause: Object.assign(new Error("reset"), { code: "ECONNRESET" }) }); };
+  const check = verify([lost, lost, () => answer(candidateSha)], 1_000);
+  await expect(check.run).resolves.toBeUndefined();
+  expect(check.reads()).toBe(3);
+  expect(check.notices[0].waitingFor).toBe("The public route did not answer: fetch failed (ECONNRESET)");
 });
 
 it("accepts the dev staff gateway's private, no-store answer", async () => {

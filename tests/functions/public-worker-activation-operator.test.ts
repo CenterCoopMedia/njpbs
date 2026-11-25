@@ -8,7 +8,9 @@ import {
   assertUploadOnlyProductionTrigger,
   projectActivationOperatorResult,
   parseApplyArguments,
+  requestCloudflareJson,
   requestPublicPublicationReceipt,
+  UnansweredRequestError,
   runPublicWorkerActivationOperator,
 } from "../../site/scripts/activate-public-worker-candidate";
 
@@ -414,13 +416,13 @@ describe("public Worker activation operator", () => {
     )).toBe(false);
   });
 
-  it("fences a retry whose candidate is not authoritatively active", async () => {
+  it("fences a retry when neither the candidate nor the predecessor serves", async () => {
     const fixture = operator({
       requestJson: requestQueue([
         workersResponse(),
         triggersResponse(),
         deploymentsResponse({
-          deploymentId: PREDECESSOR_DEPLOYMENT_ID,
+          deploymentId: "66666666-6666-4666-8666-666666666666",
           versionId: "55555555-5555-4555-8555-555555555555",
         }),
       ]),
@@ -436,6 +438,84 @@ describe("public Worker activation operator", () => {
     expect(fixture.settleOutcomeFn.mock.calls[0][0].evidence).toEqual({
       action: "reconcile",
     });
+  });
+
+  const predecessorServes = () => deploymentsResponse({
+    deploymentId: PREDECESSOR_DEPLOYMENT_ID,
+    versionId: "55555555-5555-4555-8555-555555555555",
+  });
+  const writes = (requestJson: ReturnType<typeof vi.fn>) => requestJson.mock.calls.filter(
+    ([request]) => request.method === "POST" && request.url.endsWith("/deployments"),
+  ).length;
+
+  it("writes on a held lease while its predecessor still serves", async () => {
+    const fixture = operator({
+      requestJson: requestQueue([
+        workersResponse(), triggersResponse(),
+        predecessorServes(),
+        triggersResponse(), disabledSubdomainResponse(),
+        { success: true, result: deploymentStatus() },
+        deploymentsResponse(), triggersResponse(),
+      ]),
+      acquireLeaseFn: vi.fn(async () => acquired({ idempotent: true })),
+    });
+
+    expect((await runPublicWorkerActivationOperator(fixture.input)).outcome).toBe("deployed");
+    expect(writes(fixture.requestJson)).toBe(1);
+  });
+
+  it("never writes on a held lease when the deployment list is unread", async () => {
+    const fixture = operator({
+      requestJson: requestQueue([workersResponse(), triggersResponse(), new Error("refused")]),
+      acquireLeaseFn: vi.fn(async () => acquired({ idempotent: true })),
+    });
+
+    expect((await runPublicWorkerActivationOperator(fixture.input)).outcome).toBe("reconciling");
+    expect(writes(fixture.requestJson)).toBe(0);
+  });
+
+  it("repeats an unanswered write only while the predecessor still serves", async () => {
+    const run = async (readBack: unknown[]) => {
+      const fixture = operator({
+        requestJson: requestQueue([
+          workersResponse(), triggersResponse(), triggersResponse(), disabledSubdomainResponse(),
+          new UnansweredRequestError("lost"), ...readBack, triggersResponse(),
+        ]),
+      });
+      expect((await runPublicWorkerActivationOperator(fixture.input)).outcome).toBe("deployed");
+      return writes(fixture.requestJson);
+    };
+
+    await expect(run([deploymentsResponse()])).resolves.toBe(1);
+    await expect(run([predecessorServes(), { success: true, result: deploymentStatus() }, deploymentsResponse()])).resolves.toBe(2);
+  });
+
+  it("asks a lost read again, sends a write once, and stops on a refusal", async () => {
+    const url = `https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts`;
+    const lost = () => Promise.reject(new TypeError("fetch failed", { cause: Object.assign(new Error("reset"), { code: "ECONNRESET" }) }));
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    const ask = async (method: "GET" | "POST", answers: (() => Promise<Response>)[]) => {
+      const fetchMock = vi.fn(() => answers.shift()!());
+      vi.stubGlobal("fetch", fetchMock);
+      const result = await requestCloudflareJson({ url, method, token: TOKEN }).catch(error => error);
+      return { result, sent: fetchMock.mock.calls.length };
+    };
+    try {
+      const ok = async () => Response.json({ success: true });
+      await expect(ask("GET", [lost, async () => new Response("", { status: 503 }), ok]))
+        .resolves.toEqual({ result: { success: true }, sent: 3 });
+      expect(log.mock.calls.flat().join("\n")).toMatch(/ECONNRESET[^]*HTTP 503/);
+      expect(log.mock.calls.flat().join("\n")).not.toContain(TOKEN);
+      const write = await ask("POST", [lost]);
+      expect(write.sent).toBe(1);
+      expect(write.result).toBeInstanceOf(UnansweredRequestError);
+      expect((await ask("GET", [async () => new Response("", { status: 403 })])).sent).toBe(1);
+      const redirected = await ask("GET", [() => Promise.reject(new TypeError("fetch failed", { cause: new Error("unexpected redirect") }))]);
+      expect(redirected.sent).toBe(1);
+    } finally {
+      vi.unstubAllGlobals();
+      log.mockRestore();
+    }
   });
 
   it("trusts exact active evidence after an ambiguous POST response", async () => {

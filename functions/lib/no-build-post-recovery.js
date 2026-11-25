@@ -36,6 +36,8 @@ function publicReadbackHeaders(target, value) {
   return headers;
 }
 
+const PUBLIC_READ_TIMEOUT = "public-read-timeout";
+
 // Bound headers AND body consumption. Aborting alone need not settle a stalled
 // stream; the deadline also prevents any late result from reaching settlement.
 async function withinDeadline(milliseconds, work) {
@@ -44,7 +46,7 @@ async function withinDeadline(milliseconds, work) {
   const timeout = new Promise((resolve, reject) => {
     timer = setTimeout(() => {
       controller.abort();
-      reject(new Error("Public Post confirmation timed out"));
+      reject(Object.assign(new Error("Public Post confirmation timed out"), { code: PUBLIC_READ_TIMEOUT }));
     }, milliseconds);
   });
   try { return await Promise.race([work(controller.signal), timeout]); }
@@ -403,11 +405,12 @@ async function existingNoBuildPostPublication({ firestore, changes, retry = fals
 // switch landed at 14:07:16.9Z, edges still answered from the previous version
 // 4 to 6 s later, and a single read at about 9.5 s failed a working deploy.
 // A read answered by the previous renderer is read again; the first answer
-// from any other renderer is judged once. The backstop ends only a rollout
-// that never arrives, at ten times the longest skew observed.
-const OWNED_ROUTE_ROLLOUT_BACKSTOP_MS = 60_000;
+// from any other renderer is judged once. The wait ends on that answer; what it
+// waits for is logged each notice interval.
+const OWNED_ROUTE_ROLLOUT_NOTICE_MS = 60_000;
 const OWNED_ROUTE_ROLLOUT_INTERVAL_MS = 1_000;
-const CANDIDATE_ROLLOUT = Object.freeze({ backstopMs: OWNED_ROUTE_ROLLOUT_BACKSTOP_MS, now: Date.now,
+const CANDIDATE_ROLLOUT = Object.freeze({ noticeMs: OWNED_ROUTE_ROLLOUT_NOTICE_MS, now: Date.now,
+  report: notice => console.warn(JSON.stringify({ event: "public_route_wait", ...notice })),
   wait: () => delay(OWNED_ROUTE_ROLLOUT_INTERVAL_MS) });
 
 // The dev staff gateway in front of dev.njpbs.org rebuilds every answer with
@@ -429,29 +432,43 @@ async function refuseFirstMismatch(response, message, checks) {
   }
 }
 
+// A read that got no answer proves nothing about the candidate. A refused
+// redirect or a judged mismatch is an answer.
+function unansweredRead(error) {
+  return error?.code === PUBLIC_READ_TIMEOUT || (error instanceof TypeError && ["fetch failed", "terminated"].includes(error.message));
+}
+
 // Reads one public path until an answer comes from a renderer other than the
-// previous one, then lets judge decide that answer once.
+// previous one, then lets judge decide that answer once. Each unanswered read
+// doubles the time the next one gets, so a slow answer is waited for.
 async function judgeCandidateAnswer({ url, fetchPublic, headers, candidate, previousRendererSha, rollout = CANDIDATE_ROLLOUT }, judge) {
   const previous = previousRendererSha && previousRendererSha !== candidate.commitSha ? previousRendererSha : null;
-  const backstop = rollout.now() + rollout.backstopMs;
+  const started = rollout.now();
+  let noticeAt = started + rollout.noticeMs, readMs = 10_000, waitingFor;
   // Read the body inside the deadline; the deadline aborts the request when it settles.
-  let waiting;
-  while (await withinDeadline(10_000, async signal => {
+  const read = () => withinDeadline(readMs, async signal => {
     const response = await fetchPublic(url, { method: "GET", redirect: "manual", signal, headers: new Headers(headers) });
     // Assets answer while the Post authority read is still out: not an answer yet.
-    waiting = isPublicRefreshPending(response) && `The public route still waits for its Post authority (${response.status})`;
-    if (waiting) {
-      await response.body?.cancel();
-      return true;
+    const pending = isPublicRefreshPending(response) ? `The public route still waits for its Post authority (${response.status})`
+      : previous && response.headers.get("x-njpbs-renderer-sha") === previous
+        ? "The public route still answers from the previous renderer; the candidate version has not reached it" : null;
+    if (pending) await response.body?.cancel();
+    else await judge(response);
+    return pending;
+  });
+  for (;;) {
+    try {
+      waitingFor = await read();
+      if (!waitingFor) return;
+    } catch (error) {
+      if (!unansweredRead(error)) throw error;
+      waitingFor = `The public route did not answer: ${error.message}${error.cause?.code ? ` (${error.cause.code})` : ""}`;
+      readMs = Math.min(readMs * 2, 30 * 60_000);
     }
-    if (previous && response.headers.get("x-njpbs-renderer-sha") === previous) {
-      await response.body?.cancel();
-      return true;
+    if (rollout.now() >= noticeAt) {
+      rollout.report({ path: new URL(url).pathname, waitedMs: rollout.now() - started, waitingFor });
+      noticeAt = rollout.now() + rollout.noticeMs;
     }
-    await judge(response);
-    return false;
-  })) {
-    if (rollout.now() >= backstop) throw new Error(waiting || "The public route still answers from the previous renderer; the candidate version has not reached it");
     await rollout.wait();
   }
 }
