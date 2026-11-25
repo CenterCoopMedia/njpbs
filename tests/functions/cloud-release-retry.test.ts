@@ -238,9 +238,6 @@ it.each(states)("refused bytes, $state: settles $settles", async ({ batch, point
   expect(assertMediaLifecycleDeploymentFence((await firestore.doc(pointerPath).get()).data())).toMatchObject({ generation: next.generation });
 }));
 
-  } finally { logged.mockRestore(); guarded.mockRestore(); }
-});
-
 it("leaves no journal job behind a request the operator superseded after it was read", async () => {
   await seed({ ...documents(), [requestPath]: { ...documents()[requestPath], attempts: 1, nextAttemptAt: 0 } });
   const journal = await openCmsPublicationCloudTokenJournal({ firestore, serializerId: "cloudflare-publisher", runtime: { owner: "cloudflare", release: newSha } });
