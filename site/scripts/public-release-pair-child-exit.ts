@@ -5,7 +5,7 @@ import work from "../../functions/lib/public-release-pair-work.js";
 export const PAIR_RENDER_RETRY_EXIT = 75;
 
 /** A failed child process says nothing about the frozen input only when it was
- * killed (bwrap reports 128 plus the signal) or the host had no capacity. */
+ * killed (the sandbox reports 128 plus the signal) or the host had no capacity. */
 export function pairRenderFailure(code: number | null, failed = false): "render-interrupted" | "render-failed" {
   return failed || code === null || code > 128 || code === PAIR_RENDER_RETRY_EXIT ? "render-interrupted" : "render-failed";
 }
