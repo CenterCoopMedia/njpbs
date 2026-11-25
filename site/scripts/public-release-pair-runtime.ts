@@ -59,6 +59,7 @@ export async function runPublicReleasePairWorkOnce({ firestore, pair, execute, c
   execute(input: {
     identity: work.PairTaskIdentity;
     outputPrefix: string;
+    attempts: number;
     renew(): Promise<{ leaseUntil: number }>;
     signal: AbortSignal;
   }): Promise<{ manifestDigest: string }>;
@@ -75,7 +76,7 @@ export async function runPublicReleasePairWorkOnce({ firestore, pair, execute, c
   let result: { manifestDigest: string };
   try {
     result = await withPublicReleasePairExecutionLease({ leaseUntil: claim.leaseUntil, clock, signal,
-      execute: context => execute({ identity: claim.identity, outputPrefix: claim.outputPrefix, ...context }),
+      execute: context => execute({ identity: claim.identity, outputPrefix: claim.outputPrefix, attempts: claim.attempts, ...context }),
       renew: async () => {
         try { return await work.renewPublicReleasePairWork({ firestore, pair, taskId: claim.taskId, token: claim.token, now: clock() }); }
         catch { throw new work.PairExecutionError("lease-lost"); }

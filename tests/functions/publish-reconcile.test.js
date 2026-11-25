@@ -313,6 +313,8 @@ describe("publish queue orphan recovery", () => {
     ["no transport", { "cmsPublishQueue/row": { ...orphan, transport: null } }],
     ...["reserved", "pending"].map(status => [`a development dispatch that never happened (${status})`,
       { "cmsPublishQueue/row": { ...orphan, status, transport: "github" } }, "development"]),
+    ["a development run that died before it reserved a batch", { "cmsPublishQueue/row": { ...orphan, transport: "github",
+      triggeredAt: new Date(NOW - 24 * 60 * 60 * 1000) } }, "development"],
   ])("recovers an orphaned row with %s and its content marker together", async (_label, documents, environment) => {
     expect(await reconcileRow(documents, environment)).toBe(1);
     expect((await db.doc("cmsPublishQueue/row").get()).data()).toMatchObject({ status: "failed", error: STALE_PUBLISH_ERROR });
@@ -330,6 +332,10 @@ describe("publish queue orphan recovery", () => {
     ["the activating deployment", { "system/publicDeployment": { candidateBuildBatchId: "cms-row" } }],
     ["a transport with its own owner", { "cmsPublishQueue/row": { ...orphan, transport: "library-card-no-build-v1" } }],
     ["its dispatched development run", { "cmsPublishQueue/row": { ...orphan, transport: "github" } }, "development"],
+    ["its dispatched development run, one minute before 24 hours", { "cmsPublishQueue/row": { ...orphan, transport: "github",
+      triggeredAt: new Date(NOW - 24 * 60 * 60 * 1000 + 60_000) } }, "development"],
+    ["the development run that reserved its batch two days ago", { "cmsPublishQueue/row": { ...orphan, transport: "github",
+      triggeredAt: new Date(NOW - 48 * 60 * 60 * 1000) }, "system/publicDeployment/buildBatches/cms-row": batch }, "development"],
     ["the development run that reserved its batch", { "cmsPublishQueue/row": { ...orphan, status: "pending", transport: "github" },
       "system/publicDeployment/buildBatches/cms-row": batch }, "development"],
   ])("leaves a row that %s still owns", async (_label, documents, environment) => {

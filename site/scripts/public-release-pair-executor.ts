@@ -186,8 +186,8 @@ export function createPublicReleasePairExecutor({ firestore, store, pair: rawPai
     signal?.throwIfAborted();
     if (row.exists) await ref.delete();
   };
-  const execute = async ({ identity: rawIdentity, outputPrefix, renew: renewLease, signal }: {
-    identity: PairTaskIdentity; outputPrefix: string; renew(): Promise<{ leaseUntil: number }>; signal: AbortSignal;
+  const execute = async ({ identity: rawIdentity, outputPrefix, attempts, renew: renewLease, signal }: {
+    identity: PairTaskIdentity; outputPrefix: string; attempts: number; renew(): Promise<{ leaseUntil: number }>; signal: AbortSignal;
   }) => withPublicReleasePairVerifiedReads(store, async store => {
     const started = performance.now(), timings: Record<string, number> = {};
     let marked = started, leaseRenewals = 0;
@@ -342,7 +342,9 @@ export function createPublicReleasePairExecutor({ firestore, store, pair: rawPai
           child.once("error", () => { failed = true; });
           // Wait for close even after abort, before removing the job directory.
           child.once("close", code => !failed && code === 0 ? resolve() :
-            reject(new work.PairExecutionError(pairRenderFailure(code, failed))));
+            reject(new work.PairExecutionError(pairRenderFailure(code, failed,
+              // Node killed the child at its timeout; an abort stops the attempt instead.
+              child.killed && !childSignal.signal.aborted ? { attempts } : undefined))));
         });
       } finally {
         clearInterval(timer); signal.removeEventListener("abort", abort); await renewal;

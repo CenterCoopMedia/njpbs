@@ -18,6 +18,7 @@
   "functions/lib/public-context-alerts.js": 1,
   "functions/lib/public-release-switch-code-owner.js": 2,
   "functions/lib/public-video-withdrawal.js": 1,
+  "functions/lib/publish-reconcile.js": 1,
   "functions/lib/settings-publication.js": 1,
   "functions/lib/source-originals.js": 3,
   "functions/lib/video-caption-cues.js": 1,

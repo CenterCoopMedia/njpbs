@@ -184,7 +184,7 @@ let lease: unknown;
 const uncertain = async () => { lease = await acquire(queueId); await settle(lease, { action: "reconcile" }); };
 type Row = { state: string; arrange(origin: Origin): Promise<unknown>; settles: boolean; batch: string; only?: Origin;
   /** Where eligibility ends: at the active release, or where it was. */
-  eligibility?: "active" | "unchanged"; logs?: string };
+  eligibility?: "active" | "unchanged" | "older candidate"; logs?: string };
 // Each state is reached through its own writers. A row says so when no writer makes it.
 const states: Row[] = [
   { state: "batch reserved", arrange: () => stage(queueId, "reserved"), settles: true, batch: "retired", eligibility: "unchanged" },
@@ -199,6 +199,12 @@ const states: Row[] = [
     expect((await (await journal()).read())?.queueId).toBe(queueId);
     const claimed = (await db.doc(requestPath).get()).data()!;
     vi.spyOn(Date, "now").mockReturnValue(claimed.nextAttemptAt); // The claim time passes.
+  } },
+  { state: "an older candidate is ready", settles: true, batch: "retired", eligibility: "older candidate", arrange: async () => {
+    await stage(nextId); await stage();
+  } },
+  { state: "an older candidate is ready below one that stopped before its candidate", settles: true, batch: "retired", eligibility: "older candidate", arrange: async () => {
+    await stage(nextId); await stage("34343434343434343434", "manifest"); await stage();
   } },
   // No current writer parks a request: main's attempt limit did.
   { state: "parked by main, candidate eligible", arrange: async () => { await stage(); await reserveJournal(); await park(); }, settles: true, batch: "retired", eligibility: "active" },
@@ -262,12 +268,14 @@ it.each(matrix)("refused bytes, active release with a $origin, $state: settles $
   expect(await (await journal()).read()).toBeNull();
   expect(request).toMatchObject({ status: "failed", nextAttemptAt: null, refusalReceipt: { reason: "cloud_release_input_refused" } });
   expect([after.newestEligibleGeneration, after.newestEligibleBuildBatchId]).toEqual(eligibility === "active"
-    ? [active.activeGeneration, activeBuild] : [before.newestEligibleGeneration, before.newestEligibleBuildBatchId]);
+    ? [active.activeGeneration, activeBuild] : eligibility === "older candidate" ? [active.lastReservedGeneration + 1, `cms-${nextId}`] : [before.newestEligibleGeneration, before.newestEligibleBuildBatchId]);
   // The same validators the pause drain applies.
   const validate = stored.readyAt ? assertPublicDeploymentRefusedCloudReleaseBatch : assertPublicDeploymentRetiredCloudReleaseBatch;
   expect(validate(stored, buildBatchId)).toEqual(stored);
   // The counter is ahead, so a prepared release is refused; an ordinary release is admitted and activates.
   expect(() => assertMediaLifecycleDeploymentFence(after)).toThrow();
+  // The older candidate leases and activates, as before the refused one was recorded.
+  if (eligibility === "older candidate") await activate(nextId, "77777777-7777-4777-8777-777777777777");
   const admitted = "12121212121212121212", next = await stage(admitted);
   expect(next.generation).toBe(before.lastReservedGeneration + 1);
   await activate(admitted, "55555555-5555-4555-8555-555555555555");

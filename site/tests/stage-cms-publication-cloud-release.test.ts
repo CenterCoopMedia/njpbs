@@ -157,9 +157,11 @@ it("builds and checkpoints NEW while OLD stays pinned, without creating executab
   expect(fakes.stage).not.toHaveBeenCalled();
   expect(fakes.recordCheckpoint).toHaveBeenCalledWith(expect.objectContaining({ publicBuildSettings,
     artifactCheckpointDigest: "d".repeat(64), preparedArtifact: expect.objectContaining({ artifactDigest: "c".repeat(64) }) }));
-  // Production calls the shared release records exactly as before.
-  expect(fakes.prepareDetached).toHaveBeenCalledWith(expect.not.objectContaining({ target: expect.anything() }));
-  expect(fakes.recordCheckpoint).toHaveBeenCalledWith(expect.not.objectContaining({ target: expect.anything() }));
+  // The shared release records refuse an absent target, so production names its own.
+  const production = cloudReleaseTarget({});
+  expect(production.environment).toBe("production");
+  expect(fakes.prepareDetached).toHaveBeenCalledWith(expect.objectContaining({ target: production }));
+  expect(fakes.recordCheckpoint).toHaveBeenCalledWith(expect.objectContaining({ target: production }));
   expect(fakes.build).toHaveBeenCalledWith(expect.objectContaining({
     buildEnvironment: expect.objectContaining({ CMS_DEPLOYMENT_ENVIRONMENT: "production" }) }));
 });
@@ -246,6 +248,7 @@ it.each([
   const create = vi.fn();
   const db = database({ cloudCommit: active });
   const firestore = {
+    projectId: "njpbs-site",
     doc: (name: string) => ({ ...db.doc(name), collection: () => ({ doc: () => ({}) }) }),
     runTransaction: async (transaction: (rpc: object) => Promise<unknown>) => {
       if (failure === "checkpoint record RPC") throw providerError({ code: 7, status: 800 });

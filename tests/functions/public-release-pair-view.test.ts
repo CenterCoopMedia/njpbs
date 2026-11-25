@@ -1,3 +1,4 @@
+import work from "../../functions/lib/public-release-pair-work.js";
 import { createHash } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, expect, it } from "vitest";
 import { Miniflare } from "miniflare";
@@ -252,6 +253,20 @@ it("keeps an already verified shared body independent from a consumer's mutation
   const second = await iterator.next();
   expect(new TextDecoder().decode(second.value!.body)).toBe(html);
   expect((await iterator.next()).done).toBe(true);
+});
+
+it("ends a write whose output violates the protocol, and keeps a storage failure retryable", async () => {
+  for (const rows of [[output("/large/", `${html}${" ".repeat(4 * 1024 * 1024)}`)], [output("/../private/")]]) {
+    const failure = await write(rows).catch(error => error);
+    expect(failure).toMatchObject({ name: "PairExecutionError", code: "render-failed", cause: { name: "PublicReleaseProtocolError" } });
+    expect(work.isPairFinalFailure(failure.code)).toBe(true);
+  }
+  // A store that does not answer says nothing about the output.
+  const lost = Object.assign(new Error("no answer"), { code: 14 });
+  const silent: PairViewStore = { get: key => store.get(key), async put() { throw lost; } };
+  const failure = await write(undefined, { store: silent }).catch(error => error);
+  expect(failure).toBe(lost);
+  expect(work.isPairTransportFailure(failure)).toBe(true);
 });
 
 it("applies the HTML byte bound to media-type case and parameter variants", async () => {

@@ -27,7 +27,7 @@ function isPageScheduleAvailabilityError(error) {
  * selector uses its sealed original CODE with fresh actual selection checks.
  * Neither path substitutes mutable Assets or a retained family input. */
 function createPageCurrentCodeContextReader({ firestore, rendererSha, target, request, signal = undefined,
-  releaseSelector = undefined, readSecret = undefined }) {
+  releaseSelector = undefined, readSecret = undefined, once = false }) {
   if (releaseSelector !== undefined) return require("./public-release-page-schedule-code").createPairScheduleCodeContextReader({
     firestore, rendererSha, releaseSelector, signal, environment: pagePublicationTarget({ firestore, target }).environment });
   let reader;
@@ -41,7 +41,7 @@ function createPageCurrentCodeContextReader({ firestore, rendererSha, target, re
     const boundedRequest = signal ? (url, options) => (request ?? fetch)(url, {
       ...options, signal: AbortSignal.any([signal, options.signal].filter(Boolean)) }) : request;
     reader ??= require("./home-retained-sources").createCurrentCodeContextReader({
-      target, firestore, rendererSha, request: boundedRequest,
+      target, firestore, rendererSha, request: boundedRequest, once,
       readSecret: readSecret ?? require("./cms-edge").configuredEdgeSecret });
     return reader;
   };
@@ -122,7 +122,7 @@ function captureData(capture, target, rendererSha) {
   }
   return data;
 }
-async function capturePageSchedule({ firestore, target, rendererSha = undefined, request, releaseSelector = undefined }) {
+async function capturePageSchedule({ firestore, target, rendererSha = undefined, request, releaseSelector = undefined, once = false }) {
   target = pagePublicationTarget({ firestore, target });
   if (releaseSelector !== undefined) {
     const selected = require("./public-release-media-fence").parseStoredSelector(releaseSelector);
@@ -135,7 +135,7 @@ async function capturePageSchedule({ firestore, target, rendererSha = undefined,
     rendererSha = pointer.activeCommitSha;
   }
   if (!/^[a-f0-9]{40}$/.test(rendererSha ?? "")) refuse("The Page renderer is invalid.");
-  const readCurrentCodeContext = createPageCurrentCodeContextReader({ firestore, target, rendererSha, request,
+  const readCurrentCodeContext = createPageCurrentCodeContextReader({ firestore, target, rendererSha, request, once,
     ...(releaseSelector !== undefined ? { releaseSelector } : {}) });
   const reference = await readCurrentCodeContext.readReference();
   const readSelection = reference => firestore.runTransaction(transaction => readScheduleSelectionInTransaction({

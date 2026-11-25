@@ -199,10 +199,18 @@ type ReleaseClaim = { claimToken: string; attempts: number; until: number };
 const ownsClaim = (current: DocumentData, claim: ReleaseClaim) => ["pending", "failed"].includes(current.status) &&
   current.attempts === claim.attempts && current.nextAttemptAt === claim.until;
 
-/** The eligibility of the active release: none before the first deployment, its
- * deployed batch, or the bootstrap receipt of a release adopted without one. */
-async function activeEligibility(tx: Transaction, firestore: Firestore, pointer: DocumentData) {
+/** The eligibility before the refused candidate was recorded: the newest ready
+ * candidate between it and the active release, or else the active release. That
+ * has none before the first deployment, its deployed batch, or the bootstrap
+ * receipt of a release adopted without one. */
+async function eligibilityWithout(tx: Transaction, firestore: Firestore, pointer: DocumentData, refused: DocumentData) {
   const generation = pointer.activeGeneration;
+  const ready = (await tx.get(firestore.collection("system/publicDeployment/buildBatches").where("status", "==", "ready"))).docs
+    .filter(row => row.data().generation > generation && row.data().generation < refused.generation)
+    .sort((a, b) => b.data().generation - a.data().generation);
+  const candidates = ready.length ? await tx.getAll(...ready.map(row => row.ref.collection("candidates").doc("worker"))) : [];
+  const older = ready.find((_row, index) => candidates[index].exists);
+  if (older) return { newestEligibleGeneration: older.data().generation as number, newestEligibleBuildBatchId: older.id };
   if (generation === 0) return { newestEligibleGeneration: 0, newestEligibleBuildBatchId: null };
   const [batches, receipts] = [await tx.get(firestore.collection("system/publicDeployment/buildBatches")
     .where("generation", "==", generation).where("status", "==", "deployed").limit(2)),
@@ -218,7 +226,8 @@ async function activeEligibility(tx: Transaction, firestore: Firestore, pointer:
  * request, its reservation and its own journal job end in one transaction, so
  * a later release can start. An uploaded candidate also loses its eligibility,
  * which returns to the active release. The reservation counter only moves
- * forward, and the publisher pins stay. A batch with a lease or an uncertain
+ * forward, and the publisher pins stay. An older candidate that is still ready
+ * becomes eligible again, so its own release can lease or be superseded. A batch with a lease or an uncertain
  * activation keeps its owner. */
 async function settleRefusedCloudRelease({ firestore, serializerId, commitSha, identity, request, claim, failureReason }: {
   firestore: Firestore; serializerId: string; commitSha: string; identity: CloudPublicationIdentity;
@@ -246,7 +255,7 @@ async function settleRefusedCloudRelease({ firestore, serializerId, commitSha, i
     const eligible = pointer.newestEligibleBuildBatchId === identity.buildBatchId && pointer.newestEligibleGeneration === batch.generation;
     // An active release that no record identifies cannot hold the journal: the
     // batch still ends, and its eligibility ends with the next larger generation.
-    const restored = eligible ? await activeEligibility(tx, firestore, pointer) : null;
+    const restored = eligible ? await eligibilityWithout(tx, firestore, pointer, batch) : null;
     if (eligible && !restored) console.error("release settlement: the active release has no deployed batch or bootstrap receipt; eligibility is unchanged");
     const settledAt = firebaseAdminRuntime.FieldValue.serverTimestamp();
     tx.update(requestRef, { status: "failed", nextAttemptAt: null, failureReason,

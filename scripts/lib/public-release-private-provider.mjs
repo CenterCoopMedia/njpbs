@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import protocol from "../../functions/lib/public-release-pair.js";
-import { requireImmutableReadback, requireWorkerReadback, waitForWorkerReadback, WorkerWriteRefused } from "./cloudflare-worker-readback.mjs";
+import { requireImmutableReadback, requireNotSuperseded, requireWorkerReadback, waitForWorkerReadback, WorkerWriteRefused } from "./cloudflare-worker-readback.mjs";
 const hash = bytes => createHash("sha256").update(bytes).digest("hex");
 const refuse = () => { throw new Error("Private pair provider operation was refused"); };
 export class PrivateProviderNotSent extends Error {
@@ -78,11 +78,15 @@ export function cloudflarePrivatePairProvider({ accountId, credential, fetcher =
       if (!uuid(value?.id)) refuse(); return value.id;
     },
     version: (name, id, signal, missing = false) => { if (!uuid(id)) refuse(); return request(`${script(name)}/versions/${id}`, { signal, missing }); },
-    async deployment(name, signal) {
+    /** The newest deployment. `ours` is the confirmed deployment a readback waits
+     * for; a newer one that replaced it ends that wait. */
+    async deployment(name, signal, ours) {
       const value = await request(`${script(name)}/deployments`, { signal, missing: true });
       if (value === null) return null;
       const rows = value.deployments ?? value;
-      if (!Array.isArray(rows)) refuse(); return rows[0] ?? null;
+      if (!Array.isArray(rows)) refuse();
+      requireNotSuperseded(rows, ours, "Worker deploymentId");
+      return rows[0] ?? null;
     },
     deploy: (name, version, tag, signal) => request(`${script(name)}/deployments`, { method: "POST", signal,
       body: JSON.stringify({ strategy: "percentage", versions: [{ version_id: version, percentage: 100 }], annotations: { "workers/message": `private-pair:${tag}` } }) }),
@@ -199,13 +203,13 @@ export async function installPrivateWorker({ ledger, provider, attemptId, config
     return { private: true };
   };
   await step("private-subdomain", () => provider.disableSubdomain(config.name, signal), checkSubdomain);
-  const checkDeployment = async expectedDeploymentId => checkPrivateWorkerDeployment(
-    await provider.deployment(config.name, signal), versionId, tag, expectedDeploymentId);
+  const checkDeployment = async ours => checkPrivateWorkerDeployment(
+    await provider.deployment(config.name, signal, ours), versionId, tag, ours?.id);
   const { deploymentId } = await step("deploy", () => provider.deploy(config.name, versionId, tag, signal),
-    response => checkDeployment(response?.id));
-  await checkDeployment(deploymentId);
+    response => checkDeployment(response));
+  await checkDeployment({ id: deploymentId });
   if (await provider.sourceDigest(config.name, signal) !== sourceDigest) refuse();
-  await checkDeployment(deploymentId);
+  await checkDeployment({ id: deploymentId });
   await provider.assertNoPublicRoutes(config.name, signal);
   await checkSubdomain();
   return { dryRun: false, attemptId, worker: config.name, planDigest, sourceDigest, versionId };

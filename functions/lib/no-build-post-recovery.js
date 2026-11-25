@@ -37,14 +37,14 @@ function publicReadbackHeaders(target, value) {
 }
 
 const REFRESH_PENDING = "public_refresh_pending";
-const refreshPending = new WeakMap();
+const readSlots = new WeakMap();
 
 /** One public read, headers and body. A dropped connection reads again; an
  * answer is judged once. `onPending` runs when the route reports its refresh. */
-async function readPublicAnswer(what, work, { onPending = undefined, stop = undefined } = {}) {
+async function readPublicAnswer(what, work, { slot = undefined, stop = undefined } = {}) {
   const controller = new AbortController();
   const signal = stop ? AbortSignal.any([controller.signal, stop]) : controller.signal;
-  if (onPending) refreshPending.set(signal, onPending);
+  if (slot) readSlots.set(signal, slot);
   try { return await callOutside(what, () => work(signal), { signal }); }
   finally { controller.abort(); }
 }
@@ -117,6 +117,8 @@ function isUpdatingAnswer(response) {
 async function readPublicPostAfterRefresh(url, fetchPublic, signal, headers, { updatingIsPending = true, once = false } = {}) {
   headers = new Headers(headers);
   return waitFor(`public route ${new URL(url).pathname}`, async () => {
+    const slot = readSlots.get(signal);
+    await slot?.take();
     const response = await fetchPublic(url, {
       method: "GET", redirect: "manual", signal, ...(headers.keys().next().done ? {} : { headers }),
     });
@@ -126,7 +128,7 @@ async function readPublicPostAfterRefresh(url, fetchPublic, signal, headers, { u
     await response.body?.cancel();
     const state = pending ? "refresh pending" : `updating ${response.status}`;
     if (once) return { failed: Object.assign(new Error(`The public route reports ${state}`), { code: REFRESH_PENDING }) };
-    refreshPending.get(signal)?.(state);
+    slot?.give();
     return { pending: state };
   }, { signal });
 }
