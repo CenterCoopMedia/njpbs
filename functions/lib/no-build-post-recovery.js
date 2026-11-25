@@ -40,17 +40,17 @@ const PUBLIC_READ_TIMEOUT = "public-read-timeout";
 
 // Bound headers AND body consumption. Aborting alone need not settle a stalled
 // stream; the deadline also prevents any late result from reaching settlement.
-async function withinDeadline(milliseconds, work) {
+async function withinDeadline(milliseconds, work, stopped) {
   const controller = new AbortController();
-  let timer;
-  const timeout = new Promise((resolve, reject) => {
-    timer = setTimeout(() => {
-      controller.abort();
-      reject(Object.assign(new Error("Public Post confirmation timed out"), { code: PUBLIC_READ_TIMEOUT }));
-    }, milliseconds);
+  let timer, stop;
+  const ended = new Promise((resolve, reject) => {
+    const end = error => { controller.abort(error); reject(error); };
+    timer = setTimeout(() => end(Object.assign(new Error("Public Post confirmation timed out"), { code: PUBLIC_READ_TIMEOUT })), milliseconds);
+    stop = () => end(stopped.reason);
+    stopped?.addEventListener("abort", stop);
   });
-  try { return await Promise.race([work(controller.signal), timeout]); }
-  finally { clearTimeout(timer); controller.abort(); }
+  try { return await Promise.race([work(controller.signal), ended]); }
+  finally { clearTimeout(timer); stopped?.removeEventListener("abort", stop); controller.abort(); }
 }
 
 async function purgePostRoutes(state, config, fetchImpl, target) {
@@ -455,7 +455,7 @@ async function judgeCandidateAnswer({ url, fetchPublic, headers, candidate, prev
     if (pending) await response.body?.cancel();
     else await judge(response);
     return pending;
-  });
+  }, stopped);
   for (;;) {
     try {
       waitingFor = await read();

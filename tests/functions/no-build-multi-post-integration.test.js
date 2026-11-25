@@ -717,5 +717,18 @@ describe("independent public routes, catalog and confirmation", () => {
     // A wait already asleep ends after its next read at most.
     expect(reads).toBeLessThanOrEqual(settled + 8);
     expect(together).toBe(0);
+    const signals = [];
+    const stalled = async (url, { signal }) => {
+      const state = await owner(slugs.get(new URL(url).pathname.split("/")[2]));
+      if (state.slug === [...slugs.keys()][0]) {
+        await vi.waitFor(() => expect(signals.length).toBeGreaterThan(1));
+        return new Response("", { status: 500 });
+      }
+      signals.push(signal);
+      return new Promise(() => {});
+    };
+    await expect(recovery.verifyNoBuildPostPublicRoute({ firestore: db, candidate, target, fetchPublic: stalled }))
+      .rejects.toThrow("did not preserve its instant Post routes");
+    await vi.waitFor(() => expect(signals.every(signal => signal.aborted)).toBe(true));
   });
 });

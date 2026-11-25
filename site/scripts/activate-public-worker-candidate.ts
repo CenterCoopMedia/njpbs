@@ -3,6 +3,7 @@ import { verifyDevPublicWorkerPrivate } from "../../scripts/lib/dev-private-work
 import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
+import { isDeepStrictEqual } from "node:util";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { App, ServiceAccount } from "firebase-admin/app";
@@ -588,6 +589,18 @@ export async function runPublicWorkerActivationOperator({
     return plainObject(active) && typeof active.id === "string" && active.id === lease.predecessorDeploymentId;
   };
 
+  // Another attempt of this operation may have settled this lease while this one
+  // waited. A write after that would put an older version back.
+  const leaseStillHeld = async (): Promise<boolean> => {
+    try {
+      const held = await acquireLeaseFn({ firestore, buildBatchId: prepared.buildBatchId, commitSha: prepared.commitSha, ...owned });
+      return held.outcome === "acquired" && isDeepStrictEqual(held.lease, lease);
+    } catch (error) {
+      reportActivationFault("lease before the deployment write", error);
+      return false;
+    }
+  };
+
   // A lease survives a fault before or at the deployment write, so a held lease
   // writes again when its predecessor still serves.
   let deploymentResponse: unknown = acquisition.idempotent ? await readDeployments() : undefined;
@@ -620,6 +633,10 @@ export async function runPublicWorkerActivationOperator({
     }
     for (let unanswered = true; unanswered;) {
       unanswered = false;
+      if (!await leaseStillHeld()) {
+        reportActivationFault("deployment write", new Error("The lease is no longer held; nothing was written"));
+        return settleWithFallback({ firestore, lease, evidence: { action: "reconcile" }, settleOutcomeFn: settleOwned });
+      }
       try {
         const writeResponse = await requestJson({
           url: deploymentsUrl,

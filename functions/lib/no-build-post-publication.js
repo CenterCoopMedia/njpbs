@@ -420,7 +420,7 @@ async function readNoBuildPostDecisionInTransaction({ firestore, transaction, pa
 }
 
 async function readOwnedPostDecision({ firestore, transaction, owner, pointer, capability, candidate, rendererSha,
-  admission, contextDigest, path, slug, catalog = false, canSkipUnverifiedSnapshot = false }) {
+  admission, contextDigest, path, slug = undefined, catalog = false, canSkipUnverifiedSnapshot = false }) {
   const state = effectiveNoBuildPostState(owner.state, capability);
   const staticCandidate = candidate?.noBuildStatic?.postId === state.postId ? candidate : null;
   if (state.mode === "static" || staticCandidate) {

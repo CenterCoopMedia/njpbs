@@ -40,7 +40,7 @@ async function readNoBuildPostOwner({ firestore, transaction, postId }) {
 
 /** Enumeration is read only. Code activation changes the shared capability,
  * never an unbounded set of retained Post or queue documents. */
-async function listNoBuildPostOwners({ firestore, transaction, slug, onMalformedOwner }) {
+async function listNoBuildPostOwners({ firestore, transaction = undefined, slug = undefined, onMalformedOwner = undefined }) {
   let query = firestore.collection(OWNER_COLLECTION);
   if (slug !== undefined) {
     if (!isPostRouteSlug(slug)) refuse();

@@ -474,6 +474,26 @@ describe("public Worker activation operator", () => {
     expect(writes(fixture.requestJson)).toBe(0);
   });
 
+  it.each([
+    ["another attempt settled it", async () => ({ outcome: "superseded" as const, idempotent: true })],
+    ["another lease replaced it", async () => { const next = acquired(); return { ...next, lease: { ...next.lease, leaseToken: "77777777-7777-4777-8777-777777777777" } }; }],
+    ["the lease read fails", async () => { throw new Error("unread"); }],
+  ])("writes nothing after waiting when %s", async (_name, later) => {
+    for (const idempotent of [false, true]) {
+      const acquireLeaseFn = vi.fn(later as () => Promise<any>).mockResolvedValueOnce(acquired({ idempotent }));
+      const fixture = operator({
+        acquireLeaseFn,
+        requestJson: requestQueue([
+          workersResponse(), triggersResponse(), ...(idempotent ? [predecessorServes()] : []),
+          triggersResponse(), disabledSubdomainResponse(),
+        ]),
+      });
+
+      expect((await runPublicWorkerActivationOperator(fixture.input)).outcome).toBe("reconciling");
+      expect(writes(fixture.requestJson)).toBe(0);
+    }
+  });
+
   it("repeats an unanswered write only while the predecessor still serves", async () => {
     const run = async (readBack: unknown[]) => {
       const fixture = operator({
