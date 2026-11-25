@@ -5,12 +5,25 @@
 // keeps a historical deploy_ref from restoring rules that cannot read or release
 // editor-lock documents written by the current Admin client.
 
+// This gate runs alone from the trusted checkout: it imports nothing outside
+// this file except Node built-ins.
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
+
+// The log is public, and the platform repeats the text it refused in its own
+// message (a malformed receipt body, an invalid URL). Those give the class and code only.
+const PLATFORM_ERROR = /^(?:TypeError|RangeError|SyntaxError|URIError|DOMException)$/;
+function publicMessage(error) {
+  if (!(error instanceof Error)) return String(error);
+  if (!PLATFORM_ERROR.test(error.constructor.name)) return error.message;
+  return [error.name, error.code ?? error.cause?.code].filter(value => typeof value === "string").join(": ");
+}
+const gitFailure = error => String(error?.stderr ?? "").split("\n").map(line => line.trim()).find(line => /^(?:fatal|error):/.test(line))?.slice(0, 300) ??
+  (Number.isInteger(error?.status) ? `exit ${error.status}` : publicMessage(error));
 const previewPair = () => createRequire(import.meta.url)("../../functions/lib/cms-preview-pair.js");
 
 // Schema-two boundary adapter: callers must explicitly supply the provider-backed
@@ -216,7 +229,7 @@ export function validateCmsDeployCompatibility(repoRoot) {
   } catch (error) {
     throw new Error(
       `${CMS_DEPLOY_COMPATIBILITY_MANIFEST} is missing or invalid: ${
-        error instanceof Error ? error.message : error
+        publicMessage(error)
       }`,
     );
   }
@@ -297,8 +310,8 @@ function readContentCatalogs(repoRoot, revision) {
       return execFileSync("git", ["show", `${revision}:${path}`], {
         cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"],
       });
-    } catch {
-      throw new Error(`Cannot read ${path} at ${revision} from Git history`);
+    } catch (error) {
+      throw new Error(`Cannot read ${path} at ${revision} from Git history (${gitFailure(error)})`);
     }
   };
   // Read committed declarations as data; never execute the selected or historical code.
@@ -387,7 +400,7 @@ export async function verifyLivePublisher(repoRoot, receiptUrl) {
   } catch (error) {
     throw new Error(
       `Publisher commit ${publisherSha} cannot verify support for this deploy. ` +
-      `${error instanceof Error ? error.message : error} ` +
+      `${publicMessage(error)} ` +
       "Promote the publisher first using the deployment configuration " +
       "(For an authorized publisher source change) and " +
       "the deployment configuration, then retry the CMS deploy.",
@@ -410,8 +423,8 @@ export async function verifyLivePublisher(repoRoot, receiptUrl) {
       changed = execFileSync("git", ["diff", "--name-only", "--no-renames", "-z", `${rendererSha}..HEAD`, "--"], {
         cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"],
       }).split("\0").filter(Boolean);
-    } catch {
-      throw new Error("Cannot verify renderer input changes from Git history; CMS deploy refused.");
+    } catch (error) {
+      throw new Error(`Cannot verify renderer input changes from Git history (${gitFailure(error)}); CMS deploy refused.`);
     }
     const disallowedChanges = changed.filter(path => !CMS_ONLY_DEPLOY_PATHS.some(input =>
       path === input || input.endsWith("/") && path.startsWith(input),
@@ -456,7 +469,7 @@ if (process.argv[1] && thisFile === resolve(process.argv[1])) {
       }
     } catch (error) {
       console.error(
-        `cms deploy compatibility: ${error instanceof Error ? error.message : error}`,
+        `cms deploy compatibility: ${publicMessage(error)}`,
       );
       process.exitCode = 1;
     }
