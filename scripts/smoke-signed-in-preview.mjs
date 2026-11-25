@@ -89,6 +89,14 @@ export async function checkSignedInPreview(browser, { admin, preview, credential
     if (page.url() !== editorUrl) throw new Error();
     const button = page.getByRole("button", { name: "Preview", exact: true });
     await hang.over(Promise.race([unavailable, button.waitFor({ state: "visible" })]));
+    // The editor shows the button only after its load, with the saved receipt already recorded
+    // (EditorWorkspace.tsx), so a button that is disabled when it appears stays disabled.
+    if (await hang.over(button.isDisabled())) {
+      const label = await hang.over(page.getByRole("group", { name: /^Preview unavailable: / })
+        .evaluateAll(nodes => nodes[0]?.getAttribute("aria-label") ?? null).catch(() => null));
+      saw.reason = disabledReasons.get(label?.replace(/^Preview unavailable: /, "")) ?? "unlisted";
+      throw new PreviewSmokeFailure("preview_control_disabled");
+    }
 
     phase = "private_preview_unavailable";
     const session = `${preview}/__cms-session`;
@@ -165,7 +173,9 @@ export async function checkSignedInPreview(browser, { admin, preview, credential
     return { ok: true, code: "signed_in_private_preview" };
   } catch (error) {
     const code = error instanceof PreviewSmokeFailure ? error.message : phase;
-    if (phase !== "private_preview_unavailable" && phase !== "preview_heading_missing") return { ok: false, code };
+    if (phase !== "private_preview_unavailable" && phase !== "preview_heading_missing") {
+      return { ok: false, code, ...(saw.reason ? { reason: saw.reason } : {}) };
+    }
     return { ok: false, code, missing: ["popup", "session", "document"].filter(key => !saw[key]),
       session: saw.session ?? null, job: saw.job ?? null, document: saw.document ?? null,
       popup: await describePopup(popup, { admin, preview }) };
@@ -211,6 +221,13 @@ export const STAGE_HANG_BACKSTOP_MS = 5 * 60_000;
 export const PREVIEW_HANG_BACKSTOP_MS = 95 * 60_000;
 // The errors that the editor shows when its record cannot load (ContentTab.tsx, EditorWorkspace.tsx).
 const editorUnavailable = /(?:do not have permission to edit this (?:page|record)\.|This page is no longer available\.|The (?:page|record) could not be loaded\. Reload to try again\.|Deleted records cannot be edited here\.)/;
+// The reasons the editor gives for a disabled Preview button (EditorWorkspace.tsx), as receipt codes.
+const disabledReasons = new Map([
+  ["Wait for a saved page to load before previewing.", "page_not_saved"],
+  ["Wait for a saved record to load before previewing.", "record_not_saved"],
+  ["Your access does not allow saving these changes for preview.", "save_not_allowed"],
+  ["Finish or cancel the media changes before previewing.", "media_changes_open"],
+]);
 // The errors that Admin's Preview action shows in the editor when it stops (SavedPreview.tsx).
 const editorStop = /(?:Allow pop-ups for this CMS|Preview could not open\.|Preview is temporarily unavailable\.|The preview service is updating\.|Previews are refreshing after a recent publish\.|Private preview access is taking longer)/;
 const jobStatuses = new Set(["pending", "building", "ready", "failed", "expired"]);

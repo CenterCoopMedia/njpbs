@@ -51,7 +51,7 @@ test("adds Access headers on one origin and refuses to forward them on redirects
 
 function fixtureBrowser(settings, { sessionStatus = 204, documentStatus = 200, headingVisible = true,
   sessionFailure, noDocument = false, progress = "building", later, job, reader = false, jobStatus = 200, hasProgress = true,
-  noPopup = false, editorAlert = false, signInStatus, editorError, documentFailure, stalled = false } = {}) {
+  noPopup = false, editorAlert = false, signInStatus, editorError, documentFailure, stalled = false, disabledReason } = {}) {
   const context = new EventEmitter();
   const page = new EventEmitter();
   const frame = {};
@@ -115,7 +115,9 @@ function fixtureBrowser(settings, { sessionStatus = 204, documentStatus = 200, h
     },
     getByText: pattern => ({ first: () => ({ waitFor: () =>
       editorError && pattern.test(editorError) ? Promise.resolve() : new Promise(() => {}) }) }),
-    getByRole: (role, options) => role === "alert" ? {
+    getByRole: (role, options) => role === "group" ? {
+      evaluateAll: async read => read(disabledReason ? [{ getAttribute: () => `Preview unavailable: ${disabledReason}` }] : []),
+    } : role === "alert" ? {
       filter({ hasText }) {
         assert.equal(hasText.test("Allow pop-ups for this CMS, then select Preview again. Your edits have not changed."), true);
         assert.equal(hasText.test("This draft has no preview yet."), false);
@@ -124,6 +126,7 @@ function fixtureBrowser(settings, { sessionStatus = 204, documentStatus = 200, h
     } : pageButton(options.name),
   });
   const pageButton = name => ({
+      isDisabled: async () => Boolean(disabledReason),
       waitFor: () => (signInStatus && name !== "Preview") || (editorError && name === "Preview") ? new Promise(() => {}) : Promise.resolve(),
       async click() {
         assert.equal(name, "Preview");
@@ -177,6 +180,17 @@ test("ends on a refused sign-in and an editor that cannot load its record", asyn
   assert.deepEqual(await checkSignedInPreview(fixtureBrowser(settings, { signInStatus: 400 }), settings), { ok: false, code: "staff_sign_in_failed" });
   for (const editorError of ["You do not have permission to edit this record.", "Deleted records cannot be edited here."]) {
     assert.deepEqual(await checkSignedInPreview(fixtureBrowser(settings, { editorError }), settings), { ok: false, code: "editor_unavailable" });
+  }
+});
+
+test("names a disabled Preview control at once", async () => {
+  const settings = previewSmokeSettings("production", env);
+  for (const [disabledReason, reason] of [["Wait for a saved page to load before previewing.", "page_not_saved"],
+    ["Wait for a saved record to load before previewing.", "record_not_saved"],
+    ["Your access does not allow saving these changes for preview.", "save_not_allowed"],
+    ["Draft title at /x", "unlisted"]]) {
+    assert.deepEqual(await checkSignedInPreview(fixtureBrowser(settings, { disabledReason }), settings),
+      { ok: false, code: "preview_control_disabled", reason });
   }
 });
 
