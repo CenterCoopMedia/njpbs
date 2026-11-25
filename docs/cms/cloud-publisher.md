@@ -348,6 +348,7 @@ identities, not defaults. Preserve exact argument order:
 | Never-public withdrawal | `scripts/settle-unpublished-cms-content-withdrawal.sh --apply <operator-commit> <collection> <record-id> <published-source-version> <cancelled-queue-id> <active-generation> <active-batch-id>` |
 | Retained content baseline | `bash scripts/seed-public-content-baseline.sh --target production --dist <absolute-retained-dist> --prepared <absolute-retained-prepared-worker.json>` |
 | Context dry-run | `node --import "file://$PWD/site/node_modules/tsx/dist/loader.mjs" site/scripts/retry-public-context-publication.ts --operation-id <current-failed-id> --source-sha <active-source-sha> --context-revision <current-revision>` with credential fd 3 |
+| Lease with no deployment write | From `site/`: `node --import tsx scripts/return-public-deployment-lease.ts --environment <production\|development> <leased-build-batch-id> [--apply]` with a Cloudflare read token on fd 3 and the Firebase account on fd 4 |
 
 Baseline seeding verifies exact complete retained bytes/source and immutable
 readback; it grants no deployment/route switch or withdrawal exception.

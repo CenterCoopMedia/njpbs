@@ -31,7 +31,8 @@ late mutation/settlement boundary, not only initial planning.
 Read public receipt and provider active version before and after ordinary-route
 proof. Matching source alone cannot establish exact generation/context/body.
 Reconciliation uses the original operation and lease; it never clears an
-uncertain lease/token or creates another owner to force idle. The retained
+uncertain lease/token or creates another owner to force idle. A lease with no
+deployment write has its own operator under Recovery. The retained
 [reconciler](../../site/scripts/reconcile-public-worker-deployment.ts) handles
 provider/database disagreement under these same checks.
 
@@ -65,6 +66,20 @@ actual provider version and database pointer, run original reconciliation,
 then prove idle pointer, exact public root receipt, body bytes, family/withdrawal
 and media readiness. Failed proof retains the original attempt for diagnosis.
 No second uncoordinated public writer is permitted.
+
+A lease can be held with no deployment write: the publisher container ended
+between the lease and the write, or the write was lost. The reconciler never
+settles that lease, and publishing stays refused.
+[return-public-deployment-lease.ts](../../site/scripts/return-public-deployment-lease.ts)
+gives it back. It reads Cloudflare twice, 30 seconds apart: the active
+deployment must be the lease predecessor, with no deployment after the lease.
+It refuses another release's lease, a lease younger than 10 minutes, and a lease
+whose publisher container still runs. If it cannot read the containers, it says
+so and waits until the lease is 31 minutes old. Without `--apply` it only reads.
+With `--apply` the pointer is idle on the predecessor, the batch is ready and
+the release request is due, so the publisher takes a new lease and writes once.
+It needs `CLOUDFLARE_ACCOUNT_ID` and a token with Workers Scripts read and
+Containers read.
 
 During reconciliation, the read-only CMS diagnostics observer
 (`scripts/cms-diagnostics.mjs --firebase`) checks the candidate bound to the
