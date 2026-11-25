@@ -9,7 +9,7 @@ import { secretRequirements, checkSecretIam } from "./check-cms-secret-iam.mjs";
 import { loadFunctionSource, readFunctionsDeployInventory } from "./lib/functions-deploy-inventory.mjs";
 import { provisionCmsSecret } from "./lib/functions-secret-versions.mjs";
 import { assertR2Lifecycle } from "./assert-r2-lifecycle.mjs";
-import { providerCall, providerGcloud, providerJson } from "./lib/provider-call.mjs";
+import { faultCause, providerCall, providerGcloud, providerJson } from "./lib/provider-call.mjs";
 import { assertDevelopmentSource } from "./render-development-config.mjs";
 import { cmsTarget } from "./lib/cms-target.mjs";
 
@@ -24,11 +24,11 @@ const gcloudOptions = env => ({ env: { ...env,
 encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 30000, maxBuffer: 1024 * 1024 });
 function readGcloud(args, env, execute, wait) {
   try { return providerGcloud(args, gcloudOptions(env), execute, { wait }).trim(); }
-  catch { fail("Scoped Google configuration command failed"); }
+  catch (error) { fail("Scoped Google configuration command failed", faultCause(error)); }
 }
 function writeGcloud(args, env, execute) {
   try { return execute("gcloud", args, gcloudOptions(env)).trim(); }
-  catch { fail("Scoped Google configuration command failed"); }
+  catch (error) { fail("Scoped Google configuration command failed", faultCause(error)); }
 }
 
 export function resolveDiscovery(env, execute = execFileSync) {
@@ -42,7 +42,7 @@ export function resolveDiscovery(env, execute = execFileSync) {
       ...Object.fromEntries(Object.entries(env).filter(([key]) => /^(?:COST_LEDGER_|CMS_MEDIA_PURGE_)/.test(key))),
       ...(GOOGLE_APPLICATION_CREDENTIALS ? { CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE: GOOGLE_APPLICATION_CREDENTIALS } : {}) },
       encoding: "utf8", stdio: ["ignore", "pipe", "inherit"], timeout: 600000, maxBuffer: 64 * 1024 }); }
-    catch { fail(`Could not resolve discovery configuration: ${script}`); }
+    catch (error) { fail(`Could not resolve discovery configuration: ${script}`, faultCause(error)); }
     for (const line of text.trim().split("\n")) {
       const match = line.match(/^([A-Z][A-Z0-9_]*)=(.*)$/);
       if (!match || RUNTIME_PARAMETERS[match[1]]?.format !== "discovery" || Object.hasOwn(output, match[1])) fail("Invalid discovery configuration output");
@@ -117,42 +117,42 @@ export async function nativeConfigurationProvider(env, { execute = execFileSync,
     client: { request },
     async version(name) {
       try { return nativeVersion(name, (await request({ url: `${secretBase(name)}/versions/latest` })).data); }
-      catch { fail(`Could not verify enabled secret version: ${name}`); }
+      catch (error) { fail(`Could not verify enabled secret version: ${name}`, faultCause(error)); }
     },
     async payload(name, version) {
       try {
         const data = (await request({ url: `https://secretmanager.googleapis.com/v1/${version.name}:access` })).data;
-        if (data?.name !== version.name || typeof data.payload?.data !== "string") throw new Error();
+        if (data?.name !== version.name || typeof data.payload?.data !== "string") throw new Error("answer names another version or has no payload");
         const bytes = Buffer.from(data.payload.data, "base64");
-        if (!bytes.length || bytes.toString("base64").replace(/=+$/, "") !== data.payload.data.replace(/-/g, "+").replace(/_/g, "/").replace(/=+$/, "")) throw new Error();
+        if (!bytes.length || bytes.toString("base64").replace(/=+$/, "") !== data.payload.data.replace(/-/g, "+").replace(/_/g, "/").replace(/=+$/, "")) throw new Error("payload is not canonical base64");
         return bytes;
-      } catch { fail(`Could not read scoped secret payload: ${name}`); }
+      } catch (error) { fail(`Could not read scoped secret payload: ${name}`, faultCause(error)); }
     },
     async servingFunctions() {
       try { return await readFunctionsDeployInventory(project, async (url, pageToken) =>
         (await request({ url, ...(pageToken ? { params: { pageToken } } : {}) })).data, { includeMetadata: true }); }
-      catch { fail("Could not read deployed Functions secret bindings"); }
+      catch (error) { fail("Could not read deployed Functions secret bindings", faultCause(error)); }
     },
     async authSettings() {
       try {
         const data = (await request({ url: `https://identitytoolkit.googleapis.com/admin/v2/projects/${project}/config` })).data;
-        if (![project, number].some(id => data?.name === `projects/${id}/config`)) throw new Error();
+        if (![project, number].some(id => data?.name === `projects/${id}/config`)) throw new Error("answer names another project");
         return data;
       }
-      catch { fail("Could not read Firebase email/password sign-in configuration"); }
+      catch (error) { fail("Could not read Firebase email/password sign-in configuration", faultCause(error)); }
     },
     async enableEmailAuth() {
       try { await request({ url: `https://identitytoolkit.googleapis.com/admin/v2/projects/${project}/config`, method: "PATCH",
         params: { updateMask: "signIn.email.enabled,signIn.email.passwordRequired" }, data: { signIn: { email: NATIVE_CONFIGURATION.emailSignIn } } }); }
-      catch { fail("Could not provision Firebase email/password sign-in; read back before retrying"); }
+      catch (error) { fail("Could not provision Firebase email/password sign-in; read back before retrying", faultCause(error)); }
     },
     ttlFields() {
       try {
         const fields = JSON.parse(gcloud(["firestore", "fields", "ttls", "list", `--project=${project}`,
           `--database=${NATIVE_CONFIGURATION.databaseId}`, "--format=json"]));
-        if (!Array.isArray(fields) || fields.some(field => !field || typeof field.name !== "string")) throw new Error();
+        if (!Array.isArray(fields) || fields.some(field => !field || typeof field.name !== "string")) throw new Error("answer is not a list of named fields");
         return fields;
-      } catch { fail("Could not read scoped expireAt TTL policies"); }
+      } catch (error) { fail("Could not read scoped expireAt TTL policies", faultCause(error)); }
     },
     enableTtl(group) {
       if (!NATIVE_CONFIGURATION.ttlCollections.includes(group)) fail("Unknown TTL collection group");
@@ -167,7 +167,7 @@ export async function nativeConfigurationProvider(env, { execute = execFileSync,
         const data = (await request({ url: secretBase(name) })).data;
         if (![project, number].some(id => data?.name === `projects/${id}/secrets/${name}`)) fail(`Invalid secret resource: ${name}`);
       } catch (error) {
-        if (error?.response?.status !== 404) fail(`Could not read secret resource: ${name}`);
+        if (error?.response?.status !== 404) fail(`Could not read secret resource: ${name}`, faultCause(error));
         if (!value) fail(`Missing provisioning value for absent resource: ${name}`);
         changeGcloud(["secrets", "create", name, `--project=${project}`, "--replication-policy=automatic", "--quiet"]);
         const data = (await request({ url: secretBase(name) })).data;
@@ -188,8 +188,8 @@ export async function verifyMediaLifecycle(account, bucket, token, fetchImpl = f
     body = await providerJson("media bucket lifecycle", () => fetchImpl(`https://api.cloudflare.com/client/v4/accounts/${account}/r2/buckets/${bucket}/lifecycle`, {
       headers: { authorization: `Bearer ${token}` }, redirect: "error", signal: AbortSignal.timeout(15000) }), { wait });
   } catch (error) {
-    if (![401, 403].includes(error.response?.status)) fail("Could not verify media bucket retention lifecycle");
-    fail(`CLOUDFLARE_API_TOKEN cannot read the ${bucket} lifecycle: give the ${target.environment} deploy token the account permission Workers R2 Storage Read`);
+    if (![401, 403].includes(error.response?.status)) fail("Could not verify media bucket retention lifecycle", faultCause(error));
+    fail(`CLOUDFLARE_API_TOKEN cannot read the ${bucket} lifecycle: give the ${target.environment} deploy token the account permission Workers R2 Storage Read`, faultCause(error));
   }
   try { assertR2Lifecycle(body); }
   catch (error) {
@@ -229,7 +229,7 @@ export async function verifyNativeResources(provider, provision) {
 function provisionIam(requirements, provider) {
   for (const [name, accounts] of requirements) {
     let policy;
-    try { policy = JSON.parse(provider.policy(name)); } catch { fail(`Could not read IAM policy: ${name}`); }
+    try { policy = JSON.parse(provider.policy(name)); } catch (error) { fail(`Could not read IAM policy: ${name}`, faultCause(error)); }
     if (!policy || typeof policy !== "object" || Array.isArray(policy) || !Array.isArray(policy.bindings ?? [])) fail(`Invalid IAM policy: ${name}`);
     const has = (account, roles) => (policy.bindings ?? []).some(binding => roles.includes(binding.role) && !binding.condition &&
       Array.isArray(binding.members) && binding.members.includes(`serviceAccount:${account}`));
@@ -250,7 +250,7 @@ export function verifyConfigurationIam(requirements, provider) {
   for (const name of requirements.keys()) {
     if (!FUNCTION_SECRETS[name].deployAdmin) continue;
     let policy;
-    try { policy = JSON.parse(readPolicy(name)); } catch { fail(`Could not read IAM policy: ${name}`); }
+    try { policy = JSON.parse(readPolicy(name)); } catch (error) { fail(`Could not read IAM policy: ${name}`, faultCause(error)); }
     if (!policy?.bindings?.some(binding => binding.role === "roles/secretmanager.admin" && !binding.condition &&
         binding.members?.includes(`serviceAccount:${provider.account}`))) missing.push(name);
   }
@@ -268,15 +268,15 @@ export async function mediaCanary(client, commands, bucket, key) {
   try {
     await send(commands.PutObjectCommand, { Bucket: bucket, Key: key, Body: body, ContentType: "text/plain" });
     const stored = await send(commands.HeadObjectCommand, { Bucket: bucket, Key: key });
-    if (stored.ContentLength !== body.length) throw new Error();
-  } catch { originalError = true; }
+    if (stored.ContentLength !== body.length) throw new Error("stored length differs");
+  } catch (error) { originalError = error; }
   try {
     // Include an uncertain PUT in cleanup, then prove absence rather than
     // treating a successful delete response as proof of the resulting state.
     try { await send(commands.DeleteObjectCommand, { Bucket: bucket, Key: key }); } catch { /* Readback settles an uncertain delete. */ }
     try { await send(commands.HeadObjectCommand, { Bucket: bucket, Key: key }); fail("Media canary object remains"); }
-    catch (error) { if (error?.$metadata?.httpStatusCode !== 404) fail("Could not prove media canary cleanup"); }
-    if (originalError) fail("Media Put/Head canary failed");
+    catch (error) { if (error?.$metadata?.httpStatusCode !== 404) fail("Could not prove media canary cleanup", faultCause(error)); }
+    if (originalError) fail("Media Put/Head canary failed", faultCause(originalError));
   } finally { client.destroy(); }
 }
 
@@ -301,7 +301,7 @@ export async function checkMedia(config, env, provider, provision, createClient)
     if (provision) await mediaCanary(client, commands, bucket, `cms-media-staging/deploy-preflight-${randomUUID()}`);
     else {
       try { await providerCall("media bucket read", () => client.send(new commands.HeadBucketCommand({ Bucket: bucket }), { abortSignal: AbortSignal.timeout(15000) })); }
-      catch { fail("Could not read media bucket with the pinned credentials"); }
+      catch (error) { fail("Could not read media bucket with the pinned credentials", faultCause(error)); }
       finally { client.destroy(); }
     }
     for (const name of names) if ((await provider.version(name)).canonicalName !== versions[name].canonicalName) fail(`Media secret rotated during verification: ${name}`);
@@ -360,11 +360,11 @@ export function verifyMediaBindings(config, source, live, projectNumber) {
 export function requireConfigurationSource(env) {
   try {
     if (!/^[a-f0-9]{40}$/.test(env.DEPLOY_SHA ?? "") || realpathSync(".") !== realpathSync(new URL("../", import.meta.url)) ||
-        execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim() !== env.DEPLOY_SHA) throw new Error();
+        execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim() !== env.DEPLOY_SHA) throw new Error("checkout is not at DEPLOY_SHA");
     // A dev run writes its runtime parameters over the tracked dev-index template.
     assertDevelopmentSource(process.cwd(), env,
       { allowedChanges: target.environment === "development" ? [`functions/.env.${project}`] : [] });
-  } catch { fail("Functions configuration requires a clean source checkout at DEPLOY_SHA"); }
+  } catch (error) { fail("Functions configuration requires a clean source checkout at DEPLOY_SHA", faultCause(error)); }
 }
 
 function writeConfigurationFile(path, text) {

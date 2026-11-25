@@ -1,6 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { FUNCTION_SECRETS, FunctionsConfigurationError } from "./functions-configuration.mjs";
 import { cmsTarget } from "./cms-target.mjs";
+import { faultCause } from "./provider-call.mjs";
 const project = cmsTarget().projectId;
 const names = new Set(Object.keys(FUNCTION_SECRETS));
 
@@ -17,13 +18,13 @@ export async function currentVersionMatches(name, desired, client) {
     version = (await client.request({ url: `${baseUrl}/versions/latest` })).data;
   } catch (error) {
     if (error.response?.status !== 404) {
-      throw new FunctionsConfigurationError(`Could not read latest version metadata for ${name}`);
+      throw new FunctionsConfigurationError(`Could not read latest version metadata for ${name}`, faultCause(error));
     }
     let secret;
     try {
       secret = (await client.request({ url: baseUrl })).data;
-    } catch {
-      throw new FunctionsConfigurationError(`Could not verify empty secret resource for ${name}`);
+    } catch (error) {
+      throw new FunctionsConfigurationError(`Could not verify empty secret resource for ${name}`, faultCause(error));
     }
     if (!new RegExp(`^projects/(?:${project}|[0-9]+)/secrets/${name}$`).test(secret?.name)) throw new FunctionsConfigurationError(`Invalid secret resource for ${name}`);
     return false;
@@ -41,8 +42,8 @@ export async function currentVersionMatches(name, desired, client) {
     accessed = (await client.request({
       url: `${baseUrl}/versions/${version.name.split("/").at(-1)}:access`,
     })).data;
-  } catch {
-    throw new FunctionsConfigurationError(`Could not compare latest secret value for ${name}`);
+  } catch (error) {
+    throw new FunctionsConfigurationError(`Could not compare latest secret value for ${name}`, faultCause(error));
   }
   const encoded = accessed?.payload?.data;
   if (accessed?.name !== version.name || typeof encoded !== "string" ||
@@ -72,8 +73,8 @@ export async function setSecret(name, desired, client) {
         !new RegExp(`^projects/(?:${project}|[0-9]+)/secrets/${name}/versions/[0-9]+$`).test(version?.name)) {
       throw new FunctionsConfigurationError("Unverified new secret version");
     }
-  } catch {
-    throw new FunctionsConfigurationError(`Secret provisioning failed for ${name}; verify latest version before retrying`);
+  } catch (error) {
+    throw new FunctionsConfigurationError(`Secret provisioning failed for ${name}; verify latest version before retrying`, faultCause(error));
   }
 }
 
