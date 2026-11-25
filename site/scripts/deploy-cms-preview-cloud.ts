@@ -49,7 +49,9 @@ export function releaseCredentials(env: NodeJS.ProcessEnv = process.env) {
   return { rawAccount, rawStorage, token, publicationAccess };
 }
 const releaseSecretValues: string[] = [];
-const STARTUP_HEALTH_DEADLINE_MS = 180_000;
+// Pacing between reads; it never ends a wait.
+const READ_PAUSE_MS = 10_000;
+const pause = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
 const PLACEMENT_ERROR = /no container instance(?: that can be provided)?|(?:placement|scheduling) (?:failed|error)|unable to (?:place|schedule)|insufficient (?:placement )?capacity/i;
 const STARTUP_RECOVERY = "Keep previews paused; inspect Cloudflare placement and rollout health, then start a new full CMS staging deploy for this commit.";
 
@@ -60,16 +62,16 @@ export class CloudPreviewPlacementError extends Error {
   }
 }
 
-export class CloudPreviewZeroHealthyError extends Error {
-  constructor() {
-    super(`No verified healthy target instance after 180 seconds. ${STARTUP_RECOVERY}`);
-    this.name = "CloudPreviewZeroHealthyError";
+export class CloudPreviewHealthError extends Error {
+  constructor(name: string) {
+    super(`Container health reported ${name}. ${STARTUP_RECOVERY}`);
+    this.name = "CloudPreviewHealthError";
   }
 }
 
 export class CloudPreviewProviderReadError extends Error {
-  constructor(startupRecovery = false) {
-    super(`Container health could not be read.${startupRecovery ? ` ${STARTUP_RECOVERY}` : ""}`);
+  constructor() {
+    super("Container health could not be read.");
     this.name = "CloudPreviewProviderReadError";
   }
 }
@@ -78,6 +80,7 @@ type PreviewRollout = {
   id: string;
   created_at: string;
   status: string;
+  steps?: { status?: string }[];
   health?: { errors?: { event?: { name?: string; message?: string; time?: string } }[] };
   progress?: { version_distribution?: { target_version_instances?: number; current_version_instances?: number } };
 };
@@ -109,39 +112,35 @@ export async function readCloudPreviewRollouts(readPage: (query: string) => Prom
   }
 }
 
-/** Health is an early failure signal; only the exact renderer can attest ready. */
+/** Ends when the exact renderer attests ready, or when the platform names a
+ * failure. No clock ends it: rollout 147480fa completed after 305 s with no
+ * errors, where the five before it took 106 to 169 s. GitHub's six-hour job
+ * limit is the only bound. */
 export async function waitForCloudPreviewStartup(rendererSha: string, {
-  readControl, readRollouts, readApplication, previousRolloutIds = [], firstApplication = false,
-  now = Date.now, sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms)),
+  readControl, readRollouts, readApplication, previousRolloutIds = [],
+  now = Date.now, sleep = pause, log = line => process.stdout.write(`${line}\n`),
 }: {
   readControl: () => Promise<unknown>; readRollouts: () => Promise<unknown>; readApplication: () => Promise<unknown>;
-  previousRolloutIds?: readonly string[]; firstApplication?: boolean;
-  now?: () => number; sleep?: (ms: number) => Promise<void>;
+  previousRolloutIds?: readonly string[];
+  now?: () => number; sleep?: (ms: number) => Promise<void>; log?: (line: string) => void;
 }) {
   const started = now();
   let lastHealthyAt: number | null = null;
-  let healthDeadlineRequired = !firstApplication;
-  const ready = async () => {
+  const report = (state: string) => log(`Preview startup, ${Math.round((now() - started) / 1_000)} s: ${state}`);
+  for (;;) {
     const current = parsePreviewRuntimeControl(await readControl());
     if (current.rendererSha !== rendererSha || current.serializerId !== SERIALIZER || current.phase === "paused") {
       throw new Error("Cloud preview release identity changed during startup");
     }
-    return current.phase === "ready";
-  };
-  for (;;) {
-    if (await ready()) return;
+    if (current.phase === "ready") return;
     let rawRollouts: unknown;
     let application: unknown;
     try {
       [rawRollouts, application] = await Promise.all([readRollouts(), readApplication()]);
     } catch (error) {
       if (!(error instanceof CloudPreviewProviderReadError)) throw error;
-      const elapsed = now() - started;
-      if ((healthDeadlineRequired && now() - (lastHealthyAt ?? started) >= STARTUP_HEALTH_DEADLINE_MS) || elapsed >= 20 * 60_000) {
-        if (await ready()) return;
-        throw new CloudPreviewProviderReadError(true);
-      }
-      await sleep(10_000);
+      report(`control ${current.phase}, container state not read`);
+      await sleep(READ_PAUSE_MS);
       continue;
     }
     const rollouts = previewRollouts(rawRollouts);
@@ -156,39 +155,35 @@ export async function waitForCloudPreviewStartup(rendererSha: string, {
     const latest = rollouts.filter(row => !previousRolloutIds.includes(row.id))
       .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))[0];
     const target = latest ?? active;
-    if (target && ["reverted", "replaced"].includes(target.status)) {
-      throw new Error(`Cloud preview rollout did not finish. ${STARTUP_RECOVERY}`);
-    }
-    // An unchanged image creates no new rollout. Fresh application health is
-    // still required before extending that retry's exact-ready wait.
     const count = app.health?.instances?.healthy;
-    const healthy = typeof count === "number" && Number.isSafeInteger(count) && count > 0;
     const distribution = target?.progress?.version_distribution;
     const targetCount = distribution?.target_version_instances;
+    const shown = (value: unknown) => Number.isSafeInteger(value) ? value : "unknown";
+    report(`control ${current.phase}, rollout ${target?.status ?? "none"}, ` +
+      `step ${/^[a-z_]{1,30}$/.test(target?.steps?.at(-1)?.status ?? "") ? target?.steps?.at(-1)?.status : "unknown"}, target instances ${shown(targetCount)}, ` +
+      `previous instances ${shown(distribution?.current_version_instances)}, healthy ${shown(count)}`);
+    if (target && ["reverted", "replaced"].includes(target.status)) {
+      throw new Error(`Cloud preview rollout did not finish: ${target.status}. ${STARTUP_RECOVERY}`);
+    }
+    // An unchanged image creates no new rollout; application health alone then
+    // separates a recovery from a retained error.
+    const healthy = typeof count === "number" && Number.isSafeInteger(count) && count > 0;
     const targetHealthy = healthy && (!target || (typeof targetCount === "number" && Number.isSafeInteger(targetCount)
       && targetCount > 0 && distribution?.current_version_instances === 0));
-    if (!targetHealthy && target?.health?.errors?.some(({ event }) => {
+    const fault = targetHealthy ? undefined : target?.health?.errors?.find(({ event }) => {
       // Same-image retries reuse the old rollout and may retain its errors.
       // Fresh live health or event time must distinguish recovery from history.
       if (lastHealthyAt !== null && !(typeof event?.time === "string" && Date.parse(event.time) > lastHealthyAt)) return false;
       if (!latest && !(typeof event?.time === "string" && Date.parse(event.time) >= started)) return false;
-      return PLACEMENT_ERROR.test(event?.message ?? "") ||
-        ["VMFailed", "VMFailedToStart", "RuntimeStartFailed", "NetworkingIPAssignmentFailed"].includes(event?.name ?? "");
-    })) throw new CloudPreviewPlacementError();
+      return true;
+    });
+    if (fault) {
+      const { name = "", message = "" } = fault.event ?? {};
+      if (PLACEMENT_ERROR.test(message)) throw new CloudPreviewPlacementError();
+      throw new CloudPreviewHealthError(/^[A-Za-z][A-Za-z0-9_]{0,60}$/.test(name) ? name : "an unnamed error");
+    }
     if (targetHealthy) lastHealthyAt = now();
-    healthDeadlineRequired = Boolean(target) || !firstApplication;
-    const elapsed = now() - started;
-    // A first application has no rollout, and its new cron can take 15 minutes
-    // to propagate. Existing applications must prove target health in 3 minutes.
-    if (now() - (lastHealthyAt ?? started) >= STARTUP_HEALTH_DEADLINE_MS && !targetHealthy && healthDeadlineRequired) {
-      if (await ready()) return;
-      throw new CloudPreviewZeroHealthyError();
-    }
-    if (elapsed >= 20 * 60_000) {
-      if (await ready()) return;
-      throw new Error(`Cloud preview startup timed out. ${STARTUP_RECOVERY}`);
-    }
-    await sleep(10_000);
+    await sleep(READ_PAUSE_MS);
   }
 }
 
@@ -223,11 +218,11 @@ export function releaseSecretsFor(rawAccount: string, rawStorage: string, token:
   return secrets;
 }
 
-async function waitFor(description: string, check: () => Promise<boolean>, minutes = 10) {
-  const deadline = Date.now() + minutes * 60_000;
+async function waitFor(description: string, check: () => Promise<boolean>) {
+  const started = Date.now();
   while (!await check()) {
-    if (Date.now() >= deadline) throw new Error(`Timed out waiting for ${description}`);
-    await new Promise(resolve => setTimeout(resolve, 10_000));
+    process.stdout.write(`Waiting for ${description}, ${Math.round((Date.now() - started) / 1_000)} s\n`);
+    await pause(READ_PAUSE_MS);
   }
 }
 
@@ -236,7 +231,7 @@ async function cloudflare(token: string, suffix: string): Promise<unknown> {
   let response: Response;
   try {
     response = await fetch(`https://api.cloudflare.com/client/v4/accounts/${account}/containers/applications${suffix}`, {
-      headers: { Authorization: `Bearer ${token}` }, redirect: "error", signal: AbortSignal.timeout(15_000),
+      headers: { Authorization: `Bearer ${token}` }, redirect: "error",
     });
   } catch { throw new CloudPreviewProviderReadError(); }
   if (!response.ok) {
@@ -309,34 +304,18 @@ export async function wrangler(prepared: Awaited<ReturnType<typeof preparePrevie
     });
     let stdout = "";
     let stderr = "";
-    let timedOut = false;
+    let stopped = false;
     const fail = (code: number | null, signal: string | null, failureClass: string) => {
       const elapsed = ((Date.now() - started) / 1_000).toFixed(1);
       const message = `Cloud preview Wrangler ${operation} failed (exit=${code ?? "none"}, signal=${signal ?? "none"}, elapsed=${elapsed}s, class=${failureClass})`;
       reject(Object.assign(new Error(message), { failureClass, providerLine: message }));
     };
-    // Bound image deployment separately from startup health verification.
-    const timeout = operation === "image deploy" ? setTimeout(() => {
-      timedOut = true;
-      // Wrangler starts Docker children; stop the whole command group on Linux.
-      try {
-        if (process.platform !== "win32" && child.pid) process.kill(-child.pid, "SIGKILL");
-        else child.kill("SIGKILL");
-      } catch {
-        child.kill("SIGKILL");
-      }
-      child.stdin.destroy();
-      child.stdout.destroy();
-      child.stderr.destroy();
-      fail(null, "SIGKILL", "timeout");
-    }, 15 * 60_000) : undefined;
     const observe = (chunk: Buffer, stream: "stdout" | "stderr") => {
-      if (timedOut) return;
+      if (stopped) return;
       if (stream === "stdout") stdout = (stdout + chunk.toString()).slice(-65_536);
       else stderr = (stderr + chunk.toString()).slice(-65_536);
       if (!PLACEMENT_ERROR.test(`${stdout}\n${stderr}`)) return;
-      timedOut = true;
-      clearTimeout(timeout);
+      stopped = true;
       try {
         if (process.platform !== "win32" && child.pid) process.kill(-child.pid, "SIGKILL");
         else child.kill("SIGKILL");
@@ -349,13 +328,11 @@ export async function wrangler(prepared: Awaited<ReturnType<typeof preparePrevie
     child.stdout.on("data", chunk => observe(chunk, "stdout"));
     child.stderr.on("data", chunk => observe(chunk, "stderr"));
     child.once("error", () => {
-      if (timedOut) return;
-      clearTimeout(timeout);
+      if (stopped) return;
       fail(null, null, "unknown");
     });
     child.once("close", (code, signal) => {
-      clearTimeout(timeout);
-      if (timedOut) return;
+      if (stopped) return;
       if (code === 0) resolve();
       else fail(code, signal, wranglerFailureClass(`${stdout}\n${stderr}`));
     });
@@ -365,10 +342,10 @@ export async function wrangler(prepared: Awaited<ReturnType<typeof preparePrevie
 }
 
 /** A deploy sets the Worker, image and secrets to this exact release, so a repeat reaches the same state.
- * A refused credential and our own deadline are final. */
+ * A refused credential is final. */
 export function retryWrangler(prepared: Awaited<ReturnType<typeof preparePreviewRenderer>>, args: string[], token: string, input?: string, options = {}) {
   return providerCall(`preview renderer wrangler ${args[0]}`, () => wrangler(prepared, args, token, input), {
-    permanent: (error: { failureClass?: string }) => ["authentication", "timeout"].find(kind => kind === error.failureClass) ?? null, ...options });
+    permanent: (error: { failureClass?: string }) => error.failureClass === "authentication" ? "authentication" : null, ...options });
 }
 
 export async function deployPreviewRuntime({ firestore, rendererSha, token, rawAccount, rawStorage, publicationAccess }: {
@@ -418,8 +395,6 @@ export async function deployPreviewRuntime({ firestore, rendererSha, token, rawA
     if (!id) throw new Error("Cloud preview application is missing after deployment");
     return id;
   }).catch(error => { startupId = null; throw error; });
-  // Allow 180s for target health, independently of the image deployment's
-  // 15-minute deadline.
   await waitForCloudPreviewStartup(rendererSha, {
     readControl: async () => (await ref.get()).data(),
     readRollouts: async () => {
@@ -427,7 +402,7 @@ export async function deployPreviewRuntime({ firestore, rendererSha, token, rawA
       return readCloudPreviewRollouts(query => cloudflare(token, `/${id}/rollouts${query}`));
     },
     readApplication: async () => cloudflare(token, `/${await resolveStartupId()}`),
-    previousRolloutIds, firstApplication: !existingId,
+    previousRolloutIds,
   });
   process.stdout.write(`Cloud preview renderer verified at ${rendererSha}\n`);
 }

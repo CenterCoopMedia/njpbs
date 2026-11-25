@@ -1807,9 +1807,7 @@ jobs:
       (vars.CMS_DEPLOY_OWNER != '' && github.triggering_actor == vars.CMS_DEPLOY_OWNER) && github.ref == 'refs/heads/main'
     # Wrangler builds the renderer container image and needs a Docker engine.
     runs-on: ubuntu-24.04
-    # Allow all three wait limits plus setup and image deployment.
-    # Measured Nov. 2026: 303 s, 290 s (45191230409, 44613342087).
-    timeout-minutes: 60 # Runaway guard: 3x max rounds to 48m; preserve 55m waits plus setup (#2657).
+    # GitHub's own six-hour job limit is the only bound; every wait ends on a named state.
     steps:
       - uses: actions/checkout@v7
         if: (inputs.target == 'development' || vars.CMS_PREVIEW_CLOUD_ENABLED == 'true')
