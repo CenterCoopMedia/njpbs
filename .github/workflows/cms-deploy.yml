@@ -17,11 +17,6 @@ on:
         description: "Full commit SHA on main to deploy"
         required: true
         type: string
-      site_ref:
-        description: "Site commit that this release switches to; empty compares with the live site"
-        required: false
-        default: ""
-        type: string
       release_dispatch_id:
         description: "Release CLI correlation ID"
         required: false
@@ -52,8 +47,7 @@ jobs:
       - name: Require a full commit SHA
         env:
           DEPLOY_SHA: ${{ inputs.ref }}
-          SITE_SHA: ${{ inputs.site_ref }}
-        run: '[[ "$DEPLOY_SHA" =~ ^[a-f0-9]{40}$ && "$SITE_SHA" =~ ^([a-f0-9]{40})?$ ]]'
+        run: '[[ "$DEPLOY_SHA" =~ ^[a-f0-9]{40}$ ]]'
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
@@ -61,11 +55,9 @@ jobs:
       - name: Require a commit on main
         env:
           DEPLOY_SHA: ${{ inputs.ref }}
-          SITE_SHA: ${{ inputs.site_ref }}
         run: |
           set -euo pipefail
           git merge-base --is-ancestor "$DEPLOY_SHA" "$GITHUB_SHA"
-          git merge-base --is-ancestor "${SITE_SHA:-$DEPLOY_SHA}" "$GITHUB_SHA"
       - name: Require successful CI for the commit
         env:
           GH_TOKEN: ${{ github.token }}
@@ -86,7 +78,6 @@ jobs:
       - name: Deploy the CMS
         env:
           TARGET: ${{ inputs.target }}
-          CMS_SITE_SHA: ${{ inputs.site_ref }}
           CMS_DEPLOYMENT_VARIABLES_JSON: ${{ toJSON(vars) }}
           GITHUB_TOKEN: ${{ github.token }}
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}

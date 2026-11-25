@@ -42,29 +42,32 @@ const prepared = await (dev ? prepareDevPreviewRenderer : preparePreviewRenderer
 try {
   // A refused token ends here, while previews still work.
   const before = live && await deployed();
-  // Admission stays closed until the new renderer reports ready; admitted work finishes on the old one.
-  await pausePreviewRuntime(firestore, sha);
-  while (!await previewRuntimeDrained(firestore)) { console.log("Waiting for admitted previews"); await sleep(10); }
-  const config = JSON.parse(readFileSync(prepared.configPath, "utf8"));
-  config.vars.PREVIEW_RENDERER_ENABLED = "true";
-  writeFileSync(prepared.configPath, JSON.stringify(config));
-  const secrets = join(prepared.directory, "secrets.json");
-  writeFileSync(secrets, JSON.stringify({ FIREBASE_SERVICE_ACCOUNT: env.CMS_PREVIEW_FIREBASE_ACCOUNT, R2_PREVIEW_CREDENTIAL: env.CMS_PREVIEW_R2_CREDENTIAL,
-    ...(dev ? { CMS_DEV_ACCESS_CLIENT_ID: env.CMS_DEV_ACCESS_CLIENT_ID, CMS_DEV_ACCESS_CLIENT_SECRET: env.CMS_DEV_ACCESS_CLIENT_SECRET } : {}) }), { mode: 0o600 });
   const starting = { schemaVersion: 1, phase: "starting", rendererSha: sha, serializerId: "cloudflare-preview" };
-  await firestore.doc(PREVIEW_RUNTIME_DOCUMENT).set(starting);
-  await new Promise((done, reject) => spawn(process.execPath, [prepared.wrangler, "deploy", "--config", prepared.configPath, "--secrets-file", secrets],
-    { cwd: prepared.source, stdio: ["ignore", "inherit", "inherit"], env: { PATH: env.PATH, HOME: env.HOME, CI: "true", WRANGLER_SEND_METRICS: "false",
-      CLOUDFLARE_API_TOKEN: env.CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID: env.CLOUDFLARE_ACCOUNT_ID } })
-    .on("error", reject).on("close", code => code === 0 ? done() : reject(new Error(`wrangler deploy exited ${code}`))))
-    .catch(async error => {
-      // Cloudflare still serves the old version, so the old renderer takes previews again.
-      if (live?.phase === "ready" && before && await deployed() === before) await firestore.runTransaction(async transaction => {
-        const ref = firestore.doc(PREVIEW_RUNTIME_DOCUMENT);
-        if (isDeepStrictEqual((await transaction.get(ref)).data(), starting)) transaction.set(ref, live);
-      });
-      throw error;
+  let uploading = false;
+  try {
+    // Admission stays closed until the new renderer reports ready; admitted work finishes on the old one.
+    await pausePreviewRuntime(firestore, sha);
+    while (!await previewRuntimeDrained(firestore)) { console.log("Waiting for admitted previews"); await sleep(10); }
+    const config = JSON.parse(readFileSync(prepared.configPath, "utf8"));
+    config.vars.PREVIEW_RENDERER_ENABLED = "true";
+    writeFileSync(prepared.configPath, JSON.stringify(config));
+    const secrets = join(prepared.directory, "secrets.json");
+    writeFileSync(secrets, JSON.stringify({ FIREBASE_SERVICE_ACCOUNT: env.CMS_PREVIEW_FIREBASE_ACCOUNT, R2_PREVIEW_CREDENTIAL: env.CMS_PREVIEW_R2_CREDENTIAL,
+      ...(dev ? { CMS_DEV_ACCESS_CLIENT_ID: env.CMS_DEV_ACCESS_CLIENT_ID, CMS_DEV_ACCESS_CLIENT_SECRET: env.CMS_DEV_ACCESS_CLIENT_SECRET } : {}) }), { mode: 0o600 });
+    await firestore.doc(PREVIEW_RUNTIME_DOCUMENT).set(starting);
+    uploading = true;
+    await new Promise((done, reject) => spawn(process.execPath, [prepared.wrangler, "deploy", "--config", prepared.configPath, "--secrets-file", secrets],
+      { cwd: prepared.source, stdio: ["ignore", "inherit", "inherit"], env: { PATH: env.PATH, HOME: env.HOME, CI: "true", WRANGLER_SEND_METRICS: "false",
+        CLOUDFLARE_API_TOKEN: env.CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID: env.CLOUDFLARE_ACCOUNT_ID } })
+      .on("error", reject).on("close", code => code === 0 ? done() : reject(new Error(`wrangler deploy exited ${code}`))));
+  } catch (error) {
+    // While Cloudflare still serves the old version, the old renderer takes previews again.
+    if (live?.phase === "ready" && (!uploading || before && await deployed() === before)) await firestore.runTransaction(async transaction => {
+      const ref = firestore.doc(PREVIEW_RUNTIME_DOCUMENT), now = (await transaction.get(ref)).data();
+      if ([starting, { ...live, phase: "paused" }].some(own => isDeepStrictEqual(now, own))) transaction.set(ref, live);
     });
+    throw error;
+  }
 
   for (let last = ""; ;) {
     const control = (await firestore.doc(PREVIEW_RUNTIME_DOCUMENT).get()).data();

@@ -216,15 +216,13 @@ describe("CMS deploy versus the live publisher catalog", () => {
     expect((await deployGate()).code).toBe(0);
   });
 
-  it("compares a CMS deploy alone with the live site, and a release with the commit it switches to", async () => {
+  it("refuses types that the live site does not know, and only those", async () => {
     git("update-ref", "HEAD", futureBlockSha);
-    await expect(requireSiteContentTypes(root, receiptUrl, "")).rejects.toThrow("Unsupported block types: future_block");
-    await expect(requireSiteContentTypes(root, receiptUrl, currentSha)).rejects.toThrow("Unsupported block types: future_block");
-    expect(await requireSiteContentTypes(root, receiptUrl, futureBlockSha)).toBe(futureBlockSha);
+    await expect(requireSiteContentTypes(root, receiptUrl)).rejects.toThrow("Unsupported block types: future_block");
     git("update-ref", "HEAD", sameCatalogSha);
-    expect(await requireSiteContentTypes(root, receiptUrl, "")).toBe(currentSha);
+    expect(await requireSiteContentTypes(root, receiptUrl)).toBe(currentSha);
     receiptStatus = 503;
-    await expect(requireSiteContentTypes(root, receiptUrl, "")).rejects.toThrow("503");
+    await expect(requireSiteContentTypes(root, receiptUrl)).rejects.toThrow("503");
   });
 
   it("refuses a new editorial record kind", async () => {

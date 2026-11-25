@@ -23,10 +23,8 @@ failed steps and the provider's error, and exits 1 when the list is not empty.
 | smoke | Function boundaries, then one signed-in private preview in Chrome |
 | notes | Prints missing event receivers and secret accessors, and an App Check key that differs. Never fails the run |
 
-The `firebase` and `admin-deploy` steps refuse a commit that has a block or record type the site does not know, because
-the site answers 503 for a page that uses it. A CMS deploy alone is compared with the live site's commit. A release sets
-`CMS_SITE_SHA` (`site_ref` in the workflow) to the site commit it switches to next. When that switch then fails, staff
-can publish the new types before the site renders them: deploy the site, or deploy the earlier CMS commit again.
+The `firebase` and `admin-deploy` steps refuse a commit with a block or record type that the live site does not know,
+because the site answers 503 for a page that uses it. A new type takes two releases: first the site half alone, then the CMS.
 
 Inputs are environment variables: `CMS_DEPLOYMENT_VARIABLES_JSON` (the GitHub variables as one object),
 `FIREBASE_SERVICE_ACCOUNT`, `CLOUDFLARE_API_TOKEN`, `CMS_EDGE_ORIGIN_SECRET`, `CMS_PREVIEW_R2_CREDENTIAL`,

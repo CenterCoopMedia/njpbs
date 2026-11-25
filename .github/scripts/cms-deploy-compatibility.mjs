@@ -371,10 +371,10 @@ async function readPublisherReceipt(receiptUrl) {
 }
 
 // The site cannot render a block or record type that its commit does not know: the page answers 503.
-export async function requireSiteContentTypes(repoRoot, receiptUrl, siteSha) {
-  const site = siteSha || (await readPublisherReceipt(receiptUrl)).publisherSha;
-  assertSupportedCatalogs(repoRoot, site);
-  return site;
+export async function requireSiteContentTypes(repoRoot, receiptUrl) {
+  const { publisherSha } = await readPublisherReceipt(receiptUrl);
+  assertSupportedCatalogs(repoRoot, publisherSha);
+  return publisherSha;
 }
 
 function assertSupportedCatalogs(repoRoot, siteSha) {

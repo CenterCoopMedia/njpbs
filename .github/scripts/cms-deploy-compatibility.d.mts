@@ -11,7 +11,7 @@ export function cmsEditorLockRulesDigest(source: string, version?: number): stri
 export function validateCmsDeployCompatibility(
   repoRoot: string,
 ): CmsDeployCompatibility;
-export function requireSiteContentTypes(repoRoot: string, receiptUrl: string, siteSha?: string): Promise<string>;
+export function requireSiteContentTypes(repoRoot: string, receiptUrl: string): Promise<string>;
 export function verifyLivePublisher(
   repoRoot: string,
   receiptUrl: string,
