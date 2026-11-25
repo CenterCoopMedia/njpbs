@@ -67,14 +67,30 @@ it("uses actual Firestore REST serialization for the same bounded due predicate 
   const { taskId } = await enqueue(taskInput);
   const now = Date.now();
   const hinted = await work.readPublicReleasePairWorkHint({ pair, read: rest.read, now,
-    listDue: (field, limit) => rest.listDue(pair.pairId, field, now, limit) });
+    listDue: (field, limit) => rest.listDue(pair.pairId, field, now, limit), listStopped: limit => rest.listStopped(pair.pairId, limit) });
   expect(hinted).toEqual(await work.readPublicReleasePairWork({ firestore: db, pair, now }));
   expect(hinted.taskIds).toEqual([taskId]);
   const claim = await work.claimPublicReleasePairWork({ firestore: db, pair, taskId, now });
   const running = await work.readPublicReleasePairWorkHint({ pair, read: rest.read, now,
-    listDue: (field, limit) => rest.listDue(pair.pairId, field, now, limit) });
+    listDue: (field, limit) => rest.listDue(pair.pairId, field, now, limit), listStopped: limit => rest.listStopped(pair.pairId, limit) });
   expect(running.taskIds).toEqual([]);
   await work.settlePublicReleasePairWork({ firestore: db, pair, taskId, token: claim.token, manifestDigest: "e".repeat(64), now: now + 1 });
+});
+
+it("wakes an idle publisher for a row the removed attempt cap parked", async () => {
+  const rest = reader(), now = Date.now();
+  const { taskId } = await enqueue(taskInput);
+  await work.claimPublicReleasePairWork({ firestore: db, pair, taskId, now });
+  const base = work.publicReleasePairPath(pair.pairId);
+  await db.doc(`${base}/work/${taskId}`).update({ status: "failed", attempts: 4, claimDigest: null, leaseUntil: null,
+    nextAttemptAt: null, acceptedDueAt: null, lastFailure: "storage-unavailable" });
+  await db.doc(`${base}/journals/${pair.publisher.journalNamespace}`).update({ job: null });
+  const hint = () => work.readPublicReleasePairWorkHint({ pair, read: rest.read, now,
+    listDue: (field, limit) => rest.listDue(pair.pairId, field, now, limit), listStopped: limit => rest.listStopped(pair.pairId, limit) });
+  expect(await hint()).toEqual(await work.readPublicReleasePairWork({ firestore: db, pair, now }));
+  expect((await hint()).taskIds).toEqual([taskId]);
+  await db.doc(`${base}/work/${taskId}`).update({ lastFailure: "byte-mismatch" });
+  expect((await hint()).taskIds).toEqual([]);
 });
 
 it("boots an honest preflight server without an executor and cannot claim work through a flag", async () => {

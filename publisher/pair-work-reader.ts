@@ -99,11 +99,24 @@ export function pairFirestoreReader({ projectId, token, request = fetch }: { pro
       return documents.length === 1;
     },
     async listDue(pairId: string, field: "acceptedDueAt" | "nextAttemptAt" | "leaseUntil", now: number, limit: number) {
-      if (!Number.isSafeInteger(now) || now < 1 || !Number.isSafeInteger(limit) || limit < 1 || limit > 20) throw new Error("Invalid pair query");
+      if (!Number.isSafeInteger(now) || now < 1) throw new Error("Invalid pair query");
+      return this.listWork(pairId, { fieldFilter: { field: { fieldPath: field }, op: "LESS_THAN_OR_EQUAL", value: { integerValue: String(now) } } }, limit);
+    },
+    /** The same rows as the container's recovery query in public-release-pair-work.js. */
+    async listStopped(pairId: string, limit: number) {
+      const equal = (fieldPath: string, filter: object) => ({ fieldFilter: { field: { fieldPath }, ...filter } });
+      return this.listWork(pairId, { compositeFilter: { op: "AND", filters: [
+        equal("status", { op: "EQUAL", value: { stringValue: "failed" } }),
+        { unaryFilter: { field: { fieldPath: "nextAttemptAt" }, op: "IS_NULL" } },
+        equal("lastFailure", { op: "IN", value: { arrayValue: { values: work.WAITING_FAILURE_CODES.map(stringValue => ({ stringValue })) } } }),
+      ] } }, limit);
+    },
+    async listWork(pairId: string, where: object, limit: number) {
+      if (!Number.isSafeInteger(limit) || limit < 1 || limit > 20) throw new Error("Invalid pair query");
       const parent = work.publicReleasePairPath(pairId);
       const response = await request(`${base}/${encoded(parent)}:runQuery`, { method: "POST", headers, redirect: "error",
         signal: AbortSignal.timeout(10_000), body: JSON.stringify({ structuredQuery: { from: [{ collectionId: "work" }],
-          where: { fieldFilter: { field: { fieldPath: field }, op: "LESS_THAN_OR_EQUAL", value: { integerValue: String(now) } } }, limit } }) });
+          where, limit } }) });
       const rows = await jsonResponse(response);
       if (!Array.isArray(rows) || rows.length > limit + 2) throw new Error("Private pair query exceeds bounds");
       const prefix = `${resource}/${parent}/work/`;
@@ -134,7 +147,8 @@ export async function privatePairReader({ account, identity, workerVersionId, re
   const pair = await readPrivatePairRecord(reader, identity, workerVersionId);
   return { pair, read: reader.read, async due(now = Date.now()) {
     const hint = await work.readPublicReleasePairWorkHint({ pair, read: reader.read, now,
-      listDue: (field, limit) => reader.listDue(pair.pairId, field, now, limit) });
+      listDue: (field, limit) => reader.listDue(pair.pairId, field, now, limit),
+      listStopped: limit => reader.listStopped(pair.pairId, limit) });
     if (hint.billingDisabled || hint.taskIds.length) return hint;
     const stagingPending = await reader.hasPendingStaging(pair.pairId, now);
     const observation = { ...hint, stagingPending,

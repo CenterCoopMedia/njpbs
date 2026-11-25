@@ -137,6 +137,18 @@ describe("alignment queue persistence", () => {
     expect((await slotRef.get()).data()).toMatchObject({ kind: "alignment", jobId: eligible.alignmentRef.id });
   });
 
+  it("claims another job after a worker dies and returns to the dead one later", async () => {
+    const died = await queue("died");
+    const eligible = await queue("eligible", 1);
+    expect((await claim())?.alignment.id).toBe(died.alignmentRef.id);
+    const expired = now + worker.LEASE_MS + 1;
+    const next = await alignment.claimAlignmentJob({ firestore: db, source, config, now: expired });
+    expect(next?.alignment.id).toBe(eligible.alignmentRef.id);
+    await eligible.alignmentRef.update({ active: false, phase: "complete" });
+    expect((await alignment.claimAlignmentJob({ firestore: db, source, config, now: expired + 1 }))?.alignment)
+      .toMatchObject({ id: died.alignmentRef.id, attempt: 2 });
+  });
+
   it("replaces a stale live alignment slot with the next eligible claim", async () => {
     const stale = await queue("stale-owner");
     await claim();

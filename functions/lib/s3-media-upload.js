@@ -206,11 +206,13 @@ function createS3MediaUploader(config, deps = {}) {
     const existing = await existingCopy();
     if (existing) return existing;
 
-    const abortCopy = UploadId => send("AbortMultipartUpload", new AbortMultipartUploadCommand({ ...target, UploadId }))
-      .catch(() => {});
+    // Best effort, sent once.
+    const abortCopy = UploadId => client.send(new AbortMultipartUploadCommand({ ...target, UploadId })).catch(() => {});
     let UploadId = registration.uploadId;
     if (!UploadId) {
-      const started = await send("CreateMultipartUpload", new CreateMultipartUploadCommand({ ...target,
+      // Sent once. A lost reply can hide an upload that S3 created, and nothing
+      // reads its ID back, so a second send would leave the first one untracked.
+      const started = await client.send(new CreateMultipartUploadCommand({ ...target,
         ContentType: session.mimeType,
         Metadata: { "boardwalk-session": session.id, "boardwalk-asset": session.assetId },
       }));

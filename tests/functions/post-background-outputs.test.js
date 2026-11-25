@@ -1271,7 +1271,7 @@ describe("Post background publication at the database, artifact and HTTP boundar
       await db.doc("backgroundTestContext/current").set({ digest: digest("context changed during staging") });
     };
     await owner().recover();
-    expect(await task("publish-1", "listings")).toMatchObject({ status: "failed", receipt: null });
+    expect(await task("publish-1", "listings")).toMatchObject({ status: "superseded", receipt: null, nextAttemptAt: null });
     expect((await request("/posts/")).status).toBe(503);
     await owner().recover();
     expect((await request("/posts/")).status).toBe(200);

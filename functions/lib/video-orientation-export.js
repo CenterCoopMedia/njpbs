@@ -12,6 +12,8 @@ const { SourceMediaValidationError, sourceMediaApprovalVersions, sourceMediaFile
 const { PREVIEW_JOBS, pendingPreview, renditionState, sameOriginal } = require("./video-preview-job");
 const { WORKERS, WORKER_ID } = require("./video-transcript-worker");
 
+const { jobClaimWindow } = require("./job-claim-window");
+
 const EXPORTS = "mediaSourceOrientationExports";
 // Issued uploads of exports that failed; each gets one storage check at its deadline.
 const STRAYS = "mediaSourceOrientationExportStrays";
@@ -190,10 +192,8 @@ function freeSlot(tx, firestore, slot, jobId, now) {
 async function claimExportJob({ firestore, now = Date.now() }) {
   // Waiting exports each hold a viewing-copy place, so at most the global
   // limit of them can wait; the query reaches past them to queued work.
-  const waitLimit = uploads().MAX_ACTIVE_PREVIEWS_GLOBAL;
-  const queued = await firestore.collection(EXPORTS).where("active", "==", true)
-    .orderBy("createdAt", "asc").limit(waitLimit + 5).get();
-  const candidates = queued.docs.filter((doc) => !waiting(doc.data(), now)).slice(0, 5);
+  const candidates = await jobClaimWindow({ now, size: 5, skip: (job) => waiting(job, now),
+    query: firestore.collection(EXPORTS).where("active", "==", true).orderBy("createdAt", "asc") });
   return firestore.runTransaction(async (tx) => {
     const slot = (await tx.get(slotRef(firestore))).data();
     if (slot?.jobId && slot.leaseUntil > now && slot.kind !== "orientation") return null;

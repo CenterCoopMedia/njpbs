@@ -160,11 +160,25 @@ it("doubles the pause after the fourth failure up to 30 minutes and stops spendi
   expect(builds).toBe(7);
 });
 
-it.each(["corrupt", "validation", "permission"])("keeps retrying a %s failure after four attempts", async kind => {
-  fault = kind === "corrupt" ? { corrupt: true } : kind === "permission" ? { storage: 403 } : { build: {} };
+it("ends a refused output contract on its first attempt and keeps the last good output", async () => {
+  fault = { corrupt: true };
+  await owner().recover();
+  expect((await taskRef().get()).data()).toMatchObject({ status: "failed", attempts: 1, claim: null, nextAttemptAt: null, slowRetryAt: null,
+    lastAttempt: { failureClass: "storage_readback", retryable: false } });
+  fault = null;
+  time += 3_600_000;
+  await owner().recover();
+  expect(builds).toBe(1);
+  expect(await publication.settlePublicContext({ firestore: db, operationId, runtime })).toBe(false);
+  expect((await db.doc(`cmsPublishQueue/${operationId}`).get()).data()).toMatchObject({ status: "failed", error: "background_generation_failed" });
+  expect((await readWork()).maintenance).toBe(false);
+});
+
+it.each(["unknown", "permission"])("keeps retrying a %s failure after four attempts", async kind => {
+  fault = kind === "permission" ? { storage: 403 } : { build: {} };
   await failFour();
   expect((await taskRef().get()).data()).toMatchObject({ attempts: 4, nextAttemptAt: time + 480_000, slowRetryAt: null,
-    lastAttempt: { failureClass: kind === "validation" ? "validation" : "storage_readback", retryable: false } });
+    lastAttempt: { failureClass: kind === "unknown" ? "validation" : "storage_readback", retryable: true } });
   time = (await taskRef().get()).data().nextAttemptAt;
   fault = null;
   await owner().recover();
@@ -182,7 +196,7 @@ it("records timeout without retaining the provider message", async () => {
 it("records context change and never seals bytes generated for the prior context", async () => {
   duringBuild = () => db.doc(context.PUBLIC_CONTEXT_PATH).update({ revision: 2 });
   await owner().recover();
-  expect((await taskRef().get()).data()).toMatchObject({ status: "failed", receipt: null,
+  expect((await taskRef().get()).data()).toMatchObject({ status: "superseded", receipt: null, nextAttemptAt: null,
     lastAttempt: { failureClass: "context_changed", retryable: false } });
   expect(await publication.settlePublicContext({ firestore: db, operationId, runtime })).toBe(false);
 });

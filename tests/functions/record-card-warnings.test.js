@@ -62,4 +62,16 @@ describe("record card save warnings", () => {
     expect(warnings.some(warning => warning.startsWith("Sponsor strip sponsor-24:"))).toBe(false);
   });
 
+  it("returns advisory guidance at the deadline even when Firestore does not respond", async () => {
+    vi.useFakeTimers();
+    try {
+      const firestore = { collection: () => ({ doc: () => ({ get: () => new Promise(() => {}) }) }) };
+      const pending = recordCardSaveWarnings(firestore, { blocks: [card("slow", "sponsor", "slow")] });
+      await vi.advanceTimersByTimeAsync(1_000);
+      await expect(pending).resolves.toEqual(["Some record card references could not be checked. Reopen this content to verify them."]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
 });

@@ -6,6 +6,7 @@ const { assertPublicDeploymentPointer } = require("./public-deployment");
 const { pagePublicationTarget } = require("./no-build-page-target");
 const { PUBLIC_CONTEXT_PATH, publicContextDigest } = require("./public-context-revision");
 const { refuse, digest, readNoBuildPageCapability } = require("./no-build-page-ownership");
+const { noAnswer } = require("./release-wait");
 const { readCachedPageSchedule } = require("./page-schedule-immutable-cache");
 
 const JSON_PATH = "/_schedule-sources.json";
@@ -15,7 +16,7 @@ const isPageScheduleExportPath = path => [JSON_PATH, PDF_PATH].includes(path);
 /** Only source transport, immutable validation and deadline failures defer an
  * individual scheduled row. Unexpected code/SDK errors still stop the run. */
 function isPageScheduleAvailabilityError(error) {
-  return error?.status === 409 || ["AbortError", "TimeoutError", "SyntaxError", "PublicArtifactInventoryError", "PublicWorkerArtifactError"].includes(error?.name) ||
+  return error?.status === 409 || noAnswer(error) || ["AbortError", "TimeoutError", "SyntaxError", "PublicArtifactInventoryError", "PublicWorkerArtifactError"].includes(error?.name) ||
     [401, 403, 404, 408, 429, 500, 502, 503, 504].includes(error?.code) ||
     ["fetch failed", "Cloud schedule packet is unavailable", "Retained public context does not match the current publication",
       "Qualified current CODE bytes differ", "Background artifact is too large", "Schedule projection exceeds its bound",

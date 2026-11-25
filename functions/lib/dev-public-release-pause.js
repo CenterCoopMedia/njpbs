@@ -325,8 +325,10 @@ async function drain(firestore, transaction, attempt, beforePause = false, initi
       task.attempts === undefined && task.nextAttemptAt === undefined && task.claim == null;
     const attempts = pristineHome ? 0 : task?.attempts, nextAttemptAt = pristineHome ? 0 : task?.nextAttemptAt;
     return task?.schemaVersion === 1 && task.runtime && same(task.runtime, oldOwner) &&
-      ["pending", "failed"].includes(task.status) && Number.isSafeInteger(attempts) && attempts >= 0 && attempts <= 4 &&
-      (attempts < 4 || task.status === "pending" && claimed(task) && nextAttemptAt > Date.now()) &&
+      ["pending", "failed"].includes(task.status) && Number.isSafeInteger(attempts) && attempts >= 0 &&
+      // A background task retries without an attempt limit; a Home task ends at four.
+      (attempts < 4 || task.owner === "post-background-v1" && task.claim == null ||
+        (task.owner === "post-background-v1" || attempts === 4) && task.status === "pending" && claimed(task) && nextAttemptAt > Date.now()) &&
       Number.isFinite(nextAttemptAt) && nextAttemptAt >= 0 && (task.claim == null || claimed(task));
   };
   for (const owner of new Set([attempt.oldRuntime.serializerId, attempt.oldRuntime.cloud?.serializerId ?? attempt.oldRuntime.serializerId])) {
@@ -456,7 +458,7 @@ async function recordFailedPause(firestore, attempt) {
     let preparationDigest;
     const add = (code, operationId, path) => blockers.push({ code, operationId, path });
     const exhausted = task => task?.schemaVersion === 1 && task.status === "failed" && task.claim == null &&
-      Number.isSafeInteger(task.attempts) && task.attempts >= 4 && task.nextAttemptAt === null && task.runtime && same(task.runtime, oldOwner);
+      Number.isSafeInteger(task.attempts) && task.attempts >= 1 && task.nextAttemptAt === null && task.runtime && same(task.runtime, oldOwner);
     for (const row of queueRows) {
       const queue = row.data();
       if (!originalBuildFreeQueue(queue, oldOwner)) continue;

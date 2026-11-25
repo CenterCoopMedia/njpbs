@@ -62,7 +62,9 @@ function noAnswer(error) {
   for (let cause = error; cause; cause = cause.cause) {
     if (NO_ANSWER_CODES.has(cause.code)) return true;
   }
-  return error?.name === "TypeError" && /fetch failed|network|terminated|socket/i.test(error.message ?? "");
+  // fetch reports an answered refusal (a prohibited redirect, a rejected
+  // certificate) with the same message as a lost connection. Its cause decides.
+  return error?.name === "TypeError" && error.cause === undefined && /fetch failed|network|terminated|socket/i.test(error.message ?? "");
 }
 
 function describe(value) {
@@ -136,10 +138,24 @@ async function waitFor(what, read, { signal } = {}) {
   } finally { stop(); }
 }
 
+// An advisory read that a required step must not wait for. The required step
+// goes on with `fallback` when the read has not answered by the first pause. A
+// failed read still throws. Never wrap a required step in this.
+/** @template T @param {string} what @param {() => Promise<T>} read @param {T} fallback @returns {Promise<T>} */
+async function optionalRead(what, read, fallback) {
+  let answered = false;
+  const value = Promise.resolve().then(read).finally(() => { answered = true; });
+  const late = pause(FIRST_PAUSE_MS).then(() => {
+    if (!answered) journal({ event: "optional", what, result: "skipped" });
+    return fallback;
+  });
+  return Promise.race([value, late]);
+}
+
 /** @param {keyof typeof PLATFORM_LIMITS} name @returns {number} */
 function platformLimit(name) {
   if (!Object.hasOwn(PLATFORM_LIMITS, name)) throw new Error(`Unknown platform limit ${name}`);
   return PLATFORM_LIMITS[name];
 }
 
-module.exports = { callOutside, waitFor, noAnswer, platformLimit, PLATFORM_LIMITS, setJournal };
+module.exports = { callOutside, waitFor, optionalRead, noAnswer, platformLimit, PLATFORM_LIMITS, setJournal };

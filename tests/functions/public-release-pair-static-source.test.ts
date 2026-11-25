@@ -92,6 +92,16 @@ it("retains the owner's actual static artifact when CODE has another artifact un
   expect((await value.open())!.publicationBytes).toEqual(value.publicationBytes);
   await expect(value.capture({ ...value.plan.baseline.publication, commitSha: "b".repeat(40) })).rejects.toThrow();
 });
+it.each([["a storage 503", Object.assign(new Error("synthetic"), { $metadata: { httpStatusCode: 503 } })],
+  ["a connection reset", Object.assign(new TypeError("fetch failed"), { cause: Object.assign(new Error("read ECONNRESET"), { code: "ECONNRESET" }) })]])(
+  "keeps %s during a frozen read retryable and opens the same input on the next read", async (_label, error) => {
+    const value = await fixture(); await value.capture();
+    const get = value.files.get.bind(value.files);
+    let failed = false;
+    value.files.get = name => { if (!failed) { failed = true; throw error; } return get(name); };
+    await expect(value.open()).rejects.toMatchObject({ code: "storage-unavailable" });
+    expect((await value.open())!.publicationBytes).toEqual(value.publicationBytes);
+  });
 it("refuses stale source input and missing or mismatched H chunks", async () => {
   const value = await fixture(); value.documents.get("system/publicDeployment/contexts/public").revision++;
   await expect(value.capture()).rejects.toThrow(); value.documents.get("system/publicDeployment/contexts/public").revision--;

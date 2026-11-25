@@ -1,6 +1,7 @@
 "use strict";
 
 const { resolveApprovedLibraryVersions } = require("./approved-library-records");
+const { optionalRead } = require("./release-wait");
 
 const MAX_REFERENCE_CHECKS = 24;
 const incompleteWarning = "Some record card references could not be checked. Reopen this content to verify them.";
@@ -22,8 +23,10 @@ async function recordCardSaveWarnings(firestore, document) {
   if (cards.length === 0) return [];
   const allIds = [...new Set(cards.map(card => card.id))];
   const ids = allIds.slice(0, MAX_REFERENCE_CHECKS);
-  // These checks run after commit. Fan-out stays bounded.
-  return warningsForCards(firestore, cards, ids, allIds.length > ids.length);
+  // These checks run after commit. Fan-out stays bounded, and an unanswered read
+  // cannot hold the acknowledgement of the save.
+  return optionalRead("record card warnings", () => warningsForCards(firestore, cards, ids, allIds.length > ids.length),
+    [incompleteWarning]);
 }
 
 async function warningsForCards(firestore, cards, ids, truncated) {

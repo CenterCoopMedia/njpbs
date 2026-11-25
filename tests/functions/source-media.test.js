@@ -631,6 +631,30 @@ describe("source media indexed reads", () => {
     expect(withPosters.body).not.toHaveProperty("assets");
   });
 
+  it("returns the page when poster signing does not answer", async () => {
+    const handler = createCmsListSourceMediaHandler({
+      firestore: {},
+      requirePrincipalFn: async () => actor(),
+      registryFn: () => new Map([["video-library", source()]]),
+      authorizeFn: async () => true,
+      readPageFn: async () => ({
+        records: [{ id: "slow" }],
+        assets: [{ id: "slow", rendition: { state: "ready" } }],
+        nextCursor: null,
+        hasMore: false,
+      }),
+      readTotalFn: async () => 1,
+      createReadFn: () => new Promise(() => {}),
+      documentIdField: "__name__",
+      log: { error: vi.fn(), warn: vi.fn() },
+    });
+    const res = response();
+    await handler(request({ sourceId: "video-library", posters: true }), res);
+    expect(res.statusCode).toBe(200);
+    expect(res.body.records.map((record) => record.id)).toEqual(["slow"]);
+    expect(res.body.posters).toEqual([]);
+  });
+
   it("returns no filtered total", async () => {
     const readTotalFn = vi.fn();
     const handler = createCmsListSourceMediaHandler({

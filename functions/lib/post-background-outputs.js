@@ -375,7 +375,7 @@ function createPostBackgroundOutputs({ firestore, enabled = false, accepting = e
     let homeSource = null;
     const signal = UNLIMITED;
     let stage = "validation";
-    let failure = { failureClass: "validation", retryable: false };
+    let failure = { failureClass: "validation", retryable: true };
     try {
       receipt = await (async () => {
         const generation = await build(claimed, { signal });
@@ -391,7 +391,8 @@ function createPostBackgroundOutputs({ firestore, enabled = false, accepting = e
         const generated = prepared ? { homeSource: null, files: [], hasAssets: true,
           rendererSha: input.rendererSha, contextDigest: input.contextDigest,
           routeSetDigest: digest([...input.routes].sort((a, b) => a.path.localeCompare(b.path))) } : validateGeneration(generation, claimed);
-        requireValue(generated.contextDigest === claimed.contextDigest && generated.rendererSha === claimed.rendererSha);
+        // A builder that has not moved to this release or context yet can still move.
+        if (generated.contextDigest !== claimed.contextDigest || generated.rendererSha !== claimed.rendererSha) throw new Error("Background build is for another context");
         requireValue(output !== "search" || searchFileCount === 0 || generated.files.length === searchFileCount);
         homeSource = generated.homeSource;
         const manifest = prepared?.manifest ?? [];
@@ -437,7 +438,9 @@ function createPostBackgroundOutputs({ firestore, enabled = false, accepting = e
       }
       if (context.rendererSha !== claimed.rendererSha || source.digest !== claimed.dependencies.after.digest || contextDigest !== claimed.contextDigest) {
         receipt = null;
-        failure = { failureClass: "context_changed", retryable: false };
+        // The context revision only moves forward. A renderer or a source can
+        // return to this task, so it stays retryable.
+        failure = { failureClass: "context_changed", retryable: contextDigest === claimed.contextDigest };
       } else if (now() >= current.nextAttemptAt) {
         receipt = null;
         failure = { failureClass: "lease_lost", retryable: true };
@@ -462,7 +465,7 @@ function createPostBackgroundOutputs({ firestore, enabled = false, accepting = e
           withdrawalDeadlineRevision: state.withdrawalDeadlineRevision ?? null,
         } : state.previousAssets ?? null;
       const lastAttempt = { ...attempt, ...(receipt ? { failureClass: null, retryable: false } : failure) };
-      const outcome = receipt ? { status, claim: null, nextAttemptAt: null, error: null } : publicationFailure(claimed, "background", now());
+      const outcome = receipt ? { status, claim: null, nextAttemptAt: null, error: null } : publicationFailure(claimed, "background", now(), failure);
       transaction.set(ref.collection("attempts").doc(claimed.claim), lastAttempt);
       transaction.update(ref, { ...outcome, receipt, lastAttempt, slowRetryAt: null });
       transaction.update(stateRef(output), { status, receipt,

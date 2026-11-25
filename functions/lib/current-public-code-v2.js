@@ -4,7 +4,7 @@ const { createHash } = require("node:crypto");
 const p = require("./public-release-pair");
 const code = require("./public-release-pair-code-reference");
 const { assertPublicationTarget } = require("./publication-target");
-const { callOutside } = require("./release-wait");
+const { callOutside, noAnswer } = require("./release-wait");
 const MAX_BYTES = 20 * 1024 * 1024;
 const WIRE_BYTES = Math.ceil(MAX_BYTES / 3) * 4 + 64 * 1024;
 function refuse() { throw Object.assign(new Error("Versioned current CODE is unavailable"), { status: 409 }); }
@@ -42,11 +42,13 @@ function createPairCurrentCodeTransport({ target, rendererSha, pairSelection, re
   async function read(mode) {
     const secret = readSecret?.(); if (typeof secret !== "string" || !secret || /[\r\n]/.test(secret)) refuse();
     let response;
-    try { response = await callOutside(`record-code ${mode}`, () => request(`${origin}/_internal/record-code`, { method: "POST",
+    // Development waits for the API; a production read ends when it is unanswered.
+    const ask = target.environment === "development" ? work => callOutside(`record-code ${mode}`, work) : work => work();
+    try { response = await ask(() => request(`${origin}/_internal/record-code`, { method: "POST",
       redirect: "error", headers: { "content-type": "application/json", "x-njpbs-cms-edge": secret },
       body: JSON.stringify({ schemaVersion: 2, mode, rendererSha, selection }) })); }
     catch (error) {
-      if (mode.startsWith("current-editorial") && ["TimeoutError", "AbortError"].includes(error?.name)) refreshing();
+      if (mode.startsWith("current-editorial") && (noAnswer(error) || ["TimeoutError", "AbortError"].includes(error?.name))) refreshing();
       refuse();
     }
     if (!response.ok || !response.body || !response.headers.get("content-type")?.startsWith("application/json")) {

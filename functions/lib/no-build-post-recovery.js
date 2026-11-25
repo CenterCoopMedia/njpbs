@@ -36,7 +36,6 @@ function publicReadbackHeaders(target, value) {
   return headers;
 }
 
-const NO_ANSWER_STATUSES = [429, 502, 503, 504];
 const REFRESH_PENDING = "public_refresh_pending";
 const refreshPending = new WeakMap();
 
@@ -81,8 +80,9 @@ async function purgePublicCacheTags(tags, config, fetchImpl) {
         headers: { Authorization: `Bearer ${config.token}`, "Content-Type": "application/json" },
         body: JSON.stringify({ tags: tags.slice(offset, offset + 100) }),
       });
-      // The API had no answer yet; a purge of the same tags can repeat.
-      if (NO_ANSWER_STATUSES.includes(answer.status)) {
+      // The API had no answer yet; a purge of the same tags can repeat. Every
+      // other status is Cloudflare's own refusal.
+      if (answer.status >= 500 || [408, 425, 429].includes(answer.status)) {
         await answer.body?.cancel();
         throw Object.assign(new Error(`Post purge answered ${answer.status}`), { retry: true });
       }

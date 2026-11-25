@@ -16,7 +16,7 @@ function refuse() { throw new PublicReleaseProtocolError(); }
 /** Read-only, non-transactional hint for the private Worker. Claim/settlement
  * always revalidate their SDK transaction; this cannot certify a publication.
  */
-async function readPublicReleasePairWorkHint({ pair: rawPair, read, listDue, now = Date.now() }) {
+async function readPublicReleasePairWorkHint({ pair: rawPair, read, listDue, listStopped, now = Date.now() }) {
   const pair = parsePublicReleasePair(rawPair);
   assertPrivatePairResources(pair);
   if (!positive(now)) refuse();
@@ -46,6 +46,12 @@ async function readPublicReleasePairWorkHint({ pair: rawPair, read, listDue, now
     const task = parseTask(row.data, pair, row.id);
     allowed(status, selector, task.identity.kind, pair, false);
     if (accepted.length && task.identity.kind !== "accepted") refuse();
+    if (publicReleasePairTaskDue(task, now)) tasks.set(row.id, task);
+  }
+  // Rows the removed attempt cap stopped have no due time of their own.
+  for (const row of tasks.size ? [] : await listStopped(20)) {
+    const task = parseTask(row.data, pair, row.id);
+    allowed(status, selector, task.identity.kind, pair, false);
     if (publicReleasePairTaskDue(task, now)) tasks.set(row.id, task);
   }
   return { taskIds: [...tasks.keys()] };

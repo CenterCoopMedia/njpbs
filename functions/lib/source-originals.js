@@ -13,7 +13,7 @@ const { adminLogEntry, AUDIT_COLLECTIONS } = require("./audit");
 const { assertBillingEnabled } = require("./billing-state");
 
 const { originalStatusRef, readOriginalStatuses } = require("./source-original-status");
-const { callOutside } = require("./release-wait");
+const { callOutside, optionalRead } = require("./release-wait");
 
 const RESTORES = "mediaSourceOriginalRestores";
 const CACHE_MS = 15 * 60 * 1000;
@@ -110,14 +110,20 @@ async function refreshListedOriginals({ firestore, storage, source, assets, reco
   if (!ORIGINAL_BUCKETS.has(source.bucket)) return records;
   const originals = await readOriginalStatuses(firestore, assets);
   let next = 0;
+  let open = true;
   async function worker() {
-    while (next < assets.length) {
+    while (open && next < assets.length) {
       const asset = assets[next++];
-      try { originals.set(asset.id, await refreshOriginal({ firestore, storage, source, asset, cached: originals.get(asset.id) })); }
+      try {
+        const original = await refreshOriginal({ firestore, storage, source, asset, cached: originals.get(asset.id) });
+        if (open) originals.set(asset.id, original);
+      }
       catch (error) { log.warn("Original status check failed", { assetId: asset.id, ...safeStorageDiagnostic(error) }); }
     }
   }
-  await Promise.all(Array.from({ length: Math.min(8, assets.length) }, worker));
+  // The list shows the saved states when storage does not answer.
+  await optionalRead("listed original status", () => Promise.all(Array.from({ length: Math.min(8, assets.length) }, worker)), null);
+  open = false;
   return records.map(record => ({ ...record, ...(originals.get(record.id) ? { original: originals.get(record.id) } : {}) }));
 }
 

@@ -38,7 +38,9 @@ export async function openFrozenPublicReleasePairStaticSource({ documents, origi
   const owner = soleStaticPostOwner(documents);
   if (!owner) return null;
   const read = async (name: string) => {
-    try { return await readFrozenFile(name); } catch { throw new PairStaticSourceError("pair-static-source-missing"); }
+    // A read that got no answer says nothing about the file.
+    try { return await readFrozenFile(name); }
+    catch (error) { work.rethrowPairTransport(error); throw new PairStaticSourceError("pair-static-source-missing"); }
   };
   let descriptor: any, baseline;
   try {

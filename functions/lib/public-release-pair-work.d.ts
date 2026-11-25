@@ -21,6 +21,7 @@ export function readPublicReleasePairWorkHint(input: {
   pair: PublicReleasePair;
   read(path: string): Promise<unknown>;
   listDue(field: "acceptedDueAt" | "nextAttemptAt" | "leaseUntil", limit: number): Promise<{ id: string; data: unknown }[]>;
+  listStopped(limit: number): Promise<{ id: string; data: unknown }[]>;
   now?: number;
 }): Promise<{ taskIds: string[]; billingDisabled?: boolean }>;
 export function registerPublicReleasePair(input: { firestore: Firestore; pair: PublicReleasePair }): Promise<{ idempotent: boolean; pair: PublicReleasePair }>;

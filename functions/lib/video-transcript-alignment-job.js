@@ -9,6 +9,8 @@ const { alignmentRequest, validateAlignmentCompletion } = require("./video-trans
 const { sourceMatches, WORKERS, WORKER_ID } = require("./video-transcript-worker");
 const { transcriptSegmentsVersion } = require("./video-transcript-processor");
 
+const { jobClaimWindow } = require("./job-claim-window");
+
 const ALIGNMENT_JOBS = "mediaSourceTranscriptAlignmentJobs";
 const LEASE_MS = 120_000;
 const MAX_PASSAGE_SECONDS = 180;
@@ -190,16 +192,16 @@ function validLease(alignment, request, slot, now) {
 }
 
 async function claimAlignmentJob({ firestore, source, config, now = Date.now() }) {
-  const candidates = await firestore.collection(ALIGNMENT_JOBS).where("active", "==", true)
-    .orderBy("createdAt", "asc").limit(5).get();
+  const candidates = await jobClaimWindow({ now, size: 5,
+    query: firestore.collection(ALIGNMENT_JOBS).where("active", "==", true).orderBy("createdAt", "asc") });
   return firestore.runTransaction(async (tx) => {
     const slotReference = slotRef(firestore);
     const slot = (await tx.get(slotReference)).data();
     if (slot?.jobId && slot.leaseUntil > now && slot.kind !== "alignment") return null;
     const refs = slot?.jobId && slot.leaseUntil > now
       ? [firestore.collection(ALIGNMENT_JOBS).doc(slot.jobId),
-        ...candidates.docs.filter((doc) => doc.id !== slot.jobId).map((doc) => doc.ref)]
-      : candidates.docs.map((doc) => doc.ref);
+        ...candidates.filter((doc) => doc.id !== slot.jobId).map((doc) => doc.ref)]
+      : candidates.map((doc) => doc.ref);
     const records = [];
     for (const ref of refs) {
       const alignment = (await tx.get(ref)).data();

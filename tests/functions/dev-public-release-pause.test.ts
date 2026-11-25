@@ -326,6 +326,21 @@ it.each([1, 4])("preserves an original native output claim on attempt %s while p
   expect(await read()).toMatchObject({ pauseCommitted: true, drainCommitted: false, ownsClosedFence: false });
   expect((await ref.get()).data()).toEqual(task);
 });
+it("pauses admission while a background task waits for its retry past four attempts", async () => {
+  await acceptNativeContext();
+  const ref = db.doc(`cmsPublishQueue/${nativeOperationId}/backgroundOutputs/search`);
+  await ref.update({ status: "failed", claim: null, attempts: 7, nextAttemptAt: Date.now() + 60_000 });
+  const task = (await ref.get()).data();
+  await expect(apply()).rejects.toThrow();
+  expect(await read()).toMatchObject({ pauseCommitted: true, drainCommitted: false });
+  expect((await ref.get()).data()).toEqual(task);
+});
+it("records STOP for a background task whose first attempt was refused after pause", async () => {
+  await acceptNativeContext(); await expect(apply()).rejects.toThrow(); await failNativeContext();
+  await db.doc(`cmsPublishQueue/${nativeOperationId}/backgroundOutputs/search`).update({ attempts: 1, error: "background_generation_failed" });
+  expect(await apply()).toMatchObject({ stop: true, outcome: "paused-failed", failureReceipt: { blockers: expect.arrayContaining([
+    { code: "background-exhausted", operationId: nativeOperationId, path: `cmsPublishQueue/${nativeOperationId}/backgroundOutputs/search` }]) } });
+});
 it("pauses with a real Home marker and pending original Home Page queue", async () => {
   await acceptNativeContext();
   const homeId = await acceptNativeHome();

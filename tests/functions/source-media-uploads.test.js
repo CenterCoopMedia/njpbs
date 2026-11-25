@@ -99,6 +99,23 @@ it("resumes a pinned render copy across requests and recovers the winning condit
   expect(send).toHaveBeenCalledTimes(2);
 });
 
+it("sends one multipart creation when its reply is lost, so no second upload is left untracked", async () => {
+  const send = vi.fn(async (command) => {
+    if (command.constructor.name === "HeadObjectCommand") {
+      if (command.input.Bucket === "example-renders") return { ETag: '"e"', ContentLength: 10, VersionId: "v1" };
+      throw Object.assign(new Error("absent"), { $metadata: { httpStatusCode: 404 } });
+    }
+    throw Object.assign(new Error("read ECONNRESET"), { code: "ECONNRESET" });
+  });
+  const uploader = createS3MediaUploader({ region: "us-east-2", renditionBucket: "example-renders" }, { S3ClientCtor: class { send = send; } });
+  const claimUpload = vi.fn();
+  await expect(uploader.copyClip(source(), { id: "session", assetId: "asset", objectKey: "u/key", mimeType: "video/mp4" },
+    { objectKey: "o", objectVersionId: "v1", sizeBytes: 10, eTag: '"e"' }, { claimUpload, clearUpload: vi.fn() })).rejects.toThrow("ECONNRESET");
+  const names = send.mock.calls.map(([command]) => command.constructor.name);
+  expect(names.filter(name => name === "CreateMultipartUploadCommand")).toHaveLength(1);
+  expect(claimUpload).not.toHaveBeenCalled();
+});
+
 function fakeFirestore(initial = {}, { createErrorAfterCommit = false } = {}) {
   const records = new Map(Object.entries(initial));
   const versions = new Map([...records.keys()].map((key) => [key, 1]));

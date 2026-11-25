@@ -1,6 +1,6 @@
 "use strict";
 
-const { platformLimit } = require("./lib/release-wait");
+const { optionalRead, platformLimit } = require("./lib/release-wait");
 const { productionServiceAccount } = require("./lib/production-service-account");
 const { enrichSourceMediaUploaders } = require("./lib/source-media-uploader");
 const { FieldPath } = require("firebase-admin/firestore");
@@ -258,25 +258,29 @@ async function readSourceMediaPage(firestore, source, request, documentIdField) 
 const POSTER_SIGNING_WORKERS = 8;
 
 // Sign the ready posters for one listed page, so a page needs no read call per tile. Each poster
-// keeps the same version, size and prefix checks as cmsCreateSourceMediaRead. A poster that is
-// missing or failed is left out so its tile falls back to its own read.
+// keeps the same version, size and prefix checks as cmsCreateSourceMediaRead. Signing is optional,
+// so slow storage cannot hold the list: the page returns the posters signed by then, and a
+// poster that is missing, failed or late is left out so its tile falls back to its own read.
 async function signListedPosters(createReadFn, source, assets, log) {
   const ready = assets.filter((asset) => asset.rendition?.state === "ready");
   const posters = [];
   let next = 0;
+  let open = true;
   async function worker() {
-    while (next < ready.length) {
+    while (open && next < ready.length) {
       const asset = ready[next++];
       try {
         const access = await createReadFn(source, asset, "poster");
-        posters.push({ assetId: access.assetId, url: access.url, expiresAt: access.expiresAt });
+        if (open) posters.push({ assetId: access.assetId, url: access.url, expiresAt: access.expiresAt });
       } catch (error) {
         if (!(error instanceof SourceObjectError)) log.warn("Listed poster signing failed", { assetId: asset.id });
       }
     }
   }
-  await Promise.all(Array.from({ length: Math.min(POSTER_SIGNING_WORKERS, ready.length) }, worker));
-  return posters;
+  await optionalRead("listed poster signing",
+    () => Promise.all(Array.from({ length: Math.min(POSTER_SIGNING_WORKERS, ready.length) }, worker)), null);
+  open = false;
+  return posters.slice();
 }
 
 async function readExactSourceTotal(firestore, sourceId) {

@@ -3,8 +3,6 @@
 const { platformLimit } = require("./release-wait");
 
 const FAILURE_CLASSES = ["timeout", "storage_readback", "lease_lost", "context_changed", "validation"];
-const TRANSIENT_STORAGE_CODES = new Set([4, 8, 10, 13, 14, 408, 429, 500, 502, 503, 504,
-  "ETIMEDOUT", "ECONNRESET", "ECONNREFUSED", "EAI_AGAIN"]);
 const families = {
   post: { field: "transport", owner: "post-no-build-v1", error: "Public Post confirmation is unavailable" },
   page: { field: "transport", owner: "page-no-build-v1", error: "Public Page confirmation is unavailable" },
@@ -63,8 +61,12 @@ function publicAnswerRefused(error, current = undefined) {
 
 function publicationFailure(row, family, now, error = undefined, current = undefined) {
   if (family === "background") {
-    // Background work never runs out of attempts. The pause doubles from one
-    // minute and stays at 30 minutes once it reaches it.
+    // The same invalid input fails again, so its failure is final and the last
+    // good output stays. A moved context is superseded: the next pass makes a
+    // task for the current one. Any other failure never runs out of attempts;
+    // its pause doubles from one minute and stays at 30 minutes.
+    if (error?.retryable === false) return { status: error.failureClass === "context_changed" ? "superseded" : "failed",
+      claim: null, nextAttemptAt: null, error: families[family].error };
     const pause = Math.min(60_000 * 2 ** Math.max(0, row.attempts - 1), 30 * 60_000);
     return { status: "failed", claim: null, nextAttemptAt: now + pause, error: families[family].error };
   }
@@ -80,12 +82,14 @@ function publicationRetry(row, family) {
   return row?.[contract.field] === contract.owner && row.status === "failed" && row.claim == null;
 }
 
+// Only a contract refusal of the frozen input is certain to repeat. A transport
+// fault, a permission an operator can restore and an unknown error can clear.
 function backgroundFailure(error, signal, stage) {
   if (signal?.aborted || error?.name === "TimeoutError" || error?.code === "ETIMEDOUT") {
     return { failureClass: "timeout", retryable: true };
   }
-  if (stage === "storage") return { failureClass: "storage_readback", retryable: TRANSIENT_STORAGE_CODES.has(error?.code) };
-  return { failureClass: "validation", retryable: false };
+  const failureClass = stage === "storage" ? "storage_readback" : "validation";
+  return { failureClass, retryable: error?.code !== "background_contract_refused" };
 }
 
 // A failed, unclaimed background row is due at its next attempt, whatever its

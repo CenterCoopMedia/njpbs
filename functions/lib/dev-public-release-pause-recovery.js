@@ -21,7 +21,7 @@ function immutable(row, expected) {
   return row.data();
 }
 function exhausted(value, runtime) {
-  return value?.schemaVersion === 1 && value.status === "failed" && value.attempts === 4 &&
+  return value?.schemaVersion === 1 && value.status === "failed" && value.attempts >= 1 &&
     value.claim == null && value.nextAttemptAt === null && value.runtime && same(value.runtime, runtime);
 }
 async function rows(firestore, transaction, path) {
