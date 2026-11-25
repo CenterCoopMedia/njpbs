@@ -53,7 +53,6 @@ function eligible() {
     functionsFingerprint: FINGERPRINT, configurationFingerprint: EDGE_FP,
     rendererFingerprint: RENDERER_FP, renderFingerprint: TRUSTED_FP, receiptRenderFingerprint: TRUSTED_FP,
     liveFunctionsIdentities: IDENTITIES, liveRendererIdentities: RENDERER_IDS,
-    targetHasAdminRevisionIntake: true, liveHasAdminRevisionIntake: true,
   };
 }
 
@@ -570,8 +569,6 @@ describe("CMS release plan", () => {
       liveFunctionsIdentities: IDENTITIES,
       liveRendererIdentities: RENDERER_IDS,
       currentRun: { runId: "9", runAttempt: 1 },
-      targetHasAdminRevisionIntake: true,
-      liveHasAdminRevisionIntake: true,
     });
     expect(plan).toMatchObject({
       abort: false,
@@ -598,8 +595,6 @@ describe("CMS release plan", () => {
       receiptRenderFingerprint: TRUSTED_FP,
       liveFunctionsIdentities: IDENTITIES,
       liveRendererIdentities: RENDERER_IDS,
-      targetHasAdminRevisionIntake: true,
-      liveHasAdminRevisionIntake: true,
     });
     expect(plan).toMatchObject({
       abort: false,
@@ -631,8 +626,6 @@ describe("CMS release plan", () => {
       receiptRenderFingerprint: TRUSTED_FP,
       liveFunctionsIdentities: IDENTITIES,
       liveRendererIdentities: RENDERER_IDS,
-      targetHasAdminRevisionIntake: true,
-      liveHasAdminRevisionIntake: true,
     });
     expect(plan).toMatchObject({ functionsMutated: true, releaseReason: "functions_configuration_changed" });
   });
@@ -651,8 +644,6 @@ describe("CMS release plan", () => {
       receiptRenderFingerprint: TRUSTED_FP,
       liveFunctionsIdentities: IDENTITIES,
       liveRendererIdentities: RENDERER_IDS,
-      targetHasAdminRevisionIntake: true,
-      liveHasAdminRevisionIntake: true,
     });
     expect(plan.functionsMutated).toBe(true);
     expect(plan.releaseReason).toBe("paired_release_mismatch");
@@ -666,8 +657,6 @@ describe("CMS release plan", () => {
       functionsFingerprint: FINGERPRINT,
       configurationFingerprint: EDGE_FP,
       rendererFingerprint: "9".repeat(64),
-      targetHasAdminRevisionIntake: true,
-      liveHasAdminRevisionIntake: true,
       renderFingerprint: TRUSTED_FP,
       receiptRenderFingerprint: TRUSTED_FP,
       liveFunctionsIdentities: IDENTITIES,
@@ -736,8 +725,6 @@ describe("CMS release plan", () => {
       liveFunctionsIdentities: IDENTITIES,
       liveRendererIdentities: RENDERER_IDS,
       currentRun: { runId: "9", runAttempt: 2 },
-      targetHasAdminRevisionIntake: true,
-      liveHasAdminRevisionIntake: true,
     });
     expect(plan.releaseReason).toBe("unchanged");
     expect(plan.liveFunctionsSha).toBe(SHA);
@@ -760,31 +747,10 @@ describe("CMS release plan", () => {
       liveFunctionsIdentities: IDENTITIES,
       liveRendererIdentities: RENDERER_IDS,
       currentRun: { runId: "9", runAttempt: 1 },
-      targetHasAdminRevisionIntake: true,
-      liveHasAdminRevisionIntake: true,
     });
     expect(plan.abort).toBe(true);
     expect(plan.functionsMutated).toBe(false);
     expect(plan.releaseReason).toBe("in_progress_receipt");
-  });
-
-  it("refuses a no-op when live Functions predate live Admin revision intake", () => {
-    const plan = decideRelease({
-      functionGraph: GRAPH, deploySha: OTHER, rendererGraphAvailable: true,
-      functionsReceipt: completeReceipt("functions"),
-      rendererReceipt: completeReceipt("renderer"),
-      functionsFingerprint: FINGERPRINT,
-      configurationFingerprint: EDGE_FP,
-      rendererFingerprint: RENDERER_FP,
-      renderFingerprint: TRUSTED_FP,
-      receiptRenderFingerprint: TRUSTED_FP,
-      liveFunctionsIdentities: IDENTITIES,
-      liveRendererIdentities: RENDERER_IDS,
-      targetHasAdminRevisionIntake: true,
-      liveHasAdminRevisionIntake: false,
-    });
-    expect(plan.functionsMutated).toBe(true);
-    expect(plan.releaseReason).toBe("admin_revision_floor");
   });
 
   it("does not treat identity objects as equal when a serving revision changes", () => {

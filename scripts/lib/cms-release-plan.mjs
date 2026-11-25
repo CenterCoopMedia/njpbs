@@ -197,8 +197,6 @@ export function cloudWakeConfigurationFingerprint(edgeFingerprint, decision, var
   });
 }
 
-export const ADMIN_REVISION_INTAKE_FLOOR = "8bf66cc984917486a76c1632182723ef16337d7d";
-
 const FUNCTIONS_RENDER_PATHS = Object.freeze([
   "scripts/render-development-config.mjs",
   "config/development-inputs.json",
@@ -437,8 +435,6 @@ export function decideRelease({
   currentRun = {},
   rendererRunCompleted = false,
   functionsRunCompleted = false,
-  targetHasAdminRevisionIntake = false,
-  liveHasAdminRevisionIntake = false,
 }) {
   const functionGraph = withoutFunctions(committedGraph, omittedNames);
   const manifestNames = committedNames && committedNames.filter(name => !omittedNames.includes(name));
@@ -512,9 +508,6 @@ export function decideRelease({
   }
   if (!identitiesMatch(liveRendererIdentities, rendererBase.mutation.providerIdentities)) {
     return full("live_renderer_identity_mismatch", functionsBase.mutation.sourceSha);
-  }
-  if (!targetHasAdminRevisionIntake || !liveHasAdminRevisionIntake) {
-    return full("admin_revision_floor", functionsBase.mutation.sourceSha);
   }
   if (
     (functionsBase.mutation.previewRendererSha ?? functionsBase.mutation.sourceSha) !== rendererBase.mutation.sourceSha ||

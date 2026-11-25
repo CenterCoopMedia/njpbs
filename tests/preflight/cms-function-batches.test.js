@@ -321,6 +321,56 @@ describe("CMS function build queue expiry recovery", () => {
     expect(errors).toHaveBeenLastCalledWith(expect.stringContaining(`class ${kind}, attempt 1, last provider line: `));
     errors.mockRestore();
   });
+  // Recorded from dev run 45562533334 (Nov. 25, 2026): 186 of 187 functions updated. One update was answered
+  // without its service, and Cloud Scheduler then refused the empty URL that Firebase sent for it.
+  const incompleteAnswer = readFileSync(new URL("./fixtures/function-incomplete-answer/attempt-1.txt", import.meta.url), "utf8");
+  it("deploys the failed function again after the provider answers an update without its service", async () => {
+    const run = deployment([[1, incompleteAnswer], [0, "Deploy complete!\n"]], ["onNavigationShareOwnerWrite", "onNoBuildPostConfirmationRecovery"]);
+    await expect(run.promise).resolves.toBeUndefined();
+    expect(run.targets()).toEqual([
+      "functions:onNavigationShareOwnerWrite,functions:onNoBuildPostConfirmationRecovery",
+      "functions:onNoBuildPostConfirmationRecovery",
+    ]);
+    expect(run.wait.mock.calls).toEqual([[60_000]]);
+  });
+  it("ends when the same function's schedule URL is empty again after its retry", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const run = deployment([[1, incompleteAnswer], [1, incompleteAnswer]], ["onNavigationShareOwnerWrite", "onNoBuildPostConfirmationRecovery"]);
+    await expect(run.promise).rejects.toThrow("did not confirm completion");
+    expect(run.launch).toHaveBeenCalledTimes(2);
+    expect(errors).toHaveBeenLastCalledWith(expect.stringContaining("class config, attempt 2, "));
+    errors.mockRestore();
+  });
+  it("ends on an empty schedule URL of a function that the summary does not name", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const other = incompleteAnswer.replace("\tonNoBuildPostConfirmationRecovery(", "\tonNavigationShareOwnerWrite(");
+    const run = deployment([[1, other]], ["onNavigationShareOwnerWrite", "onNoBuildPostConfirmationRecovery"]);
+    await expect(run.promise).rejects.toThrow("did not confirm completion");
+    expect(run.launch).toHaveBeenCalledTimes(1);
+    errors.mockRestore();
+  });
+  it("ends on a refused request when no answer was incomplete, and names its line", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const refused = incompleteAnswer.split("\n").filter(line => !line.includes("please re-deploy")).join("\n");
+    const run = deployment([[1, refused]], ["onNavigationShareOwnerWrite", "onNoBuildPostConfirmationRecovery"]);
+    await expect(run.promise).rejects.toThrow("did not confirm completion");
+    expect(run.launch).toHaveBeenCalledTimes(1);
+    expect(errors).toHaveBeenLastCalledWith(expect.stringMatching(/class config, .*; class from: Request to https:\/\/cloudscheduler\.googleapis\.com\//));
+    errors.mockRestore();
+  });
+  it.each([
+    ["config", "Error: Failed to load function definition from source: FirebaseError: Functions codebase could not be analyzed successfully.\n"],
+    ["config", "Request to https://cloudfunctions.googleapis.com/v2/projects/njpbs-site/locations/us-central1/functions/onNoBuildPostConfirmationRecovery had HTTP Error: 400, Invalid value\n"],
+    ["config", "Request to https://cloudscheduler.googleapis.com/v1/projects/njpbs-site/locations/us-central1/jobs/firebase-schedule-onNavigationShareOwnerWrite-us-central1 had HTTP Error: 400, Schedule or time zone is invalid.\n"],
+    ["permission", "Error: Permission denied\n"],
+  ])("keeps a permanent %s failure final beside an incomplete answer", async (kind, line) => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const run = deployment([[1, incompleteAnswer + line]], ["onNavigationShareOwnerWrite", "onNoBuildPostConfirmationRecovery"]);
+    await expect(run.promise).rejects.toThrow("did not confirm completion");
+    expect(run.launch).toHaveBeenCalledTimes(1);
+    expect(errors).toHaveBeenLastCalledWith(expect.stringContaining(`class ${kind}, attempt 1, `));
+    errors.mockRestore();
+  });
   it("does not retry a non-transient build failure", async () => {
     const run = deployment([[1, recordings[0].replace("EXPIRED", "FAILURE")]], failures[0]);
     await expect(run.promise).rejects.toThrow("did not confirm completion");

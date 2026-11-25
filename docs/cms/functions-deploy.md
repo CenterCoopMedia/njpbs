@@ -20,6 +20,8 @@ effective parameter, exports bound to an older enabled secret version, and
 the required preview readers. It emits the sorted decision for each export
 without parameter values or secret payloads. Variable-list edits can skip a
 rollout when the deployed settings, source closures and shared inputs agree.
+A change to a script that only runs or checks the deployment
+(`FUNCTION_DEPLOY_TOOLS`) selects no Function.
 Shared startup, package, provider configuration, or export inventory changes
 take the full path. So do unreadable live inputs and ownership that the module
 graph cannot prove. Rules/indexes and Storage rules retain
@@ -272,7 +274,10 @@ deploys all selected exports in one Firebase invocation. The CLI updates up to
 40 functions at a time and retries quota (429) refusals itself. The script keeps
 no-deletion manifests before every attempt, complete intended export inventory
 and final scheduler/readiness smoke; the inventory and scheduler checks catch a
-run that reports success without updating every export. Known Cloud Build
+run that reports success without updating every export. When the provider answers an update
+without its service ("please re-deploy your functions"), Cloud Scheduler's 400
+for the empty URL of a failed export is retried once for that export. Every other
+400 is final. Known Cloud Build
 `EXPIRED` failures and exact refused Cloud Run invoker-policy reads permit
 bounded retry of only the named failed exports after ten seconds, up to two
 retries. Require one allowed diagnostic per failed name with no other error
