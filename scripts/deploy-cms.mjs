@@ -2,7 +2,7 @@
 // Deploys the CMS of the checked-out commit: node scripts/deploy-cms.mjs <development|production> [step ...]
 // Every step runs, also after a failed one. The run ends with the list of failed steps.
 import { spawn } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chownSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -42,9 +42,9 @@ if (account) env.GOOGLE_APPLICATION_CREDENTIALS = privateFile("google.json", acc
 
 // Provider output streams through; its tail becomes the failure text.
 let tail = "", log = "";
-function run(command, args, { env: extra = {}, input, capture = false, cwd = root } = {}) {
+function run(command, args, { env: extra = {}, input, capture = false, cwd = root, uid } = {}) {
   return new Promise((done, reject) => {
-    const child = spawn(command, args, { cwd, env: { ...env, ...extra }, stdio: [input === undefined ? "ignore" : "pipe", "pipe", "pipe"] });
+    const child = spawn(command, args, { cwd, ...(uid ? { uid, gid: uid } : {}), env: { ...env, ...extra }, stdio: [input === undefined ? "ignore" : "pipe", "pipe", "pipe"] });
     let out = "";
     child.stdout.on("data", chunk => { if (capture) out += chunk; else { process.stdout.write(chunk); tail = (tail + chunk).slice(-6000); log += chunk; } });
     child.stderr.on("data", chunk => { process.stderr.write(chunk); tail = (tail + chunk).slice(-6000); log += chunk; });
@@ -206,7 +206,10 @@ const steps = {
   async smoke() {
     const faults = [];
     for (const args of [["scripts/smoke-cms-functions.mjs", "--live-only", "--index", "functions/index.js"], ["scripts/smoke-signed-in-preview.mjs", environment]]) {
-      try { await node(args, { env: { VITE_FUNCTIONS_BASE_URL: target.apiOrigin } }); }
+      // Chrome refuses its sandbox as root, so a root shell runs the smoke as nobody.
+      const home = mkdtempSync(join(tmpdir(), "smoke-home-")), nobody = process.getuid() === 0 ? 65534 : undefined;
+      if (nobody) chownSync(home, nobody, nobody);
+      try { await node(args, { uid: nobody, env: { VITE_FUNCTIONS_BASE_URL: target.apiOrigin, ...(nobody ? { HOME: home } : {}) } }); }
       catch (error) { faults.push(error.message); }
     }
     if (faults.length) throw new Error(faults.join("; "));

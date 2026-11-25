@@ -21,6 +21,12 @@ const sleep = seconds => new Promise(done => setTimeout(done, seconds * 1000));
 const live = (await firestore.doc(PREVIEW_RUNTIME_DOCUMENT).get()).data();
 if (!always && live?.phase === "ready" && live.rendererSha === sha) { console.log(`The renderer is live at ${sha}`); process.exit(0); }
 
+if (dev) {
+  // The container never reports ready when this client cannot read the dev site, and reports no reason.
+  const reply = await fetch(`${target.publicOrigin}/_publication.json`, { redirect: "manual",
+    headers: { "CF-Access-Client-Id": env.CMS_DEV_ACCESS_CLIENT_ID, "CF-Access-Client-Secret": env.CMS_DEV_ACCESS_CLIENT_SECRET } });
+  if (reply.status !== 200) throw new Error(`CMS_DEV_ACCESS_CLIENT_ID cannot read ${target.publicOrigin}: HTTP ${reply.status}`);
+}
 const prepared = await (dev ? prepareDevPreviewRenderer : preparePreviewRenderer)(sha);
 try {
   // Admission stays closed until the new renderer reports ready; admitted work finishes on the old one.
