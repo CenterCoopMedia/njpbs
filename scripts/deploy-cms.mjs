@@ -2,7 +2,7 @@
 // Deploys the CMS of the checked-out commit: node scripts/deploy-cms.mjs <development|production> [step ...]
 // Every step runs, also after a failed one. The run ends with the list of failed steps.
 import { spawn } from "node:child_process";
-import { chownSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chownSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -95,12 +95,10 @@ const steps = {
     await node(["scripts/component-runner.mjs", "functions", "configure"], { env: {
       CMS_ADMIN_BUILD_REVISION: functionsSha, CMS_PREVIEW_RENDERER_SHA: functionsSha, VITE_LIVE_PRODUCTION_ENABLED: dev ? "false" : env.LIVE_PRODUCTION_ENABLED || "false" } });
   },
+  // A create names a category, desk or page image that must already be live; a commit can add one.
   async seed() {
     await node(["scripts/backfill-page-seed-media.mjs"]);
-    await node(["scripts/backfill-media-thumbnails.mjs", "--apply"], { env: await r2(), input: account });
     await node(["scripts/seed-media-categories.mjs", "--if-needed"]);
-    await node(["scripts/backfill-media-category-assignments.mjs"]);
-    await node(["scripts/backfill-author-profiles.mjs"], { env: dev ? { AUTHOR_PROFILE_MAPPING: "" } : {} });
     await node(["scripts/seed-content-sections.mjs", "--if-needed"]);
   },
   async firebase() {
@@ -144,10 +142,6 @@ const steps = {
       page = list.nextPageToken || undefined;
     }
   },
-  async backfill() {
-    await node(["scripts/backfill-byline-projections.mjs"]);
-    await node(["scripts/backfill-media-discovery.mjs", "--apply", "--project", project, "--source-sha", sha], { input: account });
-  },
   async "cms-api"() {
     let config = [];
     if (dev) {
@@ -180,6 +174,8 @@ const steps = {
     } finally { await run("git", ["worktree", "remove", "--force", source]); }
   },
   async "admin-build"() {
+    // A build from placeholder names is a blank page for staff.
+    if (dev && !existsSync(".rendered-deployment-inputs.json")) throw new Error("The configuration is not rendered");
     const repository = env.CANONICAL_GITHUB_REPOSITORY;
     const token = env.GITHUB_TOKEN;
     const reply = await fetch(`https://api.github.com/repos/${repository}/milestones?state=all&sort=due_on&direction=asc&per_page=100`,
@@ -218,7 +214,7 @@ const steps = {
 
 // A step whose failure can follow from an earlier one; it still runs.
 const after = { render: ["install"], "functions-build": ["install", "render"], seed: ["install"], firebase: ["install", "functions-build"],
-  "event-grants": ["firebase"], backfill: ["firebase"], "cms-api": ["render", "install"], renderer: ["install", "render"],
+  "event-grants": ["firebase"], "cms-api": ["render", "install"], renderer: ["install", "render"],
   studio: ["install"], "admin-build": ["install", "render"], "admin-deploy": ["admin-build"], "admin-shell": ["install", "admin-deploy"],
   smoke: ["firebase", "cms-api", "renderer", "admin-deploy", "seed"] };
 const unknown = only.filter(name => !Object.hasOwn(steps, name));
