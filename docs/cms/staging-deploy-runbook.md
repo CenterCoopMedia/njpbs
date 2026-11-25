@@ -208,6 +208,16 @@ and treat the release as mixed until guarded recovery finishes. Recompute plans
 and actual identities on a partial rerun. A provider timeout is uncertain, not
 permission to restart under another identity.
 
+Within one run, the Functions deploy step redeploys only the functions that
+failed, with no attempt count, waiting 60 s and doubling to 5 min, until
+Firebase confirms `Deploy complete!` or reports a final failure (build,
+configuration, permission, a request refusal, or a daily or per-project count
+quota). A Cloud Run regional CPU or memory quota and unknown quota wording are
+retried, and each wait prints the pending functions and the provider's last line.
+In the workflow each Functions deploy step has its own `timeout-minutes`, which is
+the retry's only ceiling: a step that passes it fails, so the failure and recovery
+steps still run.
+
 Automatic Functions abandonment is limited to attempt one, both deployment
 phases skipped and no retirement/provider mutation started. Idempotent repairs
 may already have run. It restores the prior complete mutation and records the

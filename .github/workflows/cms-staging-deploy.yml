@@ -1580,6 +1580,17 @@ jobs:
             --non-interactive
       - name: Deploy ordinary Functions before the preview pause
         id: deploy_functions_before_preview
+        # The Functions retry has no count; the deploy step timeouts are its only ceiling. A
+        # step that passes its timeout fails, so the failure() and recovery steps after it still
+        # run; only the job's timeout cancels them. Measured in runs 45191230409, 44613342087,
+        # 45310500950, 45504015954 and 45506446346: the steps before the deploy took at most
+        # 1m57s, the recovery steps after a failed deploy at most 6 s, and the full deploy at
+        # most 36m24s (44613342087). This subset is smaller than the full deploy, so it gets 30
+        # minutes; the step that deploys all functions gets 60 (24 minutes of paced retries
+        # beyond the measured full deploy). Both paths leave 17 of the job's 107 minutes for
+        # other work against a measured 3. No measured run has taken this late-pause path;
+        # the first development run that does resizes these two numbers (#636).
+        timeout-minutes: 30
         if: (inputs.target == 'development' || vars.CMS_PREVIEW_CLOUD_ENABLED == 'true') && needs.firebase-preflight.outputs.preview_pause_late == 'true' && needs.firebase-preflight.outputs.functions_before_preview != ''
         env:
           DEPLOY_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
@@ -1608,6 +1619,9 @@ jobs:
             site/scripts/deploy-cms-preview-cloud.ts pause "$RENDERER_SHA"
       - name: Deploy Firebase rules, indexes, and functions
         id: deploy_functions
+        # Budget beside "Deploy ordinary Functions before the preview pause": 60 minutes for the
+        # step that deploys all functions.
+        timeout-minutes: 60
         if: needs.firebase-preflight.outputs.functions_mutated == 'true'
         env:
           FIRESTORE_DEPLOYED_BEFORE_PREVIEW: ${{ steps.deploy_rules_before_preview.outcome }}
