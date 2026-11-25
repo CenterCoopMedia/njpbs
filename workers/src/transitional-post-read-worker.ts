@@ -541,6 +541,14 @@ export function createTransitionalPostReadWorker(dependencies: Dependencies) {
       void response.body?.cancel().catch(() => {});
       return unavailable(request);
     }
+    // An unread authority cannot prove that a Post is absent: a Post newer than
+    // this code's Assets would answer 404 for the length of a version switch.
+    if (pending && response.status === 404 && postSlugForPath(publicPath(new URL(request.url).pathname) ?? "")) {
+      void response.body?.cancel().catch(() => {});
+      const refusal = unavailable(request);
+      refusal.headers.set("x-njpbs-publication-refresh", "pending");
+      return refusal;
+    }
     const headers = new Headers(response.headers);
     headers.set("cache-control", "no-store");
     if (pending) {
