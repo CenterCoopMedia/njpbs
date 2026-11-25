@@ -8,6 +8,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { repeatAfterProviderLimit } from "./lib/firebase-provider-limit.mjs";
+import { faultText, repeatNetworkFault } from "./lib/network-fault.mjs";
 
 const root = resolve(fileURLToPath(new URL("../", import.meta.url)));
 process.chdir(root);
@@ -300,7 +301,9 @@ for (const name of Object.keys(steps).filter(step => !only.length || only.includ
   const blocked = dev || name === "smoke" ? [] : (after[name] ?? []).filter(step => report.some(row => row.name === step && row.error));
   try {
     if (blocked.length) throw new Error(`Not run: ${blocked.join(", ")} failed`);
-    await steps[name]();
+    // Each step ends in the same state when it runs again, so a lost connection repeats it. The smoke reports what it meets.
+    if (name === "smoke") await steps[name]();
+    else await repeatNetworkFault(name, () => { tail = log = ""; return steps[name](); }, { text: error => `${tail}\n${faultText(error)}` });
   } catch (caught) { error = `${caught.message}\n${tail.trim().split("\n").slice(-12).join("\n")}`.trim(); }
   const seconds = Math.round((Date.now() - started) / 1000);
   report.push({ name, seconds, error });

@@ -13,10 +13,10 @@ failed steps and the provider's error, and exits 1 when the list is not empty.
 | render | Writes the target's origins and resource names into the source |
 | functions-build | Builds the Functions contracts and writes the runtime parameters |
 | seed | Adds missing page images, media categories and desks |
-| firebase | Rules, indexes and Functions in one `firebase deploy`. Unchanged Functions are skipped. A repeat after the provider's per-minute limit deploys only what is left |
+| firebase | Rules, indexes and Functions in one `firebase deploy`. Unchanged Functions are skipped. A repeat after the provider's per-minute limit or a lost connection deploys only what is left |
 | event-grants | Lets a new event trigger's identity call its Function |
 | cms-api | Deploys the CMS API Worker |
-| renderer | Deploys the preview renderer when its source changed, and waits until it reports ready |
+| renderer | Deploys the preview renderer when its source changed, and waits until it reports ready. The image is built and pushed while previews are open. After a failure the previous Worker version and previews return, or the new container finishes |
 | studio | Builds and stores the Studio connector of this commit |
 | admin-build, admin-deploy | Builds the Admin and uploads it to Pages |
 | admin-shell | Production: opens the Admin sign-in page through Access |
