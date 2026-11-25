@@ -12,6 +12,7 @@ import mediaDiscovery from "../../functions/lib/media-discovery.js";
 import mediaStore from "../../functions/lib/public-media-manifest-store.js";
 import candidateStore from "../../functions/lib/public-worker-candidate-store.js";
 import { createHash } from "node:crypto";
+import { loseAnswer, releaseWrites } from "../helpers/lost-answer.js";
 import { runNoBuildCloudRelease } from "../../site/scripts/no-build-cloud-release";
 import { publicationTarget } from "../../functions/lib/publication-target.js";
 const PRODUCTION_TARGET = publicationTarget("production");
@@ -422,7 +423,8 @@ it("accepts draft saves after handover and reservation without stranding the rel
   expect((await db.doc("system/publicDeployment").get()).data().state).toBe("deploying");
 });
 
-it.each(["deployed", "uncertain", "fifth-attempt uncertain"])("consumes a preuploaded release with %s evidence and no artifact I/O", async outcome => {
+it.each([["deployed"], ["uncertain"], ["fifth-attempt uncertain"], ["deployed", "claim"], ["deployed", "outcome"], ["deployed", "journal clear"],
+  ["uncertain", "next check"]])("consumes a preuploaded release with %s evidence and no artifact I/O (lost answer: %s)", async (outcome, write) => {
   const { candidate } = await seal();
   await pauseForHandover();
   await promote();
@@ -453,8 +455,17 @@ it.each(["deployed", "uncertain", "fifth-attempt uncertain"])("consumes a preupl
     sourceGit: async args => args[0] === "rev-parse" ? commitSha : "", activationIO: {
       requestJson, requestPublication: async () => JSON.stringify(publication) },
     storage: undefined, previewStorageCredential: undefined, stateDirectory: "/unused", cloudflareApiToken: "x".repeat(32) });
-  await run();
+  if (write) {
+    const requestPath = releaseRequest.path, journalPath = "cmsPublicationSerializerJournals/cloudflare-publisher";
+    const lost = await loseAnswer(db, { requestPath, journalPath, matches: releaseWrites[write] }, run);
+    expect(lost, `${write} landed`).not.toBeNull();
+    if (write !== "journal clear") expect((await releaseRequest.get()).data()).toEqual(lost.request);
+    // The runner comes back once its claim or check time has passed.
+    if (write === "claim") await releaseRequest.update({ nextAttemptAt: 0 });
+  }
+  if (write !== "next check") await run();
   const pointer = (await db.doc("system/publicDeployment").get()).data();
+  if (write === "outcome" || write === "journal clear") expect((await releaseRequest.get()).data()).toMatchObject({ status: "deployed", nextAttemptAt: null });
   expect(calls.filter(call => call.method === "POST" && call.path.endsWith("/deployments"))).toHaveLength(1);
   if (outcome === "deployed") {
     expect(pointer).toMatchObject({ state: "idle", activeGeneration: 8, activeCommitSha: commitSha });

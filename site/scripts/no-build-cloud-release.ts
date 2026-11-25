@@ -300,8 +300,14 @@ export async function runNoBuildCloudRelease({ firestore, storage, serializerId,
   if (!batch) throw new Error("Cloud release batch is missing");
   assertPublicationOwner(batch, runtime);
   if (["deployed", "failed", "superseded", "cancelled"].includes(batch.status)) {
-    await row.ref.update({ status: batch.status, nextAttemptAt: null,
-      failureReason: batch.status === "failed" ? request.failureReason ?? null : null });
+    // Only a request that is still open takes its batch's terminal state.
+    await firestore.runTransaction(async tx => {
+      const current = (await tx.get(row.ref)).data();
+      if (!current || !["pending", "failed"].includes(current.status) || current.refusalReceipt !== undefined ||
+          current.status === batch.status && current.nextAttemptAt === null) return;
+      tx.update(row.ref, { status: batch.status, nextAttemptAt: null,
+        failureReason: batch.status === "failed" ? current.failureReason ?? null : null });
+    });
     if (retained) await journal.clear({ queueId: retained.queueId, claimToken: retained.claimToken });
     return;
   }

@@ -5,6 +5,7 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from "vitest";
+import { loseAnswer, releaseWrites } from "../helpers/lost-answer.js";
 import { clearEmulatorFirestore, isolatedFirestore } from "../helpers/emulator-firestore.js";
 import { createPublicArtifactInventoryReceipt } from "../../site/src/lib/public-artifact-inventory";
 import { preparePublicWorkerArtifact, verifyPreparedPublicWorkerArtifact } from "../../site/src/lib/public-worker-artifact";
@@ -13,9 +14,10 @@ import { openCmsPublicationCloudTokenJournal } from "../../site/scripts/cms-publ
 import * as sourceGuard from "../../site/scripts/cms-publication-runtime-guard";
 
 const load = createRequire(import.meta.url);
-const { reservePublicBuildBatch } = load("../../functions/lib/public-deployment-coordinator.js");
-const { assertPublicDeploymentPointer, initialPublicDeploymentPointer } = load("../../functions/lib/public-deployment-pointer.js");
+const { acquirePublicDeploymentLease, reservePublicBuildBatch } = load("../../functions/lib/public-deployment-coordinator.js");
+const { assertMediaLifecycleDeploymentFence, assertPublicDeploymentPointer, initialPublicDeploymentPointer } = load("../../functions/lib/public-deployment-pointer.js");
 const { assertPublicDeploymentRefusedCloudReleaseBatch } = load("../../functions/lib/public-deployment.js");
+const { settlePublicDeploymentOutcome } = load("../../functions/lib/public-deployment-outcome-store.js");
 const bootstrap = load("../../functions/lib/public-deployment-bootstrap.js");
 const manifests = load("../../functions/lib/public-media-manifest.js");
 const manifestStore = load("../../functions/lib/public-media-manifest-store.js");
@@ -37,8 +39,8 @@ beforeEach(async () => {
 afterEach(() => vi.restoreAllMocks());
 
 /** The real reservation, media manifest and Worker candidate of one release. */
-async function stageCandidate() {
-  const { batch } = await reservePublicBuildBatch({ firestore: db, buildBatchId, commitSha, runtime });
+async function stageCandidate(id = queueId) {
+  const { batch } = await reservePublicBuildBatch({ firestore: db, buildBatchId: `cms-${id}`, commitSha, runtime });
   const inventory = createPublicArtifactInventoryReceipt({ reservation: batch, pages: [], programs: [], authors: [], settings: [], posts: [] } as never);
   const dist = path.join(scratch, randomUUID());
   await mkdir(dist, { recursive: true });
@@ -53,8 +55,8 @@ async function stageCandidate() {
     workerVersionTag: candidates.publicWorkerCandidateTag(prepared), versionCreatedOn: "2026-10-09T04:00:00.000Z", wranglerVersion: "4.123.0" };
   delete candidate.digestAlgorithm;
   await candidateStore.recordPublicWorkerCandidate({ firestore: db, candidate, runtime });
-  expect(await pointer()).toMatchObject({ newestEligibleGeneration: batch.generation, newestEligibleBuildBatchId: buildBatchId });
-  await db.doc(requestPath).set({ schemaVersion: 1, queueId, buildBatchId, runtime, commitSha, inputSha256: "c".repeat(64),
+  expect(await pointer()).toMatchObject({ newestEligibleGeneration: batch.generation, newestEligibleBuildBatchId: `cms-${id}` });
+  if (id === queueId) await db.doc(requestPath).set({ schemaVersion: 1, queueId, buildBatchId, runtime, commitSha, inputSha256: "c".repeat(64),
     artifactCheckpointDigest: "d".repeat(64), status: "pending", attempts: 0, nextAttemptAt: 0 });
   return { generation: batch.generation as number, prepared, dist };
 }
@@ -96,27 +98,71 @@ it("returns eligibility to a bootstrapped release that has no deployed batch", a
   const active = await pointer();
   const { generation } = await stageCandidate();
   await run();
+  const settledPointer = await pointer();
   await expectSettled(generation, { activeGeneration: active.activeGeneration, newestEligibleGeneration: active.activeGeneration,
     newestEligibleBuildBatchId: evidence.buildBatchId });
+  // The admitted ordinary release, through its real candidate, lease and activation.
+  await db.doc(pointerPath).update({ mediaLifecycleReady: true }); // A separate media activation does this after a bootstrap.
+  expect(() => assertMediaLifecycleDeploymentFence({ ...settledPointer, mediaLifecycleReady: true })).toThrow();
+  const next = await stageCandidate(nextId);
+  const acquired = await acquirePublicDeploymentLease({ firestore: db, buildBatchId: `cms-${nextId}`, commitSha, runtime });
+  expect(acquired.outcome).toBe("acquired");
+  const outcome = await settlePublicDeploymentOutcome({ firestore: db, lease: acquired.lease, runtime, evidence: { action: "activate",
+    buildBatchId: `cms-${nextId}`, deploymentId: "55555555-5555-4555-8555-555555555555", versionId: "33333333-3333-4333-8333-333333333333", commitSha } });
+  expect(outcome.outcome).toBe("deployed");
+  expect(assertMediaLifecycleDeploymentFence(await pointer())).toMatchObject({ generation: next.generation, commitSha });
 });
 
-it("keeps a settlement whose commit succeeded and whose answer was lost", async () => {
+const journalPath = "cmsPublicationSerializerJournals/cloudflare-publisher";
+const refusedBytes = { readInput: async () => Buffer.from("other bytes") };
+const providerFault = { readInput: async () => { throw Object.assign(new Error("unavailable"), { status: 503 }); } };
+it.each([
+  ["claim", refusedBytes, "settled"], ["settlement", refusedBytes, "settled"], ["claim", providerFault, "retry"], ["retry", providerFault, "retry"],
+  ["close", refusedBytes, "closed"], ["journal clear", refusedBytes, "closed"],
+] as const)("keeps the %s write that landed without an answer (%#)", async (write, storage, end) => {
   const { generation } = await stageCandidate();
+  if (end === "closed") {
+    await (await journal()).reserve({ queueId, buildBatchId, commitSha });
+    await db.doc(batchPath).update({ status: "failed" });
+    await db.doc(requestPath).update({ failureReason: "activation: refused." });
+  }
+  const lost = await loseAnswer(db, { requestPath, journalPath, matches: releaseWrites[write] }, () => run(storage));
+  expect(lost, `${write} landed`).not.toBeNull();
+  // The same write again changes nothing that landed.
+  const landed = (await db.doc(requestPath).get()).data();
+  if (write !== "journal clear") expect(landed).toEqual(lost!.request);
+  await run(storage);
+  if (end !== "closed") expect((await db.doc(requestPath).get()).data()).toEqual(landed);
+  if (write === "claim") { await db.doc(requestPath).update({ nextAttemptAt: 0 }); await run(storage); }
+  if (end === "settled") return expectSettled(generation, { newestEligibleGeneration: 0, newestEligibleBuildBatchId: null });
+  const request = (await db.doc(requestPath).get()).data()!;
+  if (end === "closed") {
+    expect(request).toMatchObject({ status: "failed", nextAttemptAt: null, failureReason: "activation: refused." });
+    expect(await (await journal()).read()).toBeNull();
+  } else {
+    expect(request).toMatchObject({ status: "failed", attempts: write === "claim" ? 2 : 1 });
+    expect(request.nextAttemptAt).toBeGreaterThan(Date.now());
+    expect((await (await journal()).read())?.queueId).toBe(queueId);
+  }
+});
+
+it("makes no release state without a pointer: the reservation writes both or neither", async () => {
   const begin = db.runTransaction.bind(db);
-  let lost = false;
-  vi.spyOn(db, "runTransaction").mockImplementation(async (...args: unknown[]) => {
-    const result = await (begin as (...values: unknown[]) => Promise<unknown>)(...args);
-    if (!lost && result === true && (await db.doc(requestPath).get()).data()?.refusalReceipt) {
-      lost = true;
-      throw Object.assign(new Error("Firestore unavailable after commit"), { code: 14 });
-    }
-    return result;
-  });
+  (db as { runTransaction: unknown }).runTransaction = async (work: (tx: never) => Promise<unknown>) => (begin as (w: unknown) => Promise<unknown>)(
+    async (tx: { set(ref: { path: string }, data: unknown): unknown }) => {
+      const result = await work(tx as never);
+      throw Object.assign(new Error(`aborted ${String(result)}`), { name: "Aborted" });
+    });
+  try { await expect(reservePublicBuildBatch({ firestore: db, buildBatchId, commitSha, runtime })).rejects.toThrow("aborted"); }
+  finally { delete (db as { runTransaction?: unknown }).runTransaction; }
+  expect((await db.doc(pointerPath).get()).exists).toBe(false);
+  expect((await db.doc(batchPath).get()).exists).toBe(false);
+  // Without its pointer the settlement decides nothing and the request stays with its owner.
+  await stageCandidate();
+  await db.doc(pointerPath).delete();
   await run();
-  expect(lost).toBe(true);
-  vi.mocked(db.runTransaction).mockRestore();
-  await run();
-  await expectSettled(generation, { newestEligibleGeneration: 0, newestEligibleBuildBatchId: null });
+  expect((await (await journal()).read())?.queueId).toBe(queueId);
+  expect((await db.doc(batchPath).get()).data()).toMatchObject({ status: "ready" });
 });
 
 it("reads a local file fault inside the artifact check as a fault, not as refused bytes", async () => {
