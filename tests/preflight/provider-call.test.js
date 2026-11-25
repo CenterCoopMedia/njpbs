@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { inspect } from "node:util";
 import { describe, expect, it, vi } from "vitest";
-import { ABSENT_EXIT, answerFault, failureText, faultCause, faultLine, httpFault, main, permanentFailure, providerCall, providerCallSync, providerGcloud, providerJson } from "../../scripts/lib/provider-call.mjs";
+import { ABSENT_EXIT, CALLER_REFUSED, failureText, faultCause, faultLine, httpFault, main, permanentFailure, providerCall, providerCallSync, providerGcloud, providerJson } from "../../scripts/lib/provider-call.mjs";
 
 const options = () => ({ wait: vi.fn().mockResolvedValue(), log: vi.fn() });
 const http = (status, headers = {}) => httpFault(new Response(null, { status, headers }));
@@ -84,25 +84,28 @@ describe("provider call rule", () => {
     expect(o.log.mock.calls.flat().join("\n")).not.toContain("private");
   });
 
-  it.each([
-    ["an error of the caller", () => new Error("method HEAD not allowed by the caller's request callback")],
-    ["a TypeError of the caller", () => new TypeError("request is not a function")],
-  ])("ends at once on %s before any request and prints its message", async (_name, fault) => {
-    const o = options(), call = vi.fn(() => { throw fault(); });
-    await expect(providerCall("label", call, o)).rejects.toThrow(fault().message);
+  it("ends at once on a caller's own refusal and prints its message", async () => {
+    const fault = Object.assign(new Error("method HEAD not allowed by the caller's request callback"), { code: CALLER_REFUSED });
+    const o = options(), call = vi.fn().mockRejectedValue(fault);
+    await expect(providerCall("label", call, o)).rejects.toBe(fault);
     expect(call).toHaveBeenCalledTimes(1);
     expect(o.wait).not.toHaveBeenCalled();
-    expect(o.log.mock.calls[0][0]).toContain(`class caller, 1 of 5 attempts, last provider line: `);
-    expect(o.log.mock.calls[0][0]).toContain(fault().message);
+    expect(o.log.mock.calls).toEqual([[`Provider call failed: label, class caller, 1 of 5 attempts, last provider line: CALLER_REFUSED: ${fault.message}`]]);
   });
 
+  // The last three are thrown by google-auth-library 9.15.1 and gcp-metadata 6.1.1 after a provider answered.
   it.each([
-    ["an unusable answer", answerFault("refused answer")],
-    ["an SDK error class", new (class SdkError extends Error {})("no code")],
-    ["a fetch failure without a code", new TypeError("fetch failed", { cause: new Error("unexpected redirect") })],
-  ])("still repeats %s", async (_name, fault) => {
-    const call = vi.fn().mockRejectedValueOnce(fault).mockResolvedValue("answer");
-    expect(await providerCall("label", call, options())).toBe("answer");
+    ["an unmarked error", new Error("something new")],
+    ["a TypeError", new TypeError("Cannot read properties of null (reading 'expires_in')")],
+    ["a refused token refresh", new Error("Could not refresh access token.")],
+    ["an unreadable subject token", new Error("Unable to parse the subject_token from the credential_source URL")],
+    ["a metadata answer without its header", new Error("Invalid response from metadata service: incorrect Metadata-Flavor header.")],
+  ])("repeats %s and keeps its message in the final line", async (_name, fault) => {
+    const o = options(), call = vi.fn().mockRejectedValue(fault);
+    await expect(providerCall("label", call, o)).rejects.toBe(fault);
+    expect(call).toHaveBeenCalledTimes(5);
+    expect(o.log.mock.calls[0][0]).toContain("class transient, 5 of 5 attempts");
+    expect(o.log.mock.calls[0][0]).toContain(fault.message);
   });
 
   // The log is public, so this is the boundary: none of these may reach a line.

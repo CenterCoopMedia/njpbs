@@ -20,6 +20,7 @@ import {
   runCmsFunctionSmoke,
 } from "../../scripts/smoke-cms-functions.mjs";
 import { componentFailureDiagnostic } from "../../scripts/component-runner.mjs";
+import { CALLER_REFUSED } from "../../scripts/lib/provider-call.mjs";
 import { ENDPOINTS } from "../../cms-api/src/config.ts";
 import { assertR2Lifecycle } from "../../scripts/assert-r2-lifecycle.mjs";
 import { configurationInputs, CONFIGURATION_INPUTS, NATIVE_CONFIGURATION } from "../../scripts/lib/functions-configuration.mjs";
@@ -661,16 +662,16 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
       .rejects.toMatchObject({ message: "health request failed" });
   });
 
-  it("ends on the first attempt and names the cause when the request callback refuses its own call", async () => {
-    const request = vi.fn(async () => { throw new Error("method HEAD not allowed by the caller's request callback"); });
-    const wait = vi.fn();
-    const log = vi.spyOn(console, "error").mockReturnValue();
-    const error = await runCmsFunctionSmoke({ baseUrl: BASE_URL, request, wait }).catch(error => error);
-    log.mockRestore();
-    expect(request).toHaveBeenCalledTimes(1);
-    expect(wait).not.toHaveBeenCalled();
-    expect(componentFailureDiagnostic(error)).toBe("health request failed; cause: method HEAD not allowed by the caller's request callback");
-  });
+  it.each([["a marked refusal", CALLER_REFUSED, 1], ["an unmarked error", undefined, 5]])(
+    "names the cause when the request callback throws %s", async (_name, code, attempts) => {
+      const message = "method HEAD not allowed by the caller's request callback";
+      const request = vi.fn(async () => { throw Object.assign(new Error(message), code && { code }); });
+      const log = vi.spyOn(console, "error").mockReturnValue();
+      const error = await runCmsFunctionSmoke({ baseUrl: BASE_URL, request, wait: vi.fn() }).catch(error => error);
+      log.mockRestore();
+      expect(request).toHaveBeenCalledTimes(attempts);
+      expect(componentFailureDiagnostic(error)).toBe(`health request failed; cause: ${code ? `${code}: ` : ""}${message}`);
+    });
 
   it("bounds direct-origin probes and keeps edge probes serial", async () => {
     const active = new Map(), peak = new Map();

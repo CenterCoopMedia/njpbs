@@ -76,18 +76,12 @@ function commandOutput(error) {
   return [error?.stderr, error?.stdout].filter(value => value != null).join("\n");
 }
 
-/** The thrown form of an accepted HTTP answer whose content is not usable. */
-export const answerFault = message => Object.assign(new Error(message), { code: "INVALID_ANSWER" });
-
 const isChildFault = error => ["stdout", "stderr", "spawnargs"].some(key => error?.[key] != null) || Number.isInteger(error?.status);
 
-// A plain error with no answer, no code, no command output and no cause was
-// thrown by the caller's own code before any request, so a repeat meets it
-// again. An unreadable body (SyntaxError), an abort and a provider SDK's own
-// error class stay provider faults.
-const PLAIN_ERRORS = ["Error", "TypeError", "ReferenceError", "RangeError"];
-const callerFault = error => PLAIN_ERRORS.includes(error?.constructor?.name) && PLAIN_ERRORS.includes(error.name) && !isChildFault(error) &&
-  !["response", "$metadata", "code", "errno", "cause", "providerLine"].some(key => error[key] !== undefined);
+// The code a caller sets on an error when its own rule refuses a call. Only
+// this ends a call at once: an unmarked error can come from a provider library
+// after an answer, so it is repeated.
+export const CALLER_REFUSED = "CALLER_REFUSED";
 
 // Deploy logs are public. The first line of a message stays, without URL
 // credentials and queries, labelled secrets, addresses and opaque values.
@@ -153,7 +147,7 @@ function retryAfterMs(error) {
 
 /** Answers the wait before the next attempt, or reports the final failure and throws it. */
 function afterFailure(label, error, attempt, { permanent = permanentFault, log = console.error } = {}) {
-  const kind = permanent(error) ?? (callerFault(error) ? "caller" : null);
+  const kind = permanent(error) ?? (error?.code === CALLER_REFUSED ? "caller" : null);
   if (kind || attempt >= PROVIDER_ATTEMPTS) {
     log(`Provider call failed: ${label}, class ${kind ?? "transient"}, ${attempt} of ${PROVIDER_ATTEMPTS} attempts, last provider line: ${faultLine(error)}`);
     throw Object.assign(error, { providerAttempts: attempt });

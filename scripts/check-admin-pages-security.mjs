@@ -2,7 +2,7 @@
 
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
-import { answerFault, httpFault, providerCall } from "./lib/provider-call.mjs";
+import { httpFault, providerCall } from "./lib/provider-call.mjs";
 
 const CLOUDFLARE_API = "https://api.cloudflare.com/client/v4";
 const PROJECT_NAME = "njpbs-admin";
@@ -146,7 +146,7 @@ async function cloudflareRequest(token, path, { absent = false } = {}) {
       const details = Array.isArray(body?.errors)
         ? body.errors.map((error) => error?.message).filter(Boolean).join("; ")
         : "";
-      throw Object.assign(answerFault(
+      throw Object.assign(new Error(
         `Cloudflare Pages check failed (${response.status})${details ? `: ${details}` : ""}`,
       ), response.ok ? {} : { response });
     }

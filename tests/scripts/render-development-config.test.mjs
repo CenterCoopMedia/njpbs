@@ -375,7 +375,7 @@ test("preserves placeholder sentinels and configures an unrendered trusted smoke
       assert.equal(parseApiOrigin(process.env.CMS_PRODUCTION_API_ORIGIN), process.env.CMS_PRODUCTION_API_ORIGIN);
       const requests = [];
       await assert.rejects(runCmsFunctionSmoke({ wait: () => {}, request: async url => {
-        requests.push(url); throw Object.assign(new Error("private-provider-canary"), { code: "ECONNRESET" });
+        requests.push(url); throw new Error("private-provider-canary");
       }}), /health request failed/);
       assert.deepEqual(requests, Array(5).fill(process.env.CMS_PRODUCTION_API_ORIGIN + "/health"));
       await assert.rejects(runCmsFunctionSmoke({baseUrl:"https://other.fixture.test",request:async()=>{throw new Error("unexpected-request")}}), /CMS API URL must/);`;

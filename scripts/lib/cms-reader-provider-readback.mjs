@@ -1,15 +1,15 @@
 import { functionsInventoryIdentity } from "./cms-component-receipt.mjs";
 import { DEV_TARGETS } from "../assert-dev-cms-targets.mjs";
 import { readCmsApiDeployment } from "./cloudflare-worker-readback.mjs";
-import { answerFault, httpFault, permanentFault, providerCall } from "./provider-call.mjs";
+import { httpFault, permanentFault, providerCall } from "./provider-call.mjs";
 
 const refuse = () => { throw new Error("CMS reader provider readback unavailable"); };
 async function bytes(response) {
   if (!response.ok) { await response.body?.cancel(); throw httpFault(response); }
-  if (!response.body) throw answerFault("empty body");
+  if (!response.body) refuse();
   const reader = response.body.getReader(), chunks = []; let size = 0;
   try { for (;;) { const part = await reader.read(); if (part.done) break;
-    size += part.value.length; if (size > 8 * 1024 * 1024) throw answerFault("oversized body"); chunks.push(part.value); }
+    size += part.value.length; if (size > 8 * 1024 * 1024) refuse(); chunks.push(part.value); }
   } finally { await reader.cancel(); }
   return JSON.parse(Buffer.concat(chunks, size).toString("utf8"));
 }
