@@ -4,9 +4,9 @@ umask 077
 
 if ! [[ ( $# -eq 3 && ( $1 == "--apply" || $1 == "--retire" ) ) ||
         ( $# -eq 4 && $1 == "--prepare" ) ||
-        ( ( $# -eq 3 || ( $# -eq 4 && ${4:-} == "--apply" ) ) && $1 == "--supersede-upload-exhausted" ) ||
+        ( ( $# -eq 3 || ( $# -eq 4 && ${4:-} == "--apply" ) ) && ( $1 == "--supersede-upload-exhausted" || $1 == "--end-exhausted" ) ) ||
         ( ( $# -eq 4 || ( $# -eq 5 && ${5:-} == "--apply" ) ) && $1 == "--retry" ) ]]; then
-  echo "Usage: stage-cms-publication-cloud-release.sh --apply|--retire <operation-id> <commit-sha> OR --prepare <operation-id> <new-commit-sha> <old-commit-sha> OR --retry <operation-id> <new-commit-sha> <old-commit-sha> [--apply] OR --supersede-upload-exhausted <operation-id> <commit-sha> [--apply]" >&2
+  echo "Usage: stage-cms-publication-cloud-release.sh --apply|--retire <operation-id> <commit-sha> OR --prepare <operation-id> <new-commit-sha> <old-commit-sha> OR --retry <operation-id> <new-commit-sha> <old-commit-sha> [--apply] OR --supersede-upload-exhausted|--end-exhausted <operation-id> <commit-sha> [--apply]" >&2
   exit 64
 fi
 

@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { cp, lstat, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
@@ -35,8 +35,15 @@ import { publicWorkerCandidateRendererSeal } from "./public-post-renderer-releas
 
 const requireModule = createRequire(import.meta.url);
 const { reservePublicBuildBatch } = requireModule("../../functions/lib/public-deployment-coordinator.js");
-const { assertPublicDeploymentReservedBatch, assertPublicDeploymentRetiredCloudReleaseBatch } =
+const { assertPublicDeploymentLeaseBatch, assertPublicDeploymentPointer, assertPublicDeploymentReservedBatch, assertPublicDeploymentRetiredCloudReleaseBatch,
+  assertPublicDeploymentTerminalBatchStructure, planPublicDeploymentLeaseAcquisition, timestampMillis } =
   requireModule("../../functions/lib/public-deployment.js");
+const { publicWorkerCandidateRef } = requireModule("../../functions/lib/public-deployment-coordinator.js");
+const { publicDeploymentCloudflareEvidenceDigest } = requireModule("../../functions/lib/public-deployment-cloudflare.js");
+const { assertManifestCompletion } = requireModule("../../functions/lib/public-deployment-outcome-store.js");
+const { publicMediaManifestRef, publicMediaManifestVerificationRef } = requireModule("../../functions/lib/public-media-manifest-store.js");
+const { assertPublicWorkerCandidateMatchesBatch } = requireModule("../../functions/lib/public-worker-candidate.js");
+const { assertNoReleaseWriterInTransaction } = requireModule("../../functions/lib/public-release-writer-fence.js");
 const { cloudCmsPublicationRuntimeControl } = requireModule("../../functions/lib/cms-publication-runtime-control.js");
 const { preparePublicRelease, recordPreparedPublicReleaseCheckpoint } = requireModule("../../functions/lib/public-release-preparation.js");
 const { PreparedPublicReleaseError } = requireModule("../../functions/lib/public-release-error.js");
@@ -63,15 +70,15 @@ function operatorError(message: string): never {
 }
 
 type ReleaseArguments = { action: "apply" | "retire"; queueId: string; commitSha: string } |
-  { action: "supersede-upload-exhausted"; queueId: string; commitSha: string; apply: boolean } |
+  { action: "supersede-upload-exhausted" | "end-exhausted"; queueId: string; commitSha: string; apply: boolean } |
   { action: "prepare"; queueId: string; commitSha: string; oldCommitSha: string } |
   { action: "retry"; queueId: string; commitSha: string; oldCommitSha: string; apply: boolean };
-const RELEASE_USAGE = "Usage: stage-cms-publication-cloud-release.sh --apply|--retire <operation-id> <commit-sha> OR --prepare <operation-id> <new-commit-sha> <old-commit-sha> OR --retry <operation-id> <new-commit-sha> <old-commit-sha> [--apply] OR --supersede-upload-exhausted <operation-id> <commit-sha> [--apply]";
+const RELEASE_USAGE = "Usage: stage-cms-publication-cloud-release.sh --apply|--retire <operation-id> <commit-sha> OR --prepare <operation-id> <new-commit-sha> <old-commit-sha> OR --retry <operation-id> <new-commit-sha> <old-commit-sha> [--apply] OR --supersede-upload-exhausted|--end-exhausted <operation-id> <commit-sha> [--apply]";
 export function parseReleaseArguments(args: string[]): ReleaseArguments {
-  if (args[0] === "--supersede-upload-exhausted") {
+  if (args[0] === "--supersede-upload-exhausted" || args[0] === "--end-exhausted") {
     if (![3, 4].includes(args.length) || !QUEUE_ID.test(args[1] ?? "") || !COMMIT_SHA.test(args[2] ?? "") ||
         args.length === 4 && args[3] !== "--apply") operatorError(RELEASE_USAGE);
-    return { action: "supersede-upload-exhausted", queueId: args[1], commitSha: args[2], apply: args.length === 4 };
+    return { action: args[0] === "--end-exhausted" ? "end-exhausted" : "supersede-upload-exhausted", queueId: args[1], commitSha: args[2], apply: args.length === 4 };
   }
   if (args[0] === "--prepare") {
     if (args.length !== 4 || !QUEUE_ID.test(args[1] ?? "") || !COMMIT_SHA.test(args[2] ?? "") ||
@@ -90,7 +97,7 @@ export function parseReleaseArguments(args: string[]): ReleaseArguments {
   return { action: args[0] === "--apply" ? "apply" : "retire", queueId: args[1], commitSha: args[2] };
 }
 
-/** Retire only an exhausted upload that has no candidate or activation owner.
+/** Retire only an exhausted request that has no candidate or activation owner.
  * All fences and both terminal writes share one transaction. A retained journal
  * is cleared only when its job belongs to this exact request. */
 export async function supersedeUploadExhaustedCloudRelease({ firestore, queueId, commitSha, apply = false, target = PRODUCTION,
@@ -116,9 +123,8 @@ export async function supersedeUploadExhaustedCloudRelease({ firestore, queueId,
         !/^[a-f0-9]{64}$/.test(request.inputSha256 ?? "") || !/^[a-f0-9]{64}$/.test(request.artifactCheckpointDigest ?? "")) {
       operatorError("The request does not belong to this cloud release");
     }
-    if (request.status !== "failed" || request.attempts !== CLOUD_RELEASE_ATTEMPT_LIMIT || request.nextAttemptAt !== null ||
-        typeof request.failureReason !== "string" || !request.failureReason.startsWith("candidate upload:")) {
-      operatorError("The request is not an exhausted candidate upload failure");
+    if (request.status !== "failed" || request.attempts !== CLOUD_RELEASE_ATTEMPT_LIMIT || request.nextAttemptAt !== null) {
+      operatorError("The request is not in the exhausted failed state");
     }
     assertPublicDeploymentReservedBatch(batch, buildBatchId);
     if (batch.runtime?.owner !== "cloudflare" || batch.runtime?.release !== commitSha || batch.commitSha !== commitSha ||
@@ -127,9 +133,11 @@ export async function supersedeUploadExhaustedCloudRelease({ firestore, queueId,
     if (pointer.state !== "idle" || pointer.lease != null || pointer.leaseToken != null ||
         pointer.activeGeneration !== batch.reservedAgainstGeneration || pointer.activeCommitSha !== batch.reservedAgainstCommitSha ||
         pointer.activeDeploymentId !== batch.reservedAgainstDeploymentId) operatorError("The public pointer moved from the reservation");
-    if (runtime.phase !== "paused" || runtime.cloud?.phase !== "paused" || runtime.commitSha !== commitSha ||
+    // A ready control of a source that is not active admits no publication, as a pause does.
+    const closed = runtime.phase === "paused" || runtime.phase === "ready" && pointer.activeCommitSha !== commitSha;
+    if (!closed || runtime.cloud?.phase !== runtime.phase || runtime.commitSha !== commitSha ||
         runtime.cloud?.commitSha !== commitSha || runtime.cloud?.serializerId !== CLOUD_SERIALIZER_ID) {
-      operatorError("Both publication phases must be paused at this release");
+      operatorError("Both publication phases must be paused at this release, or ready at this release while another source is active");
     }
     const journal = journalRow.data();
     const job = journal?.job;
@@ -151,6 +159,74 @@ export async function supersedeUploadExhaustedCloudRelease({ firestore, queueId,
     }
     return { queueId, buildBatchId, commitSha, generation: batch.generation, activeGeneration: pointer.activeGeneration,
       requestStatus: "superseded", batchStatus: "retired", journalCleared: Boolean(job), written: apply, dryRun: !apply };
+  }, apply ? {} : { readOnly: true });
+}
+
+/** End an exhausted release whose recorded candidate never took a lease: the
+ * ready batch ends as failed, its journal job is cleared and the active release
+ * is the newest eligible one. A lease needs a ready batch in its own transaction,
+ * so no attempt can take one, and send a deployment write, after this one. */
+export async function endExhaustedCloudRelease({ firestore, queueId, commitSha, apply = false, target = PRODUCTION, now = Date.now }: {
+  firestore: Firestore; queueId: string; commitSha: string; apply?: boolean; target?: PublicationTarget; now?: () => number;
+}) {
+  if (!QUEUE_ID.test(queueId ?? "") || !COMMIT_SHA.test(commitSha ?? "") || typeof apply !== "boolean") {
+    operatorError("The cloud release end input is invalid");
+  }
+  const buildBatchId = `cms-${queueId}`, runtime = { owner: "cloudflare", release: commitSha };
+  const pointerRef = firestore.doc("system/publicDeployment"), batchRef = firestore.doc(`system/publicDeployment/buildBatches/${buildBatchId}`);
+  const journalRef = firestore.doc(`cmsPublicationSerializerJournals/${target.serializerId}`);
+  return firestore.runTransaction(async transaction => {
+    const [pointerRow, batchRow, requestRow, journalRow, candidateRow, manifestRow, verificationRow] = await transaction.getAll(pointerRef, batchRef,
+      firestore.doc(`${cloudReleaseCollection(target.serializerId)}/${queueId}`), journalRef, publicWorkerCandidateRef(firestore, buildBatchId),
+      publicMediaManifestRef(firestore, buildBatchId), publicMediaManifestVerificationRef(firestore, buildBatchId));
+    await assertNoReleaseWriterInTransaction({ firestore, transaction });
+    const request = requestRow.data(), journal = journalRow.data();
+    if (!pointerRow.exists || !batchRow.exists || !request) operatorError("A required cloud release document is missing");
+    if (request.queueId !== queueId || request.buildBatchId !== buildBatchId || request.commitSha !== commitSha ||
+        !isDeepStrictEqual(request.runtime, runtime)) operatorError("The request does not belong to this cloud release");
+    if (request.status !== "failed" || request.attempts !== CLOUD_RELEASE_ATTEMPT_LIMIT || request.nextAttemptAt !== null) {
+      operatorError("The request is not in the exhausted failed state");
+    }
+    const pointer = assertPublicDeploymentPointer(pointerRow.data());
+    if (pointer.state !== "idle") operatorError("A deployment lease is held");
+    const batch = assertPublicDeploymentLeaseBatch(batchRow.data(), buildBatchId);
+    if (batch.status !== "ready" || batch.commitSha !== commitSha || !isDeepStrictEqual(batch.runtime, runtime) ||
+        batch.noBuildStaticInput !== undefined) operatorError("The batch is not ready for this cloud release");
+    if (planPublicDeploymentLeaseAcquisition(pointer, batch).action !== "acquire") operatorError("A newer release is eligible");
+    if (journal?.job && (journal.serializerId !== target.serializerId || journal.job.queueId !== queueId ||
+        journal.job.buildBatchId !== buildBatchId || journal.job.commitSha !== commitSha || !isDeepStrictEqual(journal.runtime, runtime))) {
+      operatorError("The retained journal does not belong to this request");
+    }
+    const candidate = assertPublicWorkerCandidateMatchesBatch(candidateRow.data(), batch, { target });
+    const manifest = assertManifestCompletion({ batch, header: manifestRow.data(), verification: verificationRow.data() });
+    if (candidate.mediaManifestDigest !== manifest.mediaManifestDigest) operatorError("The candidate and its media manifest differ");
+    const active = (await transaction.get(batchRef.parent.where("generation", "==", pointer.activeGeneration).limit(2))).docs;
+    if (active.length !== 1 || active[0].get("status") !== "deployed" || active[0].get("commitSha") !== pointer.activeCommitSha) {
+      operatorError("The batch of the active release was not found");
+    }
+    assertPublicDeploymentTerminalBatchStructure(active[0].data(), active[0].id);
+    const nextPointer = assertPublicDeploymentPointer({ ...pointer, newestEligibleGeneration: pointer.activeGeneration,
+      newestEligibleBuildBatchId: active[0].id });
+    // A failed batch names the lease that ended it. This one is taken and ended in the same write.
+    const ended = firebaseAdminRuntime.Timestamp.fromMillis(Math.max(now(), Math.ceil(timestampMillis(batch.readyAt) as number)));
+    const nextBatch = assertPublicDeploymentTerminalBatchStructure({ ...batch, status: "failed", leaseToken: randomUUID(), leaseAcquiredAt: ended,
+      predecessorGeneration: pointer.activeGeneration, predecessorDeploymentId: pointer.activeDeploymentId, predecessorCommitSha: pointer.activeCommitSha,
+      mediaManifestDigest: manifest.mediaManifestDigest, failedAt: ended, terminalOutcome: "cancelled",
+      cloudflareEvidenceDigest: publicDeploymentCloudflareEvidenceDigest({ action: "terminal-failure", buildBatchId, outcome: "cancelled" }, buildBatchId),
+    }, buildBatchId);
+    if (apply) {
+      const timestamp = firebaseAdminRuntime.FieldValue.serverTimestamp();
+      transaction.set(pointerRef, { ...nextPointer, updatedAt: timestamp });
+      transaction.set(batchRef, nextBatch);
+      if (journal?.job) transaction.update(journalRef, { job: null });
+      const audit = { state: "idle", activeGeneration: pointer.activeGeneration, activeDeploymentId: pointer.activeDeploymentId };
+      transaction.set(firestore.collection("admin_logs").doc(), { actorUid: "system:public-deployment", actorEmail: null,
+        action: "public-deployment.end-exhausted", target: batchRef.path, before: { ...audit, newestEligibleBuildBatchId: buildBatchId },
+        after: { ...audit, newestEligibleBuildBatchId: active[0].id }, source: "stage-cms-publication-cloud-release", timestamp,
+        at: new Date(now()).toISOString() });
+    }
+    return { queueId, buildBatchId, commitSha, generation: batch.generation, activeGeneration: pointer.activeGeneration, batchStatus: "failed",
+      newestEligibleBuildBatchId: active[0].id, journalCleared: Boolean(journal?.job), written: apply, dryRun: !apply };
   }, apply ? {} : { readOnly: true });
 }
 
@@ -547,8 +623,9 @@ export async function main(args = process.argv.slice(2), environment: NodeJS.Pro
       { credential: firebaseAdminRuntime.cert(serviceAccount), projectId: target.projectId },
       "cms-publication-cloud-release-operator",
     ));
-    if (parsed.action === "supersede-upload-exhausted") {
-      const result = await supersedeUploadExhaustedCloudRelease({ firestore: initialize(), queueId, commitSha, apply: parsed.apply, target });
+    if (parsed.action === "supersede-upload-exhausted" || parsed.action === "end-exhausted") {
+      const end = parsed.action === "end-exhausted" ? endExhaustedCloudRelease : supersedeUploadExhaustedCloudRelease;
+      const result = await end({ firestore: initialize(), queueId, commitSha, apply: parsed.apply, target });
       process.stdout.write(`${JSON.stringify(result)}\n`);
       return;
     }

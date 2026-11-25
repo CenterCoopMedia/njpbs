@@ -347,6 +347,8 @@ identities, not defaults. Preserve exact argument order:
 | Claimed content | `scripts/cancel-claimed-cms-publication-content.sh --apply <operator-commit> <queue-id> <batch-id> <serializer-id> <queue-commit> <absolute-journal-path>` |
 | Never-public withdrawal | `scripts/settle-unpublished-cms-content-withdrawal.sh --apply <operator-commit> <collection> <record-id> <published-source-version> <cancelled-queue-id> <active-generation> <active-batch-id>` |
 | Retained content baseline | `bash scripts/seed-public-content-baseline.sh --target production --dist <absolute-retained-dist> --prepared <absolute-retained-prepared-worker.json>` |
+| Exhausted release, never uploaded | `scripts/stage-cms-publication-cloud-release.sh --supersede-upload-exhausted <operation-id> <commit-sha> [--apply]` |
+| Exhausted release, uploaded, never leased | `scripts/stage-cms-publication-cloud-release.sh --end-exhausted <operation-id> <commit-sha> [--apply]` |
 | Context dry-run | `node --import "file://$PWD/site/node_modules/tsx/dist/loader.mjs" site/scripts/retry-public-context-publication.ts --operation-id <current-failed-id> --source-sha <active-source-sha> --context-revision <current-revision>` with credential fd 3 |
 
 Baseline seeding verifies exact complete retained bytes/source and immutable

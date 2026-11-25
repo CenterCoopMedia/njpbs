@@ -66,6 +66,15 @@ then prove idle pointer, exact public root receipt, body bytes, family/withdrawa
 and media readiness. Failed proof retains the original attempt for diagnosis.
 No second uncoordinated public writer is permitted.
 
+A release whose four attempts failed before a lease keeps its publisher journal
+job, so no other release can start. `stage-cms-publication-cloud-release.sh` ends
+it; it only reads without `--apply`. With no candidate,
+`--supersede-upload-exhausted` retires the reserved batch and clears the job, for
+any failure reason. It needs both publication phases `paused` at this release, or
+both `ready` at this release while another source is active; it never changes
+them. With a candidate, `--end-exhausted` ends the ready batch as failed, clears
+the job and makes the active release the newest eligible one.
+
 During reconciliation, the read-only CMS diagnostics observer
 (`scripts/cms-diagnostics.mjs --firebase`) checks the candidate bound to the
 deployment pointer. The `candidateProbe` check reports its HTTP status, time to

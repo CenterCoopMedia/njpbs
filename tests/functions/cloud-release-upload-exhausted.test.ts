@@ -86,7 +86,6 @@ const refusals: [string, string, object][] = [
   ["pending request", requestPath, { status: "pending" }], ["deployed request", requestPath, { status: "deployed" }],
   ["attempts remaining", requestPath, { attempts: 3 }], ["attempts above limit", requestPath, { attempts: 5 }],
   ["retry scheduled", requestPath, { nextAttemptAt: 1_800_000_000_000 }],
-  ["activation failure", requestPath, { failureReason: "activation: refused" }], ["no failure reason", requestPath, { failureReason: null }],
   ["ready batch", batchPath, { status: "ready" }], ["batch source", batchPath, { commitSha: oldSha }],
   ["batch owner", batchPath, { runtime: { owner: "node-compute", release: commitSha } }],
   ["batch runtime source", batchPath, { runtime: { owner: "cloudflare", release: oldSha } }],
@@ -105,6 +104,28 @@ it.each(refusals)("refuses %s and preserves every document", async (_label, path
   await seed(); await firestore.doc(path).update(change); const before = await snapshot();
   await expect(supersede(true)).rejects.toThrow(); expect(await snapshot()).toEqual(before);
 });
+
+const readyControl = { schemaVersion: 1, phase: "ready", commitSha, serializerId: "node-compute-primary",
+  cloud: { phase: "ready", commitSha, serializerId: "cloudflare-publisher" } };
+it("takes a ready control of this release while another source is active, and leaves the control", async () => {
+  await seed(); await firestore.doc(runtimePath).set(readyControl);
+  expect(await supersede(true)).toMatchObject({ written: true, batchStatus: "retired" });
+  expect((await firestore.doc(runtimePath).get()).data()).toEqual(readyControl);
+});
+
+it("refuses a ready control while this release's source is active", async () => {
+  await seed(); await firestore.doc(runtimePath).set(readyControl);
+  await firestore.doc(pointerPath).update({ activeCommitSha: commitSha });
+  await firestore.doc(batchPath).update({ reservedAgainstCommitSha: commitSha });
+  const before = await snapshot();
+  await expect(supersede(true)).rejects.toThrow("ready at this release while another source is active"); expect(await snapshot()).toEqual(before);
+});
+
+it.each(["source check: The commit was not found.", "artifact restore: network", "Automatic retry attempts exhausted.", null])(
+  "takes an exhausted request with a reserved batch and no candidate, reason %s", async failureReason => {
+    await seed(); await firestore.doc(requestPath).update({ failureReason });
+    expect(await supersede(true)).toMatchObject({ written: true, requestStatus: "superseded", batchStatus: "retired" });
+  });
 
 it.each([candidatePath, queuePath])("refuses an existing %s", async path => {
   await seed(); await firestore.doc(path).set({ status: "failed" }); const before = await snapshot();
