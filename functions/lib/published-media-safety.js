@@ -12,6 +12,7 @@ const { isDeepStrictEqual } = require("node:util");
 const { mediaProjection } = require("./media-contract");
 const { PAGE_EDITOR_TEMPLATES, editorTemplateForPage } = require("./public-page-contract");
 const { assertMediaLifecycleFenceInTransaction } = require("./public-deployment");
+const { PublicDeploymentFenceError } = require("./public-deployment-pointer");
 const { recordKindHasPublicRoute } = require("./public-record-kinds");
 const { parsePublishInstant } = require("./publish-instant");
 
@@ -223,7 +224,8 @@ async function assertPublishedMediaSafe({ firestore, transaction = null }) {
     try {
       await assertMediaLifecycleFenceInTransaction({ firestore, transaction, pointer: deploymentSnapshot?.data() });
       uploadedMediaReady = true;
-    } catch {
+    } catch (error) {
+      if (!(error instanceof PublicDeploymentFenceError)) throw error;
       throw new PublishedMediaSafetyError(
         `Media asset ${uploadedMediaAssetId} cannot enter public content until public deployment coordination is active.`,
       );

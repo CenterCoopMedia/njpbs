@@ -38,16 +38,14 @@ it.each(["reserved", "ready", "deploying", "reconciling", "deployed"])("stays cl
   await expect(fence()).rejects.toBeInstanceOf(PublicDeploymentFenceError);
 });
 
-it("stays closed for a missing reservation, a newer eligible release, a lease or more than 20 reservations", async () => {
+it("stays closed for a missing reservation, a newer eligible release or lifecycle not ready", async () => {
   await batch(9, "failed");
   await expect(fence()).rejects.toBeInstanceOf(PublicDeploymentFenceError);
   await batch(8, "failed");
   await expect(fence({ ...POINTER, newestEligibleGeneration: 9, newestEligibleBuildBatchId: "cms-9" })).rejects.toBeInstanceOf(PublicDeploymentFenceError);
   await expect(fence({ ...POINTER, mediaLifecycleReady: false })).rejects.toBeInstanceOf(PublicDeploymentFenceError);
-  for (let generation = 10; generation <= 27; generation += 1) await batch(generation, "failed");
-  expect(await fence({ ...POINTER, lastReservedGeneration: 27 })).toMatchObject({ generation: 7 });
-  await batch(28, "failed");
-  await expect(fence({ ...POINTER, lastReservedGeneration: 28 })).rejects.toBeInstanceOf(PublicDeploymentFenceError);
+  await batch(10, "failed");
+  await expect(fence()).rejects.toBeInstanceOf(PublicDeploymentFenceError);
 });
 
 it("lets the site-wide check before every publish pass after a release ended, not while one is in flight", async () => {
@@ -63,4 +61,17 @@ it("lets the site-wide check before every publish pass after a release ended, no
   await expect(assertPublishedMediaSafe({ firestore: db })).rejects.toThrow(/upload-one cannot enter public content/);
   await batch(9, "retired");
   await expect(assertPublishedMediaSafe({ firestore: db })).resolves.toMatchObject({ assetCount: 1 });
+});
+
+it("passes a failed batch read through instead of reporting a closed fence", async () => {
+  await db.doc("system/publicDeployment").set(POINTER);
+  await db.doc("media_assets/upload-one").set({ lifecycle: "active", source: "upload" });
+  await db.doc("cmsPosts/image-post").set({ status: "published", publishAt: "2026-11-01T12:00:00.000Z",
+    published: { metadata: { type: "post", heroImage: "upload-one" }, sourceVersion: 1, blocks: [] } });
+  const unavailable = Object.assign(new Error("14 UNAVAILABLE"), { code: 14 });
+  const firestore = new Proxy(db, { get: (target, key) => key !== "collection" ? Reflect.get(target, key).bind?.(target) ?? Reflect.get(target, key)
+    : (path: string) => path === "system/publicDeployment/buildBatches"
+      ? { where: () => ({ orderBy: () => ({ get: () => Promise.reject(unavailable) }) }) }
+      : target.collection(path) });
+  await expect(assertPublishedMediaSafe({ firestore })).rejects.toBe(unavailable);
 });

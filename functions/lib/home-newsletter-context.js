@@ -3,6 +3,7 @@
 const { shapeJoinedRecord, joinedAssetIds, pairedAssetPaths, projectPairedAsset } = require("./joined-records");
 const { PublishedMediaSafetyError } = require("./published-media-safety");
 const { assertMediaLifecycleFenceInTransaction } = require("./public-deployment");
+const { PublicDeploymentFenceError } = require("./public-deployment-pointer");
 const { mediaReplacementRef } = require("./media-replacement");
 const { selectedAssets } = require("./public-content-projection");
 const { newsletterCardData, projectHomeNewsletterRecord } = require("./home-retained-sources");
@@ -76,6 +77,7 @@ async function readRoster({ firestore, transaction, recordIds, pointer, now }) {
     // Unqualified optional art is absent. A transport failure makes the
     // optional service unavailable instead of sealing a partial normal roster.
     if (pointer?.schemaVersion === 2 && !(error instanceof require("./public-release-pair").PublicReleaseProtocolError)) throw error;
+    if (pointer?.schemaVersion !== 2 && !(error instanceof PublicDeploymentFenceError)) throw error;
   }
   const assets = new Map();
   for (const [index, id] of ids.entries()) {

@@ -23,7 +23,7 @@ const {
   assertPublishedAssetProjection,
 } = require("./lib/published-media-safety");
 const { assertMediaLifecycleFenceInTransaction } = require("./lib/public-deployment");
-const { readPublicDeploymentPointer } = require("./lib/public-deployment-pointer");
+const { PublicDeploymentFenceError, readPublicDeploymentPointer } = require("./lib/public-deployment-pointer");
 const {
   acceptsGzip,
   createPublicDecisionCache,
@@ -55,10 +55,13 @@ async function readPublicPageProjection({ firestore, pageId, now = new Date() })
       .collection("system")
       .doc("publicDeployment")
       .get();
+    let pointer = null;
     try {
-      await assertMediaLifecycleFenceInTransaction({ firestore, pointer: readPublicDeploymentPointer(deploymentSnapshot?.data()) });
+      pointer = readPublicDeploymentPointer(deploymentSnapshot?.data());
+      await assertMediaLifecycleFenceInTransaction({ firestore, pointer });
       uploadedMediaReady = true;
-    } catch {
+    } catch (error) {
+      if (pointer !== null && !(error instanceof PublicDeploymentFenceError)) throw error;
       // The per-asset assertion below returns the same public-content refusal
       // used by the static-build preflight without exposing pointer details.
     }

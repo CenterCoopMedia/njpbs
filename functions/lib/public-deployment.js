@@ -664,11 +664,11 @@ async function assertMediaLifecycleFenceInTransaction({ firestore, transaction =
   let pointer;
   try { pointer = assertPublicDeploymentPointer(value); } catch { throw new PublicDeploymentFenceError(); }
   const reserved = pointer.lastReservedGeneration - pointer.activeGeneration;
-  if (reserved === 0 || pointer.newestEligibleGeneration !== pointer.activeGeneration || reserved > 20) {
+  if (reserved === 0 || pointer.newestEligibleGeneration !== pointer.activeGeneration) {
     return assertMediaLifecycleDeploymentFence(pointer);
   }
   const query = firestore.collection("system/publicDeployment/buildBatches")
-    .where("generation", ">", pointer.activeGeneration).orderBy("generation").limit(reserved + 1);
+    .where("generation", ">", pointer.activeGeneration).orderBy("generation");
   const rows = (await (transaction ? transaction.get(query) : query.get())).docs;
   if (rows.length !== reserved || rows.some(row => !ENDED_RESERVATION_STATUSES.has(row.get("status")))) {
     throw new PublicDeploymentFenceError();

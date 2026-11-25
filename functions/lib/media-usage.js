@@ -13,6 +13,7 @@ const { mediaProjection } = require("./media-contract");
 const { isMediaAssetId } = require("./media-library");
 const { mediaReplacementRef } = require("./media-replacement");
 const { assertMediaLifecycleFenceInTransaction } = require("./public-deployment");
+const { PublicDeploymentFenceError } = require("./public-deployment-pointer");
 const {
   CMS_SETTINGS_SCHEMAS,
   CmsSettingsContractError,
@@ -425,6 +426,7 @@ async function prepareMediaUsageWrites({
       else await assertMediaLifecycleFenceInTransaction({ firestore, transaction, pointer: deploymentSnapshot?.data() });
     } catch (error) {
       if (releaseSelector !== undefined && !(error instanceof require("./public-release-pair").PublicReleaseProtocolError)) throw error;
+      if (releaseSelector === undefined && !(error instanceof PublicDeploymentFenceError)) throw error;
       throw new MediaUsageError(
         `Media asset ${uploadedPublishedAssetId} cannot be published until public deployment coordination is active.`,
         409,
