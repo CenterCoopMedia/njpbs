@@ -62,21 +62,28 @@ export async function checkSignedInPreview(browser, { admin, preview, credential
   let popup;
   let watchTab;
   const saw = {};
-  const notes = setInterval(() => note(`Still waiting: ${phase}, ${JSON.stringify(saw)}`), noteMs);
+  let shown;
+  const notes = setInterval(() => void describeWait(shown, { admin, preview }).then(state =>
+    note(`Still waiting: ${phase}, ${JSON.stringify({ ...saw, ...state })}`)), noteMs);
   notes.unref();
   try {
     const context = await browser.newContext({ serviceWorkers: "block", acceptDownloads: false });
     // Every wait below ends on what the browser, Admin or the preview reports; a long one prints and goes on.
     context.setDefaultTimeout(0);
     for (const [origin, headers] of access) await routePreviewSmokeAccess(context, origin, headers);
-    const page = await context.newPage();
+    const page = shown = await context.newPage();
+    watchPage(page);
     const entry = await (page.goto(`${admin}/`, { waitUntil: "domcontentloaded" }));
     if (entry?.status() !== 200 || new URL(page.url()).origin !== admin) throw new Error();
 
     phase = "staff_sign_in_failed";
     // The sign-in wait ends on the Account menu, or on the sign-in service's refusal.
     const refusedSignIn = refusal(page, /\/accounts:signInWithPassword$/);
-    await (submitCmsSignIn(page, async () => credential, () => Promise.race([refusedSignIn, page
+    // Admin refuses a signed-in account on a page of its own; nothing else follows that page.
+    const noAccess = page.getByText(noStaffAccess).first().waitFor({ state: "visible" })
+      .then(() => { throw new PreviewSmokeFailure("no_staff_access"); });
+    noAccess.catch(() => {});
+    await (submitCmsSignIn(page, async () => credential, () => Promise.race([refusedSignIn, noAccess, page
       .getByRole("button", { name: /^Account menu for / }).waitFor({ state: "visible" })])));
     if (new URL(page.url()).origin !== admin) throw new Error();
 
@@ -192,10 +199,50 @@ function refusal(page, path) {
   return refused;
 }
 
+const watched = new WeakMap();
+
+// What the page reported, for the notes: API paths with statuses, and the first line of each browser error.
+function watchPage(page) {
+  const seen = { auth: {}, replies: [], errors: [] };
+  watched.set(page, seen);
+  page.on("response", reply => {
+    try {
+      const { pathname } = new URL(reply.url());
+      const auth = pathname.match(/(accounts:(?:signInWithPassword|lookup)|registerStaffProfile)$/)?.[1];
+      if (auth) seen.auth[auth] = reply.status();
+      if (["xhr", "fetch"].includes(reply.request().resourceType())) seen.replies = [...seen.replies, `${pathname.split("/").at(-1)} ${reply.status()}`].slice(-6);
+    } catch { /* A reply without a readable address is not reported. */ }
+  });
+  const error = text => { seen.errors = [...seen.errors, publicLine(text)].slice(-4); };
+  page.on("console", message => { if (message.type() === "error") error(message.text()); });
+  page.on("pageerror", fault => error(fault?.message));
+}
+
+// Headings and alerts only; never a field value, an address query or a page snapshot.
+const publicLine = text => String(text ?? "").split("\n")[0].replace(/[^\s@]+@[^\s@]+/g, "[address]").replace(/\?\S+/g, "").slice(0, 160);
+async function describeWait(page, origins) {
+  if (!page) return {};
+  const read = async selector => {
+    try {
+      return await Promise.race([readCap(), page.locator(selector).evaluateAll(nodes =>
+        nodes.map(node => node.textContent?.trim()).filter(Boolean).slice(0, 3))]);
+    } catch { return null; } // The page went away or does not answer.
+  };
+  const [headings, alerts] = await Promise.all([read("h1, h2"), read("[role=alert]")]);
+  const visible = async locator => {
+    try { return await Promise.race([readCap(), locator().isVisible()]); } catch { return null; }
+  };
+  const password = await visible(() => page.getByLabel("Password", { exact: true }));
+  const accountMenu = await visible(() => page.getByRole("button", { name: /^Account menu for / }));
+  return { password, accountMenu, place: place(page.url(), origins), path: new URL(page.url()).pathname, headings: headings?.map(publicLine), alerts: alerts?.map(publicLine), ...watched.get(page) };
+}
+
 // A wait never fails on time: it prints what it waits for and goes on.
 export const WAIT_NOTE_MS = 60_000;
 // The errors that the editor shows when its record cannot load (ContentTab.tsx, EditorWorkspace.tsx).
 const editorUnavailable = /(?:do not have permission to edit this (?:page|record)\.|This page is no longer available\.|The (?:page|record) could not be loaded\. Reload to try again\.|Deleted records cannot be edited here\.)/;
+// The pages that Admin shows instead of the workspace (App.tsx).
+const noStaffAccess = /^(?:Verify your email|We couldn't open the CMS|This account cannot be used|Request staff access|Your request is waiting for an administrator|This request was not approved|This request expired|Your account is ready|Checking your access request|Account action failed)$/;
 // The reasons the editor gives for a disabled Preview button (EditorWorkspace.tsx), as receipt codes.
 const disabledReasons = new Map([
   ["Wait for a saved page to load before previewing.", "page_not_saved"],
