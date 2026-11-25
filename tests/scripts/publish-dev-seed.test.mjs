@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { ACTOR } from '../../scripts/seed-dev-published.mjs';
-import { contentTargets, publicationStep, publishContent, publishSettings, readJournal, refuseUnsafeEnvironment, settingsTargets } from '../../scripts/publish-dev-seed.mjs';
+import { awaitContent, contentTargets, publicationStep, publishContent, publishSettings, readJournal, refuseUnsafeEnvironment, settingsTargets } from '../../scripts/publish-dev-seed.mjs';
 
 // A fake Boardwalk with the replies the dev Functions give.
 function boardwalk({ documents = {}, settings = {} }) {
   const calls = [];
+  let contextRevision = 10;
   const call = async (endpoint, body) => {
     calls.push([endpoint, body]);
     const key = `${body.collection}/${body.id}`;
@@ -32,7 +33,7 @@ function boardwalk({ documents = {}, settings = {} }) {
     if (endpoint === 'cmsPublishSettings') {
       if (row.settings.version !== body.baseVersion || body.publicationTransport !== 'public-context-no-build-v1') return { status: 409, body: {} };
       row.settings.published = { values: row.settings.values, sourceVersion: row.settings.version };
-      row.publication = { status: 'success', missingConsumers: [] };
+      row.publication = { status: 'success', missingConsumers: [], contextRevision: ++contextRevision };
       return { status: 200, body: { success: true } };
     }
     throw new Error(`unexpected ${endpoint}`);
@@ -96,11 +97,56 @@ describe('publish-dev-seed', () => {
     const { call, calls } = boardwalk({ settings });
     const receipt = await publishSettings({ call, wait: async () => {}, targets: [
       { id: 'story-ctas', values: { rules: [] } }, { id: 'site-navigation', values: { items: [] } }, { id: 'public-site-chrome', values: { same: 1 } }] });
-    expect(receipt).toEqual({ status: 'success', missingConsumers: [] });
+    // Chrome is unchanged, so the newest receipt is the last one this run published.
+    expect(receipt).toEqual({ status: 'success', missingConsumers: [], contextRevision: 12 });
     expect(calls.filter(([endpoint]) => ['cmsSaveSettings', 'cmsPublishSettings'].includes(endpoint))).toEqual([
       ['cmsSaveSettings', { id: 'story-ctas', createOnly: true, values: { rules: [] } }],
       ['cmsPublishSettings', { id: 'story-ctas', baseVersion: 1, publicationTransport: 'public-context-no-build-v1' }],
       ['cmsSaveSettings', { id: 'site-navigation', baseVersion: 3, values: { items: [] } }],
       ['cmsPublishSettings', { id: 'site-navigation', baseVersion: 4, publicationTransport: 'public-context-no-build-v1' }]]);
+  });
+
+  it('awaits the newest receipt instead of the earlier receipt of an unchanged chrome', async () => {
+    const published = { values: { same: 1 }, version: 2, published: { values: { same: 1 } } };
+    const pending = { status: 'pending', missingConsumers: ['home'], contextRevision: 9 };
+    const settings = {
+      'site-navigation': { settings: published, publication: pending },
+      'public-site-chrome': { settings: published, publication: { status: 'success', missingConsumers: [], contextRevision: 3 } },
+    };
+    const { call } = boardwalk({ settings });
+    const unsettled = async (endpoint, body) => endpoint === 'cmsPublishSettings' ? { status: 200, body: { publication: pending } } : call(endpoint, body);
+    let time = 0;
+    const targets = [{ id: 'site-navigation', values: { same: 1 } }, { id: 'public-site-chrome', values: { same: 1 } }];
+    await expect(publishSettings({ call: unsettled, wait: async ms => { time += ms; }, now: () => time, targets }))
+      .rejects.toThrow('site-navigation receipt: pending missing home');
+    const receipt = await publishSettings({ call: unsettled, now: () => 0, targets, wait: async () => {
+      settings['site-navigation'].publication = { status: 'success', missingConsumers: [], contextRevision: 11 };
+    } });
+    expect(receipt).toMatchObject({ contextRevision: 11 });
+  });
+
+  it('waits for the own publication of every record, and stops on a failed one', async () => {
+    const replies = { 'cmsPosts/a': [{ publicUpdatePending: false, queueStatus: 'success' }],
+      'cmsPosts/b': [{ publicUpdatePending: true, queueStatus: 'pending' }, { publicUpdatePending: false, queueStatus: 'success' }],
+      // Late, and still pending in its receipt.
+      'cmsPosts/c': [{ publicUpdatePending: true, queueStatus: 'failed', recordPublication: { status: 'pending' } },
+        { publicUpdatePending: false, queueStatus: 'success', recordPublication: { status: 'success' } }] };
+    const reads = [];
+    const call = async (_endpoint, { collection, id, publicationOnly }) => {
+      expect(publicationOnly).toBe(true);
+      reads.push(id);
+      const list = replies[`${collection}/${id}`];
+      return { status: 200, body: { publication: list.length > 1 ? list.shift() : list[0] } };
+    };
+    const targets = ['a', 'b', 'c'].map(id => ({ collection: 'cmsPosts', id, kind: 'post' }));
+    await awaitContent({ targets, call, wait: async () => {} });
+    expect(reads).toEqual(['a', 'b', 'c', 'b', 'c']);
+    for (const failed of [{ queueStatus: 'failed' }, { queueStatus: 'failed', recordPublication: { status: 'failed' } }]) {
+      replies['cmsPosts/b'] = [{ publicUpdatePending: true, ...failed }];
+      await expect(awaitContent({ targets, call, wait: async () => {} })).rejects.toThrow('cmsPosts/b publication: failed');
+    }
+    replies['cmsPosts/b'] = [{ publicUpdatePending: true, queueStatus: 'pending' }];
+    let time = 0;
+    await expect(awaitContent({ targets, call, now: () => time, wait: async ms => { time += ms; } })).rejects.toThrow('1 publications did not settle: cmsPosts/b');
   });
 });

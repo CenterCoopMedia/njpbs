@@ -311,8 +311,10 @@ describe("publish queue orphan recovery", () => {
     ["no claimer left after legacy publication ended", { "cmsPublishQueue/row": { ...orphan, status: "pending" },
       "system/publicDeployment": { schemaVersion: 2 } }],
     ["no transport", { "cmsPublishQueue/row": { ...orphan, transport: null } }],
-  ])("recovers an orphaned row with %s and its content marker together", async (_label, documents) => {
-    expect(await reconcileRow(documents)).toBe(1);
+    ...["reserved", "pending"].map(status => [`a development dispatch that never happened (${status})`,
+      { "cmsPublishQueue/row": { ...orphan, status, transport: "github" } }, "development"]),
+  ])("recovers an orphaned row with %s and its content marker together", async (_label, documents, environment) => {
+    expect(await reconcileRow(documents, environment)).toBe(1);
     expect((await db.doc("cmsPublishQueue/row").get()).data()).toMatchObject({ status: "failed", error: STALE_PUBLISH_ERROR });
     expect((await db.doc("cmsPages/contact").get()).data()).toMatchObject({ publishBuildPending: true, publishBuildQueueId: null });
     const ended = (await db.doc("system/publicDeployment/buildBatches/cms-row").get()).data()?.status;
@@ -327,7 +329,9 @@ describe("publish queue orphan recovery", () => {
     ...["ready", "deploying", "reconciling"].map(status => [`a ${status} batch`, { "system/publicDeployment/buildBatches/cms-row": { ...batch, status } }]),
     ["the activating deployment", { "system/publicDeployment": { candidateBuildBatchId: "cms-row" } }],
     ["a transport with its own owner", { "cmsPublishQueue/row": { ...orphan, transport: "library-card-no-build-v1" } }],
-    ["its development workflow run", { "cmsPublishQueue/row": { ...orphan, transport: "github" } }, "development"],
+    ["its dispatched development run", { "cmsPublishQueue/row": { ...orphan, transport: "github" } }, "development"],
+    ["the development run that reserved its batch", { "cmsPublishQueue/row": { ...orphan, status: "pending", transport: "github" },
+      "system/publicDeployment/buildBatches/cms-row": batch }, "development"],
   ])("leaves a row that %s still owns", async (_label, documents, environment) => {
     expect(await reconcileRow(documents, environment)).toBe(0);
     expect((await db.doc("cmsPublishQueue/row").get()).data()).toMatchObject({ error: null });

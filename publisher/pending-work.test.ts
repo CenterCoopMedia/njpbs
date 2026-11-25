@@ -537,13 +537,17 @@ it.each(["pending", "failed"])("wakes a retained %s release after its fifth atte
     if (name === "system/publicDeployment/noBuildPostOwners") return json({});
     return docs[name] ? json({ fields: firestoreFields(docs[name]) }) : absent();
   }) as typeof fetch;
-  expect(await readNoBuildPublicationWork(options, request)).toMatchObject({ needsRuntime: false, healthy: true });
+  const stalled = { healthy: false, diagnostics: { reasons: ["release_stalled"] } };
+  expect(await readNoBuildPublicationWork(options, request)).toMatchObject({ needsRuntime: false,
+    ...(status === "failed" ? stalled : { healthy: true }) });
   vi.spyOn(Date, "now").mockReturnValue(1001);
-  expect(await readNoBuildPublicationWork(options, request)).toMatchObject({ needsRuntime: true, healthy: true });
+  expect(await readNoBuildPublicationWork(options, request)).toMatchObject({ needsRuntime: true, ...stalled });
   const path = `cmsPublicationSerializerJournals/${SERIALIZER_ID}/releases/${QUEUE_ID}`;
   // A failed release the removed attempt limit parked is due while it holds the journal.
   docs[path] = { ...docs[path], status: "failed", attempts: 4, nextAttemptAt: null };
-  expect(await readNoBuildPublicationWork(options, request)).toMatchObject({ needsRuntime: true, healthy: true });
+  expect(await readNoBuildPublicationWork(options, request)).toMatchObject({ needsRuntime: true, ...stalled });
+  docs[path] = { ...docs[path], attempts: 3, nextAttemptAt: 1002 };
+  expect(await readNoBuildPublicationWork(options, request)).toMatchObject({ needsRuntime: false, healthy: true, diagnostics: { reasons: [] } });
   const valid = { ...docs[path], status: "failed", attempts: 1, nextAttemptAt: 1002 };
   for (const invalid of [null, { ...valid, attempts: "1" }, { runtime: cloudRuntime, status: "failed", attempts: 1 },
     { ...valid, status: "pending", nextAttemptAt: null }, { ...valid, runtime: { owner: "node-compute", release: COMMIT_SHA } }]) {

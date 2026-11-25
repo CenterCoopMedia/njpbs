@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { SOURCE, DESTINATION, ACTOR, assertPair, canonical, digest, exportPublished, validateManifest, copyMedia, importPublished, verifyPublished, assertPublicMediaUrl } from '../../scripts/seed-dev-published.mjs';
+import { SOURCE, DESTINATION, ACTOR, assertPair, canonical, digest, exportPublished, validateManifest, copyMedia, importPublished, verifyPublished, assertPublicMediaUrl, publicVideoCopies } from '../../scripts/seed-dev-published.mjs';
 import { electionBlock, electionRace } from '../fixtures/election-results.ts';
 import mediaContract from '../../functions/lib/media-contract.js';
 import mediaSafety from '../../functions/lib/published-media-safety.js';
@@ -679,6 +679,25 @@ describe('isolated published-content seed', () => {
     await importPublished({ firestore: dev, manifest, apply: true });
     expect((await video.get()).data()).toMatchObject({ revoked: true, publicGeneration: 7 });
     expect((await verifyPublished({ firestore: dev, manifest })).verified).toBe(true);
+  });
+  it('seeds the newest public copy when two published snapshots name different versions of one video', async () => {
+    const copyOf = (version, title) => [{ id: 'video', type: 'video', order: 0, visible: true, data: { sourceId: 'video-library',
+      assetId: 'video-one', title, public: { url: `https://media.njpbs.org/cms-media/video/video-one/${version.repeat(64)}.mp4`,
+        posterUrl: `https://media.njpbs.org/cms-media/video/video-one/${version.repeat(64)}.jpg`, mimeType: 'video/mp4', width: 640, height: 360 } } }];
+    await source.doc('cmsPages/contact').update({ 'published.blocks': copyOf('a', 'Published video') });
+    const manifest = await exportSeed();
+    const page = manifest.records.find(record => record.collection === 'cmsPages' && record.id === 'contact');
+    // The same asset as published one hour later, from the version that replaced it.
+    for (const [offset, winner] of [[3_600_000, 'b'], [-3_600_000, 'a']]) {
+      const other = structuredClone(page);
+      Object.assign(other, { id: 'about' });
+      other.projection = { ...other.projection, blocks: copyOf('b', 'Published video'),
+        publishedAt: new Date(Date.parse(page.projection.publishedAt) + offset).toISOString() };
+      for (const records of [[page, other], [other, page]]) {
+        expect(publicVideoCopies(records)).toEqual([{ path: 'cmsPublicVideos/video-one',
+          data: { schemaVersion: 1, media: copyOf(winner, '')[0].data.public } }]);
+      }
+    }
   });
   it('refuses every other project pair and mismatched clients before any writes', async () => {
     for (const pair of [[DESTINATION, SOURCE], [SOURCE, SOURCE], ['other', DESTINATION], [SOURCE, 'other']]) expect(() => assertPair(...pair)).toThrow();

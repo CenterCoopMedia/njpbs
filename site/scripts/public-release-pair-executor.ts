@@ -228,7 +228,7 @@ export function createPublicReleasePairExecutor({ firestore, store, pair: rawPai
       (async () => {
         const started = performance.now();
         try { await verifyPublicReleasePairRenderer(compiled, pair); }
-        catch { throw new work.PairExecutionError("byte-mismatch"); }
+        catch (error) { work.rethrowPairTransport(error); throw new work.PairExecutionError("byte-mismatch"); }
         finally { timings.compiledVerificationMs = performance.now() - started; }
       })(),
     ] as const);

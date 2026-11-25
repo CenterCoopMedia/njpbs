@@ -17,8 +17,8 @@ import type { PairPreviewContextOutput } from "../../site/scripts/public-release
 
 // This tests the real executor/input/output/settlement path. Only the child
 // renderer transport is a fixture; native SSR parity has its existing suite.
-const child = vi.hoisted(() => ({ directory: "", body: new Uint8Array() }));
-vi.mock("../../site/scripts/public-release-pair-renderer-release.mjs", () => ({ verifyPublicReleasePairRenderer: async () => {} }));
+const child = vi.hoisted(() => ({ directory: "", body: new Uint8Array(), verifyRenderer: async () => {} }));
+vi.mock("../../site/scripts/public-release-pair-renderer-release.mjs", () => ({ verifyPublicReleasePairRenderer: () => child.verifyRenderer() }));
 vi.mock("../../site/scripts/process-cms-preview", () => ({ privatePreviewSandbox: async (_env: unknown, directory: string) => {
   child.directory = directory; return { args: ["fixture"] };
 } }));
@@ -32,7 +32,7 @@ vi.mock("node:child_process", async importOriginal => ({ ...await importOriginal
 const encode = (value: unknown) => new TextEncoder().encode(JSON.stringify(value));
 const sha = (value: Uint8Array) => createHash("sha256").update(value).digest("hex");
 let sequence = 0;
-it.each(["reject", "pending", "missing-census"])("real executor completes and stages while optional output is %s", async outcome => {
+it.each(["reject", "pending", "missing-census", "pending after a renderer read without a free handle"])("real executor completes and stages while optional output is %s", async outcome => {
   const firestore = isolatedFirestore(`editorial-executor-${++sequence}`), pair = releasePair("b"), base = work.publicReleasePairPath(pair.pairId);
   await firestore.doc("system/publicDeployment").set(deployment.initialPublicDeploymentPointer());
   await work.registerPublicReleasePair({ firestore, pair });
@@ -67,7 +67,16 @@ it.each(["reject", "pending", "missing-census"])("real executor completes and st
   const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
   try {
     const operations = createPublicReleasePairExecutor({ firestore, store, pair, previewContextOutput: output });
-    expect(await runPublicReleasePairWorkOnce({ firestore, pair, ...operations })).toBe("complete");
+    let clock = Date.now;
+    if (outcome.includes("without a free handle")) {
+      child.verifyRenderer = async () => { throw Object.assign(new Error("EMFILE: too many open files"), { code: "EMFILE" }); };
+      expect(await runPublicReleasePairWorkOnce({ firestore, pair, ...operations })).toBe("retry-recorded");
+      child.verifyRenderer = async () => {};
+      const waiting = (await firestore.doc(`${base}/work/${taskId}`).get()).data()!;
+      expect(waiting.nextAttemptAt).toEqual(expect.any(Number));
+      clock = () => Math.max(Date.now(), waiting.nextAttemptAt);
+    }
+    expect(await runPublicReleasePairWorkOnce({ firestore, pair, ...operations, clock })).toBe("complete");
     const receipt = (await firestore.doc(`${base}/receipts/${taskId}`).get()).data()!;
     expect(receipt.manifestDigest).toMatch(/^[a-f0-9]{64}$/);
     expect((await firestore.doc(`${base}/views/${receipt.manifestDigest}`).get()).exists).toBe(true);

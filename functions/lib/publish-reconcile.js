@@ -38,10 +38,13 @@ function isLegacyRow(queue, cutoff) {
     triggeredAt !== null && triggeredAt <= cutoff;
 }
 
-// GitHub dispatch exists only for development (cms-publish-dispatch.js). Its
-// workflow run owns a dispatched row and writes the terminal status.
-const ownedByDevelopmentRun = (queue) => queue.transport === "github" &&
-  process.env.CMS_DEPLOYMENT_ENVIRONMENT === "development";
+// GitHub dispatch exists only for development (cms-publish-dispatch.js). The
+// workflow run owns a row that its accepted dispatch marked publishing, or whose
+// batch it reserved, and writes the terminal status. The transport alone is no
+// owner: a request that ended before its dispatch leaves a row no run will take.
+const ownedByDevelopmentRun = (queue, batch) => queue.transport === "github" &&
+  process.env.CMS_DEPLOYMENT_ENVIRONMENT === "development" &&
+  (queue.status === "publishing" || batch?.status === "reserved");
 
 // A pending serializer row is durable before any journal, batch or candidate,
 // and a paused serializer can still claim it. Only the recorded end of the
@@ -54,15 +57,16 @@ async function serializerCanClaim({ firestore, transaction, queue }) {
 }
 
 /** Whether the exact records of this row still name an owner: a serializer
- * journal job, an uploaded candidate, or a batch that is being activated. */
-async function hasPublicationOwner({ firestore, transaction, queueId }) {
+ * journal job, a development run, an uploaded candidate, or a batch that is
+ * being activated. */
+async function hasPublicationOwner({ firestore, transaction, queueId, queue }) {
   const batchRef = firestore.doc(`system/publicDeployment/buildBatches/cms-${queueId}`);
   const [batch, candidate, pointer] = await transaction.getAll(batchRef,
     batchRef.collection("candidates").doc("worker"), firestore.doc("system/publicDeployment"));
   const job = await transaction.get(firestore.collection("cmsPublicationSerializerJournals")
     .where("job.queueId", "==", queueId).limit(1));
   const status = batch.data()?.status;
-  return !job.empty || OWNED_BATCH_STATUSES.has(status) || status === "reserved" && candidate.exists ||
+  return !job.empty || ownedByDevelopmentRun(queue, batch.data()) || OWNED_BATCH_STATUSES.has(status) || status === "reserved" && candidate.exists ||
     pointer.data()?.candidateBuildBatchId === `cms-${queueId}`;
 }
 
@@ -86,12 +90,12 @@ async function reconcileStalePublishRows({ firestore, now = () => Date.now() }) 
     for (const candidate of candidates.docs) {
       // A transport not-in query would omit legacy jobs with no transport.
       // Page past protected owners so they cannot hide later orphans.
-      if (!isLegacyRow(candidate.data(), cutoff) || ownedByDevelopmentRun(candidate.data())) continue;
+      if (!isLegacyRow(candidate.data(), cutoff)) continue;
       const result = await firestore.runTransaction(async (transaction) => {
         const queue = (await transaction.get(candidate.ref)).data();
-        if (!isLegacyRow(queue, cutoff) || ownedByDevelopmentRun(queue) ||
+        if (!isLegacyRow(queue, cutoff) ||
             await serializerCanClaim({ firestore, transaction, queue }) ||
-            await hasPublicationOwner({ firestore, transaction, queueId: candidate.id })) return false;
+            await hasPublicationOwner({ firestore, transaction, queueId: candidate.id, queue })) return false;
         return settleBuildQueueInTransaction(firestore, transaction, {
           queueId: candidate.id,
           status: "failed",
