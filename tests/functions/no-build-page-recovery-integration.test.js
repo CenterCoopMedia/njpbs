@@ -901,12 +901,16 @@ it.each(["context", "provider-refresh"])("confirms every settings alias behind a
   }
   await batch.commit();
   expect(await publicContext.settlePublicContext({ firestore, operationId: anonymousId, runtime })).toBe(true);
-  await recovery.recoverNoBuildPageDetail({ firestore, target, headers, currentCodeRequest: scheduleFixture.request,
-    fetchPublic: settingsPublicFetch(home) });
-  for (const identity of identities) {
-    const queue = (await firestore.doc(`cmsPublishQueue/${identity.operationId}`).get()).data();
-    expect(settingsOwner.settingsPublicationReceipt(queue)).toMatchObject({ status: "success", missingConsumers: [] });
+  // The Worker answers refresh pending when its own read budget passes, which a
+  // slow host can cause. Each wake reads a route once; the next wake reads again.
+  const readReceipts = () => Promise.all(identities.map(async identity => settingsOwner.settingsPublicationReceipt(
+    (await firestore.doc(`cmsPublishQueue/${identity.operationId}`).get()).data())));
+  for (let wake = 0, pending = true; pending && wake < 4; wake++) {
+    await recovery.recoverNoBuildPageDetail({ firestore, target, headers, currentCodeRequest: scheduleFixture.request,
+      fetchPublic: settingsPublicFetch(home), now: () => Date.now() + wake * 61_000 });
+    pending = (await readReceipts()).some(receipt => receipt.status === "pending");
   }
+  for (const receipt of await readReceipts()) expect(receipt).toMatchObject({ status: "success", missingConsumers: [] });
   expect((await firestore.doc(publicContext.CURRENT_PATH).get()).data().operationIds).toEqual([anonymousId]);
 });
 
