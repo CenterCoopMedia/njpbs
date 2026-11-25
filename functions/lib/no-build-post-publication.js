@@ -346,26 +346,31 @@ async function readNoBuildPostDecisionInTransaction({ firestore, transaction, pa
     .readPublicContextBackgroundInTransaction({ firestore, transaction, path, rendererSha });
   if (contextBackground) return contextBackground;
   if (background === VIDEO_CATALOG_OUTPUT) return { kind: "pass" };
+  const readLease = async () => {
+    const pointer = require("./public-deployment-pointer").readPublicDeploymentPointer(
+      (await transaction.get(firestore.doc("system/publicDeployment"))).data());
+    const candidate = pointer.state !== "idle" && rendererSha === pointer.candidateCommitSha ?
+      (await transaction.get(firestore.doc(`system/publicDeployment/buildBatches/${pointer.candidateBuildBatchId}/candidates/worker`))).data() : null;
+    return { pointer, candidate };
+  };
+  // The artifact probe asks only for the exact candidate lease. Lease
+  // acquisition and settlement each qualify every Post owner in their own
+  // transaction; reading every owner here too outlasts the Worker's reader
+  // limit (476 reads for 183 Posts), so the probe would never answer.
+  if (receipts && probe) {
+    const { pointer, candidate } = await readLease();
+    if (pointer.state === "idle" || pointer.candidateBuildBatchId !== probe.buildBatchId ||
+        candidate?.workerVersionId !== probe.versionId || candidate.commitSha !== rendererSha) refuse();
+    return { kind: "baseline-probe" };
+  }
   const malformedOwners = [];
   const owners = (slug ? await findNoBuildPostOwnersForSlug({ firestore, transaction, slug })
     : await listNoBuildPostOwners({ firestore, transaction,
-      onMalformedOwner: probe ? undefined : owner => malformedOwners.push(owner) })).filter(owner => owner.state.operationId);
-  // A first renderer activation has no Post owners yet. Its artifact probe
-  // still requires the exact candidate lease before Assets can answer it.
-  if (!owners.length && !malformedOwners.length && !(receipts && probe)) return { kind: "pass" };
-  if (slug && owners.length !== 1) refuse("Two Posts claim the same public route.");
-  const readPointer = require("./public-deployment-pointer").readPublicDeploymentPointer;
-  const pointer = readPointer((await transaction.get(firestore.doc("system/publicDeployment"))).data());
-  const capability = await readNoBuildPostCapability({ firestore, transaction });
-  const candidate = pointer.state !== "idle" && rendererSha === pointer.candidateCommitSha ?
-    (await transaction.get(firestore.doc(`system/publicDeployment/buildBatches/${pointer.candidateBuildBatchId}/candidates/worker`))).data() : null;
-  if (receipts && probe) {
-    if (pointer.state === "idle" || pointer.candidateBuildBatchId !== probe.buildBatchId ||
-        candidate?.workerVersionId !== probe.versionId || candidate.commitSha !== rendererSha) refuse();
-    await assertNoBuildCandidateInTransaction({ firestore, transaction, candidate });
-    return { kind: "baseline-probe" };
-  }
+      onMalformedOwner: owner => malformedOwners.push(owner) })).filter(owner => owner.state.operationId);
   if (!owners.length && !malformedOwners.length) return { kind: "pass" };
+  if (slug && owners.length !== 1) refuse("Two Posts claim the same public route.");
+  const { pointer, candidate } = await readLease();
+  const capability = await readNoBuildPostCapability({ firestore, transaction });
   if (background === "home") {
     if (!malformedOwners.length && owners.every(owner => owner.state.mode === "static")) return { kind: "pass" };
     const homeState = (await transaction.get(firestore.doc("cmsBackgroundOutputs/home"))).data();
@@ -486,7 +491,7 @@ async function assertNoBuildCandidateInTransaction({ firestore, transaction, can
   if (candidate.noBuildStatic && !staticOwner) refuse();
   let staticReturn;
   // Every active owner must qualify before the candidate can take the public
-  // pointer, and the probe must answer inside the Worker's authority deadline.
+  // pointer.
   // Overlap independent owner reads in this same transaction without issuing
   // an unbounded burst as the owner set grows. Settle each batch in owner
   // order so the first refusal is the same one a serial pass would raise.
