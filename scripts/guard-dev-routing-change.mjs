@@ -177,10 +177,10 @@ export async function guardDevRoutingChange({ plan, receiptPath, apply = false, 
       try {
         await restoreReadback(firstRestore);
         firstRestore = false;
-      } catch {
+      } catch (error) {
         if (now() >= recoveryDeadline) {
           log('RESTORE FAILED: Keep writers held; restore from the private receipt now');
-          throw new GuardError('Dev change failed and restoration is unverified', kindCause(cause));
+          throw new GuardError(`Dev change failed (${faultKind(cause)}) and restoration is unverified`, kindCause(error));
         }
         log('Restore request failed; retrying within the recovery window');
         await wait(Math.min(intervalMs, recoveryDeadline - now()));
@@ -188,7 +188,7 @@ export async function guardDevRoutingChange({ plan, receiptPath, apply = false, 
       }
       try {
         await prove(null);
-      } catch {
+      } catch (error) {
         record('restored proof failed');
         // The original PUT may have committed between readback and HTTP.
         // Reapply the saved value before the next proof, including at the bound.
@@ -196,12 +196,12 @@ export async function guardDevRoutingChange({ plan, receiptPath, apply = false, 
         if (now() >= recoveryDeadline) {
           try {
             await restoreReadback(true);
-          } catch {
+          } catch (error) {
             log('RESTORE FAILED: Keep writers held; restore from the private receipt now');
-            throw new GuardError('Dev change failed and restoration is unverified', kindCause(cause));
+            throw new GuardError(`Dev change failed (${faultKind(cause)}) and restoration is unverified`, kindCause(error));
           }
           log('RESTORED BUT PROOF FAILED: Keep writers held; escalate the dev access failure');
-          throw new GuardError('Dev record restored but HTTP verification failed', kindCause(cause));
+          throw new GuardError(`Dev change failed (${faultKind(cause)}); record restored but HTTP verification failed`, kindCause(error));
         }
         log('Restored record proof failed; recovery remains active');
         await wait(Math.min(intervalMs, recoveryDeadline - now()));
@@ -213,7 +213,7 @@ export async function guardDevRoutingChange({ plan, receiptPath, apply = false, 
     } while (true);
     log('Previous dev record restored');
     record('restored');
-    throw new GuardError('Dev change failed; previous record restored');
+    throw new GuardError('Dev change failed; previous record restored', kindCause(cause));
   }
 }
 
