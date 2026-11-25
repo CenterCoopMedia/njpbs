@@ -175,7 +175,9 @@ test("requires staff session, first private document response and fixture headin
 test("ends on a refused sign-in and an editor that cannot load its record", async () => {
   const settings = previewSmokeSettings("production", env);
   assert.deepEqual(await checkSignedInPreview(fixtureBrowser(settings, { signInStatus: 400 }), settings), { ok: false, code: "staff_sign_in_failed" });
-  assert.deepEqual(await checkSignedInPreview(fixtureBrowser(settings, { editorError: "You do not have permission to edit this record." }), settings), { ok: false, code: "editor_unavailable" });
+  for (const editorError of ["You do not have permission to edit this record.", "Deleted records cannot be edited here."]) {
+    assert.deepEqual(await checkSignedInPreview(fixtureBrowser(settings, { editorError }), settings), { ok: false, code: "editor_unavailable" });
+  }
 });
 
 test("names the missing wait and where the preview tab settled", async () => {

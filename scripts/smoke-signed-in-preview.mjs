@@ -209,8 +209,8 @@ export const STAGE_HANG_BACKSTOP_MS = 5 * 60_000;
 // PREVIEW_BUILD_TIMEOUT_MS (45 min), and an older job can hold the requested one for the same
 // time first; 95 min is two of those limits and 5 min for Admin to show the result.
 export const PREVIEW_HANG_BACKSTOP_MS = 95 * 60_000;
-// The errors that the editor shows when its record cannot load (ContentTab.tsx).
-const editorUnavailable = /(?:do not have permission to edit this (?:page|record)\.|This page is no longer available\.|The (?:page|record) could not be loaded\. Reload to try again\.)/;
+// The errors that the editor shows when its record cannot load (ContentTab.tsx, EditorWorkspace.tsx).
+const editorUnavailable = /(?:do not have permission to edit this (?:page|record)\.|This page is no longer available\.|The (?:page|record) could not be loaded\. Reload to try again\.|Deleted records cannot be edited here\.)/;
 // The errors that Admin's Preview action shows in the editor when it stops (SavedPreview.tsx).
 const editorStop = /(?:Allow pop-ups for this CMS|Preview could not open\.|Preview is temporarily unavailable\.|The preview service is updating\.|Previews are refreshing after a recent publish\.|Private preview access is taking longer)/;
 const jobStatuses = new Set(["pending", "building", "ready", "failed", "expired"]);
