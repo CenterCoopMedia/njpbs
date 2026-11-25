@@ -75,7 +75,7 @@ gives it back. It reads Cloudflare twice, 30 seconds apart: the active
 deployment must be the lease predecessor, with no deployment after the lease.
 It refuses another release's lease, a lease younger than 10 minutes, and a lease
 whose publisher container still runs. If it cannot read the containers, it says
-so and waits until the lease is 31 minutes old. Without `--apply` it only reads.
+so and refuses `--apply`. Without `--apply` it only reads.
 With `--apply` the pointer is idle on the predecessor, the batch is ready and
 the release request is due, so the publisher takes a new lease and writes once.
 It needs `CLOUDFLARE_ACCOUNT_ID` and a token with Workers Scripts read and

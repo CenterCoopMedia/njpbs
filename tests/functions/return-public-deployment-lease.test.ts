@@ -162,16 +162,21 @@ describe("return of a deployment lease with no deployment write", () => {
       new RegExp(`540 seconds old. This may run at ${new Date(leaseAt + 10 * MINUTE).toISOString()}`));
   });
 
-  it("refuses while the container that took the lease runs, and waits for the write limit when it cannot tell", async () => {
+  it("refuses while the container that took the lease runs or cannot be read", async () => {
     const { leaseAt } = await heldLease();
     const list = [deployment(PREDECESSOR, leaseAt - MINUTE)];
-    const instance = (at: number) => ({ id: "one", created_at: new Date(at).toISOString() });
-    await refuses(() => run(cloudflare([list, list], [instance(leaseAt + MINUTE), instance(leaseAt - MINUTE)]), leaseAt, { now: () => leaseAt + 60 * MINUTE }),
-      /can still hold the write/);
+    const instance = (at: number, status?: string) => ({ id: "one", created_at: new Date(at).toISOString(),
+      ...(status ? { current_placement: { status: { container_status: status } } } : {}) });
+    const later = { now: () => leaseAt + 120 * MINUTE };
+    for (const status of [undefined, "running", "stopping"]) {
+      await refuses(() => run(cloudflare([list, list], [instance(leaseAt + MINUTE), instance(leaseAt - MINUTE, status)]), leaseAt, later), /can still hold the write/);
+    }
     const denied = new Error("The Cloudflare API returned HTTP 403");
-    await refuses(() => run(cloudflare([list, list], denied), leaseAt, { now: () => leaseAt + 30 * MINUTE }), /cannot tell which container.*HTTP 403/);
-    expect((await run(cloudflare([list, list], denied), leaseAt, { now: () => leaseAt + 31 * MINUTE, apply: false })).result.container).toBe("unknown");
-    expect((await run(cloudflare([list, list], [instance(leaseAt + MINUTE)]), leaseAt)).result.container).toBe("gone");
+    await refuses(() => run(cloudflare([list, list], denied), leaseAt, later), /cannot tell whether the container.*HTTP 403/);
+    expect((await run(cloudflare([list, list], denied), leaseAt, { ...later, apply: false })).result.container).toBe("unknown");
+    for (const gone of [instance(leaseAt + MINUTE, "running"), instance(leaseAt - MINUTE, "stopped"), instance(leaseAt - MINUTE, "failed")]) {
+      expect((await run(cloudflare([list, list], [gone]), leaseAt, { apply: false })).result.container).toBe("gone");
+    }
   });
 
   it("refuses when the request or the publisher journal names other work", async () => {

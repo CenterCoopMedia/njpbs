@@ -34,9 +34,6 @@ const { parseCloudflareToken } = require("../../scripts/bootstrap-public-deploym
 // Measured November 25, 2026: the longest time from a release claim to its
 // deployment lease was 71 seconds, and the write follows the lease.
 const MINIMUM_LEASE_AGE_MS = 10 * 60_000;
-// Without a container read, the write itself is the limit: one attempt ends
-// after 30 minutes (LONGEST_ATTEMPT_MS in activate-public-worker-candidate.ts).
-const UNKNOWN_CONTAINER_LEASE_AGE_MS = 31 * 60_000;
 const PAUSE_BETWEEN_READS_MS = 30_000;
 
 type RequestJson = typeof requestCloudflareJson;
@@ -63,7 +60,11 @@ async function readPublisherContainer(get: (suffix: string) => Promise<unknown>,
     const listed = await result(`/containers/dash/applications/${matches[0].id}/instances?per_page=100`) as { instances?: unknown } | undefined;
     const instances = rows(listed?.instances);
     if (!instances || instances.length >= 100) return { state: "unknown", detail: "the publisher instance list is invalid" };
-    const started = instances.map(row => Date.parse(String(row.created_at)));
+    // A stopped or failed placement has no process. Every other state can have one.
+    const started = instances.filter(row => {
+      const status = (row.current_placement as { status?: { container_status?: unknown; health?: unknown } } | undefined)?.status;
+      return !["stopped", "failed"].includes(String(status?.container_status ?? status?.health));
+    }).map(row => Date.parse(String(row.created_at)));
     if (started.some(time => !Number.isFinite(time))) return { state: "unknown", detail: "a publisher instance has no start time" };
     if (!started.length) return { state: "gone", detail: "no publisher container runs" };
     const oldest = Math.min(...started);
@@ -151,12 +152,11 @@ export async function returnPublicDeploymentLease({ firestore, cloudflareApiToke
   const container = await readPublisherContainer(get, target, leaseAt);
   report({ check: "publisher container", ...container });
   if (container.state === "current") refuse(`The container that took the lease can still hold the write: ${container.detail}. Stop the publisher container, then run this again`);
-  const minimum = container.state === "gone" ? MINIMUM_LEASE_AGE_MS : UNKNOWN_CONTAINER_LEASE_AGE_MS;
-  const age = now() - leaseAt;
-  if (age < minimum) {
-    refuse(`The lease is ${Math.floor(age / 1000)} seconds old. This may run at ${iso(leaseAt + minimum)}` +
-      (container.state === "unknown" ? `: it cannot tell which container took the lease (${container.detail})` : ""));
+  if (apply && container.state === "unknown") {
+    refuse(`It cannot tell whether the container that took the lease can still hold the write: ${container.detail}. Supply a token with Containers read`);
   }
+  const age = now() - leaseAt;
+  if (age < MINIMUM_LEASE_AGE_MS) refuse(`The lease is ${Math.floor(age / 1000)} seconds old. This may run at ${iso(leaseAt + MINIMUM_LEASE_AGE_MS)}`);
   const read = () => readDeployments(get, target.workerName, state.lease.predecessorDeploymentId, leaseAt, now);
   const first = await read();
   report({ check: "first deployment read", ...first });
