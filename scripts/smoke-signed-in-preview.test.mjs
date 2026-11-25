@@ -214,6 +214,13 @@ test("names the missing wait and where the preview tab settled", async () => {
     ok: false, code: "preview_session_failed", missing: ["document"],
     session: { failed: "net::ERR_HTTP2_PROTOCOL_ERROR" }, job: null, document: null, popup: { place: "about:blank", progress: "session-slow" },
   });
+  // Admin aborts its session request after the preview operation fails; the preview error wins.
+  assert.deepEqual(await check({ sessionFailure: "net::ERR_ABORTED", noDocument: true, progress: "error",
+    job: { status: "failed", error: timeoutText } }), {
+    ok: false, code: "preview_admin_stopped", missing: ["document"],
+    session: { failed: "net::ERR_ABORTED" }, job: { status: "failed", error: "preview_build_timeout" }, document: null,
+    popup: { place: "about:blank", progress: "error" },
+  });
   // A refused session fails at once; the receipt waits for Admin's sign-in handoff.
   assert.deepEqual(await check({ sessionStatus: 401, noDocument: true, later: { url: `${settings.admin}/?staffSite=x` } }), {
     ok: false, code: "preview_session_failed", missing: ["document"],

@@ -102,10 +102,15 @@ export async function checkSignedInPreview(browser, { admin, preview, credential
     let stop;
     const stopped = new Promise((_, reject) => { stop = code => reject(new PreviewSmokeFailure(code)); });
     stopped.catch(() => {});
+    const opened = context.waitForEvent("page");
+    opened.catch(() => {});
     page.on("requestfailed", request => {
       if (!isSession(request) || saw.session) return;
       saw.session = { failed: failureName(request.failure()?.errorText) };
-      stop("preview_session_failed");
+      // Admin aborts its own session request after the preview operation fails. It shows the preview
+      // error first, so that error wins and this failure stays in the receipt as its consequence.
+      void Promise.race([opened.then(readProgress), readCap()]).then(state =>
+        stop(previewErrorStates.has(state) ? "preview_admin_stopped" : "preview_session_failed"));
     });
     // The receipt keeps the last job status and error code from Admin's own replies.
     page.on("response", reply => void readJob(reply, saw));
@@ -113,7 +118,7 @@ export async function checkSignedInPreview(browser, { admin, preview, credential
       .then(() => stop("preview_admin_stopped"), () => {});
     hang.limit(previewMs);
     const [, , document] = await hang.over(Promise.race([stopped, Promise.all([
-      context.waitForEvent("page").then(value => {
+      opened.then(value => {
         popup = value; saw.popup = true;
         value.on("close", () => stop("preview_tab_closed"));
         value.on("crash", () => stop("preview_tab_closed"));
@@ -232,6 +237,9 @@ async function readJob(reply, saw) {
 const readProgress = tab => tab.locator("main.cms-preview-progress").evaluateAll(nodes =>
   nodes[0]?.getAttribute("data-progress") ?? nodes[0]?.getAttribute("data-state") ?? null).catch(() => null);
 
+// Caps a progress read of a page that does not answer; diagnostic reads only.
+const readCap = () => new Promise(resolve => setTimeout(resolve, 1_000, null).unref());
+
 // Admin's terminal progress states mean it stopped without opening the preview.
 function watchAdminStop(tab, onStop) {
   const timer = setInterval(() => void readProgress(tab).then(state => {
@@ -260,6 +268,8 @@ function failureName(text) {
 const progressStates = new Set(["preparing", "requesting", "waiting", "pending", "building", "refreshing",
   "refresh-failed", "opening", "error", "session-slow", "updating"]);
 const settledStates = new Set(["refresh-failed", "error", "session-slow", "updating"]);
+// The preview operation's own errors; session-slow reports the session request.
+const previewErrorStates = new Set(["refresh-failed", "error", "updating"]);
 
 // A fast session failure can arrive before Admin moves the tab, so give it up to 5 s to settle.
 // Coordinator ruling (Nov. 24, 2026): the tab can still show an earlier state after a refused
@@ -269,8 +279,7 @@ async function describePopup(popup, origins) {
   const deadline = Date.now() + 5_000;
   for (;;) {
     const where = place(popup.url(), origins);
-    const state = where !== "about:blank" ? null : await Promise.race([readProgress(popup),
-      new Promise(resolve => setTimeout(resolve, 1_000, null))]);
+    const state = where !== "about:blank" ? null : await Promise.race([readProgress(popup), readCap()]);
     const progress = progressStates.has(state) ? state : null;
     if (where !== "about:blank" || settledStates.has(progress) || Date.now() >= deadline) return { place: where, progress };
     await new Promise(resolve => setTimeout(resolve, 250));
