@@ -22,11 +22,13 @@ const hash = protocol.publicReleaseDigest, same = (a: unknown, b: unknown) => ha
 function refuse(): never { throw new protocol.PublicReleaseProtocolError(); }
 /** Refusals that other release work can still change: release state moved, the
  * capture outbox row is not written yet, or the source moved under the census. */
-const waitingEvidence = (error: any) => error instanceof protocol.PublicReleaseProtocolError || error?.name === "PublicReleaseProtocolError" ||
+const waitingEvidence = (error: unknown) => error instanceof protocol.PublicReleaseProtocolError ||
+  error instanceof Error && error.name === "PublicReleaseProtocolError" ||
   error instanceof HistoricalInputError && error.code === "historical-capture-outbox-missing" ||
   error instanceof PairSourceCensusError && error.code === "source-census-mismatch";
 /** Codes and digests only; a message can hold private input. */
-function named(final: boolean, operationId: string, error: any) {
+function named(final: boolean, operationId: string, failure: unknown) {
+  const error = failure as { name?: unknown; code?: unknown; digests?: object } | null | undefined;
   const cause = [error?.name, error?.code].filter(value => /^[\w.-]{1,64}$/.test(String(value ?? ""))).join(" ");
   console.error(JSON.stringify({ severity: final ? "ERROR" : "INFO", event: final ? "switch-code-final" : "switch-code-wait", operationId, cause, ...error?.digests }));
 }

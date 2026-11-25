@@ -82,7 +82,7 @@ it("parks a terminal historical capture failure at its first refusal and keeps r
       async put(): Promise<never> { throw new Error("No write is permitted on failed capture"); } };
     const continuation = createPublicReleaseSwitchCodeContinuation({ enabled: true, firestore, pair, store: unavailable, clock: () => now });
     await outbox.set({ ...original, status: "failed" });
-    const lines: any[] = [], log = vi.spyOn(console, "error").mockImplementation(line => { lines.push(JSON.parse(line)); });
+    const lines: unknown[] = [], log = vi.spyOn(console, "error").mockImplementation(line => { lines.push(JSON.parse(line)); });
     try {
       for (let attempt = 1; attempt <= 2; attempt++) {
         await continuation.beforePoll!({});
