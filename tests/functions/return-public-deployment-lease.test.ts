@@ -26,6 +26,7 @@ const PREDECESSOR = "44444444-4444-4444-8444-444444444444";
 const LANDED = "33333333-3333-4333-8333-333333333333";
 const MINUTE = 60_000;
 let db: Firestore;
+let stoppedAt = 0;
 
 const POINTER = { schemaVersion: 1, mediaLifecycleReady: true, state: "idle", activeGeneration: 7, activeDeploymentId: PREDECESSOR,
   activeCommitSha: "b".repeat(40), lastReservedGeneration: 7, newestEligibleGeneration: 7, newestEligibleBuildBatchId: "cms-predecessor" };
@@ -35,7 +36,7 @@ const batchRef = () => db.doc(`system/publicDeployment/buildBatches/${BATCH}`);
 const requestRef = () => db.doc(`cmsPublicationSerializerJournals/${TARGET.serializerId}/releases/${QUEUE_ID}`);
 const journalRef = () => db.doc(`cmsPublicationSerializerJournals/${TARGET.serializerId}`);
 
-/** A release whose lease is held as reconciling after its attempts ended. */
+/** A release whose claimed attempt took the lease and never reported its end. */
 async function heldLease() {
   await pointerRef().set(POINTER);
   const { batch } = await reservePublicBuildBatch({ firestore: db, buildBatchId: BATCH, commitSha: COMMIT, runtime: RUNTIME });
@@ -53,11 +54,14 @@ async function heldLease() {
     versionCreatedOn: "2026-08-27T20:00:00.000Z", wranglerVersion: "4.123.0" } });
   const before = { pointer: (await pointerRef().get()).data()!, batch: (await batchRef().get()).data()! };
   await requestRef().set({ schemaVersion: 1, runtime: RUNTIME, queueId: QUEUE_ID, buildBatchId: BATCH, commitSha: COMMIT, inputSha256: "d".repeat(64),
-    artifactCheckpointDigest: "e".repeat(64), status: "failed", attempts: 4, nextAttemptAt: null, failureReason: "activation: exhausted" });
+    artifactCheckpointDigest: "e".repeat(64), status: "pending", attempts: 4, nextAttemptAt: Date.now() + 10 * MINUTE, failureReason: null });
   await journalRef().set({ schemaVersion: 1, serializerId: TARGET.serializerId, runtime: RUNTIME, job: { queueId: QUEUE_ID, buildBatchId: BATCH,
     commitSha: COMMIT, claimToken: "55555555-5555-4555-8555-555555555555", createdAt: "2026-11-25T20:00:00.000Z" } });
+  await db.doc("system/cmsPublicationRuntime").set({ schemaVersion: 1, phase: "ready", commitSha: COMMIT, serializerId: "cms-serializer",
+    cloud: { phase: "ready", commitSha: COMMIT, serializerId: TARGET.serializerId } });
   const { lease } = await acquirePublicDeploymentLease({ firestore: db, buildBatchId: BATCH, commitSha: COMMIT, runtime: RUNTIME });
   await settlePublicDeploymentOutcome({ firestore: db, lease, runtime: RUNTIME, evidence: { action: "reconcile" } });
+  stoppedAt = lease.leaseAcquiredAt.toMillis() + 1000;
   return { before, lease, leaseAt: lease.leaseAcquiredAt.toMillis() as number };
 }
 
@@ -66,11 +70,17 @@ const deployment = (id: string, createdOn: number) => ({ id, source: "api", stra
   versions: [{ version_id: "66666666-6666-4666-8666-666666666666", percentage: 100 }] });
 
 /** Cloudflare as the operator reads it. `reads` holds one deployment list for each read. */
-function cloudflare(reads: unknown[][], instances: unknown[] | Error = []) {
+function cloudflare(reads: unknown[][], instances: unknown[] | Error = [], installed = COMMIT) {
   const left = [...reads];
   const methods: string[] = [];
   const requestJson = async ({ url, method }: { url: string; method: string }) => {
     methods.push(method);
+    if (url === `${ACCOUNT}/workers/scripts/${TARGET.publisherWorker}/settings`) return { success: true,
+      result: { bindings: [{ name: "PUBLICATION_COMMIT_SHA", type: "plain_text", text: installed }] } };
+    if (url === `${ACCOUNT}/containers/applications/${APPLICATION}/instances?per_page=100`) {
+      return { success: true, result: { instances: [{ id: "slot", name: "publication-serializer", status: Array.isArray(instances) && !instances.length
+        ? { state: "inactive", updated_at: new Date(stoppedAt).toISOString() } : { state: "active", updated_at: "2026-11-25T20:00:00Z" } }] } };
+    }
     if (url === `${ACCOUNT}/containers/applications`) return { success: true, result: [{ id: APPLICATION, name: TARGET.publisherWorker }] };
     if (url === `${ACCOUNT}/containers/dash/applications/${APPLICATION}/instances?per_page=100`) {
       if (instances instanceof Error) throw instances;
@@ -87,7 +97,7 @@ const everything = async () => Promise.all([pointerRef(), batchRef(), requestRef
 async function run(provider: ReturnType<typeof cloudflare>, leaseAt: number, options: Record<string, unknown> = {}) {
   const lines: Record<string, unknown>[] = [];
   const work = returnPublicDeploymentLease({ firestore: db, cloudflareApiToken: "t".repeat(40), target: TARGET, buildBatchId: BATCH, apply: true,
-    requestJson: provider.requestJson as never, pause: async () => {}, now: () => leaseAt + 11 * MINUTE, report: line => { lines.push(line); }, ...options });
+    requestJson: provider.requestJson as never, pause: async () => {}, now: () => leaseAt + 12 * MINUTE, report: line => { lines.push(line); }, ...options });
   return { lines, result: await work };
 }
 
@@ -109,14 +119,14 @@ describe("return of a deployment lease with no deployment write", () => {
     const list = [deployment(PREDECESSOR, leaseAt - 60 * MINUTE)];
     const provider = cloudflare([list, list]);
     const { lines, result } = await run(provider, leaseAt);
-    expect(result).toMatchObject({ outcome: "returned", buildBatchId: BATCH, container: "gone" });
-    expect(lines.map(line => line.check)).toEqual(["publisher container", "first deployment read", "second deployment read"]);
+    expect(result).toMatchObject({ outcome: "returned", buildBatchId: BATCH, writer: "ended" });
+    expect(lines.map(line => line.check)).toEqual(["writer", "first deployment read", "second deployment read"]);
     expect(lines.slice(1).map(line => line.activeDeploymentId)).toEqual([PREDECESSOR, PREDECESSOR]);
     expect(new Set(provider.methods)).toEqual(new Set(["GET"]));
     const [pointer, batch, request] = await everything();
     expect({ ...pointer, updatedAt: null }).toEqual({ ...before.pointer, updatedAt: null });
     expect(batch).toEqual(before.batch);
-    expect(request).toMatchObject({ status: "pending", attempts: 0, nextAttemptAt: leaseAt + 11 * MINUTE, failureReason: null });
+    expect(request).toMatchObject({ status: "pending", attempts: 0, nextAttemptAt: leaseAt + 12 * MINUTE, failureReason: null });
     const next = await acquirePublicDeploymentLease({ firestore: db, buildBatchId: BATCH, commitSha: COMMIT, runtime: RUNTIME });
     expect(next).toMatchObject({ outcome: "acquired", idempotent: false, lease: { predecessorDeploymentId: PREDECESSOR } });
     expect(next.lease.leaseToken).not.toBe(lease.leaseToken);
@@ -156,10 +166,20 @@ describe("return of a deployment lease with no deployment write", () => {
     await refuses(() => run(cloudflare([list, list]), leaseAt), /No deployment lease is held/);
   });
 
-  it("refuses a young lease and names when it may run", async () => {
+  it("refuses until ten minutes after the last possible write and names that time", async () => {
     const { leaseAt } = await heldLease();
-    await refuses(() => run(cloudflare([]), leaseAt, { now: () => leaseAt + 9 * MINUTE }),
-      new RegExp(`540 seconds old. This may run at ${new Date(leaseAt + 10 * MINUTE).toISOString()}`));
+    await refuses(() => run(cloudflare([]), leaseAt, { now: () => leaseAt + 10 * MINUTE }),
+      new RegExp(`600 seconds old.*599 seconds ago. This may run at ${new Date(stoppedAt + 10 * MINUTE).toISOString()}`));
+  });
+
+  it("takes the end of the attempt from its request, also while its container runs", async () => {
+    const { leaseAt } = await heldLease();
+    const list = [deployment(PREDECESSOR, leaseAt - MINUTE)];
+    await requestRef().update({ status: "failed", nextAttemptAt: null, failureReason: "activation: exhausted" });
+    const ended = (await requestRef().get()).updateTime!.toMillis();
+    const running = [{ id: "one", created_at: new Date(leaseAt - MINUTE).toISOString() }];
+    await refuses(() => run(cloudflare([], running), leaseAt, { now: () => ended + 9 * MINUTE }), /This may run at/);
+    expect((await run(cloudflare([list, list], running), leaseAt, { now: () => ended + 10 * MINUTE })).result.writer).toBe("ended");
   });
 
   it("refuses while the container that took the lease runs or cannot be read", async () => {
@@ -171,20 +191,27 @@ describe("return of a deployment lease with no deployment write", () => {
     for (const status of [undefined, "running", "stopping"]) {
       await refuses(() => run(cloudflare([list, list], [instance(leaseAt + MINUTE), instance(leaseAt - MINUTE, status)]), leaseAt, later), /can still hold the write/);
     }
-    const denied = new Error("The Cloudflare API returned HTTP 403");
-    await refuses(() => run(cloudflare([list, list], denied), leaseAt, later), /cannot tell whether the container.*HTTP 403/);
-    expect((await run(cloudflare([list, list], denied), leaseAt, { ...later, apply: false })).result.container).toBe("unknown");
-    for (const gone of [instance(leaseAt + MINUTE, "running"), instance(leaseAt - MINUTE, "stopped"), instance(leaseAt - MINUTE, "failed")]) {
-      expect((await run(cloudflare([list, list], [gone]), leaseAt, { apply: false })).result.container).toBe("gone");
+    for (const unreadable of [new Error("The Cloudflare API returned HTTP 403"), [instance(leaseAt - MINUTE, "stopped")]]) {
+      await refuses(() => run(cloudflare([list, list], unreadable), leaseAt, later), /cannot tell whether the container/);
+      expect((await run(cloudflare([list, list], unreadable), leaseAt, { ...later, apply: false })).result.writer).toBe("unknown");
     }
+    const replaced = [instance(leaseAt - MINUTE, "failed"), instance(leaseAt + MINUTE, "running")];
+    expect((await run(cloudflare([list, list], replaced), leaseAt, { apply: false })).result.writer).toBe("ended");
   });
 
-  it("refuses when the request or the publisher journal names other work", async () => {
+  it("refuses a state that the installed publisher cannot take", async () => {
     const { leaseAt } = await heldLease();
     const list = [deployment(PREDECESSOR, leaseAt - MINUTE)];
+    await refuses(() => run(cloudflare([list, list], [], "c".repeat(40)), leaseAt), /installed publisher is of cccc/);
+    const runtimeRef = db.doc("system/cmsPublicationRuntime");
+    await runtimeRef.update({ "cloud.commitSha": "c".repeat(40) });
+    await refuses(() => run(cloudflare([list, list]), leaseAt), /control names another publisher/);
+    await runtimeRef.update({ "cloud.commitSha": COMMIT });
     await journalRef().update({ "job.queueId": "R".repeat(20) });
     await refuses(() => run(cloudflare([list, list]), leaseAt), /journal holds another release/);
+    await journalRef().update({ job: null });
+    expect((await run(cloudflare([list, list]), leaseAt, { apply: false })).result.outcome).toBe("dry-run");
     await requestRef().update({ status: "deployed" });
-    await refuses(() => run(cloudflare([list, list]), leaseAt), /release request does not match/);
+    await refuses(() => run(cloudflare([list, list]), leaseAt, { now: () => leaseAt + 60 * MINUTE }), /release request does not match/);
   });
 });

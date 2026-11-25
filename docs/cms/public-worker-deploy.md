@@ -68,14 +68,17 @@ and media readiness. Failed proof retains the original attempt for diagnosis.
 No second uncoordinated public writer is permitted.
 
 A lease can be held with no deployment write: the publisher container ended
-between the lease and the write, or the write was lost. The reconciler never
-settles that lease, and publishing stays refused.
+between the lease and the write, a request before the write failed, or the
+write was lost. The reconciler never settles that lease, and publishing stays
+refused.
 [return-public-deployment-lease.ts](../../site/scripts/return-public-deployment-lease.ts)
 gives it back. It reads Cloudflare twice, 30 seconds apart: the active
 deployment must be the lease predecessor, with no deployment after the lease.
-It refuses another release's lease, a lease younger than 10 minutes, and a lease
-whose publisher container still runs. If it cannot read the containers, it says
-so and refuses `--apply`. Without `--apply` it only reads.
+It refuses another release's lease, an installed publisher, publication control
+or publisher journal of another commit, and an attempt that can still write.
+The attempt has ended when its release request says so, or when its container
+stopped or was replaced. The operator runs ten minutes after that time and
+names the time when it refuses. Without `--apply` it only reads.
 With `--apply` the pointer is idle on the predecessor, the batch is ready and
 the release request is due, so the publisher takes a new lease and writes once.
 It needs `CLOUDFLARE_ACCOUNT_ID` and a token with Workers Scripts read and
