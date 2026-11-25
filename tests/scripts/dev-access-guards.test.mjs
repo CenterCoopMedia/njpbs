@@ -293,7 +293,7 @@ test('a concurrent preflight record edit is preserved without a write', async t 
 
 test('restored DNS with continued exposure is an explicit escalation', async t => {
   const h = harness(t, { restoreProofFails: true });
-  await assert.rejects(h.run(), error => /restored but HTTP verification failed/.test(error.message) && /^Dev anonymous refusal failed$/.test(error.cause?.message));
+  await assert.rejects(h.run(), error => /restored but HTTP verification failed/.test(error.message) && error.cause?.message === "Error");
   assert.deepEqual(h.current(), h.initial);
   assert.ok(h.lines.some(line => line.startsWith('RESTORED BUT PROOF FAILED')));
   assert.ok(readFileSync(h.receiptPath, 'utf8').includes('restored proof failed'));

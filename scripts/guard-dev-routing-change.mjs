@@ -15,6 +15,7 @@ const DNS_FIELDS = ['name', 'type', 'content', 'ttl', 'proxied', 'comment', 'tag
 // Only these fixed operator messages may leave the CLI error boundary.
 class GuardError extends Error {}
 // A guard refusal is a fixed sentence. Another error can quote provider data.
+const guardText = error => error instanceof GuardError ? faultLine(error) : faultKind(error);
 const guardCause = error => error instanceof GuardError ? faultCause(error) : kindCause(error);
 
 function requireState(condition, message) {
@@ -182,7 +183,7 @@ export async function guardDevRoutingChange({ plan, receiptPath, apply = false, 
       } catch (error) {
         if (now() >= recoveryDeadline) {
           log('RESTORE FAILED: Keep writers held; restore from the private receipt now');
-          throw new GuardError(`Dev change failed (${faultLine(cause)}) and restoration is unverified`, faultCause(error));
+          throw new GuardError(`Dev change failed (${guardText(cause)}) and restoration is unverified`, guardCause(error));
         }
         log('Restore request failed; retrying within the recovery window');
         await wait(Math.min(intervalMs, recoveryDeadline - now()));
@@ -200,10 +201,10 @@ export async function guardDevRoutingChange({ plan, receiptPath, apply = false, 
             await restoreReadback(true);
           } catch (error) {
             log('RESTORE FAILED: Keep writers held; restore from the private receipt now');
-            throw new GuardError(`Dev change failed (${faultLine(cause)}) and restoration is unverified`, faultCause(error));
+            throw new GuardError(`Dev change failed (${guardText(cause)}) and restoration is unverified`, guardCause(error));
           }
           log('RESTORED BUT PROOF FAILED: Keep writers held; escalate the dev access failure');
-          throw new GuardError(`Dev change failed (${faultLine(cause)}); record restored but HTTP verification failed`, faultCause(error));
+          throw new GuardError(`Dev change failed (${guardText(cause)}); record restored but HTTP verification failed`, guardCause(error));
         }
         log('Restored record proof failed; recovery remains active');
         await wait(Math.min(intervalMs, recoveryDeadline - now()));
@@ -215,7 +216,7 @@ export async function guardDevRoutingChange({ plan, receiptPath, apply = false, 
     } while (true);
     log('Previous dev record restored');
     record('restored');
-    throw new GuardError('Dev change failed; previous record restored', faultCause(cause));
+    throw new GuardError('Dev change failed; previous record restored', guardCause(cause));
   }
 }
 
