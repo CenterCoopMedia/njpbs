@@ -681,4 +681,41 @@ describe("independent public routes, catalog and confirmation", () => {
     await expect(recovery.verifyNoBuildPostPublicRoute({ firestore: db, candidate, target: { ...target, origin: "https://njpbs.org" }, headers, fetchPublic })).rejects.toThrow("mixed");
     expect(requests).toHaveLength(1);
   });
+  it("reads owned routes together and ends every wait on the first refusal", async () => {
+    const ids = ["first", "second", ...Array.from({ length: 10 }, (_, index) => `other-${index}`)];
+    for (const id of ids) {
+      if (!["first", "second"].includes(id)) await db.doc(`cmsPosts/${id}`).set(document(id));
+      expect((await publish(id)).code).toBe(200);
+    }
+    const target = targets.publicationTarget("production");
+    const candidate = { commitSha: sha, workerVersionId: "fixture-version", noBuildPost: {
+      schemaVersion: 2, families: ["posts"], rendererSha: sha, enabled: true, authoritative: true } };
+    const slugs = new Map(await Promise.all(ids.map(async id => [(await owner(id)).slug, id])));
+    const html = "<!doctype html><html><body>Post</body></html>";
+    let together = 0, peak = 0, reads = 0;
+    const read = refuse => async url => {
+      reads++;
+      peak = Math.max(peak, ++together);
+      await new Promise(resolve => setTimeout(resolve, 20));
+      together--;
+      const state = await owner(slugs.get(new URL(url).pathname.split("/")[2]));
+      if (refuse && state.slug === [...slugs.keys()][0]) return new Response("", { status: 500 });
+      if (refuse) return new Response("", { status: 200, headers: { "x-njpbs-publication-refresh": "pending" } });
+      return new Response(html, { headers: { "cache-control": "no-store", "x-njpbs-content-source": "cms-no-build",
+        "x-njpbs-publication-operation": state.operationId, "x-njpbs-source-version": String(state.sourceVersion),
+        "x-njpbs-admission-revision": "1", "x-njpbs-renderer-sha": sha,
+        "x-njpbs-html-sha256": createHash("sha256").update(html).digest("hex") } });
+    };
+    await recovery.verifyNoBuildPostPublicRoute({ firestore: db, candidate, target, fetchPublic: read(false) });
+    expect(reads).toBe(ids.length);
+    expect(peak).toBeGreaterThan(1);
+    expect(peak).toBeLessThanOrEqual(8);
+    await expect(recovery.verifyNoBuildPostPublicRoute({ firestore: db, candidate, target, fetchPublic: read(true) }))
+      .rejects.toThrow("did not preserve its instant Post routes");
+    const settled = reads;
+    await new Promise(resolve => setTimeout(resolve, 2_500));
+    // A wait already asleep ends after its next read at most.
+    expect(reads).toBeLessThanOrEqual(settled + 8);
+    expect(together).toBe(0);
+  });
 });
