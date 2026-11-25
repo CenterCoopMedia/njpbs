@@ -1,9 +1,9 @@
 import { functionsInventoryIdentity } from "./cms-component-receipt.mjs";
 import { DEV_TARGETS } from "../assert-dev-cms-targets.mjs";
 import { readCmsApiDeployment } from "./cloudflare-worker-readback.mjs";
-import { httpFault, permanentFault, providerCall } from "./provider-call.mjs";
+import { faultCause, httpFault, permanentFault, providerCall } from "./provider-call.mjs";
 
-const refuse = () => { throw new Error("CMS reader provider readback unavailable"); };
+const refuse = options => { throw new Error("CMS reader provider readback unavailable", options); };
 async function bytes(response) {
   if (!response.ok) { await response.body?.cancel(); throw httpFault(response); }
   if (!response.body) refuse();
@@ -31,7 +31,7 @@ export async function readCmsReaderProviderIdentities({ projectId, accountId, re
       { permanent: error => signal?.aborted ? "aborted" : permanentFault(error) });
       if (value.success === false || value.errors?.length) refuse();
       return value;
-    } catch { refuse(); }
+    } catch (error) { refuse(faultCause(error)); }
   };
   const functions = [], seen = new Set(); let pageToken;
   for (let page = 0; page < 20; page++) {
@@ -49,7 +49,7 @@ export async function readCmsReaderProviderIdentities({ projectId, accountId, re
   const started = performance.now();
   const cmsApi = await readCmsApiDeployment(script, () => json(
     `https://api.cloudflare.com/client/v4/accounts/${accountId}/workers/scripts/${script}/deployments`, readCloudflareToken),
-    expectedWorkerVersion).catch(refuse);
+    expectedWorkerVersion).catch(error => refuse(faultCause(error)));
   if (!/^[A-Za-z0-9._:-]{1,80}$/.test(cmsApi.deploymentId)) refuse();
   if (expectedWorkerVersion) console.log(`CMS API expected version readback: ${Math.round(performance.now() - started)} ms`);
   return { functions: functionsInventoryIdentity(functions), cmsApi };

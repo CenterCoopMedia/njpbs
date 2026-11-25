@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { request as httpRequest } from "node:http";
 import { fileURLToPath } from "node:url";
 import { inspect } from "node:util";
 import { describe, expect, it, vi } from "vitest";
@@ -115,7 +116,6 @@ describe("provider call rule", () => {
   // The last three are thrown by google-auth-library 9.15.1 and gcp-metadata 6.1.1 after a provider answered.
   it.each([
     ["an unmarked error", new Error("something new")],
-    ["a TypeError", new TypeError("Cannot read properties of null (reading 'expires_in')")],
     ["a refused token refresh", new Error("Could not refresh access token.")],
     ["an unreadable subject token", new Error("Unable to parse the subject_token from the credential_source URL")],
     ["a metadata answer without its header", new Error("Invalid response from metadata service: incorrect Metadata-Flavor header.")],
@@ -146,6 +146,58 @@ describe("provider call rule", () => {
     expect(call).toHaveBeenCalledTimes(5);
     expect(o.log.mock.calls[0][0]).toContain("class transient, 5 of 5 attempts");
     expect(o.log.mock.calls[0][0]).toContain(fault.message);
+  });
+
+  it("repeats a TypeError and keeps its message without what it quotes", async () => {
+    vi.useFakeTimers();
+    const lines = [];
+    releaseWait.setJournal(line => lines.push(line));
+    try {
+      const o = options(), call = vi.fn();
+      for (let failed = 0; failed < 6; failed++) call.mockRejectedValueOnce(new TypeError("Cannot read properties of null (reading 'expires_in')"));
+      call.mockResolvedValue("answer");
+      const answer = providerCall("label", call, o);
+      await vi.advanceTimersByTimeAsync(5 * 60_000);
+      await expect(answer).resolves.toBe("answer");
+      expect(call).toHaveBeenCalledTimes(7);
+      const retries = lines.filter(line => line.event === "retry");
+      expect(retries).toHaveLength(6);
+      for (const line of retries) expect(line.problem).toBe("check=label got=TypeError: Cannot read properties of null (reading [withheld]) want=success");
+    } finally {
+      vi.useRealTimers();
+      releaseWait.setJournal(line => console.error(JSON.stringify({ severity: "INFO", ...line })));
+    }
+    const sync = { ...options(), wait: vi.fn() };
+    expect(() => providerCallSync("label", () => { throw new TypeError("Cannot read properties of null (reading 'expires_in')"); }, sync)).toThrow("expires_in");
+    expect(sync.log.mock.calls[0][0]).toContain("last provider line: TypeError: Cannot read properties of null (reading [withheld])");
+  });
+
+  // Each one throws an error the platform wrote, most of them with the value in it.
+  it.each([
+    ["a header value", value => new Headers({ "CF-Access-Client-Secret": `${value}\nz` })],
+    ["a header name", value => new Headers({ [`${value} x`]: "x" })],
+    ["a fetch header", value => fetch("http://127.0.0.1:1", { headers: { "CF-Access-Client-Secret": `${value}\nz` } })],
+    ["a URL with credentials", value => fetch(`https://user:${value}@example.org/`)],
+    ["a URL that does not parse", value => fetch(value)],
+    ["a URL host that does not parse", value => new Request(`https://${value} x/`)],
+    ["a URL base", value => new URL("x", value)],
+    ["a method", value => fetch("http://127.0.0.1:1", { method: `${value} x` })],
+    ["an encoding", value => Buffer.from("x", value)],
+    ["a Buffer source", value => Buffer.from(Symbol(value))],
+    ["an HTTP request header", value => httpRequest("http://127.0.0.1:1", { headers: { [`${value} b`]: "x" } })],
+    ["a command argument", value => spawnSync("true", [`${value}\0`])],
+    ["a command environment", value => spawnSync("true", [], { env: { SECRET: `${value}\0` } })],
+    ["a JSON text", value => JSON.parse(value)],
+    ["a pattern", value => new RegExp(`${value}(`)],
+  ])("keeps %s the platform refused out of every line", async (_name, use) => {
+    const value = "shortsecret";
+    const error = await (async () => use(value))().catch(error => error);
+    expect(error).toBeInstanceOf(Error);
+    const wrapped = new Error("What failed", faultCause(new Error("outer", { cause: error })));
+    for (const text of [faultLine(error), failureText(error), failureText(wrapped), inspect(wrapped, { depth: 9 })]) {
+      expect(text).not.toContain(value);
+      expect(text).not.toBe("none");
+    }
   });
 
   // The log is public, so this is the boundary: none of these may reach a line.

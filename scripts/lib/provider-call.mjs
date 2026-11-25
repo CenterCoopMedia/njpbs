@@ -130,6 +130,16 @@ function publicText(text) {
     .replace(/[\u0000-\u001f\u007f-\u009f]/g, "").slice(0, 300).trim();
 }
 
+// The platform puts the value it refused in its own message: an invalid header
+// value or URL, an unknown encoding, a wrong argument, unparsable text. Only the
+// engine messages that name code are kept, without what they quote.
+const PLATFORM_ERROR = /^(?:TypeError|RangeError|SyntaxError|URIError|DOMException)$/;
+const ENGINE_MESSAGE = /^(?:fetch failed|terminated|Cannot (?:read|set) properties of (?:null|undefined)\b.*|[\w$.]+ is not (?:a function|a constructor|iterable))$/;
+const isPlatformError = error => PLATFORM_ERROR.test(error?.constructor?.name) || /^ERR_/.test(error?.code ?? "");
+function platformText(message) {
+  return ENGINE_MESSAGE.test(message) ? message.replace(/(["'`])(?:(?!\1).)*\1?/g, "[withheld]") : "";
+}
+
 /**
  * One line about a fault that is safe in a public log. An HTTP error can carry
  * a response body and authorization headers, a command's message its arguments
@@ -149,7 +159,7 @@ export function faultLine(error) {
   if (["config", "request", "response", "$metadata"].some(key => error?.[key] != null)) return code ?? "none";
   if (isChildFault(error)) return code ?? (Number.isInteger(error.status) ? `exit ${error.status}` : "none");
   const name = /^[A-Za-z]{1,40}$/.test(error?.name ?? "") ? error.name : undefined;
-  const message = error instanceof SyntaxError ? "" : publicText(error?.message ?? "");
+  const message = publicText(isPlatformError(error) ? platformText(String(error.message)) : error?.message ?? "");
   const kind = code ? (message.startsWith(code) ? undefined : code) : ["Error", "FaultCause"].includes(name) && message ? undefined : name;
   const line = [kind, message].filter(Boolean).join(": ") || "none";
   return error?.cause instanceof Error ? `${line}; cause: ${faultLine(error.cause)}` : line;
@@ -167,7 +177,8 @@ export const faultCause = error => ({ cause: new FaultCause(faultLine(error)) })
 
 /** An own error's message and the cause it was given by faultCause. The output of a script ends here.
  * @param {any} error */
-export const failureText = error => error?.cause?.name === "FaultCause" ? `${error.message}; cause: ${error.cause.message}` : `${error?.message}`;
+export const failureText = error => error?.cause?.name === "FaultCause" ? `${error.message}; cause: ${error.cause.message}`
+  : isPlatformError(error) ? faultLine(error) : `${error?.message}`;
 
 function retryAfterMs(error) {
   const headers = error?.response?.headers;

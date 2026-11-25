@@ -1,5 +1,6 @@
 import { devAccessOrigin } from "./lib/deployment-settings.mjs";
 import { pathToFileURL } from 'node:url';
+import { faultLine } from './lib/provider-call.mjs';
 
 export const DEV_HOSTS = ['dev-public.example.org', 'dev-admin.example.org'];
 // Keep ordinary URLs: a cache-busting query could hide an exposed cached page.
@@ -80,8 +81,8 @@ export async function checkDevAnonymousRefusal({ hosts = DEV_HOSTS, fetchImpl = 
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const hosts = process.argv.slice(2);
-  checkDevAnonymousRefusal({ ...(hosts.length ? { hosts } : {}) }).catch(() => {
-    console.error('Dev anonymous refusal failed');
+  checkDevAnonymousRefusal({ ...(hosts.length ? { hosts } : {}) }).catch(error => {
+    console.error(`Dev anonymous refusal failed: ${faultLine(error)}`);
     process.exitCode = 1;
   });
 }

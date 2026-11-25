@@ -6,7 +6,7 @@ import type { CurrentCodeReference } from "../../functions/lib/current-public-co
 const require = createRequire(import.meta.url);
 const { assertPublicationTarget, assertPublicationDatabase } = require("../../functions/lib/publication-target.js");
 const { createCurrentCodeTransport } = require("../../functions/lib/current-public-code-source.js") as {
-  createCurrentCodeTransport(options: { target: PublicationTarget; rendererSha: string; request?: typeof fetch; readSecret?: () => string }): {
+  createCurrentCodeTransport(options: { target: PublicationTarget; rendererSha: string; request?: typeof fetch; readSecret?: () => string; once?: boolean }): {
     readCurrentCode(): Promise<{ reference: CurrentCodeReference; bytes: Buffer }>;
     readCurrentCodeReference(): Promise<CurrentCodeReference> } };
 
