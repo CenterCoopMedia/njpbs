@@ -8,7 +8,7 @@ import { stripVTControlCharacters } from "node:util";
 import { CLOUD_WAKE_FUNCTIONS, explicitCloudWakeDecision } from "./lib/cms-release-plan.mjs";
 import { assertNoFunctionDeletions, loadFunctionDeployManifest, readFunctionsDeployInventory, requestDeploymentInventory } from "./lib/functions-deploy-inventory.mjs";
 import { cmsTarget } from "./lib/cms-target.mjs";
-import { lastProviderLine, permanentFailure } from "./lib/provider-call.mjs";
+import { lastProviderLine, permanentFailure, permanentFailureLine } from "./lib/provider-call.mjs";
 
 const PROJECT = cmsTarget().projectId;
 const REGION = "us-central1";
@@ -214,7 +214,7 @@ export async function deployFunctionTargets(names, launch = spawn, project = PRO
     if (code === 0 && output.includes("Deploy complete!")) return;
     const permanent = permanentFailure(output);
     if (permanent) {
-      console.error(`Firebase deployment failed: class ${permanent}, attempt ${attempt}, last provider line: ${lastProviderLine(output)}`);
+      console.error(`Firebase deployment failed: class ${permanent}, attempt ${attempt}, last provider line: ${lastProviderLine(output)}; class from: ${permanentFailureLine(output)}`);
       throw new ComponentReceiptError("Firebase deployment did not confirm completion");
     }
     const failed = code === 0 ? [] : failedFunctionNames(output, pending);

@@ -37,14 +37,31 @@ const RATE_QUOTA = /\bper (?:second|minute|100 seconds)\b|\brate limit\b/i;
 // any other quota wording is retried and reported on each wait.
 const FINAL_QUOTA = /\bdaily limit\b|\bper day\b|limit '[^']* per project'/i;
 
-export function permanentFailure(output) {
+// Firebase prints this when the provider answers an update without the
+// function's service. Firebase then uses the missing values in its next
+// requests, so a 400 in that output can be the provider's fault. Dev run
+// 45562533334 (Nov. 25, 2026) sent Cloud Scheduler an empty URL this way. The
+// retry deploys the failed functions, and a 400 of ours is final in its output.
+// A 400 on a function update itself stays final.
+const INCOMPLETE_ANSWER = /unexpected state - please re-deploy your functions/;
+const FOLLOWING_REQUEST = /^(?!.*\bcloudfunctions\.googleapis\.com\b).*HTTP Error: 400\b/;
+
+function permanentMatch(output) {
   const lines = output.split("\n");
+  const incomplete = lines.some(line => INCOMPLETE_ANSWER.test(line));
   for (const [kind, pattern] of PERMANENT_FAILURES) {
-    if (lines.some(line => pattern.test(line) && !(kind === "request" && RATE_QUOTA.test(line)) &&
-      !(kind === "quota" && (RATE_QUOTA.test(line) || !FINAL_QUOTA.test(line))))) return kind;
+    const line = lines.find(line => pattern.test(line) && !(kind === "request" && RATE_QUOTA.test(line)) &&
+      !(kind === "quota" && (RATE_QUOTA.test(line) || !FINAL_QUOTA.test(line))) &&
+      !(kind === "config" && incomplete && FOLLOWING_REQUEST.test(line)));
+    if (line !== undefined) return { kind, line: line.trim().slice(0, 300) };
   }
   return null;
 }
+
+export const permanentFailure = output => permanentMatch(output)?.kind ?? null;
+
+/** The output line that gave permanentFailure its class. */
+export const permanentFailureLine = output => permanentMatch(output)?.line ?? "none";
 
 export function lastProviderLine(output) {
   const line = output.split("\n").map(value => value.trim()).filter(value => /error|failed|denied|unavailable|timed? ?out|HTTP/i.test(value)).at(-1);

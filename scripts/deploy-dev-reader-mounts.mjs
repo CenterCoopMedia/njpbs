@@ -19,7 +19,7 @@ import { prepareMediaCategoryRegistry } from "./seed-media-categories.mjs";
 import deployment from "../functions/lib/dev-reader-deployment.js";
 import mount from "../functions/lib/cms-reader-mount-descriptor.js";
 import cms from "../functions/lib/cms-preview-pair.js";
-import { RECEIPT_INPUT_PATHS, fingerprintPaths, fingerprintInputs, configurationFingerprint, readReceipt, startReceipt, startCandidateReceipt,
+import { FUNCTION_DEPLOY_TOOLS, RECEIPT_INPUT_PATHS, fingerprintPaths, fingerprintInputs, configurationFingerprint, readReceipt, startReceipt, startCandidateReceipt,
   verifyCandidateReceipt, completeReceipt, commitLiveReaderReceipt, candidateReceiptRef } from "./lib/cms-component-receipt.mjs";
 import { readEnabledCmsReaderProviders } from "./lib/cms-enabled-reader-provider.mjs";
 
@@ -112,7 +112,7 @@ export async function deployDevReaders({ env = process.env, root = new URL("../"
       inputFingerprint: await fingerprintInputs(sourceSha, component, { cwd: fileURLToPath(root) }),
       configurationFingerprint: configurationFingerprint(Object.fromEntries(Object.entries(component === "functions" ? functionVars : api.vars)
         .map(([key, value]) => [key, JSON.stringify(value)]))) };
-    deploymentInputs[component] = await fingerprint(sourceSha, [...RECEIPT_INPUT_PATHS[component], "firebase.dev.json",
+    deploymentInputs[component] = await fingerprint(sourceSha, [...RECEIPT_INPUT_PATHS[component], ...(component === "functions" ? FUNCTION_DEPLOY_TOOLS : []), "firebase.dev.json",
       "scripts/lib/repository-identity.mjs",
       "scripts/deploy-dev-reader-mounts.mjs", "scripts/deploy-dev-functions.mjs", "scripts/assert-dev-cms-targets.mjs",
       "scripts/lib/cms-release-plan.mjs", "scripts/lib/functions-readbacks.sh", "scripts/check-cms-secret-iam.mjs",

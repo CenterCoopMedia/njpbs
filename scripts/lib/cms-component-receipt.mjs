@@ -20,6 +20,11 @@ export const RECEIPT_SCHEMA_VERSION = 1;
 export const FUNCTION_GRAPH_VERSION = 2;
 const FUNCTIONS_CONFIGURATION_TABLE = "config/functions-configuration.json";
 export const RECEIPT_COMPONENTS = Object.freeze(["functions", "renderer", "cmsApi"]);
+// These tools run or check a deployment; a Function contains none of them, so a
+// change to one never redeploys Functions.
+export const FUNCTION_DEPLOY_TOOLS = Object.freeze([
+  "scripts/deploy-cms-function-batches.mjs", "scripts/lib/provider-call.mjs", "scripts/smoke-cms-functions.mjs",
+]);
 export const RECEIPT_INPUT_PATHS = Object.freeze({
   functions: Object.freeze([
     ...contractInputs,
@@ -35,9 +40,7 @@ export const RECEIPT_INPUT_PATHS = Object.freeze({
     "cms-api/package.json",
     "firebase.json",
     ".firebaserc",
-    "scripts/deploy-cms-function-batches.mjs",
-    "scripts/lib/functions-deploy-inventory.mjs", "scripts/lib/provider-call.mjs",
-    "scripts/smoke-cms-functions.mjs",
+    "scripts/lib/functions-deploy-inventory.mjs",
     "scripts/resolve-media-purge.sh",
     "scripts/resolve-cost-ledger-pulls.sh",
     "scripts/prepare-cloud-publication-wake.mjs",
