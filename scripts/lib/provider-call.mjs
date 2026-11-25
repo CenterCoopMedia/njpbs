@@ -183,6 +183,10 @@ class FaultCause extends Error { name = "FaultCause"; }
  */
 export const faultCause = error => ({ cause: new FaultCause(faultLine(error)) });
 
+/** As faultCause, with the category only.
+ * @param {any} error */
+export const kindCause = error => ({ cause: new FaultCause(faultKind(error)) });
+
 /** An own error's message and the cause it was given by faultCause. The output of a script ends here.
  * @param {any} error */
 export const failureText = error => error?.cause?.name === "FaultCause" ? `${error.message}; cause: ${error.cause.message}`

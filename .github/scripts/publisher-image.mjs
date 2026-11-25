@@ -5,6 +5,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { requireReleaseSource } from "./require-release-source.mjs";
 import { requireMainCi } from "./require-main-ci.mjs";
+import { failureText, faultCause, faultKind } from "../../scripts/lib/provider-call.mjs";
 import { repositoryMatches, workflowMatches } from "../../scripts/lib/repository-identity.mjs";
 import { deploymentInputFingerprint, productionDeploymentInputs, readDeploymentManifest } from "../../scripts/render-development-config.mjs";
 import targets from "../../functions/lib/publication-target.js";
@@ -44,9 +45,9 @@ export async function verifySource({ sha, cwd = process.cwd(), env = process.env
   }
   if (!/^[a-f0-9]{40}$/.test(sha ?? "")) throw new ImageRefusal("A full deploy SHA is required");
   try { requireReleaseSource({ sha, cwd }); }
-  catch { throw new ImageRefusal("Publisher source must be clean and on main at the exact SHA"); }
+  catch (error) { throw new ImageRefusal("Publisher source must be clean and on main at the exact SHA", faultCause(error)); }
   try { return await requireMainCi({ repository: env.GITHUB_REPOSITORY, sha, request, env }); }
-  catch { throw new ImageRefusal("No successful main CI/ci proof for publisher source"); }
+  catch (error) { throw new ImageRefusal("No successful main CI/ci proof for publisher source", faultCause(error)); }
 }
 
 // Wrangler's managed-registry API issues a short-lived pull credential. Keep it
@@ -232,5 +233,5 @@ async function main(mode, env = process.env) {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  main(process.argv[2]).catch(error => { console.error(error instanceof ImageRefusal ? error.message : "Publisher image step failed; credential-bearing output withheld."); process.exitCode = 1; });
+  main(process.argv[2]).catch(error => { console.error(error instanceof ImageRefusal ? failureText(error) : `Publisher image step failed (${faultKind(error)}); credential-bearing output withheld.`); process.exitCode = 1; });
 }

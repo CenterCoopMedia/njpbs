@@ -1,6 +1,8 @@
 import { pathToFileURL } from "node:url";
 
-const failure = () => new Error("Cloud preview Containers reads could not be verified");
+// The category of a fault (status, code or error class), never its message: the log is public.
+const failure = detail => new Error(`Cloud preview Containers reads could not be verified${detail ? ` (${detail})` : ""}`);
+const kind = error => [error?.cause?.code, error?.code, error?.name].find(value => /^[A-Za-z][A-Za-z0-9_]{1,40}$/.test(value ?? "")) ?? "none";
 
 // A development run reads only the dev renderer the workflow names (cms-target.mjs rule).
 export function probeApplication(env = process.env) {
@@ -26,19 +28,19 @@ export async function probeCmsContainers(token, {
           method: "GET", headers: { Authorization: `Bearer ${token}` },
           redirect: "error", signal: AbortSignal.timeout(15_000),
         });
-      } catch {
-        if (attempt === 3) throw failure();
+      } catch (error) {
+        if (attempt === 3) throw failure(kind(error));
         await sleep(10_000);
         continue;
       }
       if (response.ok) {
         let body;
-        try { body = await response.json(); } catch { throw failure(); }
+        try { body = await response.json(); } catch (error) { throw failure(kind(error)); }
         if (body?.success !== true) throw failure();
         return body.result;
       }
       await response.body?.cancel();
-      if ((![408, 429].includes(response.status) && response.status < 500) || attempt === 3) throw failure();
+      if ((![408, 429].includes(response.status) && response.status < 500) || attempt === 3) throw failure(`HTTP ${response.status}`);
       await sleep(10_000);
     }
   };
@@ -72,8 +74,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   try {
     await probeCmsContainers(token);
     process.stdout.write("Cloud preview Containers reads verified\n");
-  } catch {
-    process.stderr.write("Cloud preview Containers reads could not be verified\n");
+  } catch (error) {
+    process.stderr.write(`${error.message.startsWith(failure().message) ? error.message : failure(kind(error)).message}\n`);
     process.exitCode = 1;
   }
 }
