@@ -1924,7 +1924,7 @@ jobs:
     # Older release boot configs select installed Chrome on hosted runners.
     runs-on: ubuntu-24.04
     # Measured Nov. 2026: 266 s, 218 s, 119 s (45191230409, 44613342087, dev 45310500950).
-    timeout-minutes: 24 # Runaway guard: 3x max 7m44s (14d, 2026-10-26; #2657).
+    timeout-minutes: 120 # Runaway guard: the 110m preview smoke step plus the other steps, measured at most 266 s.
     steps:
       - uses: actions/checkout@v7
         with:
@@ -1994,8 +1994,9 @@ jobs:
         if: inputs.target == 'development'
         run: node scripts/check-dev-anonymous-refusal.mjs "${CMS_TARGET_ADMIN_ORIGIN#https://}"
       - name: Smoke-test one signed-in private preview
-        # Stops a hung preview sign-in. Measured 25 s (45191230409), 15 s (dev 45310500950).
-        timeout-minutes: 4
+        # The smoke ends a hang itself within 105 min (its own 5, 95 and 5 min backstops) and prints its receipt.
+        # Measured 25 s (45191230409), 15 s (dev 45310500950).
+        timeout-minutes: 110
         env:
           CMS_PREVIEW_SMOKE_CREDENTIAL: ${{ secrets.CMS_PREVIEW_SMOKE_CREDENTIAL }}
           CMS_PREVIEW_SMOKE_TARGET: ${{ vars.CMS_PREVIEW_SMOKE_TARGET }}
