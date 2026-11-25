@@ -2,7 +2,7 @@
 
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
-import { providerCall } from "./lib/provider-call.mjs";
+import { answerFault, providerCall } from "./lib/provider-call.mjs";
 
 const CLOUDFLARE_API = "https://api.cloudflare.com/client/v4";
 const ADMIN_DOMAIN = "admin.njpbs.org";
@@ -27,7 +27,7 @@ async function cloudflareTransport(fetchFn, apiToken, url, init) {
     const detail = Array.isArray(body?.errors)
       ? body.errors.map((error) => error?.message).filter(Boolean).join("; ")
       : "";
-    throw Object.assign(new Error(
+    throw Object.assign(answerFault(
       `Cloudflare Access request failed (${response.status})${detail ? `: ${detail}` : ""}`,
     ), response.ok ? {} : { response });
   }

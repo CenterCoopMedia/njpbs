@@ -20,7 +20,8 @@ try {
     phase = "proof receipt";
     writeFileSync(join(process.env.RUNNER_TEMP, "dev-smoke-receipt.json"), `${JSON.stringify(receipt, null, 2)}\n`);
   }
-} catch {
-  console.error(`CMS development smoke refused during ${phase}; raw details withheld`);
+} catch (error) {
   process.exitCode = 1;
+  const { faultLine } = await import("./lib/provider-call.mjs");
+  console.error(`CMS development smoke refused during ${phase}: ${faultLine(error)}`);
 }

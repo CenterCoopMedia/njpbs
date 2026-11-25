@@ -337,7 +337,7 @@ async function expectStatus({
   const ipRateLimited = answer => allowIpRateLimit && answer.status === 429 &&
     answer.headers?.get("x-rate-limit-scope") === "ip" &&
     /^[1-9]\d*$/.test(answer.headers.get("retry-after") ?? "");
-  const { httpFault, providerCall } = await import("./lib/provider-call.mjs");
+  const { faultCause, httpFault, providerCall } = await import("./lib/provider-call.mjs");
   let response;
   try {
     response = await providerCall(`smoke ${label}`, async () => {
@@ -346,7 +346,7 @@ async function expectStatus({
       throw httpFault(answer);
     }, { wait });
   } catch (error) {
-    if (!error.response) throw new CmsSmokeError(`${label} request failed`);
+    if (!error.response) throw new CmsSmokeError(`${label} request failed`, faultCause(error));
     response = error.response;
   }
 
@@ -681,8 +681,9 @@ export async function main(argv = process.argv.slice(2)) {
 
 const invokedPath = process.argv[1] ? resolve(process.argv[1]) : "";
 if (invokedPath === fileURLToPath(import.meta.url)) {
-  main().catch((error) => {
-    console.error(error instanceof CmsSmokeError ? `CMS deployment smoke failed: ${error.message}` : "CMS deployment smoke did not complete");
+  main().catch(async (error) => {
     process.exitCode = 1;
+    const { failureText, faultLine } = await import("./lib/provider-call.mjs");
+    console.error(error instanceof CmsSmokeError ? `CMS deployment smoke failed: ${failureText(error)}` : `CMS deployment smoke did not complete: ${faultLine(error)}`);
   });
 }

@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { DEPLOYMENT_COMPONENTS } from "./lib/deployment-components.mjs";
 import { ComponentReceiptError, fingerprintPaths, requireSha } from "./lib/cms-component-receipt.mjs";
+import { failureText } from "./lib/provider-call.mjs";
 
 // This dispatcher supplies neither credentials nor authorization. The existing
 // source gates, workflow permission boundaries, locks and adapter checks still
@@ -28,7 +29,7 @@ export function componentFailureDiagnostic(error) {
   // Only deliberate adapter refusals are safe to display. Native parse, SDK
   // and subprocess errors can contain credentials or secret-derived inputs.
   return error instanceof ComponentReceiptError || ["CmsSmokeError", "FunctionsDeployInventoryError", "FunctionsConfigurationError"].includes(error?.name)
-    ? error.message : "Component operation did not complete";
+    ? failureText(error) : "Component operation did not complete";
 }
 
 export async function main(argv = process.argv.slice(2)) {

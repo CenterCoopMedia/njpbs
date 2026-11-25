@@ -97,9 +97,10 @@ async function planWorker(argv) {
   let fingerprints;
   try {
     fingerprints = writeConfigurationFingerprint(argv);
-  } catch {
-    // JSON parse errors can include secret-file content.
-    fail("CMS API secret fingerprints could not be prepared");
+  } catch (error) {
+    // JSON parse errors can include secret-file content, which faultCause leaves out.
+    const { faultCause } = await import("./lib/provider-call.mjs");
+    throw new ComponentReceiptError("CMS API secret fingerprints could not be prepared", faultCause(error));
   }
   pairing.edgeOriginSecretFingerprint = fingerprints.edgeOriginSecretFingerprint;
   const paired = planCmsApiRelease(pairing);

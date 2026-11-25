@@ -76,18 +76,74 @@ function commandOutput(error) {
   return [error?.stderr, error?.stdout].filter(value => value != null).join("\n");
 }
 
-// An HTTP error can carry a response body and authorization headers, and a
-// command's stdout can carry a secret. Report only the status, the code, the
-// error's kind and a command's error stream.
-function faultLine(error) {
+/** The thrown form of an accepted HTTP answer whose content is not usable. */
+export const answerFault = message => Object.assign(new Error(message), { code: "INVALID_ANSWER" });
+
+const isChildFault = error => ["stdout", "stderr", "spawnargs"].some(key => error?.[key] != null) || Number.isInteger(error?.status);
+
+// A plain error with no answer, no code, no command output and no cause was
+// thrown by the caller's own code before any request, so a repeat meets it
+// again. An unreadable body (SyntaxError), an abort and a provider SDK's own
+// error class stay provider faults.
+const PLAIN_ERRORS = ["Error", "TypeError", "ReferenceError", "RangeError"];
+const callerFault = error => PLAIN_ERRORS.includes(error?.constructor?.name) && PLAIN_ERRORS.includes(error.name) && !isChildFault(error) &&
+  !["response", "$metadata", "code", "errno", "cause", "providerLine"].some(key => error[key] !== undefined);
+
+// Deploy logs are public. The first line of a message stays, without URL
+// credentials and queries, labelled secrets, addresses and opaque values.
+function publicText(text) {
+  return String(text).split(/[\r\n]/, 1)[0]
+    .replace(/\b([a-z][a-z0-9+.-]*:\/\/)[^\s/?#"'<>]*@/gi, "$1")
+    .replace(/\b([a-z][a-z0-9+.-]*:\/\/[^\s?#"'<>]*)[?#][^\s"'<>]*/gi, "$1?[withheld]")
+    .replace(/\b(bearer|basic)\s+[^\s"',]+/gi, "$1 [withheld]")
+    .replace(/(authorization|cookie|token|secret|password|passphrase|credential|signature|(?:api|private|access|signing)[_ -]?key(?:_id)?)(["']?\s*[:=]\s*)[^&]+/gi, "$1$2[withheld]")
+    .replace(/[^\s@"'<>:/]+@[^\s@"'<>:/]+\.[a-z]{2,}/gi, "[withheld]")
+    // A path has no part that mixes all three classes; an opaque value does.
+    .replace(/[A-Za-z0-9+/_=-]{20,}/g, run => run.split("/").some(part => part.length > 7 && /[a-z]/.test(part) && /[A-Z]/.test(part) && /\d/.test(part)) ? "[withheld]" : run)
+    .replace(/[A-Za-z0-9_-]{20,}/g, run => /\d/.test(run) && /[A-Za-z]/.test(run) ? "[withheld]" : run)
+    .replace(/\{[\s\S]*/, "{[withheld]")
+    // eslint-disable-next-line no-control-regex -- A log line cannot carry controls.
+    .replace(/[\u0000-\u001f\u007f-\u009f]/g, "").slice(0, 300).trim();
+}
+
+/**
+ * One line about a fault that is safe in a public log. An HTTP error can carry
+ * a response body and authorization headers, a command's message its arguments
+ * and its stdout a secret, and a JSON parse error the text it read. Those
+ * report only the status, the error stream and the kind.
+ * @param {any} error
+ * @returns {string}
+ */
+export function faultLine(error) {
   const status = httpStatus(error);
   if (status !== undefined) return `HTTP ${status}`;
   // The owner of a child that prints private input writes its own line.
   if (typeof error?.providerLine === "string") return error.providerLine;
-  if (error?.stderr) return lastProviderLine(String(error.stderr));
-  const code = [error?.code, error?.cause?.code].find(value => /^[A-Z][A-Z0-9_]{2,40}$/.test(value ?? ""));
-  return code ?? (/^[A-Za-z]{1,40}$/.test(error?.name ?? "") ? error.name : "none");
+  if (error?.stderr) return publicText(lastProviderLine(String(error.stderr)));
+  const code = /^[A-Z][A-Z0-9_]{2,40}$/.test(error?.code ?? "") ? error.code : undefined;
+  // An SDK's request error can quote the request it carries.
+  if (["config", "request", "response", "$metadata"].some(key => error?.[key] != null)) return code ?? "none";
+  if (isChildFault(error)) return code ?? (Number.isInteger(error.status) ? `exit ${error.status}` : "none");
+  const name = /^[A-Za-z]{1,40}$/.test(error?.name ?? "") ? error.name : undefined;
+  const message = error instanceof SyntaxError ? "" : publicText(error?.message ?? "");
+  const kind = code ? (message.startsWith(code) ? undefined : code) : ["Error", "FaultCause"].includes(name) && message ? undefined : name;
+  const line = [kind, message].filter(Boolean).join(": ") || "none";
+  return error?.cause instanceof Error ? `${line}; cause: ${faultLine(error.cause)}` : line;
 }
+
+class FaultCause extends Error { name = "FaultCause"; }
+
+/**
+ * The options of an error that replaces a caught one:
+ * throw new OwnError("What failed", faultCause(error)). The caught error is
+ * not kept, so printing the new one cannot show a header or body.
+ * @param {any} error
+ */
+export const faultCause = error => ({ cause: new FaultCause(faultLine(error)) });
+
+/** An own error's message and the cause it was given by faultCause. The output of a script ends here.
+ * @param {any} error */
+export const failureText = error => error?.cause?.name === "FaultCause" ? `${error.message}; cause: ${error.cause.message}` : `${error?.message}`;
 
 function retryAfterMs(error) {
   const headers = error?.response?.headers;
@@ -97,7 +153,7 @@ function retryAfterMs(error) {
 
 /** Answers the wait before the next attempt, or reports the final failure and throws it. */
 function afterFailure(label, error, attempt, { permanent = permanentFault, log = console.error } = {}) {
-  const kind = permanent(error);
+  const kind = permanent(error) ?? (callerFault(error) ? "caller" : null);
   if (kind || attempt >= PROVIDER_ATTEMPTS) {
     log(`Provider call failed: ${label}, class ${kind ?? "transient"}, ${attempt} of ${PROVIDER_ATTEMPTS} attempts, last provider line: ${faultLine(error)}`);
     throw Object.assign(error, { providerAttempts: attempt });

@@ -19,6 +19,7 @@ import {
   extractProductionExports,
   runCmsFunctionSmoke,
 } from "../../scripts/smoke-cms-functions.mjs";
+import { componentFailureDiagnostic } from "../../scripts/component-runner.mjs";
 import { ENDPOINTS } from "../../cms-api/src/config.ts";
 import { assertR2Lifecycle } from "../../scripts/assert-r2-lifecycle.mjs";
 import { configurationInputs, CONFIGURATION_INPUTS, NATIVE_CONFIGURATION } from "../../scripts/lib/functions-configuration.mjs";
@@ -658,6 +659,17 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
     expect(request).toHaveBeenCalledTimes(2);
     await expect(runCmsFunctionSmoke({ baseUrl: BASE_URL, request: async () => { throw Error("synthetic-private-provider-body"); }, wait: async () => {} }))
       .rejects.toMatchObject({ message: "health request failed" });
+  });
+
+  it("ends on the first attempt and names the cause when the request callback refuses its own call", async () => {
+    const request = vi.fn(async () => { throw new Error("method HEAD not allowed by the caller's request callback"); });
+    const wait = vi.fn();
+    const log = vi.spyOn(console, "error").mockReturnValue();
+    const error = await runCmsFunctionSmoke({ baseUrl: BASE_URL, request, wait }).catch(error => error);
+    log.mockRestore();
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(wait).not.toHaveBeenCalled();
+    expect(componentFailureDiagnostic(error)).toBe("health request failed; cause: method HEAD not allowed by the caller's request callback");
   });
 
   it("bounds direct-origin probes and keeps edge probes serial", async () => {
