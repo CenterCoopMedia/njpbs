@@ -232,9 +232,6 @@ function classifyWorkflow(path) {
   if (path === ".github/workflows/ci.yml") return { ...ALL_GATES };
   if (path === ".github/workflows/admin-ci.yml") return selected("admin");
   if (path === ".github/workflows/firebase-ci.yml") return selected("firebase");
-  if (path === ".github/workflows/cms-staging-deploy.yml") {
-    return selected("admin", "firebase");
-  }
   if (SITE_WORKFLOWS.has(path)) return selected("site");
   if (SITE_FIREBASE_WORKFLOWS.has(path)) return selected("site", "firebase");
   return null;

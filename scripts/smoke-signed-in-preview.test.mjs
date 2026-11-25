@@ -262,18 +262,6 @@ test("names the missing wait and where the preview tab settled", async () => {
     [{ failed: "failed" }, { status: "building", error: "unlisted" }, { place: "other", progress: null }]);
 });
 
-test("keeps each hang backstop past the server's build limit and inside its step", () => {
-  const { PREVIEW_BUILD_TIMEOUT_MS, PREVIEW_BUILD_TIMEOUT_ERROR } = createRequire(import.meta.url)("../functions/lib/preview-build-policy.js");
-  assert.ok(PREVIEW_HANG_BACKSTOP_MS > 2 * PREVIEW_BUILD_TIMEOUT_MS);
-  assert.ok(readFileSync(new URL("./smoke-signed-in-preview.mjs", import.meta.url), "utf8").includes(`["${PREVIEW_BUILD_TIMEOUT_ERROR}"`));
-  const total = PREVIEW_HANG_BACKSTOP_MS + 2 * STAGE_HANG_BACKSTOP_MS;
-  for (const file of ["cms-staging-deploy.yml", "cms-dev-deploy.yml"]) {
-    const source = readFileSync(new URL(`../.github/workflows/${file}`, import.meta.url), "utf8");
-    const step = source.slice(source.indexOf("- name: Smoke-test one signed-in private preview"));
-    assert.ok(Number(step.match(/timeout-minutes: (\d+)/)[1]) * 60_000 > total, file);
-  }
-});
-
 test("aborts a failed Access fetch with the upstream failure class", async () => {
   assert.deepEqual(["getaddrinfo ENOTFOUND dev-preview.example.test", "connect ECONNREFUSED 192.0.2.1:443", "socket hang up",
     "Timeout 30000ms exceeded.", "unable to verify the first certificate"].map(message => abortCode(new Error(message))),

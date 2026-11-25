@@ -21,11 +21,6 @@ function sourceFilesUnder(dir) {
 }
 
 describe("admin public environment boundary", () => {
-  it("connects the reviewed author-release switch to the Admin build, defaulting off", () => {
-    const workflow = parse(readFileSync(new URL("../../.github/workflows/cms-staging-deploy.yml", import.meta.url), "utf8"));
-    const build = workflow.jobs["admin-build"].steps.find((step) => step.name === "Build admin app");
-    expect(build.env.VITE_AUTHOR_PAGES_LIVE).toBe("${{ vars.AUTHOR_PAGES_LIVE || 'false' }}");
-  });
 
   it("never expands the whole Vite environment object into the client bundle", () => {
     const offenders = sourceFilesUnder(ADMIN_SRC)

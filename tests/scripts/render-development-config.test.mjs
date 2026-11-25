@@ -44,26 +44,6 @@ test("validates every named supplier before rendering, with value-free diagnosti
   assert.throws(() => developmentValues({ ...inputs, CMS_LOCAL_PUBLICATION_OWNER: "cloudflare" }));
 });
 
-test("deploy and publish map identical repository variables and render before target-dependent commands", () => {
-  for (const filename of ["cms-dev-deploy.yml", "cms-dev-publish.yml"]) {
-    const workflow = parse(readFileSync(join(root, ".github/workflows", filename), "utf8"));
-    const supplied = {};
-    for (const name of Object.keys(inputs)) {
-      assert.equal(workflow.env[name], "${{ vars." + name + " }}"); supplied[name] = inputs[name];
-    }
-    assert.deepEqual(developmentValues(supplied), inputs);
-    for (const job of Object.values(workflow.jobs)) {
-      const steps = job.steps ?? [], render = steps.findIndex(step => step.run?.includes("render-development-config.mjs"));
-      assert.ok(render >= 0, `${filename} job lacks render`);
-      // Recovery provenance admission does not read deployment target pins.
-      const target = steps.findIndex(step => /assert-dev-cms-targets|cms-dev-publication/.test(step.run ?? ""));
-      if (target >= 0) assert.ok(render < target);
-      const selectedSource = steps.findIndex(step => step.id === "source");
-      if (selectedSource >= 0) assert.ok(steps.slice(selectedSource + 1).some(step => step.run?.includes("render-development-config.mjs")));
-    }
-  }
-});
-
 test("dry renders every runtime/config consumer, preserving target comparisons and binding structure", () => fixture(directory => {
   const before = new Map(files.map(name => [name, readFileSync(join(directory, name), "utf8")]));
   assert.equal(assertDevelopmentSource(directory, {}), true);
@@ -134,55 +114,6 @@ test("uses the selected source manifest and explicitly preserves older untemplat
     assert.ok(readFileSync(join(directory, "entry.mjs"), "utf8").includes("older.example.org"));
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
-
-test("production workflow isolates trusted gates and keeps disabled preview a no-op", () => {
-  const workflow = parse(readFileSync(join(root, ".github/workflows/cms-staging-deploy.yml"), "utf8"));
-  for (const job of Object.values(workflow.jobs)) {
-    const steps = job.steps ?? [], render = steps.findIndex(step => step.name === "Render deployment resource configuration");
-    if (render < 0) continue;
-    for (const [index, step] of steps.entries()) {
-      const path = step.with?.path;
-      if (!step.uses?.startsWith("actions/checkout") || !path?.endsWith("-gate")) continue;
-      assert.ok(steps.slice(index + 1, Math.max(render, index + 1) + 1).some(next => next.run?.includes(`mv ${path} `)), path);
-    }
-    const copy = steps.findIndex(step => step.name?.startsWith("Stage current"));
-    if (copy >= 0) assert.ok(render < copy);
-  }
-  const preview = workflow.jobs["preview-renderer"].steps;
-  const condition = preview.find(step => step.uses?.startsWith("actions/checkout") && !step.with?.path).if;
-  for (const step of preview.filter(step => /configuration renderer|Render deployment resource/.test(step.name ?? ""))) {
-    assert.equal(step.if, condition);
-  }
-});
-
-test("runs the actual production render block after real gate moves without credentials", () => fixture(async directory => {
-  const runtime = mkdtempSync(join(tmpdir(), "production-render-gates-"));
-  try {
-    const workflow = parse(readFileSync(join(root, ".github/workflows/cms-staging-deploy.yml"), "utf8"));
-    const steps = workflow.jobs["admin-build"].steps;
-    const env = { PATH: process.env.PATH, RUNNER_TEMP: runtime, GITHUB_WORKSPACE: directory, CMS_TARGET_RENDER_SCOPE: "--production",
-      ...Object.fromEntries(productionDeploymentInputs.map(name => [name, inputs[name]])) };
-    for (const step of steps) {
-      if (step.uses?.startsWith("actions/checkout") && step.with?.path) {
-        const gate = join(directory, step.with.path);
-        mkdirSync(gate);
-        if (step.name === "Check out trusted configuration renderer") {
-          const renderer = "scripts/render-development-config.mjs";
-          await copyImportClosure(root, gate, [renderer], { boundary: {
-            rule: "the trusted configuration renderer's independence from the selected checkout",
-            files: [renderer, "config/development-inputs.json"],
-          } });
-        }
-      }
-      if (step.name?.startsWith("Isolate trusted") || step.name === "Render deployment resource configuration") {
-        const result = spawnSync("bash", ["-c", step.run], { cwd: directory, env, encoding: "utf8", timeout: 5000 });
-        assert.equal(result.status, 0, result.stderr);
-      }
-      if (step.name === "Render deployment resource configuration") break;
-    }
-    assert.equal(assertDevelopmentSource(directory, env), true);
-  } finally { rmSync(runtime, { recursive: true, force: true }); }
-}));
 
 test("source proof refuses tampered, staged, unrelated, untracked and symlink changes", () => fixture(directory => {
   renderDevelopmentConfig(directory, inputs);

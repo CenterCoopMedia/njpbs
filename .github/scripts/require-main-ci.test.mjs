@@ -7,7 +7,6 @@ import { join } from "node:path";
 import { runInNewContext } from "node:vm";
 import test from "node:test";
 import { createRequire } from "node:module";
-import { readCmsDeployWorkflow } from "../../tests/helpers/cms-deploy-workflow.mjs";
 import { requireMainCi, requireReleaseCi } from "./require-main-ci.mjs";
 import { releaseAuthorization, releaseInputs, requireReleaseSource } from "./require-release-source.mjs";
 
@@ -121,17 +120,6 @@ test("main runs finish in parent and reusable workflows; PR and queue work can c
   }
 });
 
-test("deploy runs the gate from its trusted workflow checkout before installing target code", () => {
-  const workflow = readFileSync(new URL("../workflows/cms-staging-deploy.yml", import.meta.url), "utf8");
-  const build = workflow.split("\n  admin-build:\n")[1].split("\n  verify:\n")[0];
-  assert.match(build, /actions: read/);
-  assert.match(build, /node "\$RUNNER_TEMP\/release-gate"\/\.github\/scripts\/require-release-source\.mjs/);
-  assert.match(build, /DEPLOY_SHA: \$\{\{ steps.reviewed_ref.outputs.deploy_sha \}\}/);
-  const gate = 'node "$RUNNER_TEMP/admin-status-gate"/.github/scripts/require-main-ci.mjs';
-  assert.ok(build.indexOf(gate) > build.indexOf("path: .admin-status-gate"));
-  assert.ok(build.indexOf(gate) < build.indexOf("npm ci --ignore-scripts"));
-});
-
 const authorization = (target = sha, base = main) => `EMERGENCY ${target} FROM ${base} #1: synthetic emergency fixture`;
 const emergency = { emergency: true, authorization: authorization() };
 
@@ -203,7 +191,7 @@ test("source gate enforces first-parent descent, exact clean source, and normal 
     }
     git("checkout", "--quiet", "--detach", live);
     assert.equal(requireReleaseSource({ sha: live, cwd }), live); // older normal pin, not main tip
-    await t.test("a first-parent pin behind main still verifies settings before Admin", async () => {
+    await t.test("a first-parent pin behind main is admitted", async () => {
       assert.notEqual(live, normal);
       assert.equal(git("rev-parse", `${normal}^1`), live);
       const pinRun = { ...run, head_sha: live };
@@ -213,14 +201,6 @@ test("source gate enforces first-parent descent, exact clean source, and normal 
         assert.ok(path.includes(`head_sha=${live}`));
         return { workflow_runs: [pinRun] };
       } }), pinRun.id);
-
-      const { jobs } = parse(readCmsDeployWorkflow());
-      const steps = jobs["cms-api"].steps;
-      const edgeSmoke = steps.findIndex(step => step.name === "Smoke-test CMS API edge");
-      const settings = steps.findIndex(step => step.name === "Verify legacy settings transition boundaries before Admin");
-      assert.ok(edgeSmoke >= 0 && edgeSmoke < settings);
-      assert.equal(steps[settings].if, undefined);
-      assert.ok(jobs["admin-deploy"].needs.includes("cms-api"));
     });
     assert.throws(() => requireReleaseSource({ sha: fix, cwd, emergency: true, authorization: authorization(fix, live) }), /exact deploy SHA/);
     git("config", "user.name", "Test"); git("config", "user.email", "test@example.com");
@@ -230,50 +210,4 @@ test("source gate enforces first-parent descent, exact clean source, and normal 
     execFileSync("git", ["update-index", "--add", "--cacheinfo", `100644,${git("hash-object", "-w", "--stdin")},dirty`], { cwd });
     assert.throws(() => requireReleaseSource({ sha: live, cwd }), /clean/);
   } finally { rmSync(cwd, { recursive: true, force: true }); }
-});
-
-test("every CMS ancestry boundary uses trusted gates with step-scoped emergency inputs", () => {
-  const cms = readFileSync(new URL("../workflows/cms-staging-deploy.yml", import.meta.url), "utf8");
-  for (const name of ["admin-build", "firebase-preflight", "cms-api", "firebase", "preview-renderer"]) {
-    const block = cms.split(`\n  ${name}:\n`)[1].split(/\n  [a-z-]+:\n/)[0];
-    assert.match(block, /ref: \$\{\{ github.sha \}\}\n          path: \.release-gate/);
-    assert.match(block, /EMERGENCY_RELEASE: \$\{\{ inputs.emergency_release \|\| false \}\}/);
-    assert.match(block, /EMERGENCY_AUTHORIZATION: \$\{\{ inputs.emergency_authorization \|\| '' \}\}/);
-    assert.match(block, /node "\$RUNNER_TEMP\/release-gate"\/\.github\/scripts\/require-release-source.mjs/);
-    assert.ok(block.indexOf("path: .release-gate") < block.indexOf('node "$RUNNER_TEMP/release-gate"/'));
-  }
-  assert.match(cms, /emergency_release:\n(?:.*\n){2}        default: false/);
-  const rootEnv = cms.match(/^env:\n(?:  .*\n)*/m)?.[0] ?? "";
-  assert.doesNotMatch(rootEnv, /EMERGENCY_RELEASE|EMERGENCY_AUTHORIZATION/);
-});
-
-test("every CMS consumer pins clean release helpers separately from trusted workflow gates", async () => {
-  const workflow = parse(readCmsDeployWorkflow());
-  const consumers = ["admin-build", "verify", "firebase-preflight", "cms-api", "firebase", "preview-renderer", "live-smoke", "admin-deploy"];
-  for (const name of consumers) {
-    const steps = workflow.jobs[name].steps;
-    const gate = steps.find(step => step.name === "Require pinned release and trusted workflow identities");
-    assert.ok(gate, name);
-    assert.deepEqual(gate.env, {
-      CMS_RELEASE_CHECKS_SHA: "${{ inputs.deploy_ref }}", CMS_TRUSTED_WORKFLOW_SHA: "${{ github.sha }}",
-      ...(name === "admin-build" && { CMS_CORRELATED_DISPATCH_INPUTS: "${{ inputs.release_dispatch_id && toJSON(inputs) || '' }}" }),
-    });
-    const directory = gate.run.match(/\$RUNNER_TEMP\/([a-z-]+)"\/\.github\/scripts\/require-cms-release-sources\.mjs$/)?.[1];
-    assert.ok(directory, name);
-    const checkout = steps.find(step => step.with?.path === `.${directory}`);
-    assert.equal(checkout.with.ref, "${{ github.sha }}");
-    const sparse = checkout.with["sparse-checkout"];
-    assert.ok(sparse === undefined || sparse.includes(".github/scripts"));
-    assert.ok(steps.indexOf(checkout) < steps.indexOf(gate));
-    // Every step that runs release-source scripts must follow the trusted gate.
-    const gateIndex = steps.indexOf(gate);
-    steps.forEach((step, index) => {
-      if (/(?:node |import .*from ["'])\.?\/?scripts\//.test(step.run ?? "")) assert.ok(index > gateIndex, `${name}: ${step.name}`);
-    });
-    for (const step of steps) assert.doesNotMatch(step.run ?? "", /cp .*\/scripts\/lib\/repository-identity\.mjs/);
-  }
-  const { CMS_RELEASE_CHECK_FILES } = await import('./require-cms-release-sources.mjs');
-  for (const path of ['scripts/lib/studio-title-files.mjs', 'agents/vmix/configuration.mjs']) {
-    assert.ok(CMS_RELEASE_CHECK_FILES.includes(path));
-  }
 });

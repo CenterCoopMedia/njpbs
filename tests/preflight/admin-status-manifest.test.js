@@ -6,9 +6,6 @@ import {
   encodeAdminStatusManifest,
 } from "../../scripts/admin-status-manifest.mjs";
 
-const WORKFLOW = fileURLToPath(
-  new URL("../../.github/workflows/cms-staging-deploy.yml", import.meta.url),
-);
 const STANDALONE_DEPLOY = fileURLToPath(
   new URL("../../scripts/deploy-admin.sh", import.meta.url),
 );
@@ -124,36 +121,6 @@ describe("admin status build contract", () => {
       revision: "d805028221a24448055bf0adcce344d1921547b7",
       milestones: badMilestones,
     })).toThrow(/admin status manifest/i);
-  });
-
-  it("keeps the GitHub token in the fetch step and passes only manifest data to Vite", () => {
-    const workflow = readFileSync(WORKFLOW, "utf8");
-    const fetchStart = workflow.indexOf("- name: Fetch Admin milestone catalog");
-    const createStart = workflow.indexOf("- name: Create Admin status manifest");
-    const buildStart = workflow.indexOf("- name: Build admin app");
-    const fetchStep = workflow.slice(fetchStart, createStart);
-    const createStep = workflow.slice(createStart, buildStart);
-    const buildStep = workflow.slice(buildStart, workflow.indexOf("- name: Upload admin artifact"));
-
-    expect(fetchStart).toBeGreaterThan(-1);
-    expect(createStart).toBeGreaterThan(fetchStart);
-    expect(buildStart).toBeGreaterThan(createStart);
-    expect(fetchStep).toContain("GH_TOKEN: ${{ github.token }}");
-    expect(createStep).toContain('GH_TOKEN: ""');
-    expect(createStep).toContain('GITHUB_TOKEN: ""');
-    expect(buildStep).toContain('GH_TOKEN: ""');
-    expect(buildStep).toContain('GITHUB_TOKEN: ""');
-    expect(workflow).toContain("Remove checkout credential before build tools");
-    expect(workflow).toContain(
-      "git config --local --unset-all http.https://github.com/.extraheader",
-    );
-    expect(workflow).toContain("issues: read");
-    expect(workflow).toContain("ADMIN_STATUS_MANIFEST_BASE64");
-    expect(workflow).toContain("Check out current Admin status gate");
-    expect(workflow).toContain('node "$RUNNER_TEMP/admin-status-gate/scripts/admin-status-manifest.mjs"');
-    expect(workflow).toContain('--milestones "$RUNNER_TEMP/admin-milestones.json"');
-    expect(workflow).not.toContain("milestones/16");
-    expect(workflow).not.toContain("VITE_GITHUB");
   });
 
   it("makes the standalone production deploy fail closed and strips GitHub tokens from build processes", () => {

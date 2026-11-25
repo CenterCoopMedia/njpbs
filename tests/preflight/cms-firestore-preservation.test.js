@@ -1,21 +1,15 @@
-import { readCmsDeployWorkflow } from "../helpers/cms-deploy-workflow.mjs";
 import { readFileSync } from "node:fs";
-import { parse } from "yaml";
 import { createRequire } from "node:module";
 import { expect, it, vi } from "vitest";
 
 const require = createRequire(import.meta.url);
 const { FirestoreApi } = require("firebase-tools/lib/firestore/api.js");
 
-it("preserves undeclared Firestore field overrides and TTL policies on both deploy paths", () => {
-  const workflow = parse(readCmsDeployWorkflow());
-  const commands = workflow.jobs.firebase.steps.flatMap(step => [...(step.run ?? "").matchAll(/(?:npx --no-install )?firebase deploy\s[\s\S]*?--non-interactive/g)].map(match => match[0]))
-    .filter(command => command.includes('--only "$CMS_TARGET_FIREBASE_RULES"'));
-  expect(commands).toHaveLength(3);
-  // Both targets deploy the indexes; only production has Storage rules.
-  expect(workflow.env.CMS_TARGET_FIREBASE_RULES).toBe(
-    "${{ inputs.target == 'development' && 'firestore:rules,firestore:indexes' || 'firestore:rules,firestore:indexes,storage' }}");
-  for (const command of commands) expect(command).not.toMatch(/--force\b/);
+it("preserves undeclared Firestore field overrides and TTL policies on deploy", () => {
+  const commands = readFileSync(new URL("../../scripts/deploy-cms.mjs", import.meta.url), "utf8").split("\n")
+    .filter(line => line.includes('"firebase", "deploy"'));
+  expect(commands).toHaveLength(1);
+  expect(commands[0]).not.toContain("--force");
   const indexes = JSON.parse(readFileSync(new URL("../../firestore.indexes.json", import.meta.url), "utf8"));
   expect(indexes.fieldOverrides.filter(value => value.ttl === true).length).toBeGreaterThanOrEqual(7);
 });

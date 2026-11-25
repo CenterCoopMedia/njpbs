@@ -395,20 +395,6 @@ describe("Functions configuration contract", () => {
       expect(() => verifyMediaBindings(config, source, mode === "missing-export" ? [] : [live], "123456789")).toThrow();
     }
   });
-
-  it("keeps provisioning explicit in the common runner and absent from the routine workflow", () => {
-    const ops = DEPLOYMENT_COMPONENTS.functions.operations;
-    expect(ops["verify-config"].args).toEqual(["verify"]);
-    expect(ops["verify-deployed-config"].args).toEqual(["verify-deployed"]); expect(ops["provision-config"].args).toEqual(["provision"]);
-    const workflow = readFileSync(new URL("../../.github/workflows/cms-staging-deploy.yml", import.meta.url), "utf8");
-    expect(workflow).toContain("component-runner.mjs functions verify-config");
-    expect(workflow.indexOf("functions verify-deployed-config")).toBeLessThan(workflow.indexOf("- name: Record the completed Functions receipt"));
-    expect(workflow).not.toContain("functions provision-config");
-    expect(workflow).not.toContain("gcloud secrets create"); expect(workflow).not.toContain("gcloud secrets add-iam-policy-binding");
-    expect(workflow).not.toContain("functions:secrets:set");
-    expect(workflow).not.toContain("--enable-ttl");
-    expect(workflow).not.toContain("identitytoolkit.googleapis.com/admin/v2/projects/njpbs-site/config?updateMask=");
-  });
 });
 
 it("settles the real Put/Head/Delete protocol, including uncertain writes and deletes, before returning pins", async () => {

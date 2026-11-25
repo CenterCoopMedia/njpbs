@@ -135,7 +135,6 @@ describe("CI path classifier", () => {
 
   for (const path of [
     "scripts/inventory-article-posts-read-only.mjs",
-    "tests/preflight/admin-deploy-identity.test.js",
     "tests/preflight/cms-deploy-smoke.test.js",
     "tests/preflight/new-suite.test.js",
   ]) {

@@ -131,23 +131,6 @@ describe("selective Functions releases", () => {
     expect(lines).toContain(`renderer_target_sha=${OTHER}`);
     expect(lines).toContain("preview_paused=true");
   });
-  it("fingerprints exactly the variables consumed by the Functions dotenv writer", () => {
-    const workflow = parse(readFileSync(new URL("../../.github/workflows/cms-staging-deploy.yml", import.meta.url), "utf8"));
-    const writer = workflow.jobs.firebase.steps.find(step => step.name === "Configure functions runtime params");
-    expect(writer.env.CMS_DEPLOYMENT_VARIABLES_JSON).toBe("${{ toJSON(vars) }}");
-    const baseline = deploymentVariablesFingerprint("{}");
-    for (const [key, row] of Object.entries(CONFIGURATION_INPUTS)) {
-      if (!row.variable) continue;
-      const variables = JSON.stringify({ [row.variable]: "synthetic-change" });
-      expect(configurationInputs({ CMS_DEPLOYMENT_VARIABLES_JSON: variables })[key]).toBe("synthetic-change");
-      expect(deploymentVariablesFingerprint(variables), row.variable).not.toBe(baseline);
-    }
-    expect(deploymentVariablesFingerprint('{"UNRELATED_VARIABLE":"synthetic-change"}')).toBe(baseline);
-    const input = eligible();
-    input.functionsReceipt.mutation.variablesFingerprint = FINGERPRINT;
-    expect(decideRelease({ ...input, variablesFingerprint: FINGERPRINT }).functionsMutated).toBe(false);
-    expect(decideRelease({ ...input, variablesFingerprint: "9".repeat(64) }).releaseReason).toBe("runtime_variables_changed");
-  });
 
   it("compares secret-derived parameters and effective resolver outputs against every serving function", async () => {
     const env = { CMS_DEPLOYMENT_VARIABLES_JSON: '{"COST_LEDGER_GCP_PULL":"true"}',

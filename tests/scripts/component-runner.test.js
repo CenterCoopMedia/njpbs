@@ -6,7 +6,6 @@ import { describe, expect, it, vi } from "vitest";
 import { DEPLOYMENT_COMPONENTS, RECEIPT_INPUT_PATHS } from "../../scripts/lib/deployment-components.mjs";
 import { ComponentReceiptError, RECEIPT_INPUT_PATHS as receiptPaths } from "../../scripts/lib/cms-component-receipt.mjs";
 import { componentFailureDiagnostic, main, runComponentOperation } from "../../scripts/component-runner.mjs";
-import { CMS_RELEASE_CHECK_FILES } from "../../.github/scripts/require-cms-release-sources.mjs";
 
 describe("component runner", () => {
   it("uses the same immutable selection paths as the receipt owner", () => {
@@ -58,12 +57,6 @@ describe("component runner", () => {
     }
     for (const error of [new Error("synthetic-private-value"), new SyntaxError("synthetic-private-value")]) {
       expect(componentFailureDiagnostic(error)).toBe("Component operation did not complete");
-    }
-  });
-
-  it("tracks the dispatcher and table at the selected source pin", () => {
-    for (const file of ["scripts/component-runner.mjs", "scripts/lib/deployment-components.mjs"]) {
-      expect(CMS_RELEASE_CHECK_FILES).toContain(file);
     }
   });
 

@@ -236,25 +236,6 @@ describe("deployed Functions secret IAM", () => {
     expect(result.calls.every(args => args[1] === "describe" || args[1] === "get-iam-policy" || args[2] === "get-iam-policy")).toBe(true);
   });
 
-  it("runs the post-deploy checker from exactly the workflow's sparse package", () => {
-    const workflow = parse(readFileSync(join(root, ".github/workflows/cms-staging-deploy.yml"), "utf8"));
-    const checkout = workflow.jobs.firebase.steps.find(row => row.with?.path === ".cms-iam-gate");
-    const files = checkout.with["sparse-checkout"].trim().split(/\s+/);
-    const directory = mkdtempSync(join(tmpdir(), "cms-iam-sparse-"));
-    try {
-      for (const file of files) {
-        const target = join(directory, file);
-        mkdirSync(dirname(target), { recursive: true });
-        copyFileSync(join(root, file), target);
-      }
-      const result = run("first-granted", undefined, undefined, [fixture, "--post-deploy"], {}, join(directory, "scripts/check-cms-secret-iam.mjs"));
-      expect(result.status, result.stderr).toBe(0);
-      expect(result.stdout).toContain(`Verified receiver and invocation IAM after deployment for ${events.length} Functions event triggers`);
-      expect(result.calls.filter(args => args[0] === "run")).toHaveLength(events.length);
-      expect(result.calls.every(args => args[1] === "describe" || args[1] === "get-iam-policy" || args[2] === "get-iam-policy")).toBe(true);
-    } finally { rmSync(directory, { recursive: true, force: true }); }
-  });
-
   it("uses only dev IAM endpoints with the dev impersonated account", () => {
     const directory = mkdtempSync(join(tmpdir(), "cms-iam-dev-"));
     try {
@@ -420,48 +401,6 @@ describe("deployed Functions secret IAM", () => {
       FIREBASE_DEPLOY_SERVICE_ACCOUNT: deploy, PATH: `${fixture}:${process.env.PATH}`, IAM_CALLS: calls, IAM_POLICIES: join(fixture, "policies.json"),
     } });
     expect(result.status, result.stderr).toBe(0);
-  });
-
-  it("runs discovery and IAM checks before storage, preview or deploy mutations", () => {
-    const workflow = readFileSync(join(root, ".github/workflows/cms-staging-deploy.yml"), "utf8");
-    const check = workflow.indexOf("node scripts/component-runner.mjs functions verify-config");
-    expect(check).toBeGreaterThan(0);
-    for (const marker of ["Store the Studio connector in private media storage", "Mark the Functions receipt in progress",
-      "site/scripts/deploy-cms-preview-cloud.ts pause", "npx --no-install firebase deploy"]) {
-      expect(workflow.indexOf(marker)).toBeGreaterThan(check);
-    }
-    const adapter = readFileSync(join(root, "scripts/configure-cms-functions.mjs"), "utf8");
-    expect(adapter).toContain('"resolve-cost-ledger-pulls.sh"');
-    expect(adapter).toContain('"resolve-media-purge.sh"');
-    expect(workflow).not.toContain("gcloud secrets add-iam-policy-binding");
-  });
-  it("reuses Firebase authentication and checks IAM before receipt completion", () => {
-    const workflow = parse(readFileSync(join(root, ".github/workflows/cms-staging-deploy.yml"), "utf8"));
-    const steps = workflow.jobs.firebase.steps;
-    const checker = steps.find(step => step.name === "Check out the trusted post-deploy IAM checker");
-    expect(checker.with.ref).toBe("${{ github.sha }}");
-    expect(checker.with.path).toBe(".cms-iam-gate");
-    expect(checker.with["persist-credentials"]).toBe(false);
-    expect(checker.with["sparse-checkout-cone-mode"]).toBe(false);
-    expect(checker.with["sparse-checkout"].trim().split("\n")).toEqual([
-      "scripts/check-cms-secret-iam.mjs", "scripts/lib/cms-target.mjs", "scripts/lib/functions-deploy-inventory.mjs", "scripts/lib/provider-call.mjs", "scripts/lib/functions-readbacks.sh",
-    ]);
-    const setup = steps.findIndex(step => step.name === "Set up Google Cloud CLI for Functions IAM");
-    const deploy = steps.findIndex(step => step.id === "deploy_functions");
-    const check = steps.findIndex(step => step.id === "functions_readbacks");
-    const byline = steps.findIndex(step => step.name === "Backfill byline projections");
-    const receipt = steps.findIndex(step => step.name === "Record the completed Functions receipt");
-    expect(steps.some(step => step.uses?.startsWith("google-github-actions/auth@"))).toBe(false);
-    expect(steps.some(step => step.with?.name === "cms-event-trigger-first-deploy")).toBe(false);
-    expect(steps[setup]).toMatchObject({ uses: "google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db", with: { project_id: "${{ env.CMS_TARGET_FIREBASE_PROJECT }}" } });
-    const isolate = steps.findIndex(step => step.name === "Isolate trusted event IAM gate");
-    expect(steps[isolate].run).toBe('mv .cms-iam-gate "$RUNNER_TEMP/cms-iam-gate"');
-    expect(isolate).toBeGreaterThan(steps.indexOf(checker));
-    expect(check).toBeGreaterThan(isolate);
-    expect(steps[check].run).toContain('node "$RUNNER_TEMP/cms-iam-gate/scripts/check-cms-secret-iam.mjs" "$GITHUB_WORKSPACE" --post-deploy');
-    expect(steps[byline].if).toContain("steps.functions_readbacks.outputs.iam_verified == 'true'");
-    expect(setup).toBeGreaterThan(-1); expect(deploy).toBeGreaterThan(setup);
-    expect(check).toBeGreaterThan(deploy); expect(byline).toBeGreaterThan(check); expect(receipt).toBeGreaterThan(byline);
   });
 
 });

@@ -59,7 +59,6 @@ describe("workflow policy", () => {
   it("validates browser dependencies, version and sandbox for every panel consumer", () => {
     const admin = readRepo(".github/workflows/admin-ci.yml");
     assert.match(admin, /node \.github\/scripts\/ensure-panel-browser-deps\.mjs/);
-    assert.match(readRepo(".github/workflows/cms-staging-deploy.yml"), /node "\$RUNNER_TEMP\/cms-smoke-gate"\/\.github\/scripts\/ensure-panel-browser-deps\.mjs/);
     assert.match(admin, /Ensure supported sandboxed Chrome for the built boot check/);
     assert.match(readRepo(".github/workflows/firebase-ci.yml"), /node \.github\/scripts\/ensure-panel-browser-deps\.mjs/);
     const helper = readRepo(".github/scripts/ensure-panel-browser-deps.mjs");
@@ -104,16 +103,6 @@ describe("workflow policy", () => {
         assert.match(step, /^          package-manager-cache: true$/m);
         assert.match(step, /^          cache-dependency-path:/m);
       }
-    }
-  });
-
-  it("disables npm caching for CMS deployment source", () => {
-    const setups = readRepo(".github/workflows/cms-staging-deploy.yml").split(/\n      - /)
-      .filter(step => /(?:^|\n        )uses: actions\/setup-node@/.test(step));
-    assert.ok(setups.length > 0);
-    for (const step of setups) {
-      assert.match(step, /^          package-manager-cache: false$/m);
-      assert.doesNotMatch(step, /^          cache(?:-dependency-path)?:/m);
     }
   });
 });

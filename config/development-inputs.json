@@ -191,7 +191,6 @@
         "tests/dev-preview-gateways.test.ts",
         "tests/functions/cms-reader-first-install-adapter.test.ts",
         "tests/functions/dev-publication-upload-idempotence.test.js",
-        "tests/functions/dev-reader-deployment.test.ts",
         "tests/functions/paired-admin-pages-http.test.ts",
         "tests/functions/public-worker-candidate.test.js",
         "tests/functions/rehearsal-preview-readers.test.ts",
@@ -213,8 +212,7 @@
         "scripts/assert-dev-cms-targets.mjs",
         "scripts/fixtures/dev-targets.json",
         "scripts/seed-dev-published.mjs",
-        "site/tests/cms-preview-cloud-storage.test.ts",
-        "tests/functions/dev-reader-deployment.test.ts"
+        "site/tests/cms-preview-cloud-storage.test.ts"
       ]
     },
     "CMS_DEV_MEDIA_ORIGIN": {
@@ -234,7 +232,6 @@
         "site/tests/public-resource-environment.test.ts",
         "site/tests/published-resource-check.test.ts",
         "tests/functions/dev-public-content.test.js",
-        "tests/functions/dev-reader-deployment.test.ts",
         "tests/functions/seed-dev-published.test.mjs",
         "tests/preflight/home-editorial-catalog-contract.test.ts"
       ]
@@ -496,7 +493,6 @@
         "scripts/lib/cms-network-capture.cjs",
         "scripts/lib/cms-reader-bridge-install.mjs",
         "scripts/lib/cms-reader-first-install-adapter.mjs",
-        "scripts/production-reader-deployment.mjs",
         "scripts/smoke-cms-functions.mjs",
         "site/scripts/cms-preview-pair-code-transport.ts",
         "site/tests/cms-current-code-context.test.ts",

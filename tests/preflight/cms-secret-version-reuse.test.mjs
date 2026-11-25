@@ -1,4 +1,3 @@
-import { readCmsDeployWorkflow } from "../helpers/cms-deploy-workflow.mjs";
 import assert from "node:assert/strict";
 import { test, vi } from "vitest";
 import { readFileSync } from "node:fs";
@@ -175,13 +174,6 @@ test("write failures omit upstream payloads and require readback before retry", 
   await assert.rejects(setSecret(name, Buffer.from("value"), { request }),
     /^FunctionsConfigurationError: Secret provisioning failed for CMS_EDGE_ORIGIN_SECRET; verify latest version before retrying$/);
   assert.equal(request.mock.calls.length, 1);
-});
-
-test("routine deployment verifies secrets without provisioning", () => {
-  const workflow = readCmsDeployWorkflow();
-  assert.equal(workflow.includes("node scripts/component-runner.mjs functions verify-config"), true);
-  assert.equal(workflow.includes("functions provision-config"), false);
-  assert.equal(workflow.includes("functions:secrets:set"), false);
 });
 
 test("malformed base64 never causes a rotation", async () => {

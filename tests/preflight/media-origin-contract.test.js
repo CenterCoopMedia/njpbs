@@ -4,7 +4,6 @@ import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { parse } from "yaml";
 
-const deploy = parse(readFileSync(".github/workflows/cms-dev-deploy.yml", "utf8"));
 const publication = parse(readFileSync(".github/workflows/cms-dev-publish.yml", "utf8"));
 const devOrigin = DEV_TARGETS.CMS_MEDIA_ORIGIN;
 const production = "https://media.njpbs.org";
@@ -45,8 +44,6 @@ describe.each([undefined, "production", "development", "preview"])("video media 
 });
 
 it("selects the repository's dev media origin in the frozen publisher build", async () => {
-  expect(Object.values(deploy.jobs).find(job => job.env?.CMS_MEDIA_ORIGIN).env.CMS_MEDIA_ORIGIN)
-    .toBe("${{ vars.CMS_DEV_MEDIA_ORIGIN }}");
   expect(publication.env.CMS_DEPLOYMENT_ENVIRONMENT).toBe("development");
   const runner = readFileSync("site/scripts/cms-dev-publication.mjs", "utf8");
   expect(runner).toContain('CMS_DEPLOYMENT_ENVIRONMENT: "development", CMS_DEV_FROZEN_BUILD: "1"');

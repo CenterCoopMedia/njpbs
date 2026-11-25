@@ -289,15 +289,6 @@ describe("CMS function build queue expiry recovery", () => {
     expect(run.launch).toHaveBeenCalledTimes(3);
     expect(run.wait.mock.calls).toEqual([[60_000], [120_000]]);
   });
-  it("bounds both Functions deploy steps inside the firebase job's timeout", () => {
-    // The retry has no count; the step timeouts are its ceiling, and a timed-out step fails
-    // so the recovery steps run. 3 minutes cover the steps before and after (measured).
-    const job = parse(readFileSync(new URL("../../.github/workflows/cms-staging-deploy.yml", import.meta.url), "utf8")).jobs.firebase;
-    const steps = ["Deploy ordinary Functions before the preview pause", "Deploy Firebase rules, indexes, and functions"]
-      .map(name => job.steps.find(item => item.name === name)["timeout-minutes"]);
-    expect(steps.every(Number.isInteger)).toBe(true);
-    expect(steps[0] + steps[1] + 3).toBeLessThanOrEqual(job["timeout-minutes"]);
-  });
   it("retries a rate quota, which clears by itself", async () => {
     const rate = "Error: HTTP Error: 429, Quota exceeded for quota metric 'Write requests' and limit 'Write requests per minute'\n";
     const run = deployment([[1, rate], [0, "Deploy complete!\n"]], fullSet);
