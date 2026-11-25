@@ -1,27 +1,15 @@
 "use strict";
 
 const { cmsOnRequest } = require("./lib/cms-edge");
-const {
-  BugReportRequestError, createCmsSubmitBugReportHandler, parseMultipartReport,
-} = require("./bug-report");
+const { createCmsSubmitBugReportHandler, parseMultipartReport } = require("./bug-report");
 
 // Only the dev manifest exports this wrapper. Refuse missing/mixed target,
 // delivery policy or revision before authentication, replay or persistence.
 function createDevCmsSubmitBugReportHandler(deps = {}) {
-  const parseMultipartFn = deps.parseMultipartFn ?? ((req) => parseMultipartReport(req, { allowAdminBuildRevision: true }));
   const submit = createCmsSubmitBugReportHandler({
     ...deps,
     deploymentEnvironment: () => "development",
-    parseMultipartFn: async (req) => {
-      const parsed = await parseMultipartFn(req);
-      // Check the submitting bundle before the shared handler can replay a receipt.
-      if (parsed.fields.adminBuildRevision !== process.env.CMS_ADMIN_BUILD_REVISION) {
-        throw new BugReportRequestError(
-          "This Boardwalk version is out of date. Reload Boardwalk to send your report.", 409,
-        );
-      }
-      return parsed;
-    },
+    parseMultipartFn: deps.parseMultipartFn ?? ((req) => parseMultipartReport(req, { allowAdminBuildRevision: true })),
   });
   return async (req, res) => {
     if (process.env.GCLOUD_PROJECT !== "njpbs-site-dev" ||

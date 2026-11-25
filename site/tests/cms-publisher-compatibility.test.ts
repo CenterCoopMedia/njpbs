@@ -6,7 +6,7 @@ import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { parse } from "yaml";
-import { verifyLivePublisher } from "../../.github/scripts/cms-deploy-compatibility.mjs";
+import { requireSiteContentTypes, verifyLivePublisher } from "../../.github/scripts/cms-deploy-compatibility.mjs";
 
 const scriptPath = ".github/scripts/cms-deploy-compatibility.mjs";
 const modelPath = "packages/content-core/src/content-model.ts";
@@ -214,6 +214,17 @@ describe("CMS deploy versus the live publisher catalog", () => {
     receipt = { commitSha: futureBlockSha };
     rendererHeader = futureBlockSha;
     expect((await deployGate()).code).toBe(0);
+  });
+
+  it("compares a CMS deploy alone with the live site, and a release with the commit it switches to", async () => {
+    git("update-ref", "HEAD", futureBlockSha);
+    await expect(requireSiteContentTypes(root, receiptUrl, "")).rejects.toThrow("Unsupported block types: future_block");
+    await expect(requireSiteContentTypes(root, receiptUrl, currentSha)).rejects.toThrow("Unsupported block types: future_block");
+    expect(await requireSiteContentTypes(root, receiptUrl, futureBlockSha)).toBe(futureBlockSha);
+    git("update-ref", "HEAD", sameCatalogSha);
+    expect(await requireSiteContentTypes(root, receiptUrl, "")).toBe(currentSha);
+    receiptStatus = 503;
+    await expect(requireSiteContentTypes(root, receiptUrl, "")).rejects.toThrow("503");
   });
 
   it("refuses a new editorial record kind", async () => {

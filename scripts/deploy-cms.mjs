@@ -79,6 +79,14 @@ async function requireOneEdgeSecret() {
   }
 }
 
+// Functions and the Admin offer every block and record type of this commit; the site must render them.
+// A release names the site commit it switches to; a CMS deploy alone is compared with the live one.
+async function requireSiteTypes() {
+  const { requireSiteContentTypes } = await import("../.github/scripts/cms-deploy-compatibility.mjs");
+  try { console.log(`The site at ${await requireSiteContentTypes(root, `${target.publicOrigin}/_publication.json`, env.CMS_SITE_SHA)} renders every type`); }
+  catch (error) { throw new Error(`Deploy the site first, or name the site commit of this release. ${error.message}`); }
+}
+
 async function functionSource() {
   const { loadFunctionSource } = await import("./lib/functions-deploy-inventory.mjs");
   return loadFunctionSource(project);
@@ -114,6 +122,7 @@ const steps = {
     await node(["scripts/seed-content-sections.mjs", "--if-needed"]);
   },
   async firebase() {
+    await requireSiteTypes();
     await requireOneEdgeSecret();
     await npx(["firebase", "functions:artifacts:setpolicy", "--project", project, "--location", "us-central1", "--days", "7", "--force"]);
     // Firebase skips each Function whose source, parameters and secrets did not change.
@@ -207,6 +216,7 @@ const steps = {
       VITE_FIREBASE_PROJECT_ID: project, VITE_FIREBASE_AUTH_DOMAIN: `${project}.firebaseapp.com` } });
   },
   async "admin-deploy"() {
+    await requireSiteTypes();
     const config = join(root, "admin/wrangler.jsonc");
     try {
       // Pages reads this tracked file from its directory; it names production's bindings.

@@ -357,7 +357,7 @@ export function publisherReceiptHeaders(receiptUrl, env = process.env) {
   return { ...headers, "CF-Access-Client-Id": env.CMS_DEV_ACCESS_CLIENT_ID, "CF-Access-Client-Secret": env.CMS_DEV_ACCESS_CLIENT_SECRET };
 }
 
-export async function verifyLivePublisher(repoRoot, receiptUrl) {
+async function readPublisherReceipt(receiptUrl) {
   const response = await fetch(receiptUrl, {
     cache: "no-store", redirect: "error", signal: AbortSignal.timeout(10_000),
     headers: publisherReceiptHeaders(receiptUrl),
@@ -367,7 +367,28 @@ export async function verifyLivePublisher(repoRoot, receiptUrl) {
   if (typeof receipt?.commitSha !== "string" || !/^[a-f0-9]{40}$/i.test(receipt.commitSha)) {
     throw new Error("Public publication receipt must supply a full commitSha");
   }
-  const publisherSha = receipt.commitSha.toLowerCase();
+  return { response, publisherSha: receipt.commitSha.toLowerCase() };
+}
+
+// The site cannot render a block or record type that its commit does not know: the page answers 503.
+export async function requireSiteContentTypes(repoRoot, receiptUrl, siteSha) {
+  const site = siteSha || (await readPublisherReceipt(receiptUrl)).publisherSha;
+  assertSupportedCatalogs(repoRoot, site);
+  return site;
+}
+
+function assertSupportedCatalogs(repoRoot, siteSha) {
+  const deploy = readContentCatalogs(repoRoot, "HEAD");
+  const site = readContentCatalogs(repoRoot, siteSha);
+  const unsupported = Object.entries(deploy).flatMap(([label, types]) => {
+    const missing = types.filter((type) => !site[label].includes(type));
+    return missing.length ? [`Unsupported ${label}: ${missing.join(", ")}.`] : [];
+  });
+  if (unsupported.length) throw new Error(unsupported.join(" "));
+}
+
+export async function verifyLivePublisher(repoRoot, receiptUrl) {
+  const { response, publisherSha } = await readPublisherReceipt(receiptUrl);
   // Assets receipts omit this header during authority outages or before the
   // first Post owner. Their body still identifies the deployed renderer source.
   const rendererHeader = response.headers.get("x-njpbs-renderer-sha");
@@ -377,13 +398,7 @@ export async function verifyLivePublisher(repoRoot, receiptUrl) {
   }
   const rendererSha = rendererHeader?.toLowerCase() ?? publisherSha;
   try {
-    const deploy = readContentCatalogs(repoRoot, "HEAD");
-    const publisher = readContentCatalogs(repoRoot, publisherSha);
-    const unsupported = Object.entries(deploy).flatMap(([label, types]) => {
-      const missing = types.filter((type) => !publisher[label].includes(type));
-      return missing.length ? [`Unsupported ${label}: ${missing.join(", ")}.`] : [];
-    });
-    if (unsupported.length) throw new Error(unsupported.join(" "));
+    assertSupportedCatalogs(repoRoot, publisherSha);
   } catch (error) {
     throw new Error(
       `Publisher commit ${publisherSha} cannot verify support for this deploy. ` +

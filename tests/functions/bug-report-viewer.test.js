@@ -184,24 +184,18 @@ describe("isolated development report intake", () => {
     expect((await db.collection("bugReportDeliveryOutbox").get()).size).toBe(0);
   });
 
-  it.each([undefined, "", "a".repeat(40), "B".repeat(40), ` ${"b".repeat(40)}`, "bad-revision"])("requires the exact client Admin revision before creating durable state (%s)", async (adminBuildRevision) => {
-    const refused = await submitDev("viewer", { adminBuildRevision });
-    expect(refused.statusCode).toBe(409);
-    expect(refused.body).toEqual({ error: "This Boardwalk version is out of date. Reload Boardwalk to send your report." });
-    expect(refused.headers["cache-control"]).toBe("private, no-store");
-    for (const collection of ["bug_reports", "bugReportEvidence", "admin_logs", "bugReportRateLimits", "bugReportDeliveryOutbox"]) {
-      expect((await db.collection(collection).get()).size).toBe(0);
-    }
+  it.each([undefined, "a".repeat(40)])("stores a report from an Admin of another commit (%s)", async (adminBuildRevision) => {
+    const saved = await submitDev("viewer", { adminBuildRevision });
+    expect(saved.statusCode).toBe(201);
+    expect((await db.collection("bug_reports").get()).size).toBe(1);
+    expect((await db.collection("bugReportDeliveryOutbox").get()).size).toBe(0);
   });
 
-  it("refuses an old Admin before replay after the Function revision changes", async () => {
+  it("replays a stored report after the Function revision changes", async () => {
     const saved = await submitDev();
     expect(saved.statusCode).toBe(201);
     vi.stubEnv("CMS_ADMIN_BUILD_REVISION", "c".repeat(40));
-    const refused = await submitDev();
-    expect(refused.statusCode).toBe(409);
-    expect(refused.body.error).toContain("Reload Boardwalk");
-    const replay = await submitDev("viewer", { adminBuildRevision: "c".repeat(40) });
+    const replay = await submitDev();
     expect(replay.statusCode).toBe(200);
     expect(replay.body).toMatchObject({ idempotent: true, report: { id: saved.body.report.id, environment: { buildRevision: "b".repeat(40) } } });
     for (const collection of ["bug_reports", "admin_logs", "bugReportRateLimits"]) {
