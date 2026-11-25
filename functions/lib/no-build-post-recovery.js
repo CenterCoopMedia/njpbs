@@ -441,7 +441,7 @@ function unansweredRead(error) {
 // Reads one public path until an answer comes from a renderer other than the
 // previous one, then lets judge decide that answer once. Each unanswered read
 // doubles the time the next one gets, so a slow answer is waited for.
-async function judgeCandidateAnswer({ url, fetchPublic, headers, candidate, previousRendererSha, rollout = CANDIDATE_ROLLOUT }, judge) {
+async function judgeCandidateAnswer({ url, fetchPublic, headers, candidate, previousRendererSha, stopped, rollout = CANDIDATE_ROLLOUT }, judge) {
   const previous = previousRendererSha && previousRendererSha !== candidate.commitSha ? previousRendererSha : null;
   const started = rollout.now();
   let noticeAt = started + rollout.noticeMs, readMs = 10_000, waitingFor;
@@ -470,15 +470,40 @@ async function judgeCandidateAnswer({ url, fetchPublic, headers, candidate, prev
       noticeAt = rollout.now() + rollout.noticeMs;
     }
     await rollout.wait();
+    stopped?.throwIfAborted();
+  }
+}
+
+// Each route is one slow read. This many run together, which is what the
+// public Worker and its Function are asked to answer at once.
+const ROUTE_READS_TOGETHER = 8;
+
+// Ends on the first failure: the other waits stop, because a wait for a route
+// has no limit of its own.
+async function readTogether(items, read) {
+  const stop = new AbortController();
+  let next = 0;
+  const lane = async () => {
+    while (next < items.length) {
+      const item = items[next++];
+      stop.signal.throwIfAborted();
+      await read(item, stop.signal);
+    }
+  };
+  try {
+    await Promise.all(Array.from({ length: Math.min(ROUTE_READS_TOGETHER, items.length) }, lane));
+  } catch (error) {
+    stop.abort(error);
+    throw error;
   }
 }
 
 async function verifyOwnedPostRoutes({ state, staticProof, contentRedirectUrl, candidate, admission, fetchPublic, target, headers,
-  previousRendererSha, rollout = CANDIDATE_ROLLOUT }) {
+  previousRendererSha, stopped, rollout = CANDIDATE_ROLLOUT }) {
   const slugs = staticProof?.ownedSlugs ?? state.ownedSlugs;
   for (const slug of slugs) {
     await judgeCandidateAnswer({ url: `${target.origin}${postRoutePath(slug)}?cms-code=${candidate.workerVersionId}`,
-      fetchPublic, headers, candidate, previousRendererSha, rollout }, async response => {
+      fetchPublic, headers, candidate, previousRendererSha, stopped, rollout }, async response => {
     // New-admission selection cannot discard an already accepted route.
     // Invalid metadata still refuses visible proof; retained withdrawals stay absent.
     const enabled = !!staticProof || !state.visible || (candidate.noBuildPost.enabled &&
@@ -504,7 +529,7 @@ async function verifyOwnedPostRoutes({ state, staticProof, contentRedirectUrl, c
   }
 }
 
-async function verifyStaticPostOutputs({ staticProof, candidate, fetchPublic, target, headers, previousRendererSha, rollout = CANDIDATE_ROLLOUT }) {
+async function verifyStaticPostOutputs({ staticProof, candidate, fetchPublic, target, headers, previousRendererSha, stopped, rollout = CANDIDATE_ROLLOUT }) {
   const proof = require("./no-build-post-static-return").projectStaticProof(staticProof);
   const paths = ["/_publication.json", "/_content-status.json", "/posts/", "/feeds/news.xml", "/api/v1/content.json",
     "/pagefind/pagefind.js", "/search/meaning-index.json",
@@ -513,7 +538,7 @@ async function verifyStaticPostOutputs({ staticProof, candidate, fetchPublic, ta
   for (const path of paths) {
     const file = proof.files.find(file => file.path === path);
     await judgeCandidateAnswer({ url: `${target.origin}${path}?cms-code=${candidate.workerVersionId}`,
-      fetchPublic, headers, candidate, previousRendererSha, rollout }, async response => {
+      fetchPublic, headers, candidate, previousRendererSha, stopped, rollout }, async response => {
     const header = name => response.headers.get(name);
     await refuseFirstMismatch(response, `The static Post candidate did not prove its complete public outputs (${path})`, [
       ["status", file ? 200 : 404, response.status],
@@ -545,7 +570,7 @@ async function verifyNoBuildPostPublicRoute({ firestore, candidate, fetchPublic 
   const admission = await readNoBuildFamilyAdmission({ firestore });
   const options = { candidate, admission, fetchPublic, target, previousRendererSha,
     headers: { ...Object.fromEntries(readHeaders), "cache-control": "no-cache" } };
-  for (const { state } of owners) {
+  await readTogether(owners, async ({ state }, stopped) => {
     const staticProof = candidate.noBuildStatic?.postId === state.postId ? candidate.noBuildStatic
       : state.mode === "static" ? state.staticProof : null;
     let contentRedirectUrl = state.contentRedirectUrl;
@@ -553,9 +578,9 @@ async function verifyNoBuildPostPublicRoute({ firestore, candidate, fetchPublic 
       const link = staticProof.visible ? contentLink((await firestore.doc(`cmsPosts/${state.postId}`).get()).data()?.published?.metadata ?? {}, postRoutePath(staticProof.slug)) : null;
       contentRedirectUrl = link?.external ? link.href : undefined;
     }
-    await verifyOwnedPostRoutes({ ...options, state, staticProof, contentRedirectUrl });
-    if (staticProof) await verifyStaticPostOutputs({ ...options, staticProof });
-  }
+    await verifyOwnedPostRoutes({ ...options, stopped, state, staticProof, contentRedirectUrl });
+    if (staticProof) await verifyStaticPostOutputs({ ...options, stopped, staticProof });
+  });
   if (JSON.stringify(await readNoBuildFamilyAdmission({ firestore })) !== JSON.stringify(admission)) {
     throw new Error("Public admission changed during code verification");
   }
