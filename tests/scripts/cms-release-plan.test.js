@@ -1,8 +1,9 @@
 import { CONFIGURATION_INPUTS, RUNTIME_PARAMETERS, configurationInputs, servingRuntimeParameters } from "../../scripts/lib/functions-configuration.mjs";
 import { describe, expect, it } from "vitest";
+import { createRequire } from "node:module";
 import { readFileSync } from "node:fs";
 import { parse } from "yaml";
-import { FUNCTION_RUNTIME_VARIABLES, functionsForRuntimeComparison, runtimeParametersMatch, boundSecretVersionsCurrent, boundSecretVersionChanges, runtimeParameterChanges, CMS_RELEASE_SECRET_NAMES, deploymentSecretsUnchanged, deploymentVariablesFingerprint, cloudWakeConfigurationFingerprint, decideRelease, explicitCloudWakeDecision, fingerprintExecutionSource, fingerprintFunctionsRenderSource, identitiesMatch, planCmsApiRelease, componentReceiptRunCompleted, READER_FUNCTIONS, adminRevisionChanges, omittedFunctionNames, withoutFunctions } from "../../scripts/lib/cms-release-plan.mjs";
+import { FUNCTION_RUNTIME_VARIABLES, functionsForRuntimeComparison, runtimeParametersMatch, boundSecretVersionsCurrent, boundSecretVersionChanges, runtimeParameterChanges, CMS_RELEASE_SECRET_NAMES, deploymentSecretsUnchanged, deploymentVariablesFingerprint, cloudWakeConfigurationFingerprint, decideRelease, explicitCloudWakeDecision, fingerprintExecutionSource, fingerprintFunctionsRenderSource, identitiesMatch, planCmsApiRelease, componentReceiptRunCompleted, CLOUD_WAKE_FUNCTIONS, READER_FUNCTIONS, adminRevisionChanges, omittedFunctionNames, withoutFunctions } from "../../scripts/lib/cms-release-plan.mjs";
 import { releasePlanOutputLines, desiredRuntimeParameters } from "../../scripts/cms-release-plan.mjs";
 
 const SHA = "a".repeat(40);
@@ -56,7 +57,7 @@ function eligible() {
   };
 }
 
-const WAKE = ["onNoBuildCloudState", "onNoBuildCloudCandidate", "onNoBuildCloudRelease"];
+const WAKE = [...CLOUD_WAKE_FUNCTIONS];
 // The same committed graph, receipts and live inventory for both targets: the wake exports are not live.
 function targetPlan(target, overrides = {}) {
   const decision = { environment: target, enabled: target === "production" };
@@ -75,6 +76,9 @@ function targetPlan(target, overrides = {}) {
 }
 
 describe("development and production plans from the same inputs", () => {
+  it("names the wake exports that the Functions runtime names", () => {
+    expect(CLOUD_WAKE_FUNCTIONS).toEqual(createRequire(import.meta.url)("../../functions/lib/cloud-publication-wake-deployment.js").CLOUD_WAKE_FUNCTIONS);
+  });
   it("requires every committed export in production and only the deployed ones in development", () => {
     expect(targetPlan("production")).toMatchObject({ functionDeployTargets: "all", releaseReason: "runtime_configuration_changed" });
     expect(targetPlan("development")).toMatchObject({ functionDeployTargets: "", functionsMutated: false, releaseReason: "unchanged" });

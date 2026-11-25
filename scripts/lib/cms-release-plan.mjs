@@ -2,9 +2,10 @@ import { repositoryMatches } from "./repository-identity.mjs";
 import { ComponentReceiptError, assertLegacyPreviewProtocol, configurationFingerprint, fingerprintPaths, functionGraphsMatch, FUNCTION_GRAPH_VERSION } from "./cms-component-receipt.mjs";
 import { contractInputs } from "./functions-contracts.mjs";
 import { cmsTarget } from "./cms-target.mjs";
-import cloudWake from "../../functions/lib/cloud-publication-wake-deployment.js";
 
-const { CLOUD_WAKE_FUNCTIONS } = cloudWake;
+// Equal to the runtime list in functions/lib/cloud-publication-wake-deployment.js, which the
+// staged release helpers cannot import; tests/scripts/cms-release-plan.test.js compares them.
+export const CLOUD_WAKE_FUNCTIONS = Object.freeze(["onNoBuildCloudState", "onNoBuildCloudCandidate", "onNoBuildCloudRelease"]);
 
 // The exports that carry the reader binding. The record step verifies it on each one.
 export const READER_FUNCTIONS = Object.freeze(["cmsReaderV1", "cmsReaderV2", "cmsReadPairCurrentCodeV2",
