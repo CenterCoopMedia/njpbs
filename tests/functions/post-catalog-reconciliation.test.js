@@ -74,9 +74,8 @@ describe("48-owner Post catalog during reconciliation", () => {
     expect(result.catalog.posts.map(post => post.postId)).toEqual(ids);
     expect(result.catalog.posts.every(post => post.rendererSha === rendererSha)).toBe(true);
     expect(reads).toBe(48);
-    // Prove bounded overlap without a timing assertion tied to emulator load.
-    expect(peak).toBeGreaterThan(1);
-    expect(peak).toBeLessThanOrEqual(8);
+    // Owners are read together, proven without a timing assertion.
+    expect(peak).toBeGreaterThan(8);
     expect((await cache.readPublicDecisionValidator(db)).cacheable).toBe(false);
   });
 
@@ -85,22 +84,35 @@ describe("48-owner Post catalog during reconciliation", () => {
     await expect(publication.readNoBuildPostDecision({ firestore: db, path: "/_publication.json", rendererSha: sha })).rejects.toThrow();
   });
 
-  it("does not reuse a cached catalog while reconciling and sees a withdrawal immediately", async () => {
+  it("reuses a catalog while reconciling until a publication or the candidate changes", async () => {
     const handler = content.createCmsGetPublicPageHandler({ firestore: db,
       decisionCache: cache.createPublicDecisionCache(), log: { error() {} } });
-    const request = { method: "POST", headers: {}, body: { mode: "no-build-post-v1", path: "/_publication.json", rendererSha: sha } };
+    const request = { method: "POST", headers: {}, body: { mode: "no-build-post-v1", path: "/_publication.json", rendererSha: candidateSha } };
+    let ownerReads = 0;
+    const original = Transaction.prototype.get;
+    vi.spyOn(Transaction.prototype, "get").mockImplementation(function (ref, ...args) {
+      if (ref.path?.startsWith("cmsPosts/")) ownerReads++;
+      return original.call(this, ref, ...args);
+    });
     const call = async () => {
       const response = { statusCode: 200, set() { return this; }, status(code) { this.statusCode = code; return this; },
         json(body) { this.body = body; return this; }, send(body) { this.body = JSON.parse(body); return this; } };
       await handler(request, response);
-      expect(response.statusCode).toBe(200);
-      return response.body;
+      return response;
     };
-    expect((await call()).catalog.posts[47].visible).toBe(true);
+    expect((await call()).body.catalog.posts[47].visible).toBe(true);
+    expect((await call()).statusCode).toBe(200);
+    expect(ownerReads).toBe(48);
+    // Every withdrawal advances the public context in its own transaction.
     const batch = db.batch();
     batch.update(db.doc("cmsPosts/post-47"), { publiclyVisible: false });
     batch.update(db.doc("system/publicDeployment/noBuildPostOwners/post-47"), { visible: false });
+    batch.update(db.doc("system/publicDeployment/contexts/public"), { revision: 2 });
     await batch.commit();
-    expect((await call()).catalog.posts[47].visible).toBe(false);
+    expect((await call()).body.catalog.posts[47].visible).toBe(false);
+    expect(ownerReads).toBe(96);
+    await db.doc("system/publicDeployment/buildBatches/release/candidates/worker").update({ noBuildPost: {
+      schemaVersion: 2, rendererSha: "c".repeat(40), enabled: true, authoritative: true, families: ["posts"] } });
+    expect((await call()).statusCode).toBe(503);
   });
 });
