@@ -8,7 +8,7 @@ import { INDEPENDENT_INPUTS } from "../../scripts/lib/deployment-components.mjs"
 import { functionDeploymentPhase, selectedFunctionNames } from "../../scripts/deploy-cms-function-batches.mjs";
 import { contractRecipe } from "../../scripts/lib/functions-contracts.mjs";
 import { cloudWakeConfigurationFingerprint, decideRelease, deploymentVariablesFingerprint, functionSourceProof,
-  runtimeParameterChanges } from "../../scripts/lib/cms-release-plan.mjs";
+  READER_FUNCTIONS, runtimeParameterChanges } from "../../scripts/lib/cms-release-plan.mjs";
 
 const directories = [];
 afterEach(() => directories.splice(0).forEach(path => rmSync(path, { recursive: true, force: true })));
@@ -83,6 +83,15 @@ describe("committed Functions module graph", () => {
     expect(result).toMatchObject({ functionDeployTargets: "all", releaseReason: "functions_configuration_changed" });
     expect(result.functionReasons).toEqual(Object.fromEntries(manifest.map(name => [name, ["functions_configuration_changed"]])));
     expect(selectedFunctionNames(manifest, result.functionDeployTargets)).toEqual(manifest);
+  });
+
+  it("names every export that reads the reader binding", async () => {
+    const head = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+    const { reads } = await fingerprintFunctionGraph(head, { includeRuntimeInputs: true });
+    const readers = Object.keys(reads).filter(name => ["CMS_READER_BRIDGE_OPERATION_ID", "CMS_READER_BRIDGE_FUNCTIONS_CANDIDATE",
+      "CMS_READER_BRIDGE_CMS_API_CANDIDATE"].some(key => reads[name].keys.includes(key)));
+    expect(readers.length).toBeGreaterThan(0);
+    expect(READER_FUNCTIONS).toEqual(expect.arrayContaining(readers));
   });
 
   it("skips a variable-list edit when the committed closures and deployed values agree", async () => {

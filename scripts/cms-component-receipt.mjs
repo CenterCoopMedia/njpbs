@@ -30,6 +30,8 @@ function arg(name, argv) {
   return argv[index + 1];
 }
 
+const quiet = (promise) => Promise.resolve().then(() => promise).catch(() => null);
+
 function optionalArg(name, argv) {
   const index = argv.indexOf(name);
   return index === -1 ? null : argv[index + 1];
@@ -65,10 +67,30 @@ function writeConfigurationFingerprint(argv) {
   return { configurationFingerprint: digest, edgeOriginSecretFingerprint: edgeFingerprint };
 }
 
+async function readWorkerPlan(firestore, { pairing, cwd, sourceSha, trustedWorkflowSha, configurationFingerprint: digest }) {
+  const receipt = await quiet(readReceipt(firestore, "cmsApi"));
+  const baseline = receipt?.state === "complete" ? receipt.mutation : null;
+  const [inputFingerprint, trustedFingerprint, trustedReceiptFingerprint, liveIdentities] = await Promise.all([
+    quiet(fingerprintInputs(sourceSha, "cmsApi", { cwd })),
+    quiet(fingerprintExecutionSource(sourceSha, trustedWorkflowSha, { cwd })),
+    fingerprintReceiptExecutionSource(baseline, { cwd }),
+    quiet(collectLiveIdentities("cmsApi", { firestore })),
+  ]);
+  return planCmsApiRelease({ ...pairing, receipt, inputFingerprint, trustedFingerprint, trustedReceiptFingerprint,
+    configurationFingerprint: digest, liveIdentities });
+}
+
+// The Worker plan before the Functions plan: whether the Worker changes on its own inputs.
+export async function planUnpairedWorker(firestore, { secrets, ...source }) {
+  const edgeOriginSecret = edgeOriginSecretFingerprint(secrets);
+  return readWorkerPlan(firestore, { ...source, configurationFingerprint: configurationFingerprint(secrets),
+    pairing: { configurationRequiresRelease: "false", edgeOriginSecretFingerprint: edgeOriginSecret,
+      expectedEdgeOriginSecretFingerprint: edgeOriginSecret } });
+}
+
 // After secret agreement, unavailable deployment metadata selects a deploy.
 async function planWorker(argv) {
   const cwd = process.env.GITHUB_WORKSPACE;
-  const quiet = (promise) => Promise.resolve().then(() => promise).catch(() => null);
   const pairing = {
     configurationRequiresRelease: process.env.CONFIGURATION_REQUIRES_RELEASE,
     expectedEdgeOriginSecretFingerprint: process.env.CMS_EDGE_ORIGIN_SECRET_FINGERPRINT,
@@ -86,25 +108,9 @@ async function planWorker(argv) {
   const paired = planCmsApiRelease(pairing);
   if (paired.abort || paired.reason === "paired_release") return paired;
   try {
-    return await withFirestore(async (firestore) => {
-      const receipt = await quiet(readReceipt(firestore, "cmsApi"));
-      const baseline = receipt?.state === "complete" ? receipt.mutation : null;
-      const [inputFingerprint, trustedFingerprint, trustedReceiptFingerprint, liveIdentities] = await Promise.all([
-        quiet(fingerprintInputs(arg("--source-sha", argv), "cmsApi", { cwd })),
-        quiet(fingerprintExecutionSource(arg("--source-sha", argv), arg("--trusted-workflow-sha", argv), { cwd })),
-        fingerprintReceiptExecutionSource(baseline, { cwd }),
-        quiet(collectLiveIdentities("cmsApi", { firestore })),
-      ]);
-      return planCmsApiRelease({
-        ...pairing,
-        receipt,
-        inputFingerprint,
-        trustedFingerprint,
-        trustedReceiptFingerprint,
-        configurationFingerprint: fingerprints.configurationFingerprint,
-        liveIdentities,
-      });
-    });
+    return await withFirestore((firestore) => readWorkerPlan(firestore, { pairing, cwd,
+      sourceSha: arg("--source-sha", argv), trustedWorkflowSha: arg("--trusted-workflow-sha", argv),
+      configurationFingerprint: fingerprints.configurationFingerprint }));
   } catch {
     return { mutated: true, reason: "plan_unavailable" };
   }
