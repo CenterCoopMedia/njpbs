@@ -71,7 +71,7 @@ describe("Data Hub reader and downloads", () => {
     const downloaded = await exportText(id, "html");
     const preview = (doc.querySelector("#figure-frame") as unknown as { srcdoc: string }).srcdoc;
     const published = (await dataHubEmbedPages({ DATA_HUB_PUBLIC: "1" }))
-      .find(page => page.id === id && page.snapshot === "2026-11-19/chart")!.html;
+      .find(page => page.id === id && page.snapshot === "2026-11-25/chart")!.html;
     const text = (source: string) => {
       const window = new Window();
       windows.push(window);
@@ -228,7 +228,7 @@ describe("Data Hub reader and downloads", () => {
     expect(new Set(seed.metrics.map((m:{id:string})=>m.id)).size).toBe(18);
     const byId=(id:string)=>seed.metrics.find((m:{id:string})=>m.id===id);
     expect(byId("medianincome").value).toBe(107797);
-    expect(byId("electricity").value).toBe(24.61);
+    expect(byId("electricity").value).toBe(24.64);
     expect(byId("housingpermits").value).toBe(22517);
     expect(byId("precipitation").value).toBe(36.98);
     expect(byId("temperature").value).toBe(57.3);
@@ -679,7 +679,7 @@ describe("Data Hub reader and downloads", () => {
       expect(record.previewOnly).toBe(false);
       expect(record.editorialStatus).toBe("source-verified");
       expect(record.metric.id).toBe(metric.id);
-      expect(record.asOf).toBe("2026-11-19");
+      expect(record.asOf).toBe("2026-11-25");
       expect(doc.querySelector("#figure-release-status")!.textContent).toBe(
         "Published on NJ PBS. Downloads preserve this dated source snapshot.",
       );
@@ -736,7 +736,7 @@ describe("Data Hub reader and downloads", () => {
     expect((await exportText("industryjobs","svg")).replace(/<[^>]+>/g," ").replace(/\s+/g," ")).toContain("sum to −900 jobs");
     expect(rows.every((row:string[])=>row.length===header.length)).toBe(true);
     const jobJson=JSON.parse(await exportText("industryjobs","json"));
-    expect(jobJson.asOf).toBe("2026-11-19");
+    expect(jobJson.asOf).toBe("2026-11-25");
     expect(jobJson.metric.value).toBe(-900);
     const unemploymentJson=JSON.parse(await exportText("unemployment","json"));
     expect(unemploymentJson.metric.history.at(-1).date).toBe("2026-10");
@@ -1050,41 +1050,50 @@ describe("Data Hub reader and downloads", () => {
     const { doc, csv, exportText } = mount();
     const metric = seed.metrics.find((row: { id: string }) => row.id === "electricity");
     const url = "https://www.eia.gov/electricity/monthly/epm_table_grapher.php?t=epmt_5_6_a";
-    expect(metric.value).toBe(24.61);
-    expect(metric.period).toBe("August 2026");
+    expect(metric.value).toBe(24.64);
+    expect(metric.period).toBe("September 2026");
     expect(metric.sourceUrl).toBe(url);
     expect(metric.comparisonsPublic.every((r: { sourceUrl?: string }) => r.sourceUrl === url)).toBe(true);
     expect(metric.electricityComparison).toEqual([
-      { year: 2025, nj: 24.7, us: 17.57 },
-      { year: 2026, nj: 24.61, us: 18.16 },
+      { year: 2025, nj: 23.32, us: 18.05 },
+      { year: 2026, nj: 24.64, us: 18.17 },
     ]);
     const card = doc.querySelector("#metric-electricity")!;
     expect(card.querySelectorAll(".history-plot svg.v7-viz")).toHaveLength(2);
     const desc = card.querySelector(".history-plot svg.v7-viz desc")!.textContent!;
-    for (const text of ["NJ 24.70¢/kWh", "U.S. 17.57¢/kWh", "NJ 24.61¢/kWh", "U.S. 18.16¢/kWh"])
+    for (const text of ["September 2025: NJ 23.32¢/kWh", "U.S. 18.05¢/kWh", "September 2026: NJ 24.64¢/kWh", "U.S. 18.17¢/kWh"])
       expect(desc).toContain(text);
-    expect(card.textContent).toContain("35.5%");
+    const cardText = card.textContent!.replace(/\s+/g, " ");
+    expect(cardText).toContain("Since September 2025, NJ's average price changed +5.7%; the U.S. price changed +0.7%. In September 2026, New Jersey was 6.47¢/kWh (35.6%) above the U.S.");
+    expect(cardText).not.toContain("August");
+    expect(card.querySelector(".history-block__title")!.textContent).toBe("September electricity prices: 2025 and 2026");
+    const noScriptRow = [...doc.querySelectorAll("noscript")].map(node => node.innerHTML).join("");
+    expect(noScriptRow).toContain("<td>24.64¢/kWh</td><td>September 2026</td>");
+    const finding = doc.querySelector(".latest-findings [data-latest-metric='electricity']")!;
+    expect(finding.querySelector("time")!.getAttribute("datetime")).toBe("2026-11-24");
+    expect(finding.textContent).toContain("Data: September 2026");
     expect(card.textContent).toContain("not average monthly utility bills");
     const [header, ...rows] = await csv("electricity");
     expect(header).toEqual(["period", "geography", "price_cents_per_kwh", "source_name", "source_url", "released", "checked", "status"]);
     expect(rows.map(row => row.slice(0, 3))).toEqual([
-      ["August 2025", "New Jersey", "24.70"],
-      ["August 2025", "United States", "17.57"],
-      ["August 2026", "New Jersey", "24.61"],
-      ["August 2026", "United States", "18.16"],
+      ["September 2025", "New Jersey", "23.32"],
+      ["September 2025", "United States", "18.05"],
+      ["September 2026", "New Jersey", "24.64"],
+      ["September 2026", "United States", "18.17"],
     ]);
     expect(rows.every(row => row.length === header.length && row[header.indexOf("source_url")] === url)).toBe(true);
-    expect(rows.every(row => row[header.indexOf("checked")] === "2026-11-09")).toBe(true);
+    expect(rows.every(row => row[header.indexOf("checked")] === "2026-11-25")).toBe(true);
+    expect(rows.every(row => row[header.indexOf("released")] === "2026-11-24")).toBe(true);
     const svg = await exportText("electricity", "svg");
-    expect(svg).toContain("NJ 24.70¢/kWh");
-    expect(svg).toContain("U.S. 18.16¢/kWh");
+    expect(svg).toContain("NJ 23.32¢/kWh");
+    expect(svg).toContain("U.S. 18.17¢/kWh");
     const embedded = await exportText("electricity", "html");
     expect(embedded).toContain("View all four source prices as a table");
     expect(embedded).toContain("EIA Table 5.6.A");
-    expect(embedded).toContain("18.16");
+    expect(embedded).toContain("18.17");
     const record = JSON.parse(await exportText("electricity", "json"));
-    expect(record.metric.value).toBe(24.61);
-    expect(record.metric.checked).toBe("2026-11-09");
+    expect(record.metric.value).toBe(24.64);
+    expect(record.metric.checked).toBe("2026-11-25");
   });
 
   it("exports both monthly comparison series and their reconciled totals", async () => {
