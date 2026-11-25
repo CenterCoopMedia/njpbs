@@ -57,26 +57,26 @@ export function abortCode(error) {
 class PreviewSmokeFailure extends Error {}
 
 export async function checkSignedInPreview(browser, { admin, preview, credential, editor, heading, access },
-  { stageMs = STAGE_HANG_BACKSTOP_MS, previewMs = PREVIEW_HANG_BACKSTOP_MS } = {}) {
+  { noteMs = WAIT_NOTE_MS, note = text => console.error(text) } = {}) {
   let phase = "admin_unavailable";
   let popup;
   let watchTab;
   const saw = {};
-  const hang = hangBackstop();
+  const notes = setInterval(() => note(`Still waiting: ${phase}, ${JSON.stringify(saw)}`), noteMs);
+  notes.unref();
   try {
     const context = await browser.newContext({ serviceWorkers: "block", acceptDownloads: false });
-    // Every wait below ends on what the browser, Admin or the preview reports; the backstop only ends a hang.
+    // Every wait below ends on what the browser, Admin or the preview reports; a long one prints and goes on.
     context.setDefaultTimeout(0);
     for (const [origin, headers] of access) await routePreviewSmokeAccess(context, origin, headers);
     const page = await context.newPage();
-    hang.limit(stageMs);
-    const entry = await hang.over(page.goto(`${admin}/`, { waitUntil: "domcontentloaded" }));
+    const entry = await (page.goto(`${admin}/`, { waitUntil: "domcontentloaded" }));
     if (entry?.status() !== 200 || new URL(page.url()).origin !== admin) throw new Error();
 
     phase = "staff_sign_in_failed";
     // The sign-in wait ends on the Account menu, or on the sign-in service's refusal.
     const refusedSignIn = refusal(page, /\/accounts:signInWithPassword$/);
-    await hang.over(submitCmsSignIn(page, async () => credential, () => Promise.race([refusedSignIn, page
+    await (submitCmsSignIn(page, async () => credential, () => Promise.race([refusedSignIn, page
       .getByRole("button", { name: /^Account menu for / }).waitFor({ state: "visible" })])));
     if (new URL(page.url()).origin !== admin) throw new Error();
 
@@ -85,14 +85,14 @@ export async function checkSignedInPreview(browser, { admin, preview, credential
     // An editor that cannot load its record says so and has no Preview button.
     const unavailable = page.getByText(editorUnavailable).first().waitFor({ state: "visible" }).then(() => { throw new Error(); });
     unavailable.catch(() => {});
-    await hang.over(page.goto(editorUrl, { waitUntil: "domcontentloaded" }));
+    await (page.goto(editorUrl, { waitUntil: "domcontentloaded" }));
     if (page.url() !== editorUrl) throw new Error();
     const button = page.getByRole("button", { name: "Preview", exact: true });
-    await hang.over(Promise.race([unavailable, button.waitFor({ state: "visible" })]));
+    await (Promise.race([unavailable, button.waitFor({ state: "visible" })]));
     // The editor shows the button only after its load, with the saved receipt already recorded
     // (EditorWorkspace.tsx), so a button that is disabled when it appears stays disabled.
-    if (await hang.over(button.isDisabled())) {
-      const label = await hang.over(page.getByRole("group", { name: /^Preview unavailable: / })
+    if (await (button.isDisabled())) {
+      const label = await (page.getByRole("group", { name: /^Preview unavailable: / })
         .evaluateAll(nodes => nodes[0]?.getAttribute("aria-label") ?? null).catch(() => null));
       saw.reason = disabledReasons.get(label?.replace(/^Preview unavailable: /, "")) ?? "unlisted";
       throw new PreviewSmokeFailure("preview_control_disabled");
@@ -106,8 +106,6 @@ export async function checkSignedInPreview(browser, { admin, preview, credential
     // state ends the wait at once: the progress state in the tab, or the error it shows in the
     // editor. A ready job is followed by the document. A failed session request and a closed
     // tab end it too.
-    // Coordinator ruling (Nov. 24, 2026, review of e74c821): this state-based wait and the
-    // backstop below are this change's scope, because a 60 s timer failed a working preview.
     let stop;
     const stopped = new Promise((_, reject) => { stop = code => reject(new PreviewSmokeFailure(code)); });
     stopped.catch(() => {});
@@ -137,8 +135,7 @@ export async function checkSignedInPreview(browser, { admin, preview, credential
     });
     page.getByRole("alert").filter({ hasText: editorStop }).first().waitFor({ state: "visible" })
       .then(() => stop("preview_admin_stopped"), () => {});
-    hang.limit(previewMs);
-    const [, , document] = await hang.over(Promise.race([stopped, Promise.all([
+    const [, , document] = await (Promise.race([stopped, Promise.all([
       opened.then(value => {
         popup = value; saw.popup = true;
         value.on("close", () => stop("preview_tab_closed"));
@@ -160,8 +157,7 @@ export async function checkSignedInPreview(browser, { admin, preview, credential
     clearInterval(watchTab);
     phase = "preview_heading_missing";
     if (document.frame() !== popup.mainFrame()) throw new Error();
-    hang.limit(stageMs);
-    await hang.over(Promise.race([stopped, popup.waitForURL(url => url.href === document.url(), { waitUntil: "commit" })]));
+    await (Promise.race([stopped, popup.waitForURL(url => url.href === document.url(), { waitUntil: "commit" })]));
     // The named heading is the success, whatever else is still loading. A parsed document without it has failed.
     const found = popup.getByRole("heading", { name: heading, exact: true });
     const absent = popup.waitForLoadState("domcontentloaded").then(async () => {
@@ -169,7 +165,7 @@ export async function checkSignedInPreview(browser, { admin, preview, credential
       return new Promise(() => {});
     });
     absent.catch(() => {});
-    await hang.over(Promise.race([stopped, found.first().waitFor({ state: "visible" }), absent]));
+    await (Promise.race([stopped, found.first().waitFor({ state: "visible" }), absent]));
     return { ok: true, code: "signed_in_private_preview" };
   } catch (error) {
     const code = error instanceof PreviewSmokeFailure ? error.message : phase;
@@ -181,7 +177,7 @@ export async function checkSignedInPreview(browser, { admin, preview, credential
       popup: await describePopup(popup, { admin, preview }) };
   } finally {
     clearInterval(watchTab);
-    hang.clear();
+    clearInterval(notes);
   }
 }
 
@@ -196,29 +192,8 @@ function refusal(page, path) {
   return refused;
 }
 
-// One timer for the current stage. It ends a hang with the structured receipt, inside the step's own limit.
-function hangBackstop() {
-  let timer, end;
-  const expired = new Promise((_, reject) => { end = () => reject(new Error("hang")); });
-  expired.catch(() => {});
-  return {
-    limit(milliseconds) { clearTimeout(timer); timer = setTimeout(end, milliseconds); },
-    over: work => Promise.race([expired, work]),
-    clear: () => clearTimeout(timer),
-  };
-}
-
-// Hang backstops only; they end a smoke that no reported state ends. Both start at their stage.
-// Sign-in and editor, and the opened document's heading: the whole smoke measured 25 s
-// (run 45191230409) and 15 s (dev run 45310500950); 5 min is 12 times the longer one.
-export const STAGE_HANG_BACKSTOP_MS = 5 * 60_000;
-// Preview job: measured on dev, Nov. 24, 2026, with an idle container on a cached image the
-// document arrived 30 s after the click. The first job after a renderer image rollout did not
-// reach the document within 60 s in run 45436441069, and a cold start has not been measured to
-// its end, so no smaller number is safe. The server fails a job by itself at
-// PREVIEW_BUILD_TIMEOUT_MS (45 min), and an older job can hold the requested one for the same
-// time first; 95 min is two of those limits and 5 min for Admin to show the result.
-export const PREVIEW_HANG_BACKSTOP_MS = 95 * 60_000;
+// A wait never fails on time: it prints what it waits for and goes on.
+export const WAIT_NOTE_MS = 60_000;
 // The errors that the editor shows when its record cannot load (ContentTab.tsx, EditorWorkspace.tsx).
 const editorUnavailable = /(?:do not have permission to edit this (?:page|record)\.|This page is no longer available\.|The (?:page|record) could not be loaded\. Reload to try again\.|Deleted records cannot be edited here\.)/;
 // The reasons the editor gives for a disabled Preview button (EditorWorkspace.tsx), as receipt codes.

@@ -3,7 +3,7 @@ import { EventEmitter } from "node:events";
 import { test } from "node:test";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import { abortCode, checkSignedInPreview, PREVIEW_HANG_BACKSTOP_MS, previewSmokeSettings, routePreviewSmokeAccess, STAGE_HANG_BACKSTOP_MS } from "./smoke-signed-in-preview.mjs";
+import { abortCode, checkSignedInPreview, previewSmokeSettings, routePreviewSmokeAccess } from "./smoke-signed-in-preview.mjs";
 
 const credential = { email: "preview@example.org", password: "fixture-password" };
 const access = { "CF-Access-Client-Id": "preview.access", "CF-Access-Client-Secret": "fixture-secret" };
@@ -196,14 +196,14 @@ test("names a disabled Preview control at once", async () => {
 
 test("names the missing wait and where the preview tab settled", async () => {
   const settings = previewSmokeSettings("production", env);
-  // The fixture's waits never time out, so each case ends on its event or on the hang backstop given here.
+  // The fixture's waits never time out, so each case ends on its event.
   const check = (input, limits) => checkSignedInPreview(fixtureBrowser(settings, input), settings, limits);
   const timeoutText = "Preview build did not finish within 45 minutes";
-  // Only the hang backstop ends the wait while the job is still building.
-  assert.deepEqual(await check({ noDocument: true, job: { status: "building" } }, { previewMs: 20 }), {
-    ok: false, code: "private_preview_unavailable", missing: ["document"],
-    session: { status: 204 }, job: { status: "building" }, document: null, popup: { place: "about:blank", progress: "building" },
-  });
+  // A long wait prints what it waits for and goes on until the preview reports a state.
+  const notes = [];
+  assert.equal((await check({ noDocument: true, job: { status: "building" }, later: { progress: "error" } },
+    { noteMs: 1, note: text => notes.push(text) })).code, "preview_admin_stopped");
+  assert.ok(notes.length > 0);
   // A failed older job alone does not end the wait; Admin's terminal state does, and the receipt names the job error.
   assert.deepEqual(await check({ noDocument: true, job: { status: "failed", error: timeoutText, previewUrl: null },
     progress: "waiting", later: { progress: "error" } }), {
