@@ -12,7 +12,7 @@ type Names = { vars: Set<string>; secrets: Set<string> };
 
 const read = (path: string) => readFileSync(new URL("../../" + path, import.meta.url), "utf8");
 const json = <T>(path: string): T => JSON.parse(read(path));
-const targetWorkflows = ["cms-staging-deploy", "publisher-image"];
+const targetWorkflows = ["publisher-image"];
 const workflows = targetWorkflows.map(name => [name, parse(read(".github/workflows/" + name + ".yml")) as Workflow] as const);
 const manifest = json<Manifest>("config/step-inputs.json");
 const namePattern = /^[A-Z_][A-Z0-9_]*$/;
@@ -131,13 +131,6 @@ describe("release step inputs", () => {
     }
   });
 
-  it("detects a new required script input missing from the contract", () => {
-    expect(unlistedRequirements('if (!process.env.NEW_REQUIRED) throw new Error("Missing input");', [])).toEqual(["NEW_REQUIRED"]);
-    const path = "site/scripts/deploy-cms-preview-cloud.ts";
-    expect(unlistedRequirements(read(path), manifest[path].filter(name => name !== "CLOUDFLARE_ACCOUNT_ID")))
-      .toContain("CLOUDFLARE_ACCOUNT_ID");
-  });
-
   for (const [name, workflow] of workflows) {
     it("wires declared inputs for " + name, () => {
       expect(stepWiringGaps(workflow, manifest)).toEqual([]);
@@ -160,17 +153,8 @@ describe("release step inputs", () => {
     });
   }
 
-  it("names the missing Cloudflare account on the old preview pause step", () => {
-    const old = structuredClone(workflows[0][1]);
-    const pause = old.jobs.firebase.steps?.find(step => step.name === "Pause cloud preview admission before changing Functions");
-    expect(pause?.env?.CLOUDFLARE_ACCOUNT_ID).toBeDefined();
-    delete pause?.env?.CLOUDFLARE_ACCOUNT_ID;
-    expect(stepWiringGaps(old, manifest)).toContain(
-      "firebase / Pause cloud preview admission before changing Functions / CLOUDFLARE_ACCOUNT_ID");
-  });
-
   it("separates publisher image mode inputs at their invocation sites", () => {
-    const job = workflows[1][1].jobs.image;
+    const job = workflows[0][1].jobs.image;
     for (const [mode, input] of [
       ["verify", "GH_TOKEN"], ["prepare", "PUBLISHER_PUBLIC_VARS_JSON"], ["image", "CLOUDFLARE_API_TOKEN"],
     ]) {

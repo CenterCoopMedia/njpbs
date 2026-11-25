@@ -38,7 +38,6 @@ describe("pinned public build fonts", () => {
     ["publisher/Dockerfile", "node /app/site/scripts/prepare-public-fonts.mjs", "ENV NODE_ENV=production"],
     ["publisher/Dockerfile.pair", "node /app/site/scripts/prepare-public-fonts.mjs", "ARG CMS_DEPLOYMENT_ENVIRONMENT"],
     ["preview-renderer/Dockerfile", "node /app/site/scripts/prepare-public-fonts.mjs", "node --import /app/site/node_modules/tsx/dist/loader.mjs /app/site/scripts/build-compiled-renderer.ts"],
-    ["docs/cms/release-without-pause.md", "node site/scripts/prepare-public-fonts.mjs", "All attended first-install blocks"],
     [".github/workflows/ci.yml", "node site/scripts/prepare-public-fonts.mjs", "Compile and verify private renderer"],
     [".github/workflows/cms-dev-publish.yml", "node site/scripts/prepare-public-fonts.mjs", "Prepare pinned search model for offline build"],
   ])("seeds verified fonts before the offline boundary in %s", async (file, seed, boundary) => {

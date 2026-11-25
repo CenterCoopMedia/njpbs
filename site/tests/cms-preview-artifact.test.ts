@@ -23,21 +23,4 @@ describe("CMS preview configuration", () => {
     expect(checkProductionContent("contact", { CMS_CONTENT_MODE: "published" }))
       .toBe(true);
   });
-
-  it("enables deployed admin controls only through the reviewed preview-readiness variables", async () => {
-    const stagingWorkflow = await read(
-      "../../.github/workflows/cms-staging-deploy.yml",
-    );
-
-    expect(stagingWorkflow).not.toContain('VITE_CMS_PREVIEW_ENABLED: "false"');
-    expect(stagingWorkflow).toContain(
-      "VITE_CMS_PREVIEW_ENABLED: ${{ vars.VITE_CMS_PREVIEW_ENABLED || 'false' }}",
-    );
-    expect(stagingWorkflow).toContain(
-      "CMS_PREVIEW_ACCESS_VERIFIED: ${{ vars.CMS_PREVIEW_ACCESS_VERIFIED || 'false' }}",
-    );
-    expect(stagingWorkflow).toContain(
-      "CMS_PREVIEW_SERIALIZER_READY: ${{ vars.CMS_PREVIEW_SERIALIZER_READY || 'false' }}",
-    );
-  });
 });

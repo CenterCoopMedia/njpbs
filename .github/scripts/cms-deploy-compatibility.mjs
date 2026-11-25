@@ -325,7 +325,6 @@ const CMS_ONLY_DEPLOY_PATHS = [
   "admin/src/styles/", // Staff-only styles; Site owns its separate styles.
   "admin/src/data/whats-new.ts", // Staff What's new registry, read only by Admin.
   "admin/src/data/whats-new/", // Staff What's new note data, read only by Admin.
-  "docs/cms/staging-deploy-runbook.md", // Operator prose, never a renderer/build input.
   "docs/cms/cloud-publisher.md", // Operator prose, never a renderer/build input.
   "docs/cms/boardwalk-usage.md", // Staff analytics documentation, never a renderer/build input.
   "functions/boardwalk-usage.js", // Standalone CMS usage exports loaded by functions/index.js, not the publisher.
@@ -339,8 +338,6 @@ const CMS_ONLY_DEPLOY_PATHS = [
   "config/functions-deployment.json", // Functions deploy scope and media secret references; read by configure-cms-functions.mjs.
   "scripts/admin-status-manifest.mjs", // Admin status manifest generator run by the CMS workflow.
   "scripts/lib/functions-retirement.mjs", // Functions retirement plan run by the CMS workflow's firebase job.
-  "docs/cms/admin-deploy.md", // Operator prose, never a renderer/build input.
-  "docs/cms/functions-deploy.md", // Operator prose, never a renderer/build input.
   "tests/preflight/", // CI preflight tests; not run/imported by publisher builds or runtime.
   "site/tests/cms-publisher-compatibility.test.ts", // Tests for this gate; the Site build does not read site/tests.
 ];

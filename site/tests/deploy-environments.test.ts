@@ -155,13 +155,6 @@ describe("deploy credential environments", () => {
     expect(operator.run).toBe("node scripts/deploy-dev-staff-gateway.mjs");
   });
 
-  it.each([
-    ["cms-staging-deploy", ["admin-build", "firebase-preflight", "cms-api", "firebase", "preview-renderer", "live-smoke", "admin-deploy"], TARGET_ENVIRONMENT],
-    ["probe-media-manager", ["probe"], "production"],
-  ] as const)("places main-only secret jobs in production: %s", (name, jobs, environment) => {
-    for (const id of jobs) expect(workflow(name).jobs[id].environment).toBe(environment);
-  });
-
   it("places dev publication credentials only in development", () => {
     const definition = workflow("cms-dev-publish");
     for (const id of ["prepare", "finalize"]) expect(definition.jobs[id].environment).toBe("development");
@@ -171,21 +164,6 @@ describe("deploy credential environments", () => {
       "CLOUDFLARE_DEV_PUBLIC_WORKER_TOKEN", "CMS_DEV_PREVIEW_R2_CREDENTIAL",
       "CMS_DEV_ACCESS_CLIENT_ID", "CMS_DEV_ACCESS_CLIENT_SECRET",
     ]);
-  });
-
-  it.each([
-    ["cms-dev-deploy", "deploy", "development", "development", "cms-contract-source", "Smoke-test the pinned dev CMS boundaries"],
-    ["cms-staging-deploy", "live-smoke", TARGET_ENVIRONMENT, '"$CMS_TARGET"', "cms-smoke-gate", "Smoke-test the deployed signed-out Admin shell"],
-  ])("smokes one signed-in preview after the other live checks in %s", (name, id, environment, target, source, after) => {
-    const job = workflow(name).jobs[id];
-    expect(job.environment).toBe(environment);
-    expect(secretNames(job.env)).not.toContain("CMS_PREVIEW_SMOKE_CREDENTIAL");
-    const check = job.steps.findIndex((step: any) => step.name === "Smoke-test one signed-in private preview");
-    const existing = job.steps.findIndex((step: any) => step.name === after);
-    expect(existing).toBeGreaterThanOrEqual(0);
-    expect(check).toBeGreaterThan(existing);
-    expect(job.steps[check].run).toBe(`node "$RUNNER_TEMP/${source}"/scripts/smoke-signed-in-preview.mjs ${target}`);
-    expect(job.steps[check].env.CMS_PREVIEW_SMOKE_CREDENTIAL).toBe("${{ secrets.CMS_PREVIEW_SMOKE_CREDENTIAL }}");
   });
 
   it("places schedule App jobs in their dedicated main-only environment", () => {

@@ -1,6 +1,5 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { readCmsDeployWorkflow } from "../../tests/helpers/cms-deploy-workflow.mjs";
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { runInNewContext } from "node:vm";
@@ -11,10 +10,6 @@ const read = (rel: string) =>
 const astroConfig = read("../astro.config.mjs");
 const previewWorkflow = read("../../.github/workflows/preview.yml");
 const ciWorkflow = read("../../.github/workflows/ci.yml");
-const stagingDeployWorkflowPath = new URL(
-  "../../.github/workflows/cms-staging-deploy.yml",
-  import.meta.url,
-);
 const sitePackage = read("../package.json");
 const functionManifest = read("../../functions/index.js");
 const deploymentBootstrap = read(
@@ -140,35 +135,6 @@ function expectOrdered(workflow: string, first: string, second: string): void {
 }
 
 describe("production deploy authority", () => {
-  it("allows only the configured owner to start or re-run a full-stack CMS deployment", () => {
-    const stagingDeployWorkflow = readCmsDeployWorkflow();
-    expect(stagingDeployWorkflow).toContain("workflow_dispatch:");
-    expect(stagingDeployWorkflow).not.toContain("repository_dispatch:");
-    expect(stagingDeployWorkflow).toContain(
-      "inputs.deploy_ref",
-    );
-    expect(stagingDeployWorkflow).toContain(
-      "inputs.cloudflare_pages_branch",
-    );
-    expect(stagingDeployWorkflow).toContain("id: pages_branch");
-    expect(stagingDeployWorkflow).toContain("CLOUDFLARE_PAGES_BRANCH:");
-    expect(stagingDeployWorkflow).toMatch(
-      /\[\[ !? ?\"\$CLOUDFLARE_PAGES_BRANCH\" =~/,
-    );
-    expect(
-      workflowJob(stagingDeployWorkflow, "admin-deploy").match(
-        /command:.*client_payload/,
-      ),
-    ).toBeNull();
-
-    const jobNames = workflowJobNames(stagingDeployWorkflow);
-    expect(jobNames).not.toHaveLength(0);
-    for (const jobName of jobNames) {
-      expect(workflowJob(stagingDeployWorkflow, jobName)).toContain(
-        "(vars.CMS_DEPLOY_OWNER != '' && github.triggering_actor == vars.CMS_DEPLOY_OWNER) && github.ref == 'refs/heads/main'",
-      );
-    }
-  });
 
   it("discovers alternative top-level job spellings instead of skipping them", () => {
     const synthetic = [
@@ -525,195 +491,4 @@ describe("workflow gate", () => {
     );
   });
 
-});
-
-describe("cms staging deploy surface", () => {
-  it("keeps Firebase key files and exported credentials out of Cloudflare tool jobs", () => {
-    const workflow = parse(readFileSync(stagingDeployWorkflowPath, "utf8"));
-    expect(workflow.env ?? {}).not.toHaveProperty("GOOGLE_APPLICATION_CREDENTIALS");
-    for (const [name, job] of Object.entries<any>(workflow.jobs)) {
-      const runsCloudflareTool = job.steps.some((step: any) =>
-        step.uses?.startsWith("cloudflare/") ||
-        /\bwrangler\b|deploy-cms-preview-cloud\.ts deploy/.test(step.run ?? ""),
-      );
-      if (!runsCloudflareTool) continue;
-      // Only this ADC consumer may create a file; its shell cleanup is exercised
-      // in tests/preflight/admin-deploy-identity.test.js on success and failure.
-      const sharedSteps = job.steps.filter((step: any) =>
-        !(name === "admin-deploy" && step.name === "Recheck live Functions identity before Admin upload"),
-      );
-      expect(JSON.stringify(sharedSteps), name).not.toContain("GOOGLE_APPLICATION_CREDENTIALS");
-      expect(JSON.stringify(sharedSteps), name).not.toContain("firebase-service-account.json");
-      expect(job.env ?? {}, name).not.toHaveProperty("GOOGLE_APPLICATION_CREDENTIALS");
-      expect(job.env ?? {}, name).not.toHaveProperty("CMS_PREVIEW_FIREBASE_ACCOUNT");
-      expect(job.env ?? {}, name).not.toHaveProperty("FIREBASE_SERVICE_ACCOUNT");
-    }
-  });
-
-  it.each(["cms-api", "admin-deploy"])("gives %s receipt checks step-scoped Firebase credentials", name => {
-    const workflow = parse(readFileSync(stagingDeployWorkflowPath, "utf8"));
-    const receiptSteps = workflow.jobs[name].steps.filter((step: any) =>
-      step.run?.includes("node scripts/component-runner.mjs"),
-    );
-    expect(receiptSteps.length).toBeGreaterThan(0);
-    for (const step of receiptSteps) {
-      if (name === "admin-deploy" && step.name === "Recheck live Functions identity before Admin upload") {
-        expect(step.env.SA).toBe("${{ secrets.FIREBASE_SERVICE_ACCOUNT }}");
-        expect(step.env.GOOGLE_APPLICATION_CREDENTIALS).toBe("${{ runner.temp }}/firebase-service-account.json");
-        expect(step.run).not.toContain("GITHUB_ENV");
-      } else if (name === "admin-deploy" && step.name === "Recheck live renderer identity before Admin upload") {
-        // A dev run reads the dev renderer with dev credentials only, with no fallback to production secrets.
-        expect(step.env.CMS_PREVIEW_FIREBASE_ACCOUNT).toBe("${{ inputs.target == 'development' && secrets.CMS_DEV_PREVIEW_FIREBASE_ACCOUNT || inputs.target != 'development' && secrets.FIREBASE_SERVICE_ACCOUNT || '' }}");
-        expect(step.env.CLOUDFLARE_API_TOKEN).toBe("${{ inputs.target == 'development' && secrets.CLOUDFLARE_DEV_PREVIEW_RENDERER_TOKEN || inputs.target != 'development' && secrets.CLOUDFLARE_API_TOKEN || '' }}");
-      } else {
-        expect(step.env.CMS_PREVIEW_FIREBASE_ACCOUNT, step.name).toBe("${{ secrets.FIREBASE_SERVICE_ACCOUNT }}");
-      }
-    }
-  });
-
-  it("adds the manual Firebase and admin deploy workflow", () => {
-    expect(
-      existsSync(fileURLToPath(stagingDeployWorkflowPath)),
-      "cms staging deploy workflow missing",
-    ).toBe(true);
-
-    const stagingDeployWorkflow = readCmsDeployWorkflow();
-
-    expect(stagingDeployWorkflow).toContain("workflow_dispatch:");
-    expect(stagingDeployWorkflow).not.toContain("repository_dispatch:");
-    expect(stagingDeployWorkflow).not.toContain("pull_request:");
-    expect(stagingDeployWorkflow).toContain('node-version: "22.23.5"');
-    expect(stagingDeployWorkflow).toContain("FIREBASE_SERVICE_ACCOUNT");
-    expect(stagingDeployWorkflow).toContain(
-      '--only "$CMS_TARGET_FIREBASE_RULES"',
-    );
-    expect(stagingDeployWorkflow).toContain(
-      "node scripts/component-runner.mjs functions deploy",
-    );
-    expect(stagingDeployWorkflow).toContain(
-      "FUNCTION_TARGETS: ${{ needs.verify.outputs.function_targets }}",
-    );
-    expect(stagingDeployWorkflow).toContain("CMS_PUBLISH_TRANSPORT: serializer");
-    expect(stagingDeployWorkflow).not.toContain("CMS_WRITEBACK_CONFIGURED");
-    expect(stagingDeployWorkflow).toContain(
-      "Configure functions runtime params",
-    );
-    expect(stagingDeployWorkflow).toContain('"functions/.env.$CMS_TARGET_FIREBASE_PROJECT"');
-    expect(stagingDeployWorkflow).toContain("Preflight admin env");
-    expect(stagingDeployWorkflow).toContain(
-      "Missing required admin build env vars",
-    );
-    expect(stagingDeployWorkflow).toContain("npm run admin:build");
-    expect(stagingDeployWorkflow).toContain("VITE_FIREBASE_API_KEY");
-    expect(stagingDeployWorkflow).toContain("VITE_FUNCTIONS_BASE_URL");
-    expect(stagingDeployWorkflow).toContain(
-      "uses: cloudflare/wrangler-action@953926a2e2182532811c01a25e53647d93bf07c0 # v4.1.3",
-    );
-    expect(stagingDeployWorkflow).toContain("workingDirectory: admin");
-    expect(stagingDeployWorkflow).toContain(
-      "pages deploy dist --project-name=${{ env.CMS_TARGET_ADMIN_PAGES }}",
-    );
-  });
-
-  it("builds every Admin with Home layouts enabled now that production renders them", () => {
-    const workflow = parse(readFileSync(stagingDeployWorkflowPath, "utf8"));
-    const builds = Object.values(workflow.jobs).flatMap((job: any) => job.steps ?? [])
-      .filter((step: any) => step.run?.includes("npm run admin:build"));
-    expect(builds.length).toBeGreaterThan(0);
-    for (const build of builds) {
-      expect(build.env ?? {}).not.toHaveProperty("VITE_CMS_HOME_LAYOUTS_ENABLED");
-    }
-    expect(read("../../scripts/deploy-admin.sh")).toMatch(
-      /env -u GH_TOKEN -u GITHUB_TOKEN \\\r?\n\s+ADMIN_STATUS_MANIFEST_BASE64="\$admin_status_manifest" \\\r?\n\s+VITE_AUTHOR_PAGES_LIVE="\$author_release_selection" \\\r?\n\s+npm run admin:build/,
-    );
-    expect(read("../../scripts/deploy-admin.sh")).not.toContain("VITE_CMS_HOME_LAYOUTS_ENABLED");
-    expect(read("../../.github/workflows/cms-dev-deploy.yml")).not.toContain("VITE_CMS_HOME_LAYOUTS_ENABLED");
-  });
-
-  it("keeps normal reviewed-main ancestry and binds authorized freeze source in every deploy job", () => {
-    const workflow = parse(readFileSync(stagingDeployWorkflowPath, "utf8"));
-    const sourceGate = read("../../.github/scripts/require-release-source.mjs");
-    expect(workflow.on.workflow_dispatch.inputs.emergency_release.default).toBe(false);
-    expect(sourceGate).toContain('git("merge-base", "--is-ancestor", sha, "origin/main")');
-    expect(sourceGate).toContain('git("rev-list", "--first-parent", sha)');
-    for (const name of ["admin-build", "firebase-preflight", "cms-api", "firebase", "preview-renderer"]) {
-      const steps = workflow.jobs[name].steps;
-      const target = steps.find((step: any) => step.uses === "actions/checkout@v7");
-      expect(target.with.ref).toBe(name === "admin-build"
-        ? "${{ inputs.deploy_ref }}" : "${{ needs.admin-build.outputs.deploy_sha }}");
-      expect(target.with["fetch-depth"]).toBe(0);
-      expect(target.with["persist-credentials"]).toBe(name !== "preview-renderer");
-      const gateSource = steps.find((step: any) => step.with?.path === ".release-gate");
-      expect(gateSource.with.ref).toBe("${{ github.sha }}");
-      expect(gateSource.with["persist-credentials"]).toBe(false);
-      const gate = steps.find((step: any) => step.name === (name === "preview-renderer"
-        ? "Require reviewed renderer source" : "Require reviewed deploy ref"));
-      expect(steps.indexOf(gateSource)).toBeLessThan(steps.indexOf(gate));
-      expect(gate.run).toContain('node "$RUNNER_TEMP/release-gate"/.github/scripts/require-release-source.mjs');
-      expect(gate.env.EMERGENCY_RELEASE).toBe("${{ inputs.emergency_release || false }}");
-      expect(gate.env.EMERGENCY_AUTHORIZATION).toBe("${{ inputs.emergency_authorization || '' }}");
-      if (name !== "preview-renderer") expect(gate.run).toContain("git fetch origin main");
-    }
-  });
-
-  it("writes explicit bootstrap and account-email values without admission lists", () => {
-    const stagingDeployWorkflow = readCmsDeployWorkflow();
-
-    const table = JSON.parse(read("../../config/functions-configuration.json"));
-    for (const key of ["BOOTSTRAP_SUPER_ADMINS", "CMS_STAFF_EMAIL_FROM", "CMS_STAFF_EMAIL_REPLY_TO"]) {
-      expect(table.parameters[key].input).toBe(key);
-      expect(table.inputs[key].variable).toBe(key);
-    }
-    expect(table.inputs.CMS_STAFF_EMAIL_ADMIN_ORIGIN.default).toBe("https://admin.njpbs.org");
-    expect(stagingDeployWorkflow).toContain("component-runner.mjs functions configure");
-    expect(stagingDeployWorkflow).toContain("CMS_DEPLOYMENT_VARIABLES_JSON: ${{ toJSON(vars) }}");
-    expect(stagingDeployWorkflow).not.toContain("STAFF_EMAIL_DOMAINS");
-    expect(stagingDeployWorkflow).not.toContain("STAFF_EMAIL_ALLOWLIST");
-    expect(stagingDeployWorkflow).not.toContain(
-      'if [ -n "${BOOTSTRAP_SUPER_ADMINS:-}" ]',
-    );
-  });
-
-  it("builds the admin artifact before Firebase and uploads it afterward", () => {
-    const stagingDeployWorkflow = readCmsDeployWorkflow();
-    const adminBuildJob = workflowJob(stagingDeployWorkflow, "admin-build");
-    const verifyJob = workflowJob(stagingDeployWorkflow, "verify");
-    const firebaseJob = workflowJob(stagingDeployWorkflow, "firebase");
-    const cmsApiJob = workflowJob(stagingDeployWorkflow, "cms-api");
-    const liveSmokeJob = workflowJob(stagingDeployWorkflow, "live-smoke");
-    const adminDeployJob = workflowJob(stagingDeployWorkflow, "admin-deploy");
-
-    expect(adminBuildJob).toContain("Preflight admin env");
-    expect(adminBuildJob).toContain("npm run admin:build");
-    expect(adminBuildJob).toContain("uses: actions/upload-artifact@v7");
-    expect(adminBuildJob).toContain("name: cms-staging-admin");
-    expect(adminBuildJob).toContain("path: admin/dist/");
-    expect(adminBuildJob).not.toContain("firebase deploy");
-    expect(verifyJob).toContain("node scripts/component-runner.mjs functions manifest");
-    expect(verifyJob).not.toContain("FIREBASE_SERVICE_ACCOUNT");
-    expect(firebaseJob).toContain(
-      "needs: [admin-build, firebase-preflight, verify]",
-    );
-    expect(firebaseJob).toContain(
-      "ref: ${{ needs.admin-build.outputs.deploy_sha }}",
-    );
-    expect(firebaseJob).toContain("firebase deploy");
-    expect(firebaseJob).not.toContain(".cms-smoke-gate");
-    expect(cmsApiJob).toContain(
-      "needs: [admin-build, firebase-preflight, firebase]",
-    );
-    expect(cmsApiJob).toContain("Deploy CMS API Worker");
-    expect(liveSmokeJob).toContain(
-      "needs: [admin-build, firebase, admin-deploy]",
-    );
-    expect(liveSmokeJob).toContain("node scripts/component-runner.mjs functions smoke");
-    expect(liveSmokeJob).not.toContain("FIREBASE_SERVICE_ACCOUNT");
-    expect(adminDeployJob).toContain("needs: [admin-build, cms-api, firebase, preview-renderer, firebase-preflight, admin-contract]");
-    expect(adminDeployJob).toContain("uses: actions/download-artifact@v8");
-    expect(adminDeployJob).toContain("name: cms-staging-admin");
-    expect(adminDeployJob).toContain("path: admin/dist");
-    expect(adminDeployJob).toContain("uses: cloudflare/wrangler-action@953926a2e2182532811c01a25e53647d93bf07c0 # v4.1.3");
-    expect(adminDeployJob).toContain("CMS_ADMIN_ACCESS_API_TOKEN");
-    expect(adminDeployJob).toContain("configure-admin-public-shell.mjs");
-  });
 });

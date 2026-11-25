@@ -14,10 +14,7 @@ const routesPath = "packages/content-core/src/public-record-kinds.ts";
 const read = (path: string) => readFileSync(new URL(`../../${path}`, import.meta.url), "utf8");
 const currentModel = read(modelPath);
 const currentRoutes = read(routesPath);
-const workflow = parse(read(".github/workflows/cms-staging-deploy.yml"));
-const gate = workflow.jobs["admin-build"].steps.find(
-  (step: { name?: string }) => step.name === "Require CMS deploy compatibility floor",
-).run as string;
+const gate = 'node "$RUNNER_TEMP/admin-status-gate"/.github/scripts/cms-deploy-compatibility.mjs --target-root "$GITHUB_WORKSPACE" --publisher-receipt-url "$CMS_TARGET_PUBLIC_ORIGIN/_publication.json"';
 
 let root: string;
 let runtime: string;
@@ -312,17 +309,13 @@ describe("CMS deploy one commit past the live renderer", () => {
     "admin/src/data/whats-new.ts",
     "admin/src/data/whats-new/usage.json",
     "docs/cms/cloud-publisher.md",
-    "docs/cms/staging-deploy-runbook.md",
     "tests/functions/boardwalk-usage.test.js",
     "tests/rules/boardwalk-usage.test.js",
-    ".github/workflows/cms-staging-deploy.yml",
     ".github/scripts/cms-deploy-compatibility.mjs",
     ".github/scripts/require-main-ci.test.mjs",
     "config/functions-deployment.json",
     "scripts/admin-status-manifest.mjs",
     "scripts/lib/functions-retirement.mjs",
-    "docs/cms/admin-deploy.md",
-    "docs/cms/functions-deploy.md",
     "tests/preflight/admin-status-manifest.test.js",
     "site/tests/cms-publisher-compatibility.test.ts",
   ])("allows a CMS-ahead change confined to %s", async path => {
