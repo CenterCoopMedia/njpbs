@@ -82,12 +82,13 @@ export async function checkSignedInPreview(browser, { admin, preview, credential
 
     phase = "editor_unavailable";
     const editorUrl = `${admin}${editor}`;
-    // A refused content read leaves the editor without a Preview button.
-    const refusedContent = refusal(page, /\/cmsGetContent$/);
+    // An editor that cannot load its record says so and has no Preview button.
+    const unavailable = page.getByText(editorUnavailable).first().waitFor({ state: "visible" }).then(() => { throw new Error(); });
+    unavailable.catch(() => {});
     await hang.over(page.goto(editorUrl, { waitUntil: "domcontentloaded" }));
     if (page.url() !== editorUrl) throw new Error();
     const button = page.getByRole("button", { name: "Preview", exact: true });
-    await hang.over(Promise.race([refusedContent, button.waitFor({ state: "visible" })]));
+    await hang.over(Promise.race([unavailable, button.waitFor({ state: "visible" })]));
 
     phase = "private_preview_unavailable";
     const session = `${preview}/__cms-session`;
@@ -114,6 +115,18 @@ export async function checkSignedInPreview(browser, { admin, preview, credential
     });
     // The receipt keeps the last job status and error code from Admin's own replies.
     page.on("response", reply => void readJob(reply, saw));
+    for (const ended of ["close", "crash"]) page.on(ended, () => stop("preview_admin_stopped"));
+    // The popup document's own network failure is its end: no response or terminal state follows it.
+    const isDocument = request => {
+      const url = new URL(request.url());
+      return url.origin === preview && previewPath.test(url.pathname) &&
+        request.isNavigationRequest() && request.resourceType() === "document";
+    };
+    context.on("requestfailed", request => {
+      if (!isDocument(request)) return;
+      saw.document = { ...saw.document, failed: failureName(request.failure()?.errorText) };
+      stop("preview_document_failed");
+    });
     page.getByRole("alert").filter({ hasText: editorStop }).first().waitFor({ state: "visible" })
       .then(() => stop("preview_admin_stopped"), () => {});
     hang.limit(previewMs);
@@ -129,11 +142,7 @@ export async function checkSignedInPreview(browser, { admin, preview, credential
         saw.session = { status: reply.status() };
         if (reply.status() !== 204) throw new PreviewSmokeFailure("preview_session_failed");
       }),
-      context.waitForEvent("response", { predicate: reply => {
-        const url = new URL(reply.url());
-        return url.origin === preview && previewPath.test(url.pathname) &&
-          reply.request().isNavigationRequest() && reply.request().resourceType() === "document";
-      }}).then(reply => {
+      context.waitForEvent("response", { predicate: reply => isDocument(reply.request()) }).then(reply => {
         saw.document = { status: reply.status() };
         if (reply.status() !== 200) throw new PreviewSmokeFailure("preview_document_failed");
         return reply;
@@ -144,10 +153,15 @@ export async function checkSignedInPreview(browser, { admin, preview, credential
     phase = "preview_heading_missing";
     if (document.frame() !== popup.mainFrame()) throw new Error();
     hang.limit(stageMs);
-    await hang.over(Promise.race([stopped, popup.waitForURL(url => url.href === document.url())]));
-    // The private preview is a complete document, so once it has loaded the heading is there or it is not.
-    await hang.over(Promise.race([stopped, popup.waitForLoadState("load")]));
-    if (!await hang.over(popup.getByRole("heading", { name: heading, exact: true }).first().isVisible())) throw new Error();
+    await hang.over(Promise.race([stopped, popup.waitForURL(url => url.href === document.url(), { waitUntil: "commit" })]));
+    // The named heading is the success, whatever else is still loading. A parsed document without it has failed.
+    const found = popup.getByRole("heading", { name: heading, exact: true });
+    const absent = popup.waitForLoadState("domcontentloaded").then(async () => {
+      if (!await popup.getByRole("heading", { name: heading, exact: true, includeHidden: true }).count()) throw new Error();
+      return new Promise(() => {});
+    });
+    absent.catch(() => {});
+    await hang.over(Promise.race([stopped, found.first().waitFor({ state: "visible" }), absent]));
     return { ok: true, code: "signed_in_private_preview" };
   } catch (error) {
     const code = error instanceof PreviewSmokeFailure ? error.message : phase;
@@ -195,6 +209,8 @@ export const STAGE_HANG_BACKSTOP_MS = 5 * 60_000;
 // PREVIEW_BUILD_TIMEOUT_MS (45 min), and an older job can hold the requested one for the same
 // time first; 95 min is two of those limits and 5 min for Admin to show the result.
 export const PREVIEW_HANG_BACKSTOP_MS = 95 * 60_000;
+// The errors that the editor shows when its record cannot load (ContentTab.tsx).
+const editorUnavailable = /(?:do not have permission to edit this (?:page|record)\.|This page is no longer available\.|The (?:page|record) could not be loaded\. Reload to try again\.)/;
 // The errors that Admin's Preview action shows in the editor when it stops (SavedPreview.tsx).
 const editorStop = /(?:Allow pop-ups for this CMS|Preview could not open\.|Preview is temporarily unavailable\.|The preview service is updating\.|Previews are refreshing after a recent publish\.|Private preview access is taking longer)/;
 const jobStatuses = new Set(["pending", "building", "ready", "failed", "expired"]);

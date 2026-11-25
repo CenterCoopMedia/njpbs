@@ -51,7 +51,7 @@ test("adds Access headers on one origin and refuses to forward them on redirects
 
 function fixtureBrowser(settings, { sessionStatus = 204, documentStatus = 200, headingVisible = true,
   sessionFailure, noDocument = false, progress = "building", later, job, reader = false, jobStatus = 200, hasProgress = true,
-  noPopup = false, editorAlert = false, signInStatus, contentStatus } = {}) {
+  noPopup = false, editorAlert = false, signInStatus, editorError, documentFailure, stalled = false } = {}) {
   const context = new EventEmitter();
   const page = new EventEmitter();
   const frame = {};
@@ -77,12 +77,14 @@ function fixtureBrowser(settings, { sessionStatus = 204, documentStatus = 200, h
       const node = { getAttribute: name => name === "data-progress" ? hasProgress ? progress : null : folded };
       return { evaluateAll: async read => read([node]) };
     },
-    async waitForLoadState(state) { assert.equal(state, "load"); },
-    async waitForURL(matches) { assert.equal(matches(new URL(artifact)), true); },
+    // A stalled stylesheet or image holds the document's load states open.
+    waitForLoadState: state => { assert.equal(state, "domcontentloaded"); return stalled ? new Promise(() => {}) : Promise.resolve(); },
+    async waitForURL(matches, options) { assert.equal(matches(new URL(artifact)), true); assert.deepEqual(options, { waitUntil: "commit" }); },
     getByRole(role, options) {
       assert.equal(role, "heading");
-      assert.deepEqual(options, { name: settings.heading, exact: true });
-      return { first: () => ({ isVisible: async () => headingVisible }) };
+      assert.equal(options.name, settings.heading);
+      assert.equal(options.exact, true);
+      return { first: () => ({ waitFor: () => headingVisible ? Promise.resolve() : new Promise(() => {}) }), count: async () => headingVisible ? 1 : 0 };
     },
   });
   const response = (url, status, method, navigation, sent) => ({
@@ -96,9 +98,6 @@ function fixtureBrowser(settings, { sessionStatus = 204, documentStatus = 200, h
     url: () => location,
     async goto(url) {
       location = url;
-      if (contentStatus && url.endsWith(settings.editor)) {
-        page.emit("response", response("https://dev-cms-api.example.test/cmsGetContent", contentStatus, "POST", false));
-      }
       return { status: () => 200 };
     },
     waitForResponse: predicate => wait(page, "response", predicate),
@@ -114,6 +113,8 @@ function fixtureBrowser(settings, { sessionStatus = 204, documentStatus = 200, h
         return { async fill(value) { password = value; }, async evaluate() { return true; }, async dispose() {} };
       },
     },
+    getByText: pattern => ({ first: () => ({ waitFor: () =>
+      editorError && pattern.test(editorError) ? Promise.resolve() : new Promise(() => {}) }) }),
     getByRole: (role, options) => role === "alert" ? {
       filter({ hasText }) {
         assert.equal(hasText.test("Allow pop-ups for this CMS, then select Preview again. Your edits have not changed."), true);
@@ -123,7 +124,7 @@ function fixtureBrowser(settings, { sessionStatus = 204, documentStatus = 200, h
     } : pageButton(options.name),
   });
   const pageButton = name => ({
-      waitFor: () => (signInStatus && name !== "Preview") || (contentStatus && name === "Preview") ? new Promise(() => {}) : Promise.resolve(),
+      waitFor: () => (signInStatus && name !== "Preview") || (editorError && name === "Preview") ? new Promise(() => {}) : Promise.resolve(),
       async click() {
         assert.equal(name, "Preview");
         assert.equal(password, "");
@@ -138,6 +139,11 @@ function fixtureBrowser(settings, { sessionStatus = 204, documentStatus = 200, h
             ? response("https://dev-cms-api.example.test/api/cms/v2/reader", jobStatus, "POST", false, { version: 2, action: "request", endpoint: "cmsPreviewStatus", body: {} })
             : response("https://dev-cms-api.example.test/cmsPreviewStatus", jobStatus, "POST", false);
           page.emit("response", { ...reply, json: async () => job });
+        }
+        if (documentFailure) {
+          context.emit("requestfailed", { url: () => artifact, isNavigationRequest: () => true, resourceType: () => "document",
+            failure: () => ({ errorText: documentFailure }) });
+          return;
         }
         if (noDocument) return;
         popupUrl = artifact;
@@ -166,10 +172,10 @@ test("requires staff session, first private document response and fixture headin
   }
 });
 
-test("ends on a refused sign-in and a refused content read", async () => {
+test("ends on a refused sign-in and an editor that cannot load its record", async () => {
   const settings = previewSmokeSettings("production", env);
   assert.deepEqual(await checkSignedInPreview(fixtureBrowser(settings, { signInStatus: 400 }), settings), { ok: false, code: "staff_sign_in_failed" });
-  assert.deepEqual(await checkSignedInPreview(fixtureBrowser(settings, { contentStatus: 403 }), settings), { ok: false, code: "editor_unavailable" });
+  assert.deepEqual(await checkSignedInPreview(fixtureBrowser(settings, { editorError: "You do not have permission to edit this record." }), settings), { ok: false, code: "editor_unavailable" });
 });
 
 test("names the missing wait and where the preview tab settled", async () => {
@@ -221,6 +227,13 @@ test("names the missing wait and where the preview tab settled", async () => {
     session: { failed: "net::ERR_ABORTED" }, job: { status: "failed", error: "preview_build_timeout" }, document: null,
     popup: { place: "about:blank", progress: "error" },
   });
+  // A failed document navigation ends the wait at once, and the job's last status stays in the receipt.
+  assert.deepEqual(await check({ documentFailure: "net::ERR_CONNECTION_RESET", noDocument: true }), {
+    ok: false, code: "preview_document_failed", missing: [], session: { status: 204 }, job: null,
+    document: { failed: "net::ERR_CONNECTION_RESET" }, popup: { place: "about:blank", progress: "building" },
+  });
+  // The visible heading passes while the document's other resources are still open.
+  assert.deepEqual(await check({ stalled: true }), { ok: true, code: "signed_in_private_preview" });
   // A refused session fails at once; the receipt waits for Admin's sign-in handoff.
   assert.deepEqual(await check({ sessionStatus: 401, noDocument: true, later: { url: `${settings.admin}/?staffSite=x` } }), {
     ok: false, code: "preview_session_failed", missing: ["document"],
