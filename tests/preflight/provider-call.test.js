@@ -184,6 +184,13 @@ describe("provider call rule", () => {
     expect(failureText(new Error("Fixed sentence", kindCause(new Error("private", { cause: new Error("private") }))))).toBe("Fixed sentence; cause: Error");
   });
 
+  it("names Git's own failure line, and the exit code of a command that named none", () => {
+    const git = Object.assign(new Error("Command failed: git show private"), { status: 128,
+      stderr: "fatal: path 'config/example.json' exists on disk, but not in 'example'\n" });
+    expect(faultLine(git)).toBe("fatal: path 'config/example.json' exists on disk, but not in 'example'");
+    expect(faultLine(Object.assign(new Error("Command failed: private"), { status: 3, stderr: "note" }))).toBe("exit 3");
+  });
+
   it("carries a caught error's message, code and cause into the replacing error", () => {
     const missing = Object.assign(new Error("ENOENT: no such file, open 'config/example.json'"), { code: "ENOENT" });
     const replaced = new Error("Could not read it", faultCause(new Error("step two", { cause: missing })));

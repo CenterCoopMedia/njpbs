@@ -70,7 +70,7 @@ export const permanentFailure = (output, retryableSchedules) => permanentMatch(o
 export const permanentFailureLine = (output, retryableSchedules) => permanentMatch(output, retryableSchedules)?.line ?? "none";
 
 export function lastProviderLine(output) {
-  const line = output.split("\n").map(value => value.trim()).filter(value => /error|failed|denied|unavailable|timed? ?out|HTTP/i.test(value)).at(-1);
+  const line = output.split("\n").map(value => value.trim()).filter(value => /error|failed|fatal|denied|unavailable|timed? ?out|HTTP/i.test(value)).at(-1);
   return line ? line.slice(0, 300) : "none";
 }
 
@@ -146,7 +146,8 @@ export function faultLine(error) {
   if (status !== undefined) return `HTTP ${status}`;
   // The owner of a child that prints private input writes its own line.
   if (typeof error?.providerLine === "string") return error.providerLine;
-  if (error?.stderr) return publicText(lastProviderLine(String(error.stderr)));
+  const line = error?.stderr ? lastProviderLine(String(error.stderr)) : "none";
+  if (line !== "none") return publicText(line);
   const code = /^[A-Z][A-Z0-9_]{2,40}$/.test(error?.code ?? "") ? error.code : undefined;
   // An SDK's request error can quote the request it carries.
   if (["config", "request", "response", "$metadata"].some(key => error?.[key] != null)) return code ?? "none";
@@ -154,8 +155,8 @@ export function faultLine(error) {
   const name = /^[A-Za-z]{1,40}$/.test(error?.name ?? "") ? error.name : undefined;
   const message = publicText(isPlatformError(error) ? platformText(String(error.message)) : error?.message ?? "");
   const kind = code ? (message.startsWith(code) ? undefined : code) : ["Error", "FaultCause"].includes(name) && message ? undefined : name;
-  const line = [kind, message].filter(Boolean).join(": ") || "none";
-  return error?.cause instanceof Error ? `${line}; cause: ${faultLine(error.cause)}` : line;
+  const text = [kind, message].filter(Boolean).join(": ") || "none";
+  return error?.cause instanceof Error ? `${text}; cause: ${faultLine(error.cause)}` : text;
 }
 
 /**
