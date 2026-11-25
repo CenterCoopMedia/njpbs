@@ -6,7 +6,7 @@ const { parsePublicReleasePair, publicReleasePairReference, parseVersionedPublic
   PublicReleaseProtocolError, publicReleaseDigest, exact, digest, positive, freeze } = require("./public-release-pair");
 const { publicationTarget, assertPublicationDatabase } = require("./publication-target");
 const pairInputs = require("./public-release-pair-input");
-const { isPairFailureCode, isPairTransportFailure, rethrowPairTransport, PairExecutionError, assertPrivatePairResources } = require("./public-release-pair-execution");
+const { WAITING_FAILURE_CODES, isPairFailureCode, isPairFinalFailure, isPairTransportFailure, rethrowPairTransport, PairExecutionError, assertPrivatePairResources } = require("./public-release-pair-execution");
 
 const PAIRS = "system/publicReleasePairs";
 const KINDS = new Set(["accepted", "qualification", "recovery"]);
@@ -140,15 +140,16 @@ function parseTask(value, pair, taskId) {
       value.nextAttemptAt !== 0 || value.receiptDigest !== null || value.lastFailure !== null)) refuse();
   if (value.status === "running" && (value.attempts < 1 || !digest(value.claimDigest) || !positive(value.leaseUntil) ||
       value.nextAttemptAt !== null || value.receiptDigest !== null)) refuse();
-  // A failed attempt always has its next attempt. Only a receipt ends the work.
-  // A row the removed attempt cap stopped (nextAttemptAt null) is due at once.
+  // A final failure has no next attempt; a waiting one always does. A waiting
+  // row the removed attempt cap stopped (nextAttemptAt null) is due at once.
   // Delete this and its recovery query when no dev or production pair work row
-  // is failed with nextAttemptAt null.
-  if (value.status === "failed" && value.nextAttemptAt === null && value.acceptedDueAt === null) {
+  // is failed for a waiting cause with nextAttemptAt null.
+  const ended = value.status === "failed" && isPairFinalFailure(value.lastFailure) && value.nextAttemptAt === null;
+  if (value.status === "failed" && !ended && value.nextAttemptAt === null && value.acceptedDueAt === null) {
     value = { ...value, nextAttemptAt: 1, acceptedDueAt: identity.kind === "accepted" ? 1 : null };
   }
   if (value.status === "failed" && (value.attempts < 1 || value.claimDigest !== null || value.leaseUntil !== null || value.receiptDigest !== null || value.lastFailure === null ||
-      !positive(value.nextAttemptAt))) refuse();
+      !ended && !positive(value.nextAttemptAt))) refuse();
   if (value.status === "complete" && (value.attempts < 1 || value.claimDigest !== null || value.leaseUntil !== null ||
       value.nextAttemptAt !== null || !digest(value.receiptDigest))) refuse();
   return freeze({ ...value, identity: expected });
@@ -262,7 +263,7 @@ async function assertPublicReleasePairInputOwnerInTransaction({ firestore, trans
 // Hints never supply a claim, create work, or certify a publication.
 function publicReleasePairTaskDue(task, now) {
   return task.status === "pending" || task.status === "running" && task.leaseUntil <= now ||
-    task.status === "failed" && task.nextAttemptAt <= now;
+    task.status === "failed" && task.nextAttemptAt !== null && task.nextAttemptAt <= now;
 }
 async function claimPublicReleasePairWork({ firestore, pair: rawPair, taskId, now = Date.now() }) {
   const pair = parsePublicReleasePair(rawPair);
@@ -318,7 +319,8 @@ async function readPublicReleasePairWork({ firestore, pair: rawPair, now = Date.
     const [pending, expired, stopped] = await Promise.all([
       transaction.get(work.where("nextAttemptAt", "<=", now).limit(20)),
       transaction.get(work.where("leaseUntil", "<=", now).limit(20)),
-      transaction.get(work.where("status", "==", "failed").where("nextAttemptAt", "==", null).limit(20)),
+      transaction.get(work.where("status", "==", "failed").where("nextAttemptAt", "==", null)
+        .where("lastFailure", "in", WAITING_FAILURE_CODES).limit(20)),
     ]);
     const tasks = new Map([...pending.docs, ...expired.docs, ...stopped.docs].map(row => [row.id, parseTask(row.data(), pair, row.id)]));
     const due = [...tasks].filter(([, task]) => publicReleasePairTaskDue(task, now));
@@ -375,8 +377,8 @@ async function settlePublicReleasePairWork({ firestore, pair: rawPair, taskId, t
       // original claim/manifest or make recovery claim and render it again.
       transaction.create(pairRef.collection("staging").doc(taskId), { ...receipt, attempts: 0, nextAttemptAt: 0, lastFailure: null });
     }
-    // Every failed attempt is retried; the caller paces it with retryAt.
-    else if (retryAt === null) refuse();
+    // A final failure ends here. Any other is retried; the caller paces it.
+    else if ((retryAt === null) !== isPairFinalFailure(failureCode)) refuse();
     transaction.set(workRef, { ...task, status: receipt ? "complete" : "failed", claimDigest: null, leaseUntil: null,
       nextAttemptAt: receipt ? null : retryAt,
       acceptedDueAt: receipt || task.identity.kind !== "accepted" ? null : retryAt,
@@ -409,6 +411,7 @@ async function assertPublicReleasePairCompletedReceiptInTransaction({ firestore,
 
 module.exports = { PAIRS, LEASE_MS, registerPublicReleasePair, enqueuePublicReleasePairWorkInTransaction,
   claimPublicReleasePairWork, settlePublicReleasePairWork, publicReleasePairTaskDue, readPublicReleasePairWork,
-  renewPublicReleasePairWork, assertPublicReleasePairDatabase: database, assertPrivatePairResources, PairExecutionError, isPairTransportFailure, rethrowPairTransport,
+  renewPublicReleasePairWork, assertPublicReleasePairDatabase: database, assertPrivatePairResources, PairExecutionError, WAITING_FAILURE_CODES, isPairFinalFailure,
+  isPairTransportFailure, rethrowPairTransport,
   readPublicReleasePairWorkHint, publicReleasePairPath, publicReleasePairKey, assertPublicReleasePairCompletedReceiptInTransaction,
   assertPublicReleasePairInputOwnerInTransaction };

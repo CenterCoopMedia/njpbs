@@ -288,7 +288,8 @@ export function createPublicReleasePairExecutor({ firestore, store, pair: rawPai
         const file = frozen.root.files.find(file => file.name === name);
         if (!file) refuse();
         const bytes = await readFile(path.join(inputs, file.name));
-        if (bytes.length !== file.bytes || hash(bytes) !== file.digest) throw new work.PairExecutionError("byte-mismatch");
+        if (bytes.length !== file.bytes || hash(bytes) !== file.digest)
+          throw new work.PairExecutionError("byte-mismatch", { got: hash(bytes), want: file.digest });
         return new Uint8Array(bytes);
       };
       const replayContext = async (route: typeof plan.routes[number]): Promise<PairReplayContext> => {
@@ -339,7 +340,9 @@ export function createPublicReleasePairExecutor({ firestore, store, pair: rawPai
           let failed = false;
           child.once("error", () => { failed = true; });
           // Wait for close even after abort, before removing the job directory.
-          child.once("close", code => !failed && code === 0 ? resolve() : reject(new work.PairExecutionError("render-failed")));
+          // bwrap reports a render killed by a signal as 128 plus that signal.
+          child.once("close", code => !failed && code === 0 ? resolve() : reject(new work.PairExecutionError(
+            failed || code === null || code > 128 ? "render-interrupted" : "render-failed")));
         });
       } finally {
         clearInterval(timer); signal.removeEventListener("abort", abort); await renewal;
@@ -354,13 +357,13 @@ export function createPublicReleasePairExecutor({ firestore, store, pair: rawPai
         const before = `${overlap.ordinaryIndex}`, after = `aggregate-${overlap.aggregateIndex}`;
         const [left, right] = await Promise.all([readPublicReleasePairOutputFile(path.join(dist, `${before}.body`), views.BODY_BYTES_LIMIT),
           readPublicReleasePairOutputFile(path.join(dist, `${after}.body`), views.BODY_BYTES_LIMIT)]);
-        if (hash(left) !== hash(right)) throw new work.PairExecutionError("byte-mismatch");
+        if (hash(left) !== hash(right)) throw new work.PairExecutionError("byte-mismatch", { got: hash(right), want: hash(left) });
         const ordinaryRoute = plans.ordinaryPlan.routes[overlap.ordinaryIndex], aggregateRoute = plans.aggregatePlan!.routes[overlap.aggregateIndex];
         const expected = plans.ordinaryPlan.expectedOutputs[overlap.ordinaryIndex];
         if ([302, 308].includes(expected.status)) {
           const [a, b] = await Promise.all([readPublicReleasePairOutputFile(path.join(dist, `${before}.location`), 2048),
             readPublicReleasePairOutputFile(path.join(dist, `${after}.location`), 2048)]);
-          if (hash(a) !== hash(b)) throw new work.PairExecutionError("byte-mismatch");
+          if (hash(a) !== hash(b)) throw new work.PairExecutionError("byte-mismatch", { got: hash(b), want: hash(a) });
         }
         if (isPublicReleasePairProjection(ordinaryRoute.renderer) !== isPublicReleasePairProjection(aggregateRoute.renderer)) refuse();
         if (isPublicReleasePairProjection(ordinaryRoute.renderer)) {
@@ -368,7 +371,8 @@ export function createPublicReleasePairExecutor({ firestore, store, pair: rawPai
             readPublicReleasePairOutputFile(path.join(dist, `${after}.target.json`), 64 * 1024)]);
           const oldTarget = parsePublicReleasePairReplayTargetReceipt(json(a), await replayContext(ordinaryRoute));
           const newTarget = parsePublicReleasePairReplayTargetReceipt(json(b), await replayContext(aggregateRoute));
-          if (protocol.publicReleaseDigest(oldTarget.target) !== protocol.publicReleaseDigest(newTarget.target)) throw new work.PairExecutionError("byte-mismatch");
+          const want = protocol.publicReleaseDigest(oldTarget.target), got = protocol.publicReleaseDigest(newTarget.target);
+          if (got !== want) throw new work.PairExecutionError("byte-mismatch", { got, want });
         }
         await renew();
       }
@@ -411,7 +415,8 @@ export function createPublicReleasePairExecutor({ firestore, store, pair: rawPai
           const { file: _file, location, ...member } = action;
           const read = async () => {
             const bytes = await readPublicReleasePairOutputFile(path.join(dist, file), views.BODY_BYTES_LIMIT);
-            if (bytes.length !== action.size || hash(bytes) !== action.sha256) throw new work.PairExecutionError("byte-mismatch");
+            if (bytes.length !== action.size || hash(bytes) !== action.sha256)
+              throw new work.PairExecutionError("byte-mismatch", { got: hash(bytes), want: action.sha256 });
             if (action.path === "/_home-sources.json" && action.status === 200) homeSourceBytes = new Uint8Array(bytes);
             const headers: Record<string, string> = { "content-type": action.mime, "cache-control": "no-store", "x-njpbs-renderer-sha": pair.commitSha };
             if (action.status === 308) headers.location = location;
@@ -434,7 +439,8 @@ export function createPublicReleasePairExecutor({ firestore, store, pair: rawPai
                 alias.bytes > views.BODY_BYTES_LIMIT || !/^[a-f0-9]{64}$/.test(alias.digest)) refuse();
             return { path: alias.path as string, async read() {
               const bytes = await readPublicReleasePairOutputFile(path.join(dist, file), views.BODY_BYTES_LIMIT);
-              if (bytes.length !== alias.bytes || hash(bytes) !== alias.digest) throw new work.PairExecutionError("byte-mismatch");
+              if (bytes.length !== alias.bytes || hash(bytes) !== alias.digest)
+                throw new work.PairExecutionError("byte-mismatch", { got: hash(bytes), want: alias.digest });
               await renew(); return bytes;
             } };
           });

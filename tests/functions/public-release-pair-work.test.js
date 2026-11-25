@@ -1,7 +1,8 @@
-import { beforeAll, beforeEach, expect, it } from "vitest";
+import { beforeAll, beforeEach, expect, it, vi } from "vitest";
 import { clearEmulatorFirestore, isolatedFirestore } from "../helpers/emulator-firestore.js";
 import { releasePair, releaseSelector, pairReference } from "../helpers/private-public-release-pair.js";
 import work from "../../functions/lib/public-release-pair-work.js";
+import { PublicReleaseProtocolError } from "../../functions/lib/public-release-pair.js";
 import legacy from "../../functions/lib/public-deployment.js";
 import { runPublicReleasePairWorkOnce } from "../../site/scripts/public-release-pair-runtime";
 import { wakePublicReleasePair } from "../../publisher/release-pair-wake";
@@ -100,7 +101,7 @@ it("recovers a missed wake and expired claim, renews exact ownership, and refuse
   await complete(next, second, 62_002);
 });
 
-it("keeps claiming expired work past any attempt count and always schedules a failed attempt's retry", async () => {
+it("keeps claiming expired work past any attempt count and always schedules a waiting failure's retry", async () => {
   await register(next);
   const { taskId } = await enqueue(next, input());
   let claimed;
@@ -111,25 +112,69 @@ it("keeps claiming expired work past any attempt count and always schedules a fa
   expect((await stored(next, taskId)).attempts).toBe(6);
   const now = 1000 + 5 * 60_001 + 1;
   await expect(work.settlePublicReleasePairWork({ firestore: db, pair: next, taskId, token: claimed.token,
-    manifestDigest: null, failureCode: "render-failed", now })).rejects.toThrow();
+    manifestDigest: null, failureCode: "storage-unavailable", now })).rejects.toThrow();
   await work.settlePublicReleasePairWork({ firestore: db, pair: next, taskId, token: claimed.token,
-    manifestDigest: null, failureCode: "render-failed", retryAt: now + 1000, now });
-  expect(await stored(next, taskId)).toMatchObject({ status: "failed", attempts: 6, nextAttemptAt: now + 1000, lastFailure: "render-failed" });
+    manifestDigest: null, failureCode: "storage-unavailable", retryAt: now + 1000, now });
+  expect(await stored(next, taskId)).toMatchObject({ status: "failed", attempts: 6, nextAttemptAt: now + 1000, lastFailure: "storage-unavailable" });
   expect((await work.readPublicReleasePairWork({ firestore: db, pair: next, now: now + 1000 })).taskIds).toEqual([taskId]);
   expect(Boolean(await claim(next, taskId, now + 1000))).toBe(true);
 });
 
-it("resumes a row the removed attempt cap stopped: minute recovery finds it and a claim retries it", async () => {
+it.each(work.WAITING_FAILURE_CODES)("resumes a %s row the removed attempt cap stopped: minute recovery finds it and a claim retries it", async lastFailure => {
   await register(next);
   const { taskId } = await enqueue(next, input());
   await claim(next, taskId);
   // The shape the cap wrote before cbca85e: failed with no next attempt.
   await db.doc(`${path(next)}/work/${taskId}`).update({ status: "failed", attempts: 4, claimDigest: null, leaseUntil: null,
-    nextAttemptAt: null, acceptedDueAt: null, lastFailure: "lease-expired" });
+    nextAttemptAt: null, acceptedDueAt: null, lastFailure });
   await db.doc(`${path(next)}/journals/${next.publisher.journalNamespace}`).update({ job: null });
   expect((await work.readPublicReleasePairWork({ firestore: db, pair: next, now: 200_000 })).taskIds).toEqual([taskId]);
   expect(Boolean(await claim(next, taskId, 200_000))).toBe(true);
   expect(await stored(next, taskId)).toMatchObject({ status: "running", attempts: 5 });
+});
+
+const FINAL_CODES = ["input-unavailable", "render-failed", "byte-mismatch", "author-input-missing", "replay-frozen-code-mismatch",
+  "unsupported-cross-source-schedule", "reader-mismatch", "unexpected-executor-error"];
+it.each(FINAL_CODES)("ends %s at the first failure: no retry, no recovery, and no claim", async failureCode => {
+  await register(next);
+  const { taskId } = await enqueue(next, input());
+  const claimed = await claim(next, taskId);
+  await expect(work.settlePublicReleasePairWork({ firestore: db, pair: next, taskId, token: claimed.token,
+    manifestDigest: null, failureCode, retryAt: 3000, now: 2000 })).rejects.toThrow();
+  await work.settlePublicReleasePairWork({ firestore: db, pair: next, taskId, token: claimed.token, manifestDigest: null, failureCode, now: 2000 });
+  expect(await stored(next, taskId)).toMatchObject({ status: "failed", attempts: 1, nextAttemptAt: null, acceptedDueAt: null, lastFailure: failureCode });
+  expect((await work.readPublicReleasePairWork({ firestore: db, pair: next, now: 1_000_000 })).taskIds).toEqual([]);
+  expect(await claim(next, taskId, 1_000_000)).toBe(null);
+  expect(await enqueue(next, input())).toMatchObject({ idempotent: true, taskId, task: { status: "failed", nextAttemptAt: null } });
+});
+
+it("gives a final row an earlier writer scheduled its scheduled attempt", async () => {
+  await register(next);
+  const { taskId } = await enqueue(next, input());
+  await claim(next, taskId);
+  await db.doc(`${path(next)}/work/${taskId}`).update({ status: "failed", claimDigest: null, leaseUntil: null,
+    nextAttemptAt: 3000, acceptedDueAt: null, lastFailure: "byte-mismatch" });
+  await db.doc(`${path(next)}/journals/${next.publisher.journalNamespace}`).update({ job: null });
+  expect((await work.readPublicReleasePairWork({ firestore: db, pair: next, now: 3000 })).taskIds).toEqual([taskId]);
+  expect(Boolean(await claim(next, taskId, 3000))).toBe(true);
+});
+
+it("names a final failure with its code and the two digests, and a wait with its code", async () => {
+  await register(next);
+  const { taskId } = await enqueue(next, input());
+  const lines = [], log = vi.spyOn(console, "error").mockImplementation(line => { lines.push(JSON.parse(line)); });
+  const once = (error, now) => runPublicReleasePairWorkOnce({ firestore: db, pair: next, clock: () => now, execute: async () => { throw error; } });
+  try {
+    await once(new PublicReleaseProtocolError(), 1000);
+    expect(await stored(next, taskId)).toMatchObject({ lastFailure: "release-state-refused", nextAttemptAt: 2000 });
+    await once(Object.assign(new Error("private text"), { code: 14 }), 3000);
+    await once(new work.PairExecutionError("byte-mismatch", { got: "a".repeat(64), want: "b".repeat(64) }), 5000);
+  } finally { log.mockRestore(); }
+  expect(lines).toEqual([
+    { severity: "INFO", event: "pair-work-wait", taskId, kind: expect.any(String), code: "release-state-refused", cause: "PublicReleaseProtocolError" },
+    { severity: "INFO", event: "pair-work-wait", taskId, kind: expect.any(String), code: "storage-unavailable", cause: "Error 14" },
+    { severity: "ERROR", event: "pair-work-final", taskId, kind: expect.any(String), code: "byte-mismatch", got: "a".repeat(64), want: "b".repeat(64) },
+  ]);
 });
 it("routes private wakes by exact incarnation and uses the same durable predicate for idle/minute recovery", async () => {
   await register(next);
@@ -160,7 +205,7 @@ it("prioritizes an accepted retry ahead of more than one page of pending qualifi
   const accepted = await enqueue(next, input("accepted"));
   const claimed = await claim(next, accepted.taskId);
   await work.settlePublicReleasePairWork({ firestore: db, pair: next, taskId: accepted.taskId, token: claimed.token,
-    manifestDigest: null, failureCode: "render-failed", retryAt: 2000, now: 1001 });
+    manifestDigest: null, failureCode: "storage-unavailable", retryAt: 2000, now: 1001 });
   expect((await work.readPublicReleasePairWork({ firestore: db, pair: next, now: 2001 })).taskIds).toEqual([accepted.taskId]);
 });
 
@@ -199,8 +244,8 @@ it("runs and retries private work without activating a release or claiming publi
   const before = (await db.doc("system/publicDeployment").get()).data();
   let now = 1000;
   expect(await runPublicReleasePairWorkOnce({ firestore: db, pair: next, clock: () => now,
-    execute: async () => { throw new work.PairExecutionError("render-failed"); } })).toBe("retry-recorded");
-  expect((await stored(next, taskId)).lastFailure).toBe("render-failed");
+    execute: async () => { throw new work.PairExecutionError("render-interrupted"); } })).toBe("retry-recorded");
+  expect((await stored(next, taskId)).lastFailure).toBe("render-interrupted");
   expect((await work.readPublicReleasePairWork({ firestore: db, pair: next, now })).taskIds).toEqual([]);
   now = 2001;
   expect(await runPublicReleasePairWorkOnce({ firestore: db, pair: next, clock: () => now,

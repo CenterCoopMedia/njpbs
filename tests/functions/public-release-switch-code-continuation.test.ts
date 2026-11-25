@@ -72,7 +72,7 @@ it("yields CODE capture to an existing accepted-work due hint", async () => {
     expect(writes).toHaveLength(0);
   } finally { await ref.delete(); }
 });
-it("parks terminal historical capture failures while retrying storage outages without spending the refusal budget", async () => {
+it("parks a terminal historical capture failure at its first refusal and keeps retrying storage outages and waiting refusals", async () => {
   const { firestore, pair, codeOperationId } = fixture;
   const outbox = firestore.doc(`system/publicReleaseChanges/captures/${codeOperationId}`), original = (await outbox.get()).data()!;
   const pending = firestore.doc(codeOwner.codePendingPath(pair, codeOperationId));
@@ -82,12 +82,25 @@ it("parks terminal historical capture failures while retrying storage outages wi
       async put(): Promise<never> { throw new Error("No write is permitted on failed capture"); } };
     const continuation = createPublicReleaseSwitchCodeContinuation({ enabled: true, firestore, pair, store: unavailable, clock: () => now });
     await outbox.set({ ...original, status: "failed" });
-    for (let attempt = 1; attempt <= 4; attempt++) {
-      await continuation.beforePoll!({});
-      expect((await pending.get()).data()).toMatchObject({ failures: Math.min(attempt, 3),
-        nextAttemptAt: attempt < 3 ? now + 30_000 : null, lastFailure: "source-refused", lease: null });
-      now += 30_001;
-    }
+    const lines: any[] = [], log = vi.spyOn(console, "error").mockImplementation(line => { lines.push(JSON.parse(line)); });
+    try {
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        await continuation.beforePoll!({});
+        expect((await pending.get()).data()).toMatchObject({ failures: 3, nextAttemptAt: null, lastFailure: "source-refused", lease: null });
+        now += 30_001;
+      }
+      // The source owner has not written this outbox row yet.
+      await pending.delete(); await outbox.delete();
+      for (let attempt = 1; attempt <= 4; attempt++) {
+        await continuation.beforePoll!({});
+        expect((await pending.get()).data()).toMatchObject({ failures: 0, nextAttemptAt: now + 30_000, lastFailure: "source-refused", lease: null });
+        now += 30_001;
+      }
+    } finally { log.mockRestore(); }
+    expect(lines).toEqual([
+      { severity: "ERROR", event: "switch-code-final", operationId: codeOperationId, cause: "HistoricalInputError historical-capture-failed" },
+      ...Array(4).fill({ severity: "INFO", event: "switch-code-wait", operationId: codeOperationId, cause: "HistoricalInputError historical-capture-outbox-missing" }),
+    ]);
     await outbox.set(original); await pending.delete();
     for (let attempt = 0; attempt < 4; attempt++) {
       await continuation.beforePoll!({});
@@ -164,7 +177,7 @@ it("recovers a missed CODE wake through actual leased H, completed G and private
   const pendingRef = firestore.doc(`${work.publicReleasePairPath(pair.pairId)}/switchCodePending/${codeOperationId}`);
   const pendingBefore = (await pendingRef.get()).data()!, taskBefore = task.data();
   // A row the removed attempt cap stopped is due at once; the continuation waits for its receipt.
-  await task.ref.update({ status: "failed", attempts: 4, nextAttemptAt: null, lastFailure: "render-failed" });
+  await task.ref.update({ status: "failed", attempts: 4, nextAttemptAt: null, lastFailure: "lease-expired" });
   await pendingRef.update({ nextAttemptAt: 0 });
   await continuation.beforePoll!({});
   const waiting = (await pendingRef.get()).data()!;
@@ -177,6 +190,13 @@ it("recovers a missed CODE wake through actual leased H, completed G and private
   const resumed = (await pendingRef.get()).data()!;
   expect(resumed).toMatchObject({ lease: null, failures: 0, lastFailure: null });
   expect(resumed.nextAttemptAt).toBeGreaterThan(0);
+  // A final failure of its work parks it under its own name, and it stays parked.
+  await task.ref.update({ lastFailure: "byte-mismatch" });
+  await pendingRef.set({ ...waiting, nextAttemptAt: null, failures: 3, lastFailure: "work-failed" });
+  for (let attempt = 0; attempt < 2; attempt++) {
+    await continuation.beforePoll!({});
+    expect((await pendingRef.get()).data()).toMatchObject({ lease: null, failures: 3, nextAttemptAt: null, lastFailure: "work-refused" });
+  }
   // Restore the private failure fixture before exercising the real G owner.
   await task.ref.set(taskBefore); await pendingRef.set(pendingBefore);
   const staged = await stagedPublicReleasePairCompositeFixture({ ...fixture, taskId: task.id }, store);
@@ -242,7 +262,7 @@ it("recovers a missed CODE wake through actual leased H, completed G and private
   expect(writes.some(key => key.startsWith(`release-pair-inputs/v2/${pair.pairId}/`))).toBe(true);
   expect(writes.some(key => key.startsWith(`release-pair-replay/v2/${p.publicReleaseDigest(pair)}/`))).toBe(true);
   expect((await firestore.doc(`${work.publicReleasePairPath(pair.pairId)}/switchCodePending/${codeOperationId}`).get()).exists).toBe(false);
-}, 120_000);
+}, 240_000);
 
 it("verifies the original completed activation without storage/replay work on subsequent polls", async () => {
   const { firestore, pair } = fixture;

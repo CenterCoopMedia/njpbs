@@ -128,7 +128,8 @@ export async function existingReplayView(firestore: Firestore, pair: PublicRelea
       firestore.doc(`${base}/work/${taskId}`), firestore.doc(`${base}/stagingFailures/${taskId}`));
     // These are stop signals, never publication evidence. A terminal original
     // owner needs explicit repair; repeatedly waking its successors cannot fix it.
-    if (quarantine.data()?.status === "quarantined" || task.data()?.status === "failed" && task.data()?.nextAttemptAt === null)
+    if (quarantine.data()?.status === "quarantined" || task.data()?.status === "failed" &&
+        task.data()?.nextAttemptAt === null && work.isPairFinalFailure(task.data()?.lastFailure))
       throw new PublicationActivationError("content-activation-predecessor-failed");
     const row = completed.data();
     if (!row) continue;

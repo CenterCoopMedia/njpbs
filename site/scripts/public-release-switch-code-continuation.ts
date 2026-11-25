@@ -6,7 +6,8 @@ import type { PairViewStore } from "./public-release-pair-view-storage";
 import protocol from "../../functions/lib/public-release-pair.js";
 import owner from "../../functions/lib/public-release-switch-code-owner.js";
 import work from "../../functions/lib/public-release-pair-work.js";
-import { captureHistoricalPublicReleasePairInput } from "./public-release-pair-source-owner";
+import { captureHistoricalPublicReleasePairInput, HistoricalInputError } from "./public-release-pair-source-owner";
+import { PairSourceCensusError } from "./public-release-pair-source-census";
 import { corruptEvidence } from "./public-release-original-work-recovery";
 import { existingReplayView, PublicationActivationError } from "./public-release-pair-content-activation";
 import { replayPublicReleasePairToHead } from "./public-release-pair-log-replay";
@@ -19,6 +20,16 @@ type Options = { enabled?: boolean; firestore: Firestore; pair: PublicReleasePai
   captureStore?(operationId: string, lease: string): PairViewStore; replayStore?(operationId: string): PairViewStore };
 const hash = protocol.publicReleaseDigest, same = (a: unknown, b: unknown) => hash(a) === hash(b);
 function refuse(): never { throw new protocol.PublicReleaseProtocolError(); }
+/** Refusals that other release work can still change: release state moved, the
+ * capture outbox row is not written yet, or the source moved under the census. */
+const waitingEvidence = (error: any) => error instanceof protocol.PublicReleaseProtocolError || error?.name === "PublicReleaseProtocolError" ||
+  error instanceof HistoricalInputError && error.code === "historical-capture-outbox-missing" ||
+  error instanceof PairSourceCensusError && error.code === "source-census-mismatch";
+/** Codes and digests only; a message can hold private input. */
+function named(final: boolean, operationId: string, error: any) {
+  const cause = [error?.name, error?.code].filter(value => /^[\w.-]{1,64}$/.test(String(value ?? ""))).join(" ");
+  console.error(JSON.stringify({ severity: final ? "ERROR" : "INFO", event: final ? "switch-code-final" : "switch-code-wait", operationId, cause, ...error?.digests }));
+}
 
 /** Default off. The exact selected switch event is its durable discovery hint;
  * no publish admission, original queue, claim or terminal fact is fabricated. */
@@ -32,9 +43,9 @@ export function createPublicReleaseSwitchCodeContinuation(options: Options): {
   const base = work.publicReleasePairPath(pair.pairId);
   const selected = (transaction: any, operationId?: string) => owner.readSelectedSwitchCodeSourceInTransaction({ firestore, transaction, pair, operationId });
   const defer = async (operationId: string, error: unknown, leaseToken?: string) => {
-    const refused = corruptEvidence(error);
+    const refused = corruptEvidence(error), final = refused && !waitingEvidence(error);
     const predecessorFailed = error instanceof PublicationActivationError && error.code === "content-activation-predecessor-failed";
-    await firestore.runTransaction(async transaction => {
+    const deferred = await firestore.runTransaction(async transaction => {
       const [fence, billing, pins] = await transaction.getAll(firestore.doc("system/publicDeployment/releaseWriter/fence"),
         firestore.doc("system/billing"), firestore.doc("system/cmsPublicationRuntime"));
       const runtime = pins.data();
@@ -45,11 +56,14 @@ export function createPublicReleaseSwitchCodeContinuation(options: Options): {
       const pending = owner.parseSwitchCodePending(row.data(), pair, current);
       if (pending.nextAttemptAt === null) return;
       if (leaseToken ? pending.lease?.token !== leaseToken : pending.lease && pending.lease.until > clock()) return;
-      const failures = Math.min(3, pending.failures + (refused ? 1 : 0));
-      transaction.set(ref, { ...pending, lease: null, failures, nextAttemptAt: failures === 3 || predecessorFailed ? null : clock() + 30_000,
+      // The stored row marks its end with failures 3; nothing counts to it.
+      transaction.set(ref, { ...pending, lease: null, failures: final ? 3 : pending.failures,
+        nextAttemptAt: final || predecessorFailed ? null : clock() + 30_000,
         lastFailure: predecessorFailed ? "replay-predecessor-failed" : refused ? "source-refused" : error instanceof SwitchCodeHeadPendingError || error instanceof activation.ContentActivationConflictError
           ? "replay-pending" : "temporarily-unavailable" });
+      return true;
     });
+    if (deferred) named(final || predecessorFailed, operationId, error);
   };
   const resolveView = (entry: PublicReleaseChange) => existingReplayView(firestore, pair, entry.operationId, entry.sequence);
   const completed = async (input: Completed) => {
@@ -97,9 +111,9 @@ export function createPublicReleaseSwitchCodeContinuation(options: Options): {
       const initial = { schemaVersion: 2, kind: "switch-code-pending", operationId, pairDigest: hash(pair), scope: current.scope,
         sourceDigest: hash(current.source), lease: null, nextAttemptAt: 0, failures: 0, lastFailure: null };
       const stored = row.exists ? owner.parseSwitchCodePending(row.data(), pair, current) : initial;
-      // A row the removed work-failed branch parked re-enters this pass: its
-      // work now always has a next attempt. Delete when no stored pending row
-      // has lastFailure work-failed.
+      // A row the removed work-failed branch parked re-enters this pass, which
+      // parks it again as work-refused if its work is final. Delete when no
+      // stored pending row has lastFailure work-failed.
       const pending = stored.nextAttemptAt === null && stored.lastFailure === "work-failed"
         ? { ...stored, failures: 0, lastFailure: null, nextAttemptAt: 0 } : stored;
       if (pending.nextAttemptAt === null || pending.nextAttemptAt! > clock() || pending.lease && pending.lease.until > clock()) return null;
@@ -134,8 +148,12 @@ export function createPublicReleaseSwitchCodeContinuation(options: Options): {
         const task = await work.enqueuePublicReleasePairWorkInTransaction({ firestore, transaction, pair,
           input: { ...current.scope, inputManifestDigest: captured.receipt.inputManifestDigest } as any });
         // A new enqueue wrote only the new work row. Completed tasks do not write.
-        // A failed task always has its next attempt, so only its receipt ends the wait.
-        const taskState = task.task as { status: string };
+        const taskState = task.task as { status: string; nextAttemptAt: number | null; lastFailure: string | null };
+        if (taskState.status === "failed" && taskState.nextAttemptAt === null) {
+          transaction.update(firestore.doc(owner.codePendingPath(pair, operationId)), { lease: null, failures: 3, nextAttemptAt: null, lastFailure: "work-refused" });
+          return { refused: taskState.lastFailure };
+        }
+        // Any other task has a next attempt, so only its receipt ends the wait.
         if (taskState.status !== "complete") {
           transaction.update(firestore.doc(owner.codePendingPath(pair, operationId)), { lease: null, nextAttemptAt: clock() + 30_000 });
           return null;
@@ -144,7 +162,8 @@ export function createPublicReleaseSwitchCodeContinuation(options: Options): {
         if (!reserved.alreadyActivated) transaction.update(firestore.doc(owner.codePendingPath(pair, operationId)), { lease: null });
         return { identity: receipt.identity as PairTaskIdentity, claimDigest: receipt.claimDigest as string, manifestDigest: receipt.manifestDigest as string, signal };
       });
-      if (queued) await completed(queued);
+      if (queued && "refused" in queued) named(true, operationId, { name: "work-refused", code: queued.refused });
+      else if (queued) await completed(queued);
     } catch (error) { signal?.throwIfAborted(); await defer(reserved.operationId, error, reserved.lease.token); }
   };
   const retryCompleted = async (taskId: string, signal?: AbortSignal) => {

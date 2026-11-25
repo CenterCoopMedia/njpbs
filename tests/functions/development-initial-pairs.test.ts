@@ -39,7 +39,7 @@ it('stages only completed native claims, exhausts G bytes again, and preserves o
   expect(reads).toBeGreaterThan(0);
   expect((await db.doc(`${base}/receipts/${taskId}`).get()).data()).toEqual(receipt);
 });
-it('returns an attended wait for pending and failed native work and refuses a malformed failure before any object read', async () => {
+it('returns an attended wait for pending and failed native work and refuses a final or malformed failure before any object read', async () => {
   const { pair, contentView } = fixture, base = work.publicReleasePairPath(pair.pairId), taskId = protocol.publicReleaseDigest(contentView.identity);
   const ref = db.doc(`${base}/work/${taskId}`), original = (await ref.get()).data()!;
   const captured = { receipt: (await db.doc(`${base}/inputs/${contentView.identity.inputManifestDigest}`).get()).data() };
@@ -50,6 +50,8 @@ it('returns an attended wait for pending and failed native work and refuses a ma
     await ref.set({ ...original, status: 'failed', attempts: 1, claimDigest: null, leaseUntil: null, nextAttemptAt: Date.now() + 1000, receiptDigest: null, lastFailure: 'storage-unavailable' });
     expect(await stageDevelopmentInitialCapture({ firestore: db, store: never, pair, captured })).toMatchObject({ status: 'waiting', taskId, taskStatus: 'failed' });
     await ref.set({ ...original, status: 'failed', attempts: 3, claimDigest: null, leaseUntil: null, nextAttemptAt: null, receiptDigest: null, lastFailure: 'byte-mismatch' });
+    await expect(stageDevelopmentInitialCapture({ firestore: db, store: never, pair, captured })).rejects.toThrow();
+    await ref.set({ ...original, status: 'failed', attempts: 4, claimDigest: null, leaseUntil: null, nextAttemptAt: null, receiptDigest: null, lastFailure: 'storage-unavailable' });
     expect(await stageDevelopmentInitialCapture({ firestore: db, store: never, pair, captured })).toMatchObject({ status: 'waiting', taskId, taskStatus: 'failed' });
     await ref.set({ ...original, status: 'failed', attempts: 3, claimDigest: null, leaseUntil: null, nextAttemptAt: Date.now() + 1000, receiptDigest: null, lastFailure: null });
     await expect(stageDevelopmentInitialCapture({ firestore: db, store: never, pair, captured })).rejects.toThrow();

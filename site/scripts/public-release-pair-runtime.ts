@@ -83,11 +83,19 @@ export async function runPublicReleasePairWorkOnce({ firestore, pair, execute, c
   } catch (error) {
     const now = clock();
     const failureCode = error instanceof work.PairExecutionError ? error.code
-      : work.isPairTransportFailure(error) ? "storage-unavailable" : "unexpected-executor-error";
+      : work.isPairTransportFailure(error) ? "storage-unavailable"
+      : error instanceof protocol.PublicReleaseProtocolError ? "release-state-refused" : "unexpected-executor-error";
+    const final = work.isPairFinalFailure(failureCode);
     try {
       await work.settlePublicReleasePairWork({ firestore, pair, taskId: claim.taskId, token: claim.token,
-        manifestDigest: null, retryAt: now + 1_000, failureCode, now });
+        manifestDigest: null, retryAt: final ? null : now + 1_000, failureCode, now });
     } catch { throw new work.PairExecutionError(failureCode); }
+    // Codes and digests only; a message can hold private input.
+    const named = (error instanceof work.PairExecutionError ? (error as { cause?: unknown }).cause : error) as { name?: unknown; code?: unknown } | undefined;
+    const cause = [named?.name, named?.code].filter(value => /^[\w.-]{1,64}$/.test(String(value ?? ""))).join(" ");
+    console.error(JSON.stringify({ severity: final ? "ERROR" : "INFO", event: final ? "pair-work-final" : "pair-work-wait",
+      taskId: claim.taskId, kind: claim.identity.kind, code: failureCode, ...(cause ? { cause } : {}),
+      ...(error instanceof work.PairExecutionError ? error.digests : {}) }));
     return "retry-recorded";
   }
   // An uncertain settlement must propagate to durable reconciliation; never

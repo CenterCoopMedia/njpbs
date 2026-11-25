@@ -5,7 +5,7 @@ import type { SwitchCodeSource } from "./public-release-switch-code-recovery";
 export type SelectedSwitchCodeSource = Readonly<{ scope: PairInputScope; source: SwitchCodeSource; selector: PublicReleaseSelector }>;
 export type SwitchCodePending = Readonly<{ schemaVersion: 2; kind: "switch-code-pending"; operationId: string; pairDigest: string;
   scope: PairInputScope; sourceDigest: string; lease: Readonly<{ token: string; until: number }> | null;
-  nextAttemptAt: number | null; failures: number; lastFailure: null | "temporarily-unavailable" | "source-refused" | "replay-pending" | "work-failed" | "replay-predecessor-failed" }>;
+  nextAttemptAt: number | null; failures: number; lastFailure: null | "temporarily-unavailable" | "source-refused" | "replay-pending" | "work-refused" | "work-failed" | "replay-predecessor-failed" }>;
 export function switchCodeOperationId(operationId: string): string;
 export function codePendingPath(pair: PublicReleasePair, operationId: string): string;
 export function parseSwitchCodePending(value: unknown, pair: PublicReleasePair, owner: SelectedSwitchCodeSource): SwitchCodePending;

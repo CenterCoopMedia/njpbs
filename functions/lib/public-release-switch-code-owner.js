@@ -16,7 +16,7 @@ function parseSwitchCodePending(value, pair, owner) {
       value.pairDigest !== p.publicReleaseDigest(pair) || !same(scope, owner.scope) || value.sourceDigest !== p.publicReleaseDigest(owner.source) ||
       !Number.isInteger(value.failures) || value.failures < 0 || value.failures > 3 ||
       (value.failures === 3 || value.lastFailure === "replay-predecessor-failed" ? value.nextAttemptAt !== null : !Number.isSafeInteger(value.nextAttemptAt) || value.nextAttemptAt < 0) ||
-      ![null, "temporarily-unavailable", "source-refused", "replay-pending", "work-failed", "replay-predecessor-failed"].includes(value.lastFailure)) refuse();
+      ![null, "temporarily-unavailable", "source-refused", "replay-pending", "work-failed", "work-refused", "replay-predecessor-failed"].includes(value.lastFailure)) refuse();
   if (value.lease !== null) {
     p.exact(value.lease, ["token", "until"]);
     if (!/^[a-f0-9-]{36}$/.test(value.lease.token) || !p.positive(value.lease.until)) refuse();
