@@ -7,6 +7,7 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { repeatAfterProviderLimit } from "./lib/firebase-provider-limit.mjs";
 
 const root = resolve(fileURLToPath(new URL("../", import.meta.url)));
 process.chdir(root);
@@ -103,18 +104,18 @@ const steps = {
   },
   async firebase() {
     await npx(["firebase", "functions:artifacts:setpolicy", "--project", project, "--location", "us-central1", "--days", "7", "--force"]);
-    // Firebase skips each Function whose source, parameters and secrets did not change; a repeat deploys only what is left.
+    // Firebase skips each Function whose source, parameters and secrets did not change.
     // No --force: it would delete every live index and Function that the source does not name.
     const rules = dev ? "firestore:rules,firestore:indexes" : "firestore:rules,firestore:indexes,storage";
-    for (let left = Infinity; ;) {
+    for (let only = `${rules},functions`; ;) {
       log = "";
       try {
-        return await npx(["firebase", "deploy", "--project", project, "--config", target.firebaseConfig, "--only", `${rules},functions`, "--non-interactive"]);
+        return await npx(["firebase", "deploy", "--project", project, "--config", target.firebaseConfig, "--only", only, "--non-interactive"]);
       } catch (error) {
-        const failed = new Set([...log.matchAll(/Error Failed to .* function (\w+)/g)].map(match => match[1])).size;
-        if (!failed || failed >= left || !/Quota exceeded|HTTP Error: (?:429|5\d\d)/i.test(log)) throw error;
-        left = failed;
-        console.log(`${failed} Functions met the provider's per-minute write limit; its minute ends in 60 s`);
+        const repeat = repeatAfterProviderLimit(log, only);
+        if (!repeat) throw error;
+        ({ only } = repeat);
+        console.log(`${repeat.error}\nWaiting 60 s for the provider's minute, then deploying ${repeat.left.length ? repeat.left.join(", ") : "everything again"}`);
         await new Promise(done => setTimeout(done, 60_000));
       }
     }
