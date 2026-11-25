@@ -141,7 +141,7 @@ async function mutateDataset(firestore, actor, request) {
         const digest = fingerprint(before.workingRelease);
         refresh = await captureDatasetRefresh({ firestore, transaction, datasetId: id,
           action: before.workingRelease.changeKind, releaseId: releaseRef.id, revision, approvedDigest: digest,
-          expectedUseCount: request.expectedUseCount, requestId: request.requestId });
+          expectedUseCount: request.expectedUseCount, requestId: request.requestId, release: before.workingRelease });
         transaction.create(releaseRef.collection("revisions").doc(String(revision)), {
           release: before.workingRelease, datasetId: id, releaseId: releaseRef.id, revision, digest,
           approvedBy: actor.uid, approvedAt: after.updatedAt,

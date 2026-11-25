@@ -61,6 +61,8 @@ interface PublicWorkerDependencies {
   projectionCache?: Pick<Cache, "match" | "put">;
   now?: () => number;
   waitUntil?(task: Promise<unknown>): void;
+  /** The Hub page readers would get now. Absent means its static build. */
+  hubPage?(): Promise<Response | null>;
 }
 
 type PublicWorkerEnv = Omit<Env, "CMS_API"> & {
@@ -478,7 +480,7 @@ export async function servePublicRequest(
   deps: PublicWorkerDependencies,
 ): Promise<Response> {
   const url = new URL(request.url);
-  const figure = serveDataHubEmbed(request, deps.fetchAsset);
+  const figure = serveDataHubEmbed(request, deps.fetchAsset, deps.hubPage);
   if (figure) return figure;
   // Compiled pair modules and archive redirect data are internal assets.
   let compiledPath = url.pathname;

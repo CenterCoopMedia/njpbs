@@ -26,6 +26,8 @@ import previewTarget from "../../functions/lib/preview-target.js";
 import audit from "../../functions/lib/audit.js";
 import { datasetRelease } from "../fixtures/dataset-release.js";
 import { electionBlock, electionRace } from "../fixtures/election-results.ts";
+import hubComposition from "../../functions/lib/data-hub-composition.js";
+import { hubElectricityBinding } from "../../site/src/lib/data-hub-figure-binding.ts";
 import electionApproval from "../../functions/lib/election-results-approval.js";
 
 const { db, admin } = firebase;
@@ -1031,6 +1033,67 @@ describe("durable dataset correction refresh", () => {
       `cmsDatasets/${record.id}/releases/${releaseId}/revisions/1`).get()).data())
       .toEqual(immutableRevisionOne);
   }, 30_000);
+
+  it("publishes an approved electricity price to the Data Hub Page and keeps its draft and an unusable release private", async () => {
+    const priceSource = { publisher: "Example agency", title: "Prices", url: "https://www.eia.gov/electricity/monthly/epm_table_grapher.php?t=epmt_5_6_a", seriesId: "EIA-EPM-5.6.A-NJ-RES" };
+    const price = (nj, us, changes = {}) => {
+      const period = { start: "2026-09-01", end: "2026-09-30", label: "September 2026" };
+      const compared = (value, year) => ({ label: "U.S.", unit: "cents_kwh", value, adjustment: "not_seasonally_adjusted",
+        period: { start: `${year}-09-01`, end: `${year}-09-30`, label: `September ${year}` },
+        geography: { level: "nation", code: "US", label: "United States" },
+        source: { ...priceSource, seriesId: "EIA-EPM-5.6.A-US-RES" }, comparisonNote: "Same table." });
+      return { ...datasetRelease(), label: "Residential electricity price", unit: "cents_kwh", value: nj, period,
+        adjustment: "not_seasonally_adjusted", points: [{ period: "2025-09-30", value: 24 }, { period: "2026-09-30", value: nj }],
+        comparators: [compared(us, 2026), compared(17.5, 2025)], source: priceSource, reuse: { display: "allowed", exports: "allowed", evidence: "Synthetic", note: "" }, releasedOn: "2026-11-24", verifiedOn: "2026-11-25", ...changes };
+    };
+    const hubRef = firestore.doc("cmsPages/data-hub");
+    const shown = async () => hubElectricityBinding({ ...(await hubRef.get()).data().published,
+      dataHubCompositionVersion: 1 }).projection.release.value;
+    let record = await saveDataset(price(24.5, 18));
+    record = (await transition(record, "review")).body.dataset;
+    record = (await transition(record, "approve", { expectedUseCount: 0 })).body.dataset;
+    const first = (await call({ action: "figure", id: record.id, version: { mode: "latestApproved" } })).body.figure;
+
+    const block = { ...dataFigureBlock("figure-hub", record.id, { mode: "latestApproved" }), order: 25 };
+    const source = { id: "data-hub", title: "Data Hub", status: "draft", version: 2, createdBy: actor.uid, previousSlugs: [],
+      dataHubCompositionVersion: 1, blocks: [block, ...hubComposition.defaultDataHubBlocks()] };
+    const published = freezeSource("cmsPages", source, first);
+    const operationId = `${"D".repeat(19)}4`;
+    const owner = { ...pageOwner(operationId, published), pageId: "data-hub", path: "/data-hub/", ownedPaths: ["/data-hub/"] };
+    const batch = db.batch();
+    batch.update(db.doc("system/noBuildPostAdmission"), { "families.pages.ids": ["data-hub"] });
+    batch.update(db.doc(pageOwnership.PAGE_CAPABILITY_PATH), { dataHubReportingVersion: 1, dataHubCompositionVersion: 1 });
+    batch.set(db.doc("cmsPages/data-hub"), { ...source, version: 8, publiclyVisible: true, published });
+    batch.set(db.doc(`${pageOwnership.PAGE_OWNER_COLLECTION}/data-hub`), owner);
+    batch.set(db.doc(`cmsPublishQueue/${operationId}`), { status: "success", transport: "page-no-build-v1", noBuildPage: owner, backgroundRuntime: runtime });
+    batch.set(pageOwnership.pageRouteRef(db, "/data-hub/"), { schemaVersion: 1, pageId: "data-hub", path: "/data-hub/" });
+    await batch.commit();
+    await writeUsage("cmsPages", "data-hub", published);
+    expect(await shown()).toBe(24.5);
+
+    // A correction that the Hub cannot show is refused before it is approved.
+    record = await saveDataset(price(25.1, 18.2, { changeKind: "correction", changeNote: "Revised", comparators: [] }), record);
+    record = (await transition(record, "review")).body.dataset;
+    const refused = await transition(record, "approve", { expectedUseCount: 1 });
+    expect(refused.status).toBe(409);
+    expect(refused.body.error).toContain("U.S. comparison");
+    record = await saveDataset(price(25.1, 18.2, { changeKind: "correction", changeNote: "Revised", unit: "number",
+      comparators: price(25.1, 18.2).comparators.map(item => ({ ...item, unit: "number" })) }), record);
+    record = (await transition(record, "review")).body.dataset;
+    expect((await transition(record, "approve", { expectedUseCount: 1 })).body.error).toContain("Remove this data figure");
+
+    // A saved and reviewed draft stays private. Approval republishes the Hub Page.
+    record = await saveDataset(price(25.1, 18.2, { changeKind: "correction", changeNote: "Revised" }), record);
+    record = (await transition(record, "review")).body.dataset;
+    expect(await shown()).toBe(24.5);
+    const approved = await transition(record, "approve", { expectedUseCount: 1 });
+    expect(approved.status, approved.body.error).toBe(200);
+    await datasetRefresh.processDatasetRefreshJob({ firestore, jobId: approved.body.dataset.refreshJobId });
+    const [task] = [...(await ownerTasks(approved.body.dataset.refreshJobId)).values()];
+    expect(task, task.error ?? "").toMatchObject({ status: "pending", error: null });
+    expect(await shown()).toBe(25.1);
+    expect((await hubRef.get()).data()).toMatchObject({ publishBuildPending: true, version: 8 });
+  });
 
   it("moves only latest-approved owners to a new release and withdraws every use after archive proof", async () => {
     const september = datasetRelease();

@@ -529,6 +529,8 @@ const expectedCmsAnchorEmitters: Readonly<Record<string, number>> = {
   "coverage-list.ts": 1,
   "data-table-render.ts": 1,
   "data-figure-render.ts": 1,
+  // The electricity record links to its checked www.eia.gov source, the card anchor and the fixed Data Hub.
+  "data-hub-electricity.ts": 5,
   // The script-free embed 404 links only to the fixed Data Hub destination.
   "data-hub-embed.ts": 1,
   // Three existing constructors (race jumps, source and AP) plus the reviewed

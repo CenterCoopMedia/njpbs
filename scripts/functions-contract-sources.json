@@ -7,6 +7,7 @@
     "cost-hardware": "packages/content-core/src/cost-hardware.ts",
     "county-comparison": "packages/content-core/src/county-comparison.ts",
     "data-figure": "packages/content-core/src/data-figure.ts",
+    "data-hub-electricity": "packages/content-core/src/data-hub-electricity.ts",
     "data-hub-composition": "packages/content-core/src/data-hub-composition.ts",
     "data-hub-reporting-sources": "packages/content-core/src/data-hub-reporting-sources.ts",
     "data-hub-reporting": "packages/content-core/src/data-hub-reporting.ts",

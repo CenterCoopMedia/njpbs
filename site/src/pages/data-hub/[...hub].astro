@@ -10,6 +10,8 @@ import { isDefaultDataHubComposition } from "../../../../packages/content-core/s
 import PublicSiteLayout from "../../layouts/PublicSiteLayout.astro";
 import { dataHubPageEnabled } from "../../lib/build-target";
 import dataHubHtml from "../../data/njpbs-data-hub-v16.html?raw";
+import { hubElectricityBinding } from "../../lib/data-hub-figure-binding";
+import { applyHubElectricity } from "../../../../packages/content-core/src/data-hub-electricity";
 import "../../styles/data-hub.css";
 import { resolveNjDecidesSocialImage } from "../../lib/nj-decides-social-images";
 
@@ -19,7 +21,11 @@ export function getStaticPaths() {
     : [];
 }
 const context = Astro.locals.cmsRender;
-const page = context ? renderPage(context,"data-hub") : (await getCollection("cmsPages")).find(entry => entry.data.pageId === "data-hub");
+const storedPage = context ? renderPage(context,"data-hub") : (await getCollection("cmsPages")).find(entry => entry.data.pageId === "data-hub");
+// An approved electricity release replaces the compiled record; its block draws no second chart.
+const electricity = storedPage ? hubElectricityBinding(storedPage.data) : undefined;
+const page = storedPage && electricity ? { ...storedPage, data: { ...storedPage.data, blocks: electricity.blocks } } : storedPage;
+const figuresHtml = electricity ? applyHubElectricity(dataHubHtml, electricity.projection) : dataHubHtml;
 const sources = context && "dataHubSources" in context.content ? context.content.dataHubSources : undefined;
 const collected = context ? context.content.posts : (await getCollection("cmsPosts")).map(entry => entry.data);
 const posts = sources?.posts ?? collected.flatMap(post => {
@@ -31,7 +37,7 @@ const spotlight = sources?.spotlight ?? (!context ? (await getEntry("publicDataH
 const preview = isPrivatePreviewRender(context) || page?.data.contentMode === "draft";
 const cutoffAt = sources ? Date.parse(sources.cutoffAt) : context?.content.kind === "private-preview"
   ? context.content.publicContextReceipt.cutoffAt.seconds*1000 + Math.floor(context.content.publicContextReceipt.cutoffAt.nanoseconds/1e6) : Date.now();
-const html = dataHubReportingHtml(dataHubHtml,page?.data.dataHubReporting,posts,spotlight,Number.isFinite(cutoffAt) ? cutoffAt : Date.now());
+const html = dataHubReportingHtml(figuresHtml,page?.data.dataHubReporting,posts,spotlight,Number.isFinite(cutoffAt) ? cutoffAt : Date.now());
 const composed = page?.data.dataHubCompositionVersion === 1 && !isDefaultDataHubComposition(page.data.blocks);
 const compositionHtml = dataHubCompositionHtml(html, page?.data.blocks ?? [], page?.data.dataHubCompositionVersion);
 const socialImage = resolveNjDecidesSocialImage(page ? { kind: "page", ...page.data } : undefined);

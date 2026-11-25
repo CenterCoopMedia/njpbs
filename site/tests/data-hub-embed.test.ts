@@ -1,4 +1,5 @@
 // @vitest-environment node
+import { readFileSync } from "node:fs";
 import { beforeAll, describe, expect, it } from "vitest";
 import { Window } from "happy-dom";
 import { dataHubEmbedPages, type FigureEmbedPage } from "../src/lib/data-hub-embed-pages";
@@ -6,9 +7,11 @@ import { serveDataHubEmbed } from "../../packages/content-core/src/data-hub-embe
 import { classify } from "../src/lib/legacy-redirects";
 import snapshot from "../src/data/data-hub-revisions/2026-11-09.json";
 
+const hub = readFileSync(new URL("../src/data/njpbs-data-hub-v16.html", import.meta.url), "utf8");
 let pages: FigureEmbedPage[];
 const pathFor = (page: FigureEmbedPage) => `/data/figures/${page.id}/embed/${page.snapshot ? page.snapshot + "/" : ""}`;
 const request = async (path: string, method = "GET") => serveDataHubEmbed(new Request(`https://njpbs.org${path}`, { method }), async asset => {
+  if (new URL(asset.url).pathname === "/data-hub/") return new Response(hub, { headers: { "content-type": "text/html" } });
   const page = pages.find(page => pathFor(page) === new URL(asset.url).pathname);
   // The Assets boundary includes ordinary shell/cookie/frame headers. None may leak into embeds.
   return new Response(page?.html ?? "Site 404 with analytics", { status: page ? 200 : 404, headers: {

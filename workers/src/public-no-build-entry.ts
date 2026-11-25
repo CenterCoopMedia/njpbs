@@ -60,6 +60,8 @@ async function serve(request: Request, env: PublicEnv, ctx: ExecutionContext, ta
   const assets = (assetRequest: Request) => env.ASSETS.fetch(assetRequest);
   const fetchAsset = env.DURABLE_POST_WITHDRAWALS ? createContentBaselineAssetReader({
     target, rendererSha, store: env.DURABLE_POST_WITHDRAWALS, fetchAsset: assets }) : assets;
+  const hubRequest = () => new Request(new URL("/data-hub/", request.url));
+  let hubPage: (() => Promise<Response | null>) | undefined;
   if (env.NO_BUILD_PAGE_RENDERER_SHA || env.DURABLE_POST_WITHDRAWALS || isPageScheduleExportPath(new URL(request.url).pathname)) {
     const pages = createNoBuildPageWorker({ target, rendererSha, cache: caches.default,
       rendererReady: env.NO_BUILD_PAGE_RENDERER_SHA === rendererSha,
@@ -72,6 +74,7 @@ async function serve(request: Request, env: PublicEnv, ctx: ExecutionContext, ta
       readWithdrawal: path => readDurablePageWithdrawal(env.DURABLE_POST_WITHDRAWALS, target.workerName, path),
       scheduleProof,
       getDecision: (path, method, pageStatus) => env.CMS_API.getNoBuildPage(path, rendererSha, method, true, scheduleProof, pageStatus) });
+    hubPage = async () => await pages.fetch(hubRequest()) ?? fetchAsset(hubRequest());
     const response = await pages.fetch(request);
     if (response) return response;
   }
@@ -100,7 +103,7 @@ async function serve(request: Request, env: PublicEnv, ctx: ExecutionContext, ta
   });
   const response = await servePublicRequest(request, {
     fetchAsset,
-    getPublishedPage: pageId => env.CMS_API.getPublishedPage(pageId),
+    getPublishedPage: pageId => env.CMS_API.getPublishedPage(pageId), hubPage,
     noBuildPosts, publicationOrigin: target.workerName,
     projectionCache: caches.default, waitUntil: task => ctx.waitUntil(task),
   });
