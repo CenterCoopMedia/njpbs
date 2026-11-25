@@ -337,6 +337,8 @@ function candidateMatchesPrepared(
 
 /** The request got no answer: whether it took effect is unknown. */
 export class UnansweredRequestError extends Error {}
+/** The provider refused the request at its rate limit: it took no effect. */
+export class RefusedRequestError extends UnansweredRequestError {}
 
 const ASK_AGAIN_MS = 1_000;
 const LONGEST_ATTEMPT_MS = 30 * 60_000;
@@ -378,13 +380,13 @@ async function readUntilAnswered<T>(firstAttemptMs: number, read: (signal: Abort
   }
 }
 
-/** A read is asked again until Cloudflare answers. A write is sent once: its
- * caller reads the resulting state before it repeats the write. */
+/** A read is asked again until Cloudflare answers. A write is sent once and
+ * waits for its answer; its caller reads the resulting state. */
 export async function requestCloudflareJson(
   request: CloudflareRequest,
 ): Promise<unknown> {
   const attempt = (signal: AbortSignal) => sendCloudflareRequest(request, signal);
-  return request.method === "GET" ? readUntilAnswered(15_000, attempt) : attempt(AbortSignal.timeout(15_000));
+  return request.method === "GET" ? readUntilAnswered(15_000, attempt) : attempt(AbortSignal.timeout(LONGEST_ATTEMPT_MS));
 }
 
 async function sendCloudflareRequest(request: CloudflareRequest, signal: AbortSignal): Promise<unknown> {
@@ -406,7 +408,8 @@ async function sendCloudflareRequest(request: CloudflareRequest, signal: AbortSi
       signal,
     });
     if (response.status === 429 || response.status >= 500) {
-      throw new UnansweredRequestError(`${label} did not complete: HTTP ${response.status}`);
+      const Unanswered = response.status === 429 ? RefusedRequestError : UnansweredRequestError;
+      throw new Unanswered(`${label} did not complete: HTTP ${response.status}`);
     }
     if (!response.ok) {
       operatorError(`The Cloudflare API returned HTTP ${response.status}`);
@@ -582,13 +585,6 @@ export async function runPublicWorkerActivationOperator({
       return {};
     }
   };
-  // The switch has not happened while the lease's predecessor still serves. An
-  // unread list or any other deployment never permits a write.
-  const predecessorServes = (response: unknown): boolean => {
-    const active = activeDeployment(response);
-    return plainObject(active) && typeof active.id === "string" && active.id === lease.predecessorDeploymentId;
-  };
-
   // A reconciliation may have settled this lease while this attempt waited. A
   // write after that would put an older version back.
   const leaseStillHeld = async (): Promise<boolean> => {
@@ -632,8 +628,8 @@ export async function runPublicWorkerActivationOperator({
         settleOutcomeFn: settleOwned,
       });
     }
-    for (let unanswered = true; unanswered;) {
-      unanswered = false;
+    for (let refused = true; refused;) {
+      refused = false;
       if (!await leaseStillHeld()) {
         reportActivationFault("deployment write", new Error("The lease is no longer held; nothing was written"));
         return settleWithFallback({ firestore, lease, evidence: { action: "reconcile" }, settleOutcomeFn: settleOwned });
@@ -656,15 +652,15 @@ export async function runPublicWorkerActivationOperator({
         }
       } catch (error) {
         // The response is ambiguous. The authoritative active-deployment read
-        // below decides whether the exact version is live, the write is
-        // repeated, or the lease must reconcile.
+        // below decides whether the exact version is live or must reconcile.
+        // Only a refused write is sent again: a lost one can still take effect,
+        // also after a later release.
         reportActivationFault("deployment write", error);
-        unanswered = error instanceof UnansweredRequestError;
+        refused = error instanceof RefusedRequestError;
+        if (refused) await new Promise(resolve => setTimeout(resolve, ASK_AGAIN_MS));
       }
-      deploymentResponse = await readDeployments();
-      unanswered &&= predecessorServes(deploymentResponse);
-      if (unanswered) await new Promise(resolve => setTimeout(resolve, ASK_AGAIN_MS));
     }
+    deploymentResponse = await readDeployments();
   }
 
   let evidence = planPublicWorkerActivationEvidence({

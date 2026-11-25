@@ -10,6 +10,7 @@ import {
   parseApplyArguments,
   requestCloudflareJson,
   requestPublicPublicationReceipt,
+  RefusedRequestError,
   UnansweredRequestError,
   runPublicWorkerActivationOperator,
 } from "../../site/scripts/activate-public-worker-candidate";
@@ -487,20 +488,22 @@ describe("public Worker activation operator", () => {
     expect(writes(fixture.requestJson)).toBe(0);
   });
 
-  it("repeats an unanswered write only while the predecessor still serves", async () => {
-    const run = async (readBack: unknown[]) => {
+  it("sends a refused write again and never a lost one", async () => {
+    const run = async (answers: unknown[]) => {
       const fixture = operator({
-        requestJson: requestQueue([
-          workersResponse(), triggersResponse(), triggersResponse(), disabledSubdomainResponse(),
-          new UnansweredRequestError("lost"), ...readBack, triggersResponse(),
-        ]),
+        requestJson: requestQueue([workersResponse(), triggersResponse(), triggersResponse(), disabledSubdomainResponse(), ...answers]),
       });
-      expect((await runPublicWorkerActivationOperator(fixture.input)).outcome).toBe("deployed");
-      return writes(fixture.requestJson);
+      const { outcome } = await runPublicWorkerActivationOperator(fixture.input);
+      return { outcome, writes: writes(fixture.requestJson) };
     };
+    const answered = { success: true, result: deploymentStatus() };
 
-    await expect(run([deploymentsResponse()])).resolves.toBe(1);
-    await expect(run([predecessorServes(), { success: true, result: deploymentStatus() }, deploymentsResponse()])).resolves.toBe(2);
+    await expect(run([new RefusedRequestError("HTTP 429"), answered, deploymentsResponse(), triggersResponse()]))
+      .resolves.toEqual({ outcome: "deployed", writes: 2 });
+    await expect(run([new UnansweredRequestError("lost"), deploymentsResponse(), triggersResponse()]))
+      .resolves.toEqual({ outcome: "deployed", writes: 1 });
+    await expect(run([new UnansweredRequestError("lost"), predecessorServes()]))
+      .resolves.toEqual({ outcome: "reconciling", writes: 1 });
   });
 
   it("asks a lost read again, sends a write once, and stops on a refusal", async () => {
@@ -522,6 +525,10 @@ describe("public Worker activation operator", () => {
       const write = await ask("POST", [lost]);
       expect(write.sent).toBe(1);
       expect(write.result).toBeInstanceOf(UnansweredRequestError);
+      expect(write.result).not.toBeInstanceOf(RefusedRequestError);
+      const refused = async (status: number) => (await ask("POST", [async () => new Response("", { status })])).result;
+      expect(await refused(429)).toBeInstanceOf(RefusedRequestError);
+      expect(await refused(503)).not.toBeInstanceOf(RefusedRequestError);
       expect((await ask("GET", [async () => new Response("", { status: 403 })])).sent).toBe(1);
       const redirected = await ask("GET", [() => Promise.reject(new TypeError("fetch failed", { cause: new Error("unexpected redirect") }))]);
       expect(redirected.sent).toBe(1);
