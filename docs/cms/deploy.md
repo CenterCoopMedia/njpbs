@@ -26,3 +26,10 @@ Inputs are environment variables: `CMS_DEPLOYMENT_VARIABLES_JSON` (the GitHub va
 `FIREBASE_SERVICE_ACCOUNT`, `CLOUDFLARE_API_TOKEN`, `CMS_EDGE_ORIGIN_SECRET`, `CMS_PREVIEW_R2_CREDENTIAL`,
 `CMS_PREVIEW_SMOKE_CREDENTIAL`, `CMS_ADMIN_ACCESS_API_TOKEN` (production) and, for development, the
 `CLOUDFLARE_DEV_*`, `CMS_DEV_PREVIEW_*` and `CMS_DEV_ACCESS_*` names. The renderer step needs Docker.
+
+A development run first checks its settings and stops before the install step when one can be production's. The
+refusal lists every such setting: a resource or origin without a dev name, a `VITE_FIREBASE_*` value that differs from
+the dev project's recorded web app (`FIREBASE_DEV_WEB_API_KEY`, `CMS_DEV_FIREBASE_WEB_APP_ID`,
+`FIREBASE_DEV_APPCHECK_SITE_KEY`), a smoke target that is more than an editor path, and a feature switch that is not in
+`CMS_DEPLOYMENT_VARIABLES_JSON`. On development that object holds the development environment's variables and, from
+the repository, the names that only development uses.

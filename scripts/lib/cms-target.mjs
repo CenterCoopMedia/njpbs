@@ -31,14 +31,15 @@ export function isDevelopmentHostname(value) {
   return /^[a-z0-9.-]+\.[a-z]{2,}$/i.test(value ?? "") && (first === "dev" || first.startsWith("dev-"));
 }
 
-function devName(env, key) {
-  // config-input: CMS_DEV_API_WORKER, CMS_DEV_PREVIEW_RENDERER, CMS_DEV_ADMIN_PAGES
+export function devName(env, key) {
+  // config-input: CMS_DEV_API_WORKER, CMS_DEV_PREVIEW_RENDERER, CMS_DEV_ADMIN_PAGES, CMS_DEV_STUDIO_BUCKET, CMS_DEV_MEDIA_BUCKET, CMS_DEV_PREVIEW_BUCKET
+  // config-input: CMS_DEV_PREVIEW_STAFF_WORKER, CMS_DEV_PREVIEW_WORKER, CMS_DEV_SITE_PAGES, CLOUDFLARE_DEV_PUBLIC_WORKER
   const value = env[key]?.trim();
   if (!isDevelopmentName(value)) throw new CmsTargetError(`${key} must name a development resource`);
   return value;
 }
-function devOrigin(env, key) {
-  // config-input: CMS_DEV_ADMIN_ORIGIN, CMS_DEV_API_ORIGIN, CMS_DEV_PUBLIC_ORIGIN, CMS_DEV_MEDIA_ORIGIN
+export function devOrigin(env, key) {
+  // config-input: CMS_DEV_ADMIN_ORIGIN, CMS_DEV_API_ORIGIN, CMS_DEV_PUBLIC_ORIGIN, CMS_DEV_MEDIA_ORIGIN, CMS_DEV_PREVIEW_ORIGIN
   const value = env[key]?.trim() ?? "";
   let url;
   try { url = new URL(value); } catch { throw new CmsTargetError(`${key} must be a development origin`); }

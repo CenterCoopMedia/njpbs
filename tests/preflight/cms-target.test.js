@@ -1,7 +1,10 @@
 import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import { assertDevelopmentPagesConfig, assertDevelopmentWorkerConfig, cmsTarget, isDevelopmentHostname, isDevelopmentName } from "../../scripts/lib/cms-target.mjs";
+import { assertDevelopmentSettings } from "../../scripts/lib/cms-development-settings.mjs";
 import { configurationInputs, runtimeParameters } from "../../scripts/lib/functions-configuration.mjs";
 
 const read = path => JSON.parse(readFileSync(new URL(`../../${path}`, import.meta.url), "utf8"));
@@ -34,6 +37,42 @@ describe("CMS deploy target", () => {
     for (const name of ["njpbs-cms-api", "njpbs", "njpbs-devtools", "njpbs-media"]) expect(isDevelopmentName(name)).toBe(false);
     for (const host of ["dev.njpbs.org", "dev-media.njpbs.org", "dev-api.example.org"]) expect(isDevelopmentHostname(host)).toBe(true);
     for (const host of ["media.njpbs.org", "njpbs.org", "devmedia.njpbs.org", "cms-api.njpbs.org"]) expect(isDevelopmentHostname(host)).toBe(false);
+  });
+});
+
+describe("development deploy settings", () => {
+  const settings = {
+    ...devEnv, CLOUDFLARE_DEV_PUBLIC_WORKER: "njpbs-dev-public", CMS_DEV_MEDIA_BUCKET: "njpbs-dev-media", CMS_DEV_PREVIEW_BUCKET: "njpbs-dev-cms-previews",
+    CMS_DEV_PREVIEW_ORIGIN: "https://dev-preview.njpbs.org", CMS_DEV_PREVIEW_STAFF_WORKER: "njpbs-dev-preview-staff-sites",
+    CMS_DEV_PREVIEW_WORKER: "njpbs-dev-cms-preview", CMS_DEV_SITE_PAGES: "njpbs-dev", CMS_DEV_STUDIO_BUCKET: "njpbs-dev-media-master",
+    VITE_FIREBASE_API_KEY: "dev-key", FIREBASE_DEV_WEB_API_KEY: "dev-key", VITE_FIREBASE_APP_ID: "1:2:web:a", CMS_DEV_FIREBASE_WEB_APP_ID: "1:2:web:a",
+    VITE_FIREBASE_APPCHECK_SITE_KEY: "dev-site-key", FIREBASE_DEV_APPCHECK_SITE_KEY: "dev-site-key",
+    CMS_PREVIEW_SMOKE_TARGET: JSON.stringify({ editor: "/content/post/abc/edit", heading: "A post" }),
+  };
+
+  it("admits development values and lists every fault of a production one", () => {
+    expect(() => assertDevelopmentSettings(settings, settings)).not.toThrow();
+    const production = { VITE_FIREBASE_API_KEY: "production-key", VITE_FIREBASE_APP_ID: "1:1:web:a", VITE_FIREBASE_APPCHECK_SITE_KEY: "production-site-key",
+      CMS_DEV_STUDIO_BUCKET: "njpbs-media-master", CMS_DEV_PREVIEW_BUCKET: "njpbs-cms-previews", CMS_DEV_PREVIEW_ORIGIN: "https://preview.njpbs.org",
+      CMS_PREVIEW_SMOKE_TARGET: JSON.stringify({ editor: "https://admin.njpbs.org/content/post/abc/edit", heading: "A post" }) };
+    const switches = { AUTHOR_PAGES_LIVE: "true", VITE_VIDEO_REPLACEMENT_ENABLED: "true" };
+    const faults = name => { try { assertDevelopmentSettings({ ...settings, ...production, ...switches, ...name }, settings); } catch (error) { return error.message; } };
+    for (const name of Object.keys({ ...production, ...switches })) expect(faults()).toContain(`- ${name} must`);
+    expect(faults().split("\n- ")).toHaveLength(10);
+    expect(faults()).not.toMatch(/production-|njpbs-media-master|preview\.njpbs/);
+  });
+
+  it.each(["FIREBASE_DEV_WEB_API_KEY", "FIREBASE_DEV_APPCHECK_SITE_KEY", "CMS_DEV_FIREBASE_WEB_APP_ID"])("refuses a deploy without %s", name => {
+    expect(() => assertDevelopmentSettings({ ...settings, [name]: undefined }, settings)).toThrow(name);
+  });
+
+  it("stops the deploy before its first step", () => {
+    const root = fileURLToPath(new URL("../../", import.meta.url));
+    const run = spawnSync(process.execPath, ["scripts/deploy-cms.mjs", "development"], { cwd: root, encoding: "utf8",
+      env: { PATH: process.env.PATH, CMS_DEPLOYMENT_VARIABLES_JSON: JSON.stringify({ ...settings, VITE_FIREBASE_API_KEY: "other", CMS_DEV_STUDIO_BUCKET: "njpbs" }) } });
+    expect(run.status).not.toBe(0);
+    expect(run.stderr).toMatch(/CMS_DEV_STUDIO_BUCKET must[^]*VITE_FIREBASE_API_KEY must/);
+    expect(run.stdout).not.toContain("START");
   });
 });
 

@@ -17,7 +17,9 @@ if (!["development", "production"].includes(environment)) throw new Error("Usage
 const dev = environment === "development";
 
 // Variables arrive as one JSON object (toJSON(vars)); a name set in the environment wins.
-for (const [name, value] of Object.entries(JSON.parse(process.env.CMS_DEPLOYMENT_VARIABLES_JSON || "{}"))) process.env[name] ??= value;
+const variables = JSON.parse(process.env.CMS_DEPLOYMENT_VARIABLES_JSON || "{}");
+// config-input: CMS_DEPLOYMENT_VARIABLES_JSON
+for (const [name, value] of Object.entries(variables)) process.env[name] ??= value;
 const env = process.env;
 env.CMS_TARGET = environment;
 if (dev) { env.CMS_DEPLOYMENT_ENVIRONMENT = "development"; env.CMS_PUBLISH_TRANSPORT = "github"; }
@@ -27,6 +29,7 @@ env.VITE_CANONICAL_GITHUB_REPOSITORY ||= env.CANONICAL_GITHUB_REPOSITORY;
 env.WRANGLER_SEND_METRICS = "false";
 
 const { assertDevelopmentPagesConfig, assertDevelopmentWorkerConfig, cmsTarget } = await import("./lib/cms-target.mjs");
+if (dev) (await import("./lib/cms-development-settings.mjs")).assertDevelopmentSettings(env, variables);
 const target = cmsTarget();
 const project = target.projectId;
 env.GCLOUD_PROJECT = project; env.GOOGLE_CLOUD_PROJECT = project;

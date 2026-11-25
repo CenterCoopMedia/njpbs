@@ -1,11 +1,11 @@
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import { launchCmsBrowser, parseBrowserCredential, submitCmsSignIn } from "./cms-debug-browser.mjs";
+import { editorPath } from "./lib/cms-development-settings.mjs";
 import { developmentInstallAccess } from "./lib/development-install-credentials.mjs";
 import { developmentValues } from "./render-development-config.mjs";
 
 const production = { admin: "https://admin.njpbs.org", preview: "https://preview.njpbs.org" };
-const editorPath = /^\/content\/(?:pages|post)\/[A-Za-z0-9][A-Za-z0-9_-]{0,127}\/edit$/;
 const previewPath = /^\/p\/[A-Za-z0-9]{20}\//;
 
 export function previewSmokeSettings(environment, env) {
