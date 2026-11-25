@@ -416,13 +416,13 @@ describe("public Worker activation operator", () => {
     )).toBe(false);
   });
 
-  it("fences a retry when neither the candidate nor the predecessor serves", async () => {
+  it("fences a retry whose candidate is not authoritatively active", async () => {
     const fixture = operator({
       requestJson: requestQueue([
         workersResponse(),
         triggersResponse(),
         deploymentsResponse({
-          deploymentId: "66666666-6666-4666-8666-666666666666",
+          deploymentId: PREDECESSOR_DEPLOYMENT_ID,
           versionId: "55555555-5555-4555-8555-555555555555",
         }),
       ]),
@@ -448,30 +448,29 @@ describe("public Worker activation operator", () => {
     ([request]) => request.method === "POST" && request.url.endsWith("/deployments"),
   ).length;
 
-  it("writes on a held lease while its predecessor still serves", async () => {
-    const fixture = operator({
-      requestJson: requestQueue([
-        workersResponse(), triggersResponse(),
-        predecessorServes(),
-        triggersResponse(), disabledSubdomainResponse(),
-        { success: true, result: deploymentStatus() },
-        deploymentsResponse(), triggersResponse(),
-      ]),
-      acquireLeaseFn: vi.fn(async () => acquired({ idempotent: true })),
-    });
-
-    expect((await runPublicWorkerActivationOperator(fixture.input)).outcome).toBe("deployed");
-    expect(writes(fixture.requestJson)).toBe(1);
-  });
-
-  it("never writes on a held lease when the deployment list is unread", async () => {
-    const fixture = operator({
-      requestJson: requestQueue([workersResponse(), triggersResponse(), new Error("refused")]),
-      acquireLeaseFn: vi.fn(async () => acquired({ idempotent: true })),
-    });
-
-    expect((await runPublicWorkerActivationOperator(fixture.input)).outcome).toBe("reconciling");
-    expect(writes(fixture.requestJson)).toBe(0);
+  it("writes from the attempt that acquired the lease only, also while that write is paused", async () => {
+    const started = Promise.withResolvers<void>(), answer = Promise.withResolvers<unknown>();
+    const queue = requestQueue([workersResponse(), triggersResponse(), triggersResponse(), disabledSubdomainResponse(),
+      null, deploymentsResponse(), triggersResponse()]);
+    const first = operator({ requestJson: vi.fn(async (request: { method: string; url: string }) => {
+      const next = await queue(request);
+      if (request.method !== "POST" || !request.url.endsWith("/deployments")) return next;
+      started.resolve();
+      return answer.promise;
+    }) });
+    const running = runPublicWorkerActivationOperator(first.input);
+    await started.promise;
+    for (const list of [predecessorServes(), new Error("refused")]) {
+      const retry = operator({
+        requestJson: requestQueue([workersResponse(), triggersResponse(), list]),
+        acquireLeaseFn: vi.fn(async () => acquired({ idempotent: true })),
+      });
+      expect((await runPublicWorkerActivationOperator(retry.input)).outcome).toBe("reconciling");
+      expect(writes(retry.requestJson)).toBe(0);
+    }
+    answer.resolve({ success: true, result: deploymentStatus() });
+    expect((await running).outcome).toBe("deployed");
+    expect(writes(first.requestJson)).toBe(1);
   });
 
   it.each([
@@ -479,19 +478,13 @@ describe("public Worker activation operator", () => {
     ["another lease replaced it", async () => { const next = acquired(); return { ...next, lease: { ...next.lease, leaseToken: "77777777-7777-4777-8777-777777777777" } }; }],
     ["the lease read fails", async () => { throw new Error("unread"); }],
   ])("writes nothing after waiting when %s", async (_name, later) => {
-    for (const idempotent of [false, true]) {
-      const acquireLeaseFn = vi.fn<() => Promise<unknown>>(later).mockResolvedValueOnce(acquired({ idempotent }));
-      const fixture = operator({
-        acquireLeaseFn,
-        requestJson: requestQueue([
-          workersResponse(), triggersResponse(), ...(idempotent ? [predecessorServes()] : []),
-          triggersResponse(), disabledSubdomainResponse(),
-        ]),
-      });
+    const fixture = operator({
+      acquireLeaseFn: vi.fn<() => Promise<unknown>>(later).mockResolvedValueOnce(acquired()),
+      requestJson: requestQueue([workersResponse(), triggersResponse(), triggersResponse(), disabledSubdomainResponse()]),
+    });
 
-      expect((await runPublicWorkerActivationOperator(fixture.input)).outcome).toBe("reconciling");
-      expect(writes(fixture.requestJson)).toBe(0);
-    }
+    expect((await runPublicWorkerActivationOperator(fixture.input)).outcome).toBe("reconciling");
+    expect(writes(fixture.requestJson)).toBe(0);
   });
 
   it("repeats an unanswered write only while the predecessor still serves", async () => {

@@ -41,6 +41,7 @@ const PUBLIC_READ_TIMEOUT = "public-read-timeout";
 // Bound headers AND body consumption. Aborting alone need not settle a stalled
 // stream; the deadline also prevents any late result from reaching settlement.
 async function withinDeadline(milliseconds, work, stopped) {
+  stopped?.throwIfAborted();
   const controller = new AbortController();
   let timer, stop;
   const ended = new Promise((resolve, reject) => {

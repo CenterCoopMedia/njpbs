@@ -589,8 +589,8 @@ export async function runPublicWorkerActivationOperator({
     return plainObject(active) && typeof active.id === "string" && active.id === lease.predecessorDeploymentId;
   };
 
-  // Another attempt of this operation may have settled this lease while this one
-  // waited. A write after that would put an older version back.
+  // A reconciliation may have settled this lease while this attempt waited. A
+  // write after that would put an older version back.
   const leaseStillHeld = async (): Promise<boolean> => {
     try {
       const held = await acquireLeaseFn({ firestore, buildBatchId: prepared.buildBatchId, commitSha: prepared.commitSha, ...owned });
@@ -601,10 +601,11 @@ export async function runPublicWorkerActivationOperator({
     }
   };
 
-  // A lease survives a fault before or at the deployment write, so a held lease
-  // writes again when its predecessor still serves.
-  let deploymentResponse: unknown = acquisition.idempotent ? await readDeployments() : undefined;
-  if (!acquisition.idempotent || predecessorServes(deploymentResponse)) {
+  // Cloudflare takes no expected version with a deployment, so one attempt per
+  // lease writes: the one whose transaction acquired it. A retry only reads.
+  let deploymentResponse: unknown;
+  if (acquisition.idempotent) deploymentResponse = await readDeployments();
+  else {
     try {
       const preDeployTriggerResponse = await requestJson({
         url: workerApiPath(`/builds/workers/${workerTag}/triggers`),

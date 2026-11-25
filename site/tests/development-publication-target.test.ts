@@ -160,7 +160,7 @@ describe("development activation and reconciliation", () => {
       `GET /accounts/${ACCOUNT}/workers/scripts/${development.workerName}/subdomain`,
       `GET /accounts/${ACCOUNT}/workers/domains?service=${development.workerName}`];
     expect(log).toEqual([`GET /accounts/${ACCOUNT}/workers/scripts`, `GET /accounts/${ACCOUNT}/builds/workers/${TAG}/triggers`, ...privateCheck, "lease",
-      `GET /accounts/${ACCOUNT}/builds/workers/${TAG}/triggers`, `POST /accounts/${ACCOUNT}/workers/scripts/${development.workerName}/subdomain`, ...privateCheck,
+      `GET /accounts/${ACCOUNT}/builds/workers/${TAG}/triggers`, `POST /accounts/${ACCOUNT}/workers/scripts/${development.workerName}/subdomain`, ...privateCheck, "lease",
       `POST /accounts/${ACCOUNT}/workers/scripts/${development.workerName}/deployments`,
       `GET /accounts/${ACCOUNT}/workers/scripts/${development.workerName}/deployments`, `GET /accounts/${ACCOUNT}/builds/workers/${TAG}/triggers`, ...privateCheck]);
     expect(fixture.requestPublication).toHaveBeenCalledWith(
