@@ -84,13 +84,16 @@ async function purgePublicHome({ target, fetchPurge = fetch, purgeConfig } = {})
   await purgePublicCacheTags([publicationPostCacheTag(target, "background")], config, fetchPurge);
 }
 
+const isPublicRefreshPending = response => response.headers.get("x-njpbs-publication-refresh") === "pending" &&
+  response.headers.get("retry-after") === "1";
+
 async function readPublicPostAfterRefresh(url, fetchPublic, signal, headers) {
   headers = new Headers(headers);
   while (!signal.aborted) {
     const response = await fetchPublic(url, {
       method: "GET", redirect: "manual", signal, ...(headers.keys().next().done ? {} : { headers }),
     });
-    if (response.headers.get("x-njpbs-publication-refresh") !== "pending" || response.headers.get("retry-after") !== "1") return response;
+    if (!isPublicRefreshPending(response)) return response;
     await response.body?.cancel();
     // Public reads return Assets while their edge refresh runs. This polling is
     // inside the existing ten-second deadline and retains the same operation.
@@ -432,8 +435,15 @@ async function judgeCandidateAnswer({ url, fetchPublic, headers, candidate, prev
   const previous = previousRendererSha && previousRendererSha !== candidate.commitSha ? previousRendererSha : null;
   const backstop = rollout.now() + rollout.backstopMs;
   // Read the body inside the deadline; the deadline aborts the request when it settles.
+  let waiting;
   while (await withinDeadline(10_000, async signal => {
-    const response = await readPublicPostAfterRefresh(url, fetchPublic, signal, new Headers(headers));
+    const response = await fetchPublic(url, { method: "GET", redirect: "manual", signal, headers: new Headers(headers) });
+    // Assets answer while the Post authority read is still out: not an answer yet.
+    waiting = isPublicRefreshPending(response) && `The public route still waits for its Post authority (${response.status})`;
+    if (waiting) {
+      await response.body?.cancel();
+      return true;
+    }
     if (previous && response.headers.get("x-njpbs-renderer-sha") === previous) {
       await response.body?.cancel();
       return true;
@@ -441,7 +451,7 @@ async function judgeCandidateAnswer({ url, fetchPublic, headers, candidate, prev
     await judge(response);
     return false;
   })) {
-    if (rollout.now() >= backstop) throw new Error("The public route still answers from the previous renderer; the candidate version has not reached it");
+    if (rollout.now() >= backstop) throw new Error(waiting || "The public route still answers from the previous renderer; the candidate version has not reached it");
     await rollout.wait();
   }
 }

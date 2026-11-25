@@ -388,20 +388,20 @@ async function readNoBuildPostDecisionInTransaction({ firestore, transaction, pa
     log.warn?.("Public Post catalog owner refused", { postId, reason });
   };
   for (const owner of malformedOwners) refuseOwner(owner, "malformed_owner");
-  // Reconcile every owner within the same bounded read transaction. Ordinary
-  // catalogs can omit a bad snapshot while preserving its existing route claims.
-  for (let offset = 0; offset < owners.length; offset += 8) {
-    const replies = await Promise.all(owners.slice(offset, offset + 8).map(owner =>
-      readOwnedPostDecision({ ...context, owner, path: single ? path : postRoutePath(owner.state.slug),
-        catalog: !single, canSkipUnverifiedSnapshot })));
-    for (const reply of replies) {
-      if (reply.kind === "unverified-snapshot") {
-        refuseOwner(reply, "snapshot_mismatch");
-      } else {
-        if (single) return reply;
-        posts.push(reply.receipt);
-        generation = Math.max(generation, reply.receipt.generation);
-      }
+  // Reconcile every owner in one read transaction, all at once: a switch turns
+  // the decision cache off, and the Worker ends a catalog read after 3 s. Eight
+  // owners at a time took 3 s for 147 Posts, and newer Posts then answered 404.
+  // Ordinary catalogs can omit a bad snapshot while preserving its route claims.
+  const replies = await Promise.all(owners.map(owner =>
+    readOwnedPostDecision({ ...context, owner, path: single ? path : postRoutePath(owner.state.slug),
+      catalog: !single, canSkipUnverifiedSnapshot })));
+  for (const reply of replies) {
+    if (reply.kind === "unverified-snapshot") {
+      refuseOwner(reply, "snapshot_mismatch");
+    } else {
+      if (single) return reply;
+      posts.push(reply.receipt);
+      generation = Math.max(generation, reply.receipt.generation);
     }
   }
   if (!admission.valid) refuse("Instant publication admission is unavailable.");

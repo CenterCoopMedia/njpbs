@@ -96,21 +96,22 @@ function createCmsGetPublicPageHandler(deps = {}) {
   };
   // Reads the validator before the decision, so a stored decision is never
   // older than the validator key it is stored under. Errors are not stored.
-  const cachedDecision = async (req, res, requestKey, read, storable) => {
+  const cachedDecision = async (req, res, requestKey, read, storable, duringSwitch = false) => {
     const send = (entry, body, gzip) => {
       if (entry) res.set("x-njpbs-public-decision-valid-until", String(entry.expiresAt));
       return sendJson(req, res, body, entry?.gzip ?? gzip);
     };
     const validator = decisionCache ? await readPublicDecisionValidator(firestore) : null;
-    if (validator?.cacheable) {
-      const hit = decisionCache.get(requestKey, validator.key);
+    const validatorKey = validator?.cacheable ? validator.key : duringSwitch ? validator?.switchKey : undefined;
+    if (validatorKey) {
+      const hit = decisionCache.get(requestKey, validatorKey);
       if (hit) return send(hit, null);
     }
     const result = await read();
-    if (!validator?.cacheable || !storable(result)) return reply(req, res, result);
+    if (!validatorKey || !storable(result)) return reply(req, res, result);
     const body = JSON.stringify(result);
     const gzip = gzipSync(body);
-    const entry = decisionCache.set(requestKey, validator.key, body, gzip);
+    const entry = decisionCache.set(requestKey, validatorKey, body, gzip);
     return send(entry, body, gzip);
   };
 
@@ -230,7 +231,7 @@ function createCmsGetPublicPageHandler(deps = {}) {
             delete result.backgroundBucket;
             if (!contentLinkReadFits(result, 2 * 1024 * 1024, "published")) throw new Error("Published read too large");
             return result;
-          }, result => ["pass", "post", "alias", "gone", "receipts"].includes(result.kind));
+          }, result => ["pass", "post", "alias", "gone", "receipts"].includes(result.kind), true);
         }
         const result = await (deps.readNoBuildPostFn ?? readNoBuildPostDecision)({ firestore, path, rendererSha, probe, log });
         if (result.kind === "background") {
