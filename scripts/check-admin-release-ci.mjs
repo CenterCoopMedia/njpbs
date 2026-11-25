@@ -1,6 +1,5 @@
 import { execFileSync } from "node:child_process";
 import { MERGE_GROUP_NOT_ON_MAIN, requireMainCi } from "../.github/scripts/require-main-ci.mjs";
-import { providerCall } from "./lib/provider-call.mjs";
 import { repositoryIdentity } from "./lib/repository-identity.mjs";
 
 // This read-only Node gate and gh inherit any ambient GH_TOKEN/GITHUB_TOKEN.
@@ -11,9 +10,9 @@ try {
   const run = await requireMainCi({
     repository: repositoryIdentity().repository,
     sha,
-    request: async endpoint => JSON.parse(await providerCall("gh CI read", () => execFileSync("gh", ["api", endpoint], {
+    request: endpoint => JSON.parse(execFileSync("gh", ["api", endpoint], {
       encoding: "utf8", stdio: ["ignore", "pipe", "pipe"],
-    }))),
+    })),
   });
   console.log(`Admin release ${sha} passed main CI run ${run}.`);
 } catch (error) {
