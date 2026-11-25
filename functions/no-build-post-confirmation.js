@@ -30,6 +30,9 @@ const purgeConfigFn = () => ({ zoneId: ZONE_ID.value(), token: PURGE_TOKEN.value
 const readbackOptions = () => ({ target: publicationTarget(DEVELOPMENT ? "development" : "production"),
   headers: DEVELOPMENT ? { "cf-access-client-id": DEV_ACCESS_ID.value(), "cf-access-client-secret": DEV_ACCESS_SECRET.value() } : {} });
 
+// A claim made by this event cannot outlive the event.
+const EVENT_SECONDS = platformLimit("cloudFunctionsEventSeconds");
+
 function createNoBuildPostConfirmationHandler(deps = {}) {
   const { firestore = db, config = purgeConfigFn, readback = readbackOptions, ...network } = deps;
   return async event => {
@@ -69,12 +72,12 @@ function createNoBuildPostConfirmationHandler(deps = {}) {
         if (queue.settingsPublication || queue.libraryCardPublication || queue.recordPublication) {
           // Loaded here: its import graph declares a secret that the development manifest must not carry.
           try { await require("./lib/no-build-page-settings-confirmation").confirmNoBuildPageSettings({ firestore, operationId: event.params.queueId, ...readback(), ...network,
-            platformSeconds: platformLimit("cloudFunctionsEventSeconds") }); }
+            platformSeconds: EVENT_SECONDS }); }
           catch { /* The minute scheduler repeats the settings consumer proof. */ }
         }
         if (queue.recordPublication) {
           try { await require("./lib/no-build-record-confirmation").recoverNoBuildRecordPublication({ firestore,
-            operationId: event.params.queueId, ...readback(), ...network }); }
+            operationId: event.params.queueId, ...readback(), ...network, platformSeconds: EVENT_SECONDS }); }
           catch { /* The recovery wake retains the accepted source. */ }
         }
       }
@@ -82,12 +85,12 @@ function createNoBuildPostConfirmationHandler(deps = {}) {
     }
     if (queue?.transport === PAGE_TRANSPORT) {
       if (queue.status !== "pending" || queue.claim || queue.nextAttemptAt === null || queue.nextAttemptAt > Date.now()) return;
-      await recoverNoBuildPageDetail({ firestore, ...readback(), ...network, operationId: event.params.queueId });
+      await recoverNoBuildPageDetail({ firestore, ...readback(), ...network, operationId: event.params.queueId, platformSeconds: EVENT_SECONDS });
       return;
     }
     if (queue?.transport !== TRANSPORT || (!postProofDue(queue, Date.now()) &&
         (queue.status !== "pending" || queue.claim || queue.nextAttemptAt === null || queue.nextAttemptAt > Date.now()))) return;
-    await recoverNoBuildPostDetail({ firestore, ...readback(), ...network, purgeConfig: config(), operationId: event.params.queueId });
+    await recoverNoBuildPostDetail({ firestore, ...readback(), ...network, purgeConfig: config(), operationId: event.params.queueId, platformSeconds: EVENT_SECONDS });
   };
 }
 

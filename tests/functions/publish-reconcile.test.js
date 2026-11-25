@@ -247,6 +247,8 @@ describe("publish queue reconciliation schedule", () => {
       });
     }
     const legacy = ["a-github", "a-serializer", "a-without-transport"];
+    // Nothing claims serializer rows once the serializer is retired.
+    batch.set(db.doc("system/publicDeployment/controls/serializer"), { schemaVersion: 1, enabled: false });
     legacy.forEach((id, index) => batch.set(db.collection("cmsPublishQueue").doc(id), {
       status: ["reserved", "pending", "publishing"][index], triggeredAt: timestamp,
       ...(index < 2 ? { transport: ["github", "serializer"][index] } : {}),
@@ -304,6 +306,10 @@ describe("publish queue orphan recovery", () => {
     ["a batch that already ended", { "system/publicDeployment/buildBatches/cms-row": { ...batch, status: "failed" } }],
     ["a serializer journal for another row", { "cmsPublicationSerializerJournals/cloudflare-publisher": { job: { queueId: "other" } } }],
     ["a github transport in production", { "cmsPublishQueue/row": { ...orphan, transport: "github" } }],
+    ["no claimer left after the serializer was retired", { "cmsPublishQueue/row": { ...orphan, status: "pending" },
+      "system/publicDeployment/controls/serializer": { schemaVersion: 1, enabled: false } }],
+    ["no claimer left after legacy publication ended", { "cmsPublishQueue/row": { ...orphan, status: "pending" },
+      "system/publicDeployment": { schemaVersion: 2 } }],
     ["no transport", { "cmsPublishQueue/row": { ...orphan, transport: null } }],
   ])("recovers an orphaned row with %s and its content marker together", async (_label, documents) => {
     expect(await reconcileRow(documents)).toBe(1);
@@ -315,6 +321,7 @@ describe("publish queue orphan recovery", () => {
 
   it.each([
     ["its serializer journal", { "cmsPublicationSerializerJournals/cloudflare-publisher": { job: { queueId: "row" } } }],
+    ["a serializer that can still claim it", { "cmsPublishQueue/row": { ...orphan, status: "pending" } }],
     ["an uploaded candidate", { "system/publicDeployment/buildBatches/cms-row": batch,
       "system/publicDeployment/buildBatches/cms-row/candidates/worker": { schemaVersion: 1 } }],
     ...["ready", "deploying", "reconciling"].map(status => [`a ${status} batch`, { "system/publicDeployment/buildBatches/cms-row": { ...batch, status } }]),
@@ -323,7 +330,8 @@ describe("publish queue orphan recovery", () => {
     ["its development workflow run", { "cmsPublishQueue/row": { ...orphan, transport: "github" } }, "development"],
   ])("leaves a row that %s still owns", async (_label, documents, environment) => {
     expect(await reconcileRow(documents, environment)).toBe(0);
-    expect((await db.doc("cmsPublishQueue/row").get()).data()).toMatchObject({ status: "publishing", error: null });
+    expect((await db.doc("cmsPublishQueue/row").get()).data()).toMatchObject({ error: null });
+    expect(reconcileCore.NON_TERMINAL_STATUSES).toContain((await db.doc("cmsPublishQueue/row").get()).data().status);
     expect((await db.doc("cmsPages/contact").get()).data()).toEqual(content);
   });
 

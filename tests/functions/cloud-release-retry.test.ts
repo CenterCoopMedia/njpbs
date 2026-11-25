@@ -143,6 +143,20 @@ it.each([["a due request", {}], ["a request the removed attempt limit parked", {
     expect((await journal.read())?.queueId).toBe(nextQueueId);
   }));
 
+it.each([["has no sealed proof", {}], ["carries a malformed proof", { proof: { schemaVersion: 1, preparationId: "other" } }]])(
+  "settles a prepared release that %s and lets the next release take the journal", async (_label, documents: { proof?: object }) => quietly(async () => {
+    const journal = await seedReserved({ preparationId: queueId, preparedArtifact: {} });
+    const entry = `system/publicReleasePreparations/entries/${queueId}`;
+    if (documents.proof) await seed({ [`${entry}/proofs/complete`]: documents.proof });
+    await runRelease(async () => { throw new Error("A prepared release must not read its input"); });
+    await firestore.doc(`${entry}/proofs/complete`).delete();
+    expect((await firestore.doc(requestPath).get()).data()).toMatchObject({ status: "failed", nextAttemptAt: null,
+      failureReason: expect.stringMatching(/^release verification:/), refusalReceipt: { reason: "cloud_release_input_refused" } });
+    expect((await firestore.doc(batchPath).get()).data()).toMatchObject({ status: "retired" });
+    const { job } = await journal.reserve({ queueId: nextQueueId, buildBatchId: `cms-${nextQueueId}`, commitSha: newSha });
+    expect(job.queueId).toBe(nextQueueId);
+  }));
+
 it.each([["a provider failure", { status: "reserved" }, async () => { throw Object.assign(new Error("unavailable"), { status: 503 }); }],
   ["an uncertain activation", { status: "reconciling" }, async () => Buffer.from("other bytes")]])(
   "keeps the journal and the request retryable after %s", async (_label, batch, readInput) => quietly(async () => {

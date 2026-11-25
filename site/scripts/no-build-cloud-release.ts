@@ -19,6 +19,7 @@ import type { PublicationAccess } from "./activate-public-worker-candidate";
 
 const require = createRequire(import.meta.url);
 const { assertPublicationOwner } = require("../../functions/lib/publication-runtime-owner");
+const { noAnswer } = require("../../functions/lib/release-wait");
 const { assertPublicDeploymentReservedBatch } = require("../../functions/lib/public-deployment");
 const { readPreparedReleaseProof } = require("../../functions/lib/public-release-promotion");
 const { projectPublicWorkerCandidate } = require("../../functions/lib/public-worker-candidate");
@@ -152,6 +153,16 @@ export async function stageNoBuildCloudRelease({ firestore, storage, serializerI
   });
 }
 
+/** The sealed proof is durable metadata. A refusal of what was read is final;
+ * a failed read, which carries a Firestore code, is not. */
+async function refusedProof<T>(read: () => Promise<T> | T) {
+  try { return await read(); }
+  catch (error) {
+    if (typeof (error as { code?: unknown })?.code === "number" || noAnswer(error)) throw error;
+    throw new CloudPublicationBytesRefused((error as Error)?.message ?? "Prepared release proof was refused", { cause: error });
+  }
+}
+
 async function readPreparedReleaseRequest(firestore: Firestore, transaction: Transaction,
   preparationId: string, commitSha: string, target?: PublicationTarget) {
   const retained = await readPreparedReleaseProof(transaction, firestore, preparationId, commitSha, target);
@@ -170,8 +181,8 @@ async function readPreparedReleaseRequest(firestore: Firestore, transaction: Tra
 /** Materialize only sealed metadata. The atomic promotion already created the
  * original owner's request, so interruption here resumes the same durable job. */
 async function materializePreparedRelease(firestore: Firestore, preparationId: string, commitSha: string, target?: PublicationTarget) {
-  const retained = await firestore.runTransaction(async transaction => readPreparedReleaseProof(transaction, firestore, preparationId, commitSha, target),
-    { readOnly: true });
+  const retained = await refusedProof(() => firestore.runTransaction(async transaction =>
+    readPreparedReleaseProof(transaction, firestore, preparationId, commitSha, target), { readOnly: true }));
   await stagePublicMediaManifest({ firestore, manifest: retained.proof.mediaManifest });
   await markPublicMediaManifestReady({ firestore, manifest: retained.proof.mediaManifest });
   await recordPublicWorkerCandidate({ firestore, candidate: retained.candidate, runtime: { owner: "cloudflare", release: commitSha }, target });
@@ -281,9 +292,9 @@ export async function runNoBuildCloudRelease({ firestore, storage, serializerId,
       // A leased candidate keeps its original reconciliation path. Its metadata
       // is already durable and must not be registered again after traffic moves.
       if (batch.status === "reserved" || batch.status === "ready") await materializePreparedRelease(firestore, row.id, commitSha, target);
-      const sealed = await firestore.runTransaction(transaction => readPreparedReleaseRequest(firestore, transaction,
-        row.id, commitSha, target), { readOnly: true });
-      prepared = assertPreparedPublicWorkerArtifact(request.preparedArtifact);
+      const sealed = await refusedProof(() => firestore.runTransaction(transaction => readPreparedReleaseRequest(firestore, transaction,
+        row.id, commitSha, target), { readOnly: true }));
+      prepared = await refusedProof(() => assertPreparedPublicWorkerArtifact(request.preparedArtifact));
       if (!isDeepStrictEqual(prepared, sealed.preparedArtifact) || identity.inputSha256 !== sealed.proof.inputSha256 ||
           request.artifactCheckpointDigest !== sealed.proof.artifactCheckpointDigest) throw new CloudPublicationBytesRefused("Prepared release proof differs");
     } else {
@@ -330,7 +341,7 @@ export async function runNoBuildCloudRelease({ firestore, storage, serializerId,
     const failureReason = cloudReleaseFailureReason(stage, error);
     console.error(failureReason);
     if (error instanceof CloudPublicationBytesRefused &&
-        await settleRefusedCloudRelease({ firestore, serializerId, commitSha, identity, request, claimToken: job.claimToken, failureReason })) return;
+        await settleRefusedCloudRelease({ firestore, serializerId, commitSha, identity, request, claimToken: job.claimToken, failureReason }).catch(() => false)) return;
     await row.ref.update({ status: "failed", failureReason, nextAttemptAt: Date.now() + cloudReleaseRetryPause(request.attempts) });
   }
 }

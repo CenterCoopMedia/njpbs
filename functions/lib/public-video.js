@@ -36,9 +36,9 @@ const { platformLimit } = require("./release-wait");
 
 const PUBLIC_VIDEO_COLLECTION = "cmsPublicVideos";
 const PUBLIC_VIDEO_SCHEMA_VERSION = 1;
-// Lease on a copy or withdrawal operation. It outlives the longest holder: the
-// copy runs in an HTTP Function, withdrawal in event and schedule Functions.
-const PUBLIC_VIDEO_OPERATION_LEASE_MS = (platformLimit("cloudFunctionsHttpSeconds") + 60) * 1000;
+// Lease on a copy or withdrawal operation. It outlives the longest holder, the
+// copy Function, which runs for at most the event limit. Withdrawal is shorter.
+const PUBLIC_VIDEO_OPERATION_LEASE_MS = (platformLimit("cloudFunctionsEventSeconds") + 60) * 1000;
 const DEFAULT_WIDTH = 1920;
 const DEFAULT_HEIGHT = 1080;
 const IMMUTABLE_CACHE = "public, max-age=31536000, immutable";

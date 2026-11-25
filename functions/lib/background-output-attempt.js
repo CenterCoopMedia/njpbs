@@ -31,12 +31,12 @@ function publicationAttempt(row, family, now) {
 // still waiting stays below 4; the run journal holds the real read counts.
 const TERMINAL = 4;
 
-// Only a killed process leaves a claim behind, and it cannot outlive the
-// platform limit. The claim ID, not this time, fences every later write.
-function publicationClaim(row, claim, now, takeoverMs = undefined) {
+// Only a killed process leaves a claim behind, and it cannot outlive its own
+// platform limit; a schedule run has the longest one. The claim ID, not this time, fences every later write.
+function publicationClaim(row, claim, now, takeoverMs = undefined, platformSeconds = platformLimit("cloudFunctionsScheduleSeconds")) {
   if (takeoverMs !== undefined) return { claim, attempts: (row.attempts ?? 0) + 1, nextAttemptAt: now + takeoverMs };
   return { claim, attempts: Math.min((row.attempts ?? 0) + 1, TERMINAL - 1),
-    nextAttemptAt: now + platformLimit("cloudFunctionsScheduleSeconds") * 1_000 };
+    nextAttemptAt: now + platformSeconds * 1_000 };
 }
 
 // The public route, or the purge it needs, answered and refused. Any other

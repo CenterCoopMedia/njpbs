@@ -3,6 +3,7 @@
 const { FieldValue, Timestamp } = require("firebase-admin/firestore");
 const { settleBuildQueueInTransaction } = require("./publish-build-state");
 const { platformLimit } = require("./release-wait");
+const { readSerializerPublicationControlInTransaction } = require("./serializer-publication-control");
 
 const QUEUE_COLLECTION = "cmsPublishQueue";
 const NON_TERMINAL_STATUSES = ["reserved", "pending", "publishing"];
@@ -42,6 +43,16 @@ function isLegacyRow(queue, cutoff) {
 const ownedByDevelopmentRun = (queue) => queue.transport === "github" &&
   process.env.CMS_DEPLOYMENT_ENVIRONMENT === "development";
 
+// A pending serializer row is durable before any journal, batch or candidate,
+// and a paused serializer can still claim it. Only the recorded end of the
+// serializer, or of legacy publication, shows that nothing will.
+async function serializerCanClaim({ firestore, transaction, queue }) {
+  if (queue.transport !== "serializer" || queue.status !== "pending") return false;
+  const root = await transaction.get(firestore.doc("system/publicDeployment"));
+  if (root.data()?.schemaVersion === 2) return false;
+  return (await readSerializerPublicationControlInTransaction({ firestore, transaction })).enabled;
+}
+
 /** Whether the exact records of this row still name an owner: a serializer
  * journal job, an uploaded candidate, or a batch that is being activated. */
 async function hasPublicationOwner({ firestore, transaction, queueId }) {
@@ -79,6 +90,7 @@ async function reconcileStalePublishRows({ firestore, now = () => Date.now() }) 
       const result = await firestore.runTransaction(async (transaction) => {
         const queue = (await transaction.get(candidate.ref)).data();
         if (!isLegacyRow(queue, cutoff) || ownedByDevelopmentRun(queue) ||
+            await serializerCanClaim({ firestore, transaction, queue }) ||
             await hasPublicationOwner({ firestore, transaction, queueId: candidate.id })) return false;
         return settleBuildQueueInTransaction(firestore, transaction, {
           queueId: candidate.id,

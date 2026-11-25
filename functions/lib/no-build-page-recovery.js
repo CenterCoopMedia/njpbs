@@ -235,7 +235,7 @@ async function preparePageConfirmation({ firestore, state, fetchPublic = fetch,
   };
 }
 
-async function recoverNoBuildPageDetail({ firestore, operationId = undefined, fetchPublic = fetch, now = Date.now,
+async function recoverNoBuildPageDetail({ firestore, operationId = undefined, platformSeconds = undefined, fetchPublic = fetch, now = Date.now,
   target, headers = {}, currentCodeRequest = undefined, fetchPurge = undefined, purgeConfig = undefined, once = false }) {
   target = pagePublicationTarget({ firestore, target });
   target = assertReadbackTarget(firestore, target);
@@ -298,7 +298,7 @@ async function recoverNoBuildPageDetail({ firestore, operationId = undefined, fe
     const owner = await readNoBuildPageOwner({ firestore, transaction, pageId: accepted.noBuildPage?.pageId });
     if (!owner.state || owner.state.operationId !== operationId || !publicationAttempt(queue, "page", now())) return null;
     assertPageQueue(queue, owner.state);
-    transaction.update(queueRef, publicationClaim(queue, claim, now()));
+    transaction.update(queueRef, publicationClaim(queue, claim, now(), undefined, platformSeconds));
     return owner.state;
   });
   if (!state) return;

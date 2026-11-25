@@ -2,6 +2,7 @@
 
 const { GetObjectCommand, HeadObjectCommand } = require("@aws-sdk/client-s3");
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
+const { optionalRead } = require("./release-wait");
 const { COPIES, copyIdentity, enqueueCopy, verifiedFile, currentIdentity } = require("./private-video-copy");
 
 const PRIVATE_READ_TTL_SECONDS = 5 * 60;
@@ -22,11 +23,13 @@ function createPrivateVideoReader({ firestore, storage, now = Date.now, sign = g
       repair = job?.phase === "ready" && !file;
       if (file) {
         let head;
-        try { head = await r2.client.send(new HeadObjectCommand({ Bucket: r2.bucket, Key: file.key })); }
+        // A silent R2 uses the existing S3 path, as an unavailable one does.
+        try { head = await optionalRead("private video HeadObject", () => r2.client.send(new HeadObjectCommand({ Bucket: r2.bucket, Key: file.key })), null); }
         catch (error) {
           if (["NotFound", "NoSuchKey"].includes(error?.name) || error?.$metadata?.httpStatusCode === 404) repair = true;
           throw error;
         }
+        if (head === null) throw new Error("private_video_read_unanswered");
         if (head.ContentLength === file.sizeBytes && head.ETag === file.etag &&
             head.Metadata?.binding === binding.id && head.Metadata?.generation === job.generation) {
           // Do not issue a link after a concurrent replacement, withdrawal or deletion.

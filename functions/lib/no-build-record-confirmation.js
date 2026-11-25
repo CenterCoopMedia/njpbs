@@ -112,7 +112,7 @@ async function prepareRecordPublicProof({ firestore, accepted, target = undefine
 
 /** Reuse the context owner and existing bounded public readback pool. A queue's
  * aggregate status cannot confirm staff publication without its public routes. */
-async function recoverNoBuildRecordPublication({ firestore, operationId = undefined, target, headers = {}, fetchPublic = fetch,
+async function recoverNoBuildRecordPublication({ firestore, operationId = undefined, platformSeconds = undefined, target, headers = {}, fetchPublic = fetch,
   artifacts = undefined, currentCodeRequest = undefined, now = Date.now, once = false }) {
   target = pagePublicationTarget({ firestore, target: assertReadbackTarget(firestore, target) });
   headers = publicReadbackHeaders(target, headers);
@@ -174,7 +174,7 @@ async function recoverNoBuildRecordPublication({ firestore, operationId = undefi
   if (queue.status !== "success") return { confirmed: false };
   if (accepted.publication.missingConsumers.some(name => ["pages", "home", "posts"].includes(name))) {
     await require("./no-build-page-settings-confirmation").confirmNoBuildPageSettings({ firestore, operationId,
-      target, headers, fetchPublic, currentCodeRequest, now, once });
+      target, headers, fetchPublic, currentCodeRequest, now, once, platformSeconds });
     accepted = await readAccepted();
     if (!accepted || accepted.ref.id !== operationId) return { confirmed: false };
   }

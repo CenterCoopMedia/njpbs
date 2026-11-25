@@ -104,10 +104,10 @@ async function purgePublicHome({ target, fetchPurge = fetch, purgeConfig } = {})
 }
 
 // The public Worker's "content is being updated" answer, or an edge or Worker
-// error (500, 1101, 52x) that has no answer yet. It carries no receipt, unlike a
+// error (500, 1101, 52x), or an edge challenge (401, 403), that has no answer yet. It carries no receipt, unlike a
 // withdrawal or renderer refusal.
 function isUpdatingAnswer(response) {
-  return (response.status === 429 || response.status >= 500) &&
+  return ([401, 403, 429].includes(response.status) || response.status >= 500) &&
     ![...response.headers.keys()].some(name => name.startsWith("x-njpbs-"));
 }
 
@@ -274,7 +274,7 @@ async function verifyServedPost({ firestore, state, claim, fetchPublic, target, 
 
 // Publication and its later proof keep independent retries under the
 // same queue. A lost process after success cannot leave the proof unowned.
-async function recoverNoBuildPostDetail({ firestore, fetchPublic = fetch, fetchPurge = fetch, purgeConfig,
+async function recoverNoBuildPostDetail({ firestore, platformSeconds = undefined, fetchPublic = fetch, fetchPurge = fetch, purgeConfig,
   operationId = undefined, now = Date.now, target = publicationTarget(process.env.CMS_DEPLOYMENT_ENVIRONMENT ?? "production"), headers = {}, once = false }) {
   target = assertReadbackTarget(firestore, target);
   const readHeaders = publicReadbackHeaders(target, headers);
@@ -335,11 +335,11 @@ async function recoverNoBuildPostDetail({ firestore, fetchPublic = fetch, fetchP
     if (!queue || queue.transport !== TRANSPORT || current?.operationId !== state.operationId) return false;
     if (postProofDue(queue, now())) {
       transaction.update(queueRef, { postProof: { ...queue.postProof,
-        status: "pending", ...publicationClaim(queue.postProof, claim, now()) } });
+        status: "pending", ...publicationClaim(queue.postProof, claim, now(), undefined, platformSeconds) } });
       return "proof";
     }
     if (!publicationAttempt(queue, "post", now())) return false;
-    transaction.update(queueRef, publicationClaim(queue, claim, now()));
+    transaction.update(queueRef, publicationClaim(queue, claim, now(), undefined, platformSeconds));
     return true;
   });
   if (!acquired) return;

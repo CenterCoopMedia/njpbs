@@ -7,7 +7,7 @@ const {
   PUBLIC_SOURCE_VERSION_FIELD,
   addressedPublishChanges,
 } = require("./publish-build-state");
-const { waitFor } = require("./release-wait");
+const { optionalRead, waitFor } = require("./release-wait");
 
 const CONTENT_SOURCE = "cms-runtime";
 
@@ -34,30 +34,31 @@ function runtimeCandidate(changes) {
   return surface ? { change, surface } : null;
 }
 
-// Read until the runtime serves this exact source version, or an answer shows
-// that it does not. An unconfirmed receipt sends the caller to the durable
-// queue, so every definitive miss ends here: no answer, an HTTP error, an answer
-// without the runtime marker (a redirect or static page), a newer version, or an
-// older version that the next read repeats.
+// Optional reads before the durable enqueue. Only this exact source version from
+// the runtime confirms. An older version is read again only while it advances;
+// every other answer, no answer, or none yet sends the caller to the queue.
 async function readExactRuntimeReceipt(candidate, deps = {}) {
   const fetchImpl = deps.fetchImpl ?? fetch;
   const nonce = deps.nonce ?? `${Date.now().toString(36)}-${crypto.randomUUID()}`;
-  let attempt = 0, older = null;
-  return waitFor(`runtime receipt ${candidate.surface.url}`, async () => {
-    const url = new URL(candidate.surface.url);
-    url.searchParams.set("cms-receipt", `${nonce}-${attempt}`);
-    attempt += 1;
-    let response;
-    try { response = await fetchImpl(url, { credentials: "omit", method: "GET", redirect: "follow" }); }
-    catch { return { done: false }; }
-    await response.body?.cancel?.();
-    const version = response.headers.get("x-njpbs-source-version");
-    if (!response.ok || response.headers.get("x-njpbs-content-source") !== CONTENT_SOURCE) return { done: false };
-    if (version === String(candidate.change.sourceVersion)) return { done: true };
-    if (!/^[1-9][0-9]*$/.test(version ?? "") || Number(version) > candidate.change.sourceVersion || version === older) return { done: false };
-    older = version;
-    return { pending: `source version ${version}` };
-  });
+  const ended = new AbortController();
+  let attempt = 0, older = 0;
+  try {
+    return await waitFor(`runtime receipt ${candidate.surface.url}`, async () => {
+      const url = new URL(candidate.surface.url);
+      url.searchParams.set("cms-receipt", `${nonce}-${attempt}`);
+      attempt += 1;
+      const response = await optionalRead(`runtime receipt ${url.pathname}`, () =>
+        fetchImpl(url, { credentials: "omit", method: "GET", redirect: "follow", signal: ended.signal }), null);
+      await response?.body?.cancel?.();
+      if (!response?.ok || response.headers.get("x-njpbs-content-source") !== CONTENT_SOURCE) return { done: false };
+      const version = Number(response.headers.get("x-njpbs-source-version"));
+      if (version === candidate.change.sourceVersion) return { done: true };
+      if (!(version > older && version < candidate.change.sourceVersion)) return { done: false };
+      older = version;
+      return { pending: `source version ${version}` };
+    });
+  } catch { return false; }
+  finally { ended.abort(); }
 }
 
 async function settleRuntimePublication(

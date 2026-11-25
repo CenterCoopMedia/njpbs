@@ -448,12 +448,13 @@ describe("cms publish function", () => {
   });
 
   it.each([
-    ["a static redirect target", () => new Response("<html>", { status: 200 }), 1],
-    ["an HTTP error", () => new Response(null, { status: 503, headers: { "x-njpbs-content-source": "cms-runtime", "x-njpbs-source-version": "7" } }), 1],
-    ["no answer", () => { throw Object.assign(new TypeError("fetch failed"), { cause: { code: "ECONNRESET" } }); }, 1],
-    ["a newer version", () => new Response(null, { headers: { "x-njpbs-content-source": "cms-runtime", "x-njpbs-source-version": "8" } }), 1],
-    ["an older version that stays", () => new Response(null, { headers: { "x-njpbs-content-source": "cms-runtime", "x-njpbs-source-version": "6" } }), 2],
-  ])("returns an honest runtime miss for %s without changing the pending fallback", async (_label, answer, reads) => {
+    ["a static redirect target", () => new Response("<html>", { status: 200 })],
+    ["an HTTP error", () => new Response(null, { status: 503, headers: { "x-njpbs-content-source": "cms-runtime", "x-njpbs-source-version": "7" } })],
+    ["no answer", () => { throw Object.assign(new TypeError("fetch failed"), { cause: { code: "ECONNRESET" } }); }],
+    ["an answer that never comes", () => new Promise(() => {})],
+    ["a newer version", () => new Response(null, { headers: { "x-njpbs-content-source": "cms-runtime", "x-njpbs-source-version": "8" } })],
+    ["an older version that stays", () => new Response(null, { headers: { "x-njpbs-content-source": "cms-runtime", "x-njpbs-source-version": "6" } })],
+  ])("returns an honest runtime miss for %s without changing the pending fallback", async (label, answer) => {
     const contactRef = db.collection("cmsPages").doc("contact");
     await contactRef.set({
       status: "published",
@@ -478,7 +479,7 @@ describe("cms publish function", () => {
       confirmed: false,
       publicReceipt: { status: "unconfirmed", sourceVersion: 7 },
     });
-    expect(fetchImpl).toHaveBeenCalledTimes(reads);
+    expect(fetchImpl).toHaveBeenCalledTimes(label === "an older version that stays" ? 2 : 1);
     expect((await contactRef.get()).data()).toMatchObject({
       publishBuildPending: true,
       publishBuildQueueId: null,
