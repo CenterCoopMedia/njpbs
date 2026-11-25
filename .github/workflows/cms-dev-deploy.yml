@@ -69,7 +69,7 @@ jobs:
       (vars.CANONICAL_GITHUB_REPOSITORY != '' && vars.CANONICAL_GITHUB_REPOSITORY_ID != '' && github.repository_id == vars.CANONICAL_GITHUB_REPOSITORY_ID && github.workflow_ref == format('{0}/.github/workflows/cms-dev-deploy.yml@refs/heads/main', vars.CANONICAL_GITHUB_REPOSITORY))
     environment: development
     runs-on: ubuntu-24.04
-    timeout-minutes: 45 # Runaway guard: 3x max rounds to 15m; retain 45m floor (#2657).
+    timeout-minutes: 155 # Runaway guard: the former 45m floor (3x max rounds to 15m, #2657) plus the 110m preview smoke step.
     permissions:
       contents: read
       id-token: write
@@ -320,7 +320,8 @@ jobs:
         timeout-minutes: 5
         run: node "$RUNNER_TEMP/cms-contract-source"/.github/scripts/ensure-panel-browser-deps.mjs
       - name: Smoke-test one signed-in private preview
-        timeout-minutes: 4
+        # The smoke ends a hang itself within 105 min and prints its receipt.
+        timeout-minutes: 110
         env:
           CMS_PREVIEW_SMOKE_CREDENTIAL: ${{ secrets.CMS_PREVIEW_SMOKE_CREDENTIAL }}
           CMS_PREVIEW_SMOKE_TARGET: ${{ vars.CMS_PREVIEW_SMOKE_TARGET }}

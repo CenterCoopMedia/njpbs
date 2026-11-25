@@ -56,59 +56,75 @@ export function abortCode(error) {
 
 class PreviewSmokeFailure extends Error {}
 
-export async function checkSignedInPreview(browser, { admin, preview, credential, editor, heading, access }) {
+export async function checkSignedInPreview(browser, { admin, preview, credential, editor, heading, access },
+  { stageMs = STAGE_HANG_BACKSTOP_MS, previewMs = PREVIEW_HANG_BACKSTOP_MS } = {}) {
   let phase = "admin_unavailable";
   let popup;
   let watchTab;
   const saw = {};
+  const hang = hangBackstop();
   try {
     const context = await browser.newContext({ serviceWorkers: "block", acceptDownloads: false });
+    // Every wait below ends on what the browser, Admin or the preview reports; the backstop only ends a hang.
+    context.setDefaultTimeout(0);
     for (const [origin, headers] of access) await routePreviewSmokeAccess(context, origin, headers);
     const page = await context.newPage();
-    page.setDefaultTimeout(30_000);
-    const entry = await page.goto(`${admin}/`, { waitUntil: "domcontentloaded" });
+    hang.limit(stageMs);
+    const entry = await hang.over(page.goto(`${admin}/`, { waitUntil: "domcontentloaded" }));
     if (entry?.status() !== 200 || new URL(page.url()).origin !== admin) throw new Error();
 
     phase = "staff_sign_in_failed";
-    await submitCmsSignIn(page, async () => credential, () => page
-      .getByRole("button", { name: /^Account menu for / }).waitFor({ state: "visible" }));
+    // The sign-in wait ends on the Account menu, or on the sign-in service's refusal.
+    const refusedSignIn = refusal(page, /\/accounts:signInWithPassword$/);
+    await hang.over(submitCmsSignIn(page, async () => credential, () => Promise.race([refusedSignIn, page
+      .getByRole("button", { name: /^Account menu for / }).waitFor({ state: "visible" })])));
     if (new URL(page.url()).origin !== admin) throw new Error();
 
     phase = "editor_unavailable";
     const editorUrl = `${admin}${editor}`;
-    await page.goto(editorUrl, { waitUntil: "domcontentloaded" });
+    // A refused content read leaves the editor without a Preview button.
+    const refusedContent = refusal(page, /\/cmsGetContent$/);
+    await hang.over(page.goto(editorUrl, { waitUntil: "domcontentloaded" }));
     if (page.url() !== editorUrl) throw new Error();
     const button = page.getByRole("button", { name: "Preview", exact: true });
-    await button.waitFor({ state: "visible" });
+    await hang.over(Promise.race([refusedContent, button.waitFor({ state: "visible" })]));
 
     phase = "private_preview_unavailable";
     const session = `${preview}/__cms-session`;
     const isSession = request => request.url() === session && request.method() === "POST";
-    page.on("requestfailed", request => {
-      if (isSession(request) && !saw.session) saw.session = { failed: failureName(request.failure()?.errorText) };
-    });
-    // The document wait ends on the preview job, not on a clock. Admin follows the addressed
+    // The preview wait ends on the preview job, not on a clock. Admin follows the addressed
     // job (an older blocking job can fail before the requested one is made), so its terminal
-    // progress state in the tab ends the wait at once; a ready job is followed by the document.
+    // state ends the wait at once: the progress state in the tab, or the error it shows in the
+    // editor. A ready job is followed by the document. A failed session request and a closed
+    // tab end it too.
     // Coordinator ruling (Nov. 24, 2026, review of e74c821): this state-based wait and the
     // backstop below are this change's scope, because a 60 s timer failed a working preview.
     let stop;
-    const stopped = new Promise((_, reject) => { stop = reject; });
+    const stopped = new Promise((_, reject) => { stop = code => reject(new PreviewSmokeFailure(code)); });
+    stopped.catch(() => {});
+    page.on("requestfailed", request => {
+      if (!isSession(request) || saw.session) return;
+      saw.session = { failed: failureName(request.failure()?.errorText) };
+      stop("preview_session_failed");
+    });
     // The receipt keeps the last job status and error code from Admin's own replies.
     page.on("response", reply => void readJob(reply, saw));
-    // The tab opens inside the click and Admin bounds the session request at 30 s,
-    // so these 60 s waits end on Admin's own outcome for a working system.
-    const [, , document] = await Promise.all([
-      context.waitForEvent("page", { timeout: 60_000 }).then(value => {
+    page.getByRole("alert").filter({ hasText: editorStop }).first().waitFor({ state: "visible" })
+      .then(() => stop("preview_admin_stopped"), () => {});
+    hang.limit(previewMs);
+    const [, , document] = await hang.over(Promise.race([stopped, Promise.all([
+      context.waitForEvent("page").then(value => {
         popup = value; saw.popup = true;
-        watchTab = watchAdminStop(value, () => stop(new PreviewSmokeFailure("preview_admin_stopped")));
+        value.on("close", () => stop("preview_tab_closed"));
+        value.on("crash", () => stop("preview_tab_closed"));
+        watchTab = watchAdminStop(value, () => stop("preview_admin_stopped"));
         return value;
       }),
-      page.waitForResponse(reply => isSession(reply.request()), { timeout: 60_000 }).then(reply => {
+      page.waitForResponse(reply => isSession(reply.request())).then(reply => {
         saw.session = { status: reply.status() };
         if (reply.status() !== 204) throw new PreviewSmokeFailure("preview_session_failed");
       }),
-      Promise.race([stopped, context.waitForEvent("response", { timeout: DOCUMENT_HANG_BACKSTOP_MS, predicate: reply => {
+      context.waitForEvent("response", { predicate: reply => {
         const url = new URL(reply.url());
         return url.origin === preview && previewPath.test(url.pathname) &&
           reply.request().isNavigationRequest() && reply.request().resourceType() === "document";
@@ -116,13 +132,17 @@ export async function checkSignedInPreview(browser, { admin, preview, credential
         saw.document = { status: reply.status() };
         if (reply.status() !== 200) throw new PreviewSmokeFailure("preview_document_failed");
         return reply;
-      })]),
+      }),
       button.click(),
-    ]);
+    ])]));
+    clearInterval(watchTab);
     phase = "preview_heading_missing";
     if (document.frame() !== popup.mainFrame()) throw new Error();
-    await popup.waitForURL(url => url.href === document.url(), { timeout: 15_000 });
-    await popup.getByRole("heading", { name: heading, exact: true }).first().waitFor({ state: "visible", timeout: 15_000 });
+    hang.limit(stageMs);
+    await hang.over(Promise.race([stopped, popup.waitForURL(url => url.href === document.url())]));
+    // The private preview is a complete document, so once it has loaded the heading is there or it is not.
+    await hang.over(Promise.race([stopped, popup.waitForLoadState("load")]));
+    if (!await hang.over(popup.getByRole("heading", { name: heading, exact: true }).first().isVisible())) throw new Error();
     return { ok: true, code: "signed_in_private_preview" };
   } catch (error) {
     const code = error instanceof PreviewSmokeFailure ? error.message : phase;
@@ -132,41 +152,91 @@ export async function checkSignedInPreview(browser, { admin, preview, credential
       popup: await describePopup(popup, { admin, preview }) };
   } finally {
     clearInterval(watchTab);
+    hang.clear();
   }
 }
 
-// Hang backstop only. Measured on dev, Nov. 24, 2026: with an idle container on a cached
-// image the document arrived 30 s after the click (session +3 s, job accepted +6 s,
-// building +21 s). In run 45436441069 the first job after the renderer image rollout
-// (7 min 38 s after rollout, container idle) did not reach the document within 60 s.
-// The server's own build limit, PREVIEW_BUILD_TIMEOUT_MS, is 45 min, which is longer
-// than this step's 4 min; 180 s fits the step after sign-in (13 s) and the heading (15 s).
-const DOCUMENT_HANG_BACKSTOP_MS = 180_000;
+// The wait ends when a listed request is refused or fails; its absence leaves the next state to end it.
+function refusal(page, path) {
+  const matches = request => request.method() === "POST" && path.test(new URL(request.url()).pathname);
+  const refused = new Promise((_, reject) => {
+    page.on("response", reply => { if (reply.status() >= 400 && matches(reply.request())) reject(new Error("refused")); });
+    page.on("requestfailed", request => { if (matches(request)) reject(new Error("refused")); });
+  });
+  refused.catch(() => {});
+  return refused;
+}
+
+// One timer for the current stage. It ends a hang with the structured receipt, inside the step's own limit.
+function hangBackstop() {
+  let timer, end;
+  const expired = new Promise((_, reject) => { end = () => reject(new Error("hang")); });
+  expired.catch(() => {});
+  return {
+    limit(milliseconds) { clearTimeout(timer); timer = setTimeout(end, milliseconds); },
+    over: work => Promise.race([expired, work]),
+    clear: () => clearTimeout(timer),
+  };
+}
+
+// Hang backstops only; they end a smoke that no reported state ends. Both start at their stage.
+// Sign-in and editor, and the opened document's heading: the whole smoke measured 25 s
+// (run 45191230409) and 15 s (dev run 45310500950); 5 min is 12 times the longer one.
+export const STAGE_HANG_BACKSTOP_MS = 5 * 60_000;
+// Preview job: measured on dev, Nov. 24, 2026, with an idle container on a cached image the
+// document arrived 30 s after the click. The first job after a renderer image rollout did not
+// reach the document within 60 s in run 45436441069, and a cold start has not been measured to
+// its end, so no smaller number is safe. The server fails a job by itself at
+// PREVIEW_BUILD_TIMEOUT_MS (45 min), and an older job can hold the requested one for the same
+// time first; 95 min is two of those limits and 5 min for Admin to show the result.
+export const PREVIEW_HANG_BACKSTOP_MS = 95 * 60_000;
+// The errors that Admin's Preview action shows in the editor when it stops (SavedPreview.tsx).
+const editorStop = /(?:Allow pop-ups for this CMS|Preview could not open\.|Preview is temporarily unavailable\.|The preview service is updating\.|Previews are refreshing after a recent publish\.|Private preview access is taking longer)/;
 const jobStatuses = new Set(["pending", "building", "ready", "failed", "expired"]);
+
+// The server's fixed failure texts and typed codes, as receipt codes. Any other text is "unlisted".
+const jobErrors = new Map([
+  ["Preview build did not finish within 45 minutes", "preview_build_timeout"],
+  ["Preview build failed. Try again or contact an administrator.", "preview_build_failed"],
+  ["Preview build failed", "preview_build_failed"],
+  ["Previews are refreshing after a recent publish. Try again in a minute.", "preview_context_refreshing"],
+]);
+const replyCodes = new Set(["preview-renderer-updating", "preview-version-unavailable"]);
+
+// A preview reply comes from the function, or from the installed reader with the endpoint named in its request.
+function isPreviewReply(request, url) {
+  if (request.method() !== "POST") return false;
+  if (/\/cmsPreview(?:Status)?$/.test(url.pathname)) return true;
+  if (!/^\/api\/cms\/v[12]\/reader$/.test(url.pathname)) return false;
+  const body = JSON.parse(request.postData() ?? "null");
+  return body?.action === "request" && ["cmsPreview", "cmsPreviewStatus"].includes(body.endpoint);
+}
 
 // Record the last job status and error code from Admin's preview replies.
 async function readJob(reply, saw) {
   try {
-    const request = reply.request();
-    if (request.method() !== "POST" || !/\/cmsPreview(?:Status)?$/.test(new URL(reply.url()).pathname)) return;
+    if (!isPreviewReply(reply.request(), new URL(reply.url()))) return;
+    const body = await reply.json().catch(() => null);
     if (reply.status() < 200 || reply.status() > 299) {
-      saw.job = { ...saw.job, http: reply.status() };
+      saw.job = { ...saw.job, http: reply.status(), ...(replyCodes.has(body?.code) ? { code: body.code } : {}) };
       return;
     }
-    const body = await reply.json();
     if (!jobStatuses.has(body?.status)) return;
-    const error = typeof body.error === "string" && /^[a-z][a-z0-9_]{0,63}$/.test(body.error) ? body.error
-      : body.error ? "unlisted" : undefined;
+    const error = body.failureReason === "preview_context_refreshing" ? body.failureReason
+      : body.error ? jobErrors.get(body.error) ?? "unlisted" : undefined;
     saw.job = { status: body.status, ...(error ? { error } : {}) };
   } catch { /* A reply without a readable job leaves the last status in place. */ }
 }
 
+// Reads the progress state now. A build without data-progress still writes data-state, with failures folded into "error".
+const readProgress = tab => tab.locator("main.cms-preview-progress").evaluateAll(nodes =>
+  nodes[0]?.getAttribute("data-progress") ?? nodes[0]?.getAttribute("data-state") ?? null).catch(() => null);
+
 // Admin's terminal progress states mean it stopped without opening the preview.
 function watchAdminStop(tab, onStop) {
-  const timer = setInterval(() => {
-    void tab.locator("main.cms-preview-progress").first().getAttribute("data-progress", { timeout: 500 })
-      .then(state => { if (settledStates.has(state)) { clearInterval(timer); onStop(); } }, () => {});
-  }, 1_000);
+  const timer = setInterval(() => void readProgress(tab).then(state => {
+    if (settledStates.has(state)) { clearInterval(timer); onStop(); }
+  }), 1_000);
   return timer;
 }
 
@@ -199,8 +269,8 @@ async function describePopup(popup, origins) {
   const deadline = Date.now() + 5_000;
   for (;;) {
     const where = place(popup.url(), origins);
-    const state = where !== "about:blank" ? null : await popup.locator("main.cms-preview-progress").first()
-      .getAttribute("data-progress", { timeout: 1_000 }).catch(() => null);
+    const state = where !== "about:blank" ? null : await Promise.race([readProgress(popup),
+      new Promise(resolve => setTimeout(resolve, 1_000, null))]);
     const progress = progressStates.has(state) ? state : null;
     if (where !== "about:blank" || settledStates.has(progress) || Date.now() >= deadline) return { place: where, progress };
     await new Promise(resolve => setTimeout(resolve, 250));
