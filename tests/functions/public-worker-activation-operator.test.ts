@@ -480,7 +480,7 @@ describe("public Worker activation operator", () => {
     ["the lease read fails", async () => { throw new Error("unread"); }],
   ])("writes nothing after waiting when %s", async (_name, later) => {
     for (const idempotent of [false, true]) {
-      const acquireLeaseFn = vi.fn(later as () => Promise<any>).mockResolvedValueOnce(acquired({ idempotent }));
+      const acquireLeaseFn = vi.fn<() => Promise<unknown>>(later).mockResolvedValueOnce(acquired({ idempotent }));
       const fixture = operator({
         acquireLeaseFn,
         requestJson: requestQueue([
