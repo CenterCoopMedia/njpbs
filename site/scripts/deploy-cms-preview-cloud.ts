@@ -49,6 +49,11 @@ export function releaseCredentials(env: NodeJS.ProcessEnv = process.env) {
   return { rawAccount, rawStorage, token, publicationAccess };
 }
 const releaseSecretValues: string[] = [];
+// A hosted runner ends a job after 360 minutes, which would skip the pause a
+// failed release owes. 330 leaves 30 for the job's other steps. Nothing else
+// in a release ends by a clock: each wait ends on a state it reads.
+// https://docs.github.com/en/actions/reference/limits
+const HANG_BACKSTOP_MS = 330 * 60_000;
 // Pacing between reads; it never ends a wait.
 const READ_PAUSE_MS = 10_000;
 const pause = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
@@ -114,8 +119,7 @@ export async function readCloudPreviewRollouts(readPage: (query: string) => Prom
 
 /** Ends when the exact renderer attests ready, or when the platform names a
  * failure. No clock ends it: rollout 147480fa completed after 305 s with no
- * errors, where the five before it took 106 to 169 s. GitHub's six-hour job
- * limit is the only bound. */
+ * errors, where the five before it took 106 to 169 s. */
 export async function waitForCloudPreviewStartup(rendererSha: string, {
   readControl, readRollouts, readApplication, previousRolloutIds = [],
   now = Date.now, sleep = pause, log = line => process.stdout.write(`${line}\n`),
@@ -218,6 +222,15 @@ export function releaseSecretsFor(rawAccount: string, rawStorage: string, token:
   return secrets;
 }
 
+/** Ends work that has not ended when the job limit is near, so its failure path still runs. */
+export function withHangBackstop<T>(work: Promise<T>, milliseconds = HANG_BACKSTOP_MS): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const backstop = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`Cloud preview release hung. ${STARTUP_RECOVERY}`)), milliseconds);
+  });
+  return Promise.race([work, backstop]).finally(() => clearTimeout(timer));
+}
+
 async function waitFor(description: string, check: () => Promise<boolean>) {
   const started = Date.now();
   while (!await check()) {
@@ -239,8 +252,11 @@ async function cloudflare(token: string, suffix: string): Promise<unknown> {
     if ([408, 429].includes(response.status) || response.status >= 500) throw new CloudPreviewProviderReadError();
     throw new Error("Cloud preview container state could not be checked");
   }
+  let text: string;
+  // A body that stops arriving is a lost read; undici ends it after 300 s.
+  try { text = await response.text(); } catch { throw new CloudPreviewProviderReadError(); }
   let body: { success?: boolean; result?: unknown };
-  try { body = await response.json(); }
+  try { body = JSON.parse(text); }
   catch { throw new Error("Cloud preview container state is invalid"); }
   if (body.success !== true) throw new Error("Cloud preview container state is invalid");
   return body.result;
@@ -458,7 +474,7 @@ async function main() {
     }
     else {
       if (!token) throw new Error("Cloud preview deploy credential is required");
-      try { await deployPreviewRuntime({ firestore, rendererSha, token, rawAccount, rawStorage, publicationAccess }); }
+      try { await withHangBackstop(deployPreviewRuntime({ firestore, rendererSha, token, rawAccount, rawStorage, publicationAccess })); }
       catch (error) {
         await pausePreviewRuntime(firestore, rendererSha);
         throw error;
@@ -476,6 +492,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     releaseSecretValues.length = 0;
     process.stderr.write(`${line}\n`);
     process.stderr.write("Cloud preview release stopped without a verified result; check the private release control before retrying\n");
-    process.exitCode = 1;
+    // A release that hung still has its child and its reads open.
+    process.exit(1);
   });
 }
