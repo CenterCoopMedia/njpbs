@@ -532,6 +532,8 @@ describe("public version evidence", () => {
     finishHead = undefined;
     await act(async () => { firstHead?.(pageHead("/contact/", "contact", 7)); });
     expect(await screen.findByText("Queue pending")).toBeVisible();
+    // Let the second read's probe start here, not on the next test's fetch.
+    await waitFor(() => expect(finishHead).toBeDefined());
   });
 
   it.each([true, false])("reports an unpublished custom Page as not live (load metadata: %s)", async (loadPublicationMetadata) => {
