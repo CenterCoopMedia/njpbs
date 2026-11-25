@@ -652,7 +652,7 @@ it("cannot transfer Home while the legacy background claim is uncertain", async 
   expect((await db.doc("cmsPages/home").get()).data().version).toBe(1);
   expect((await db.doc("system/publicDeployment/contexts/public").get()).data().revision).toBe(7);
 });
-it("republishes Home with monotonic dirty revision and preserves an older refresh claim", async () => {
+it("republishes Home with monotonic dirty revision and ends an older claimed refresh", async () => {
   await seedHomeForAcceptance();
   const first = await invoke(saveHandler(), { collection: "cmsPages", id: "home", baseVersion: 1, publish: true, document: {} });
   expect(first.code, JSON.stringify(first.body)).toBe(200);
@@ -672,7 +672,7 @@ it("republishes Home with monotonic dirty revision and preserves an older refres
   expect((await db.doc(`${ownership.PAGE_OWNER_COLLECTION}/home`).get()).data().homeRefresh)
     .toMatchObject({ revision: 4, status: "superseded", supersededBy: next.body.publication.queueId });
   expect((await db.doc(taskPath).get()).data())
-    .toMatchObject({ revision: 4, status: "superseded", claim: "refresh-preparing-claim" });
+    .toMatchObject({ revision: 4, status: "superseded", claim: null, nextAttemptAt: null });
 });
 
 it.each([

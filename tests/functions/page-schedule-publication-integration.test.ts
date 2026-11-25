@@ -70,10 +70,9 @@ it("denies a wrong fixed Watch grant before private IO and keeps an ordinary dra
   expect((await firestore.doc(`${ownership.PAGE_OWNER_COLLECTION}/schedule`).get()).exists).toBe(false);
   expect((await firestore.doc("system/publicDeployment/contexts/public").get()).data().revision).toBe(1);
 });
-it("refuses an expired capture on an actual SDK retry without renewing it or writing a Page", async () => {
-  let clock = Date.now();
+it("reuses one capture on an actual SDK retry without reading CODE or storage again", async () => {
   const capture = await source.capturePageScheduleForPublication({ firestore, collection: "cmsPages", documentId: "schedule",
-    publishing: true, currentCodeRequest: fixture.request, now: () => clock, deadline: clock + 45_000 });
+    publishing: true, currentCodeRequest: fixture.request });
   const next = { id: "schedule", template: "programLanding", section: "watch", version: 2, title: "Qualified candidate",
     blocks: [], status: "published", publiclyVisible: true, publishAt: instant } as any;
   next.published = snapshots.createPublishedSnapshot({ collection: "cmsPages", document: next, publishedAt: instant, publishedBy: actor.uid });
@@ -81,18 +80,16 @@ it("refuses an expired capture on an actual SDK retry without renewing it or wri
   const requests = fixture.codeRequests(), reads = fixture.boundary.reads.length;
   fixture.refuseCode(); fixture.boundary.refuseReads(true);
   let attempts = 0;
-  await expect(firestore.runTransaction(async (transaction: any) => {
+  await firestore.runTransaction(async (transaction: any) => {
     attempts++;
-    if (attempts === 2) clock += 45_001;
     const prepared = await source.prepareNoBuildPagePublication({ firestore, transaction, collection: "cmsPages",
       documentId: "schedule", nextDocument: next, queueRef, actor, pageScheduleCapture: capture });
     if (attempts === 1) throw Object.assign(new Error("Fixture SDK abort"), { code: 10 });
     prepared.write(); transaction.set(firestore.doc("cmsPages/schedule"), next);
-  }, { maxAttempts: 2 })).rejects.toThrow("capture is unavailable");
+  }, { maxAttempts: 2 });
   expect(attempts).toBe(2); expect(fixture.codeRequests()).toBe(requests); expect(fixture.boundary.reads.length).toBe(reads);
-  expect((await queueRef.get()).exists).toBe(false);
-  expect((await firestore.doc(`${ownership.PAGE_OWNER_COLLECTION}/schedule`).get()).exists).toBe(false);
-  expect((await firestore.doc("cmsPages/schedule").get()).data().version).toBe(1);
+  expect((await firestore.doc(`${ownership.PAGE_OWNER_COLLECTION}/schedule`).get()).exists).toBe(true);
+  expect((await firestore.doc("cmsPages/schedule").get()).data().version).toBe(2);
 });
 it.each(["schedule", "live"])("publishes due %s through the real scheduler with a wall-clock source budget", async id => {
   await firestore.doc(`cmsPages/${id}`).update({ status: "scheduled", publishAt: instant,
