@@ -59,7 +59,7 @@ const sha = await run("git", ["rev-parse", "HEAD"], { capture: true });
 // Functions and the renderer carry the commit that last changed them, so an unchanged one is not deployed again.
 const lastChange = paths => run("git", ["log", "-1", "--format=%H", "--", ...paths], { capture: true });
 const contract = ["scripts/lib/functions-contracts.mjs", "packages", "package.json", "package-lock.json"];
-const functionsSha = await lastChange(["functions", "config", ...contract]);
+const functionsSha = await lastChange(["functions"]); // a label; Firebase compares the content itself
 const rendererSha = await lastChange(["preview-renderer", "site", "functions", "config/development-inputs.json", "scripts/prepare-preview-renderer.mjs", ...contract]);
 const secret = async name => {
   const value = await npx(["firebase", "--non-interactive", "functions:secrets:access", name, "--project", project], { capture: true });
