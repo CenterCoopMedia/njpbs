@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { workerReadbackClock } from "../helpers/worker-readback-clock.mjs";
 import { deployCmsApiWorker } from "../../scripts/deploy-cms-api-worker.mjs";
 import {
@@ -810,7 +810,7 @@ describe("CMS API Worker receipt", () => {
     const version = deployCmsApiWorker(import.meta.filename, (_cmd, args, options) => {
       writes++;
       expect(args).toEqual(["deploy", "--cwd", "cms-api", "--secrets-file", import.meta.filename]);
-      expect(options.stdio).toEqual(["ignore", "pipe", "ignore"]);
+      expect(options.stdio).toEqual(["ignore", "pipe", "pipe"]);
       return { status: 0, stdout: `synthetic-sensitive-config\nCurrent Version ID: ${expected}\n` };
     });
     expect(version).toBe(expected);
@@ -819,8 +819,15 @@ describe("CMS API Worker receipt", () => {
       expect(args).toEqual(["deploy", "--cwd", "/fixture/cms-api", "--config", "wrangler.dev.jsonc", "--tag", SOURCE]);
       return { status: 0, stdout: `Current Version ID: ${expected}\n` };
     }, { cwd: "/fixture/cms-api", devSourceSha: SOURCE })).toBe(expected);
-    expect(() => deployCmsApiWorker(import.meta.filename, () => ({ status: 1, stdout: `Current Version ID: ${expected}\n` })))
-      .toThrow("did not report success");
+    const printed = vi.spyOn(console, "error").mockImplementation(() => {});
+    let failures = 0;
+    expect(() => deployCmsApiWorker(import.meta.filename, () => {
+      failures++;
+      return { status: 1, stdout: `Current Version ID: ${expected}\n`, stderr: "ERROR synthetic-sensitive-config failed" };
+    }, { wait: () => {} })).toThrow("did not report success");
+    expect(failures).toBe(5);
+    expect(printed.mock.calls).toEqual([["Provider call failed: CMS API wrangler deploy, class transient, 5 of 5 attempts, last provider line: withheld"]]);
+    printed.mockRestore();
     expect(() => deployCmsApiWorker(import.meta.filename, () => ({ status: 0, stdout: "synthetic-sensitive-config" })))
       .toThrow("did not report a valid versionId");
   });

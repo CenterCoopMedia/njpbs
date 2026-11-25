@@ -8,6 +8,7 @@ import { ComponentReceiptError, assertLegacyPreviewProtocol, readReceipt, requir
 import { extractProductionExports } from "./smoke-cms-functions.mjs";
 import { FUNCTION_DEPLOY_REGION, cloudWakeFunctionPlan, explicitCloudWakeDecision, functionTargets, main as deployFunctions } from "./deploy-cms-function-batches.mjs";
 import { readFunctionsDeployInventory } from "./lib/functions-deploy-inventory.mjs";
+import { providerJson } from "./lib/provider-call.mjs";
 import { cmsTarget } from "./lib/cms-target.mjs";
 import { applyFunctionRetirements, planFunctionRetirements, requireRetirementScope, validateRetirementPlan } from "./lib/functions-retirement.mjs";
 
@@ -57,7 +58,7 @@ export async function retirementReceipt(firestore, context, patch = {}) {
   });
 }
 
-export function retirementProvider(scope, readToken, fetchImpl = fetch, launch = execute) {
+export function retirementProvider(scope, readToken, fetchImpl = fetch, launch = execute, wait = undefined) {
   scope = requireRetirementScope(scope);
   const request = async (url, pageToken, method = "GET") => {
     const target = new URL(url);
@@ -66,10 +67,12 @@ export function retirementProvider(scope, readToken, fetchImpl = fetch, launch =
     try {
       const token = await readToken();
       if (!token || typeof token.access_token !== "string") refuse();
-      const response = await fetchImpl(target, { method, headers: { authorization: `Bearer ${token.access_token}` },
+      const send = () => fetchImpl(target, { method, headers: { authorization: `Bearer ${token.access_token}` },
         redirect: "error", signal: AbortSignal.timeout(15000) });
+      if (method === "GET") return await providerJson(`Google ${target.pathname}`, send, { wait });
+      const response = await send();
       if (!response.ok) { await response.body?.cancel(); refuse(); }
-      return method === "DELETE" ? {} : await response.json();
+      return {};
     } catch { refuse(); }
   };
   return {

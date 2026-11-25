@@ -8,6 +8,8 @@ import { spawnSync } from "node:child_process";
 import { afterEach, describe, expect, it } from "vitest";
 import deployment from "../../functions/lib/media-purge-deployment.js";
 const root = fileURLToPath(new URL("../../", import.meta.url));
+// The retry waits are the helper's contract, tested with the helper.
+const NO_WAIT = "--import=data:text/javascript,Atomics.wait=()=>'timed-out'";
 const temporary = [];
 afterEach(() => temporary.splice(0).forEach((dir) => rmSync(dir, { recursive: true, force: true })));
 function directory() {
@@ -18,13 +20,14 @@ function directory() {
 function resolve(configuration = {}) {
   const dir = directory();
   mkdirSync(join(dir, "functions"));
-  writeFileSync(join(dir, "gcloud"), '#!/bin/bash\nprintf "%s\\n" "$*" >> "$PURGE_STUB_CALLS"\nprintf "%s\\n" "${PURGE_STUB_STATE:-ENABLED}"\n');
+  writeFileSync(join(dir, "gcloud"), '#!/bin/bash\nprintf "%s\\n" "$*" >> "$PURGE_STUB_CALLS"\nif [[ -n "${PURGE_STUB_ERROR:-}" ]]; then printf "%s\\n" "$PURGE_STUB_ERROR" >&2; exit 1; fi\nprintf "%s\\n" "${PURGE_STUB_STATE:-ENABLED}"\n');
   chmodSync(join(dir, "gcloud"), 0o755);
   const calls = join(dir, "calls");
   const result = spawnSync("bash", [join(root, "scripts/resolve-media-purge.sh")], { cwd: dir, encoding: "utf8",
     env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, PURGE_STUB_CALLS: calls,
       CMS_MEDIA_PURGE_SWEEP_ENABLED: "false", CMS_MEDIA_PURGE_REAL_DELETES_ENABLED: "false", ...configuration } });
-  return { ...result, decision: deployment.readPurgeDeployment(join(dir, "functions/media-purge.generated.json"), {}),
+  const decision = join(dir, "functions/media-purge.generated.json");
+  return { ...result, written: existsSync(decision), decision: deployment.readPurgeDeployment(decision, {}),
     calls: existsSync(calls) ? readFileSync(calls, "utf8") : "" };
 }
 describe("purge activation decision", () => {
@@ -45,6 +48,24 @@ describe("purge activation decision", () => {
   it("keeps a requested real-deletion deployment off if metadata is unavailable", () => {
     const result = resolve({ CMS_MEDIA_PURGE_SWEEP_ENABLED: "true", CMS_MEDIA_PURGE_REAL_DELETES_ENABLED: "true", PURGE_STUB_STATE: "DISABLED" });
     expect(result.decision).toEqual({ enabled: false, realDeletesEnabled: false });
+  });
+  it("stays disabled when the provider names the version absent", () => {
+    const result = resolve({ CMS_MEDIA_PURGE_SWEEP_ENABLED: "true",
+      PURGE_STUB_ERROR: "ERROR: (gcloud.secrets.versions.describe) NOT_FOUND: Secret not found or has no versions." });
+    expect(result.status).toBe(0);
+    expect(result.calls.split("\n").filter(Boolean)).toHaveLength(1);
+    expect(result.decision).toEqual({ enabled: false, realDeletesEnabled: false });
+  });
+  it.each([
+    ["ERROR: (gcloud.secrets.versions.describe) UNAVAILABLE: The service is currently unavailable.", 5],
+    ["ERROR: (gcloud.secrets.versions.describe) PERMISSION_DENIED: Permission denied", 1],
+  ])("fails loud and writes no decision when the state could not be read: %s", (line, attempts) => {
+    const result = resolve({ CMS_MEDIA_PURGE_SWEEP_ENABLED: "true", PURGE_STUB_ERROR: line, NODE_OPTIONS: NO_WAIT });
+    expect(result.status).toBe(1);
+    expect(result.calls.split("\n").filter(Boolean)).toHaveLength(attempts);
+    expect(result.stderr).toContain(`${attempts} of 5 attempts`);
+    expect(result.stderr).toContain("could not be read");
+    expect(result.written).toBe(false);
   });
   it("requires the explicit real-deletion switch as well as ready credentials", () => {
     expect(resolve({ CMS_MEDIA_PURGE_SWEEP_ENABLED: "true", CMS_MEDIA_PURGE_REAL_DELETES_ENABLED: "true" }).decision)

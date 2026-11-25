@@ -8,6 +8,7 @@ import { stripVTControlCharacters } from "node:util";
 import { explicitCloudWakeDecision } from "./lib/cms-release-plan.mjs";
 import { assertNoFunctionDeletions, loadFunctionDeployManifest, readFunctionsDeployInventory, requestDeploymentInventory } from "./lib/functions-deploy-inventory.mjs";
 import { cmsTarget } from "./lib/cms-target.mjs";
+import { lastProviderLine, permanentFailure } from "./lib/provider-call.mjs";
 
 const PROJECT = cmsTarget().projectId;
 const REGION = "us-central1";
@@ -158,33 +159,6 @@ export async function listPages(request, url, field) {
 }
 
 
-// A failed Firebase invocation is retried unless its output shows a permanent
-// failure: our source or configuration is wrong, or a permission or quota needs
-// a person (Joe, Nov. 24, 2026: fix it as a principle). Unknown and provider-side
-// failures (any 5xx, "Authentication backend unavailable", a reset connection, a
-// timeout, an exit without "Deploy complete!") are retried. A retry is safe because
-// the deploy is idempotent: `firebase deploy --only <targets> --force` sets each
-// named function to this exact source and configuration, so repeating it after a
-// partial attempt reaches the same state, and the inventory check before every
-// attempt still refuses any deletion.
-const PERMANENT_FAILURES = Object.freeze([
-  ["build", /^Build failed with status: FAILURE\b|predeploy error|Command terminated with non-zero exit code|\berror TS\d+:|^SyntaxError:|Cannot find module /],
-  ["config", /Failed to load function definition|HTTP Error: 400\b|INVALID_ARGUMENT|is not a valid|Invalid (?:function|configuration|config|trigger)\b/i],
-  ["permission", /HTTP Error: 40[13]\b|PERMISSION_DENIED|Permission denied|does not have (?:the )?(?:required )?permission|Missing (?:required )?permissions?/i],
-  ["quota", /\bquota\b.*\b(?:exceeded|exhausted)\b|\bexceed(?:s|ed)? (?:the )?quota\b/i],
-]);
-
-// A rate quota (per second, minute or 100 seconds) clears by itself and is retried.
-const RATE_QUOTA = /\bper (?:second|minute|100 seconds)\b/i;
-
-function permanentFailure(output) {
-  const lines = output.split("\n");
-  for (const [kind, pattern] of PERMANENT_FAILURES) {
-    if (lines.some(line => pattern.test(line) && !(kind === "quota" && RATE_QUOTA.test(line)))) return kind;
-  }
-  return null;
-}
-
 // The functions Firebase names as failed, when its one summary names only targets of this
 // attempt; a retry narrows to them. Otherwise the whole attempt is retried.
 function failedFunctionNames(output, names) {
@@ -195,11 +169,6 @@ function failedFunctionNames(output, names) {
   const label = new RegExp(`^\\t${codebase === "default" ? "" : `${codebase}:`}([A-Za-z][A-Za-z0-9]*)\\(${REGION}\\)$`);
   const failed = summaries[0][1].trimEnd().split("\n").map(line => line.match(label)?.[1]);
   return failed.some(name => !names.includes(name)) || new Set(failed).size !== failed.length ? [] : failed;
-}
-
-function lastProviderLine(output) {
-  const line = output.split("\n").map(value => value.trim()).filter(value => /error|failed|denied|unavailable|timed? ?out|HTTP/i.test(value)).at(-1);
-  return line ? line.slice(0, 300) : "none";
 }
 
 function runFunctionDeploy(names, launch, project) {
@@ -224,23 +193,36 @@ function runFunctionDeploy(names, launch, project) {
   });
 }
 
+// A failed Firebase invocation is retried unless its output shows a permanent
+// failure: our source or configuration is wrong, or a permission or a final
+// quota needs a person (Joe, Nov. 24, 2026: fix it as a principle). It has no
+// attempt count: each retry deploys only the functions that failed, paced from
+// 60 s doubling to 5 min, and prints what it waits for, until Firebase confirms
+// "Deploy complete!" or answers a permanent failure. Unknown and provider-side
+// failures (any 5xx, "Authentication backend unavailable", a reset connection, a
+// timeout, an exit without "Deploy complete!") are retried. A retry is safe because
+// the deploy is idempotent: `firebase deploy --only <targets> --force` sets each
+// named function to this exact source and configuration, so repeating it after a
+// partial attempt reaches the same state, and the inventory check before every
+// attempt still refuses any deletion.
 export async function deployFunctionTargets(names, launch = spawn, project = PROJECT, { manifest, request, wait = pause } = {}) {
   if (!Array.isArray(names) || !names.length || !Array.isArray(manifest) ||
       names.some(name => !manifest.some(fn => fn.name === name))) throw new ComponentReceiptError("Function targets differ from the exact manifest");
   let pending = names;
-  for (let attempt = 1; attempt <= 3; attempt++) {
+  for (let attempt = 1, delay = 60_000; ; attempt++, delay = Math.min(delay * 2, 300_000)) {
     assertNoFunctionDeletions(manifest, await readFunctionsDeployInventory(project, request), { projectId: project, codebase: cmsTarget().codebase, only: pending });
     const { code, output } = await runFunctionDeploy(pending, launch, project);
     if (code === 0 && output.includes("Deploy complete!")) return;
     const permanent = permanentFailure(output);
-    if (permanent || attempt === 3) {
-      console.error(`Firebase deployment failed: class ${permanent ?? "transient"}, ${attempt} of 3 attempts, last provider line: ${lastProviderLine(output)}`);
+    if (permanent) {
+      console.error(`Firebase deployment failed: class ${permanent}, attempt ${attempt}, last provider line: ${lastProviderLine(output)}`);
       throw new ComponentReceiptError("Firebase deployment did not confirm completion");
     }
     const failed = code === 0 ? [] : failedFunctionNames(output, pending);
     if (failed.length) pending = failed;
-    console.log(`Retrying function deployment, attempt ${attempt + 1} of 3: ${pending.join(", ")}`);
-    await wait(10_000);
+    console.log(`Waiting ${delay / 1000} s for the provider, then deploying again (attempt ${attempt + 1}): ${pending.join(", ")}; ` +
+      `last provider line: ${lastProviderLine(output)}`);
+    await wait(delay);
   }
 }
 

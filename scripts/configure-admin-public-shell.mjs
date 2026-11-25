@@ -2,12 +2,18 @@
 
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
+import { providerCall } from "./lib/provider-call.mjs";
 
 const CLOUDFLARE_API = "https://api.cloudflare.com/client/v4";
 const ADMIN_DOMAIN = "admin.njpbs.org";
 const POLICY_NAME = "Public Admin authentication shell";
 
-async function cloudflareRequest(fetchFn, apiToken, url, init = {}) {
+function cloudflareRequest(fetchFn, apiToken, url, init = {}, options = {}) {
+  return providerCall(`Cloudflare Access ${init.method ?? "GET"}`,
+    () => cloudflareTransport(fetchFn, apiToken, url, init), options);
+}
+
+async function cloudflareTransport(fetchFn, apiToken, url, init) {
   const response = await fetchFn(url, {
     ...init,
     headers: {
@@ -21,9 +27,9 @@ async function cloudflareRequest(fetchFn, apiToken, url, init = {}) {
     const detail = Array.isArray(body?.errors)
       ? body.errors.map((error) => error?.message).filter(Boolean).join("; ")
       : "";
-    throw new Error(
+    throw Object.assign(new Error(
       `Cloudflare Access request failed (${response.status})${detail ? `: ${detail}` : ""}`,
-    );
+    ), response.ok ? {} : { response });
   }
   return body.result;
 }
@@ -32,6 +38,7 @@ export async function configureAdminPublicShell({
   accountId,
   apiToken,
   fetchFn = fetch,
+  wait,
 } = {}) {
   if (!/^[a-f0-9]{32}$/.test(accountId ?? "")) {
     throw new Error("CLOUDFLARE_ACCOUNT_ID is invalid");
@@ -45,6 +52,8 @@ export async function configureAdminPublicShell({
     fetchFn,
     apiToken,
     `${accountUrl}/access/apps?per_page=100`,
+    {},
+    { wait },
   );
   const matches = Array.isArray(applications)
     ? applications.filter(
@@ -66,14 +75,19 @@ export async function configureAdminPublicShell({
 
   const application = matches[0];
   const policiesUrl = `${accountUrl}/access/apps/${application.id}/policies`;
-  const policies = await cloudflareRequest(
-    fetchFn,
-    apiToken,
-    `${policiesUrl}?per_page=100`,
-  );
-  const existing = Array.isArray(policies)
-    ? policies.find((policy) => policy?.name === POLICY_NAME)
-    : null;
+  const namedPolicy = async () => {
+    const policies = await cloudflareRequest(
+      fetchFn,
+      apiToken,
+      `${policiesUrl}?per_page=100`,
+      {},
+      { wait },
+    );
+    return Array.isArray(policies)
+      ? policies.find((policy) => policy?.name === POLICY_NAME)
+      : undefined;
+  };
+  const existing = await namedPolicy();
   const payload = {
     name: POLICY_NAME,
     decision: "bypass",
@@ -90,6 +104,8 @@ export async function configureAdminPublicShell({
       method: existing?.id ? "PUT" : "POST",
       body: JSON.stringify(payload),
     },
+    // A repeated POST would add a second policy.
+    { wait, readBack: existing?.id ? undefined : namedPolicy },
   );
 
   return {

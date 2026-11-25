@@ -1,10 +1,12 @@
 import { functionsInventoryIdentity } from "./cms-component-receipt.mjs";
 import { DEV_TARGETS } from "../assert-dev-cms-targets.mjs";
 import { readCmsApiDeployment } from "./cloudflare-worker-readback.mjs";
+import { httpFault, permanentFault, providerCall } from "./provider-call.mjs";
 
 const refuse = () => { throw new Error("CMS reader provider readback unavailable"); };
 async function bytes(response) {
-  if (!response.ok || !response.body) { await response.body?.cancel(); refuse(); }
+  if (!response.ok) { await response.body?.cancel(); throw httpFault(response); }
+  if (!response.body) refuse();
   const reader = response.body.getReader(), chunks = []; let size = 0;
   try { for (;;) { const part = await reader.read(); if (part.done) break;
     size += part.value.length; if (size > 8 * 1024 * 1024) refuse(); chunks.push(part.value); }
@@ -13,8 +15,8 @@ async function bytes(response) {
 }
 
 /** The deploy owner's inventory identity, over bounded native provider GETs.
- * No ADC fallback, provider mutation, HTTP retry or caller-selected endpoint. */
-export async function readCmsReaderProviderIdentities({ projectId, accountId, readCloudflareToken, readGoogleToken, signal, fetchImpl = fetch, inspectFunctions, expectedWorkerVersion, readbackClock }) {
+ * No ADC fallback, provider mutation or caller-selected endpoint. */
+export async function readCmsReaderProviderIdentities({ projectId, accountId, readCloudflareToken, readGoogleToken, signal, fetchImpl = fetch, inspectFunctions, expectedWorkerVersion, readbackClock, wait }) {
   const development = projectId === "njpbs-site-dev";
   if (!development && projectId !== "njpbs-site" || !/^[a-f0-9]{32}$/.test(accountId ?? "") ||
       development && accountId !== DEV_TARGETS.CLOUDFLARE_ACCOUNT_ID) refuse();
@@ -24,9 +26,9 @@ export async function readCmsReaderProviderIdentities({ projectId, accountId, re
       signal?.throwIfAborted();
       const token = await readToken();
       if (typeof token !== "string" || !/^[\x21-\x7e]{1,32768}$/.test(token)) refuse();
-      const response = await fetchImpl(url, { method: "GET", redirect: "error", cache: "no-store",
-        headers: { authorization: `Bearer ${token}` }, signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000) });
-      const value = await bytes(response);
+      const value = await providerCall(`CMS reader readback ${new URL(url).hostname}`, async () => bytes(await fetchImpl(url, { method: "GET", redirect: "error", cache: "no-store",
+        headers: { authorization: `Bearer ${token}` }, signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000) })),
+      { wait, permanent: error => signal?.aborted ? "aborted" : permanentFault(error) });
       if (value.success === false || value.errors?.length) refuse();
       return value;
     } catch { refuse(); }

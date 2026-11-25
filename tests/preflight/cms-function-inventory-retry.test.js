@@ -16,25 +16,25 @@ describe("CMS function inventory request retries", () => {
     expect(client.request.mock.calls).toEqual(Array.from({ length: 2 }, () => [{
       url: functionsUrl, method: "GET", params: { pageSize: 100, pageToken: "next" }, retry: false,
     }]));
-    expect(wait.mock.calls).toEqual([[1000]]);
+    expect(wait.mock.calls).toEqual([[2000]]);
   });
 
-  it.each([429, 503, undefined])("fails closed after three attempts without exposing HTTP %s error contents", async status => {
+  it.each([429, 503, undefined])("fails closed after five attempts without exposing HTTP %s error contents", async status => {
     const client = { request: vi.fn().mockRejectedValue(providerError(status)) };
     const wait = vi.fn().mockResolvedValue();
     const error = await requestDeploymentInventory(client, functionsUrl, undefined, wait).catch(error => error);
     expect(error).toBeInstanceOf(Error);
-    expect(error.message).toBe(`Could not verify deployed function inventory (${status === undefined ? "code ECONNRESET" : `HTTP ${status}`}, attempt 3 of 3)`);
+    expect(error.message).toBe(`Could not verify deployed function inventory (${status === undefined ? "code ECONNRESET" : `HTTP ${status}`}, attempt 5 of 5)`);
     expect(error.cause).toBeUndefined();
-    expect(client.request).toHaveBeenCalledTimes(3);
-    expect(wait.mock.calls).toEqual([[1000], [2000]]);
+    expect(client.request).toHaveBeenCalledTimes(5);
+    expect(wait.mock.calls).toEqual([[2000], [4000], [8000], [16000]]);
   });
 
   it.each([400, 401, 403, 404, 409])("refuses HTTP %s immediately", async status => {
     const client = { request: vi.fn().mockRejectedValue(providerError(status)) };
     const wait = vi.fn().mockResolvedValue();
     await expect(requestDeploymentInventory(client, functionsUrl, undefined, wait)).rejects.toThrow(
-      `Could not verify deployed function inventory (HTTP ${status}, attempt 1 of 3)`);
+      `Could not verify deployed function inventory (HTTP ${status}, attempt 1 of 5)`);
     expect(client.request).toHaveBeenCalledTimes(1);
     expect(wait).not.toHaveBeenCalled();
   });
@@ -52,7 +52,7 @@ describe("CMS function inventory request retries", () => {
     expect(functions).toMatchObject([{ name, platform: "gcfv1" }]);
     expect(client.request.mock.calls.map(([options]) => [new URL(options.url).pathname.split("/")[1], options.params.pageToken]))
       .toEqual([["v1", undefined], ["v1", "next"], ["v1", "next"], ["v1", "next"], ["v2", undefined]]);
-    expect(wait.mock.calls).toEqual([[1000], [2000]]);
+    expect(wait.mock.calls).toEqual([[2000], [4000]]);
   });
 
   it("never launches a forced deployment after inventory retries fail", async () => {
@@ -61,25 +61,25 @@ describe("CMS function inventory request retries", () => {
     await expect(deployFunctionTargets(["health"], launch, "njpbs-site", {
       manifest: [{ name: "health", region: "us-central1", platform: "gcfv2" }],
       request: (url, token) => requestDeploymentInventory(client, url, token, async () => {}),
-    })).rejects.toThrow("HTTP 503, attempt 3 of 3");
+    })).rejects.toThrow("HTTP 503, attempt 5 of 5");
     expect(launch).not.toHaveBeenCalled();
-    expect(client.request).toHaveBeenCalledTimes(3);
+    expect(client.request).toHaveBeenCalledTimes(5);
   });
 
   it("bounds read-only Scheduler retries with the same policy", async () => {
     const client = { request: vi.fn().mockRejectedValue(providerError(503)) };
     const wait = vi.fn().mockResolvedValue();
     await expect(requestDeploymentInventory(client, "https://cloudscheduler.googleapis.com/v1/projects/njpbs-site/locations/us-central1/jobs", undefined, wait))
-      .rejects.toThrow("HTTP 503, attempt 3 of 3");
-    expect(client.request).toHaveBeenCalledTimes(3);
-    expect(wait.mock.calls).toEqual([[1000], [2000]]);
+      .rejects.toThrow("HTTP 503, attempt 5 of 5");
+    expect(client.request).toHaveBeenCalledTimes(5);
+    expect(wait.mock.calls).toEqual([[2000], [4000], [8000], [16000]]);
   });
 
   it.each(["ETIMEDOUT", "ECONNRESET", "ECONNREFUSED", "ENOTFOUND", "EAI_AGAIN", "ECONNABORTED", 0, 999])(
     "retains only the allowlisted error code %s", async code => {
       const client = { request: vi.fn().mockRejectedValue(Object.assign(providerError(), { code })) };
       const error = await requestDeploymentInventory(client, functionsUrl, undefined, async () => {}).catch(error => error);
-      expect(error.message).toBe(`Could not verify deployed function inventory (code ${code}, attempt 3 of 3)`);
+      expect(error.message).toBe(`Could not verify deployed function inventory (code ${code}, attempt 5 of 5)`);
       expect(error.cause).toBeUndefined();
     });
 
@@ -87,13 +87,13 @@ describe("CMS function inventory request retries", () => {
     "discards unknown or malformed provider codes (%j)", async code => {
       const client = { request: vi.fn().mockRejectedValue(Object.assign(providerError(), { code })) };
       const error = await requestDeploymentInventory(client, functionsUrl, undefined, async () => {}).catch(error => error);
-      expect(error.message).toBe("Could not verify deployed function inventory (HTTP unavailable, attempt 3 of 3)");
+      expect(error.message).toBe("Could not verify deployed function inventory (HTTP unavailable, attempt 5 of 5)");
       expect(error.cause).toBeUndefined();
     });
 
   it("prefers a validated HTTP status to an allowlisted code", async () => {
     const client = { request: vi.fn().mockRejectedValue(Object.assign(providerError(403), { code: "ECONNRESET" })) };
     await expect(requestDeploymentInventory(client, functionsUrl, undefined, async () => {}))
-      .rejects.toThrow("HTTP 403, attempt 1 of 3");
+      .rejects.toThrow("HTTP 403, attempt 1 of 5");
   });
 });

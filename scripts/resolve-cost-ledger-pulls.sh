@@ -4,11 +4,16 @@ set -euo pipefail
 
 secret_version_ready() {
   local secret_name="$1"
-  local state
-  state="$(timeout 10s gcloud secrets versions describe latest \
-    --secret="$secret_name" \
-    --project njpbs-site \
-    --format='value(state)' 2>/dev/null)" || return 1
+  local state status=0
+  state="$(node "$(dirname "${BASH_SOURCE[0]}")/lib/provider-call.mjs" "secret version $secret_name" -- \
+    timeout 30s gcloud secrets versions describe latest --secret="$secret_name" \
+    --project njpbs-site --format='value(state)')" || status=$?
+  # Only an absent version is an answer. A provider fault must not switch a feature off.
+  [[ "$status" != 4 ]] || return 1
+  if [[ "$status" != 0 ]]; then
+    echo "The secret version state of $secret_name could not be read." >&2
+    exit 1
+  fi
   [[ "$state" == ENABLED ]]
 }
 

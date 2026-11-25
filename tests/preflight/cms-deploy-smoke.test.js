@@ -254,8 +254,9 @@ describe("CMS deployment smoke gate", () => {
     const root = mkdtempSync(join(tmpdir(), "cms-deploy-params-"));
     try {
       mkdirSync(join(root, "functions"));
-      mkdirSync(join(root, "scripts"));
+      mkdirSync(join(root, "scripts/lib"), { recursive: true });
       mkdirSync(join(root, "config"));
+      copyFileSync(join(REPO_ROOT, "scripts/lib/provider-call.mjs"), join(root, "scripts/lib/provider-call.mjs"));
       copyFileSync(join(REPO_ROOT, "config/functions-deployment.json"), join(root, "config/functions-deployment.json"));
       copyFileSync(join(REPO_ROOT, "scripts/resolve-media-purge.sh"), join(root, "scripts/resolve-media-purge.sh"));
       copyFileSync(
@@ -337,8 +338,9 @@ describe("CMS deployment smoke gate", () => {
     const marker = join(root, "gcloud-credential-path");
     try {
       mkdirSync(join(root, "functions"));
-      mkdirSync(join(root, "scripts"));
+      mkdirSync(join(root, "scripts/lib"), { recursive: true });
       mkdirSync(join(root, "config"));
+      copyFileSync(join(REPO_ROOT, "scripts/lib/provider-call.mjs"), join(root, "scripts/lib/provider-call.mjs"));
       copyFileSync(join(REPO_ROOT, "config/functions-deployment.json"), join(root, "config/functions-deployment.json"));
       copyFileSync(join(REPO_ROOT, "scripts/resolve-media-purge.sh"), join(root, "scripts/resolve-media-purge.sh"));
       mkdirSync(bin);
@@ -395,6 +397,8 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
     const script = extractLiteralRunBlocks(workflow.slice(start))[0];
     const root = mkdtempSync(join(tmpdir(), "cms-reader-secret-"));
     try {
+      mkdirSync(join(root, "scripts/lib"), { recursive: true });
+      copyFileSync(join(REPO_ROOT, "scripts/lib/provider-call.mjs"), join(root, "scripts/lib/provider-call.mjs"));
       const command = join(root, "gcloud");
       writeFileSync(command, '#!/bin/sh\nprintf "%s\\n" "$*" > "$READER_CALL_LOG"\nprintf "%s" "$READER_SECRET_STATE"\nexit "$READER_SECRET_STATUS"\n');
       chmodSync(command, 0o700);
@@ -403,6 +407,7 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
         execFileSync("bash", ["-c", script], { cwd: root, stdio: "pipe", env: {
           PATH: `${root}:${process.env.PATH}`, FUNCTION_TARGETS: targets, CMS_TARGET_FIREBASE_PROJECT: "njpbs-site",
           READER_SECRET_STATE: state, READER_SECRET_STATUS: status, READER_CALL_LOG: callLog,
+          NODE_OPTIONS: "--import=data:text/javascript,Atomics.wait=()=>%22timed-out%22",
         } });
       expect(() => run("ENABLED")).not.toThrow();
       expect(readFileSync(callLog, "utf8")).toBe(
@@ -651,7 +656,7 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
       "cmsCuezStatus unauthenticated POST returned 200; expected 401",
     );
     expect(request).toHaveBeenCalledTimes(2);
-    await expect(runCmsFunctionSmoke({ baseUrl: BASE_URL, request: async () => { throw Error("synthetic-private-provider-body"); } }))
+    await expect(runCmsFunctionSmoke({ baseUrl: BASE_URL, request: async () => { throw Error("synthetic-private-provider-body"); }, wait: async () => {} }))
       .rejects.toMatchObject({ message: "health request failed" });
   });
 
@@ -701,7 +706,7 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
     const request = async (url, init) => url === `${BASE_URL}/${endpoint}` && init?.method === "POST"
       ? new Response(null, { status, headers })
       : expectedResponseFor(url, init);
-    await expect(runCmsFunctionSmoke({ request }))
+    await expect(runCmsFunctionSmoke({ request, wait: async () => {} }))
       .rejects.toThrow(`${endpoint} unauthenticated POST returned ${status}; expected 401`);
   });
 

@@ -413,7 +413,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          gh api "repos/$GITHUB_REPOSITORY/milestones?state=all&sort=due_on&direction=asc&per_page=100" > "$RUNNER_TEMP/admin-milestones.json"
+          node scripts/lib/provider-call.mjs "Admin milestones" -- gh api "repos/$GITHUB_REPOSITORY/milestones?state=all&sort=due_on&direction=asc&per_page=100" > "$RUNNER_TEMP/admin-milestones.json"
       - name: Create Admin status manifest
         env:
           ADMIN_STATUS_REVISION: ${{ steps.reviewed_ref.outputs.deploy_sha }}
@@ -810,7 +810,7 @@ jobs:
           if [[ ",$FUNCTION_TARGETS," != *",functions:cmsGetPublishedPost,"* ]]; then
             exit 0
           fi
-          secret_state="$(gcloud secrets versions describe latest \
+          secret_state="$(node scripts/lib/provider-call.mjs "Post reader secret" -- gcloud secrets versions describe latest \
             --secret=PUBLISHED_POST_READER_HMAC_KEY \
             --project="$CMS_TARGET_FIREBASE_PROJECT" --format='value(state)')" || {
             echo "PUBLISHED_POST_READER_HMAC_KEY must already have an enabled version" >&2
@@ -864,8 +864,8 @@ jobs:
           project_number="${BASH_REMATCH[1]}"
           expected_name="projects/${project_number}/apps/${FIREBASE_APP_ID}/recaptchaEnterpriseConfig"
           config_path="$RUNNER_TEMP/firebase-app-check-config.json"
-          access_token="$(gcloud auth print-access-token)"
-          if ! curl --silent --show-error --fail \
+          access_token="$(node scripts/lib/provider-call.mjs "gcloud access token" -- gcloud auth print-access-token)"
+          if ! node scripts/lib/provider-call.mjs "App Check registration" -- curl --silent --show-error --fail \
             --request GET \
             --header "Authorization: Bearer $access_token" \
             --output "$config_path" \
@@ -944,8 +944,8 @@ jobs:
           CMS_MEDIA_MASTER_R2_BUCKET: ${{ env.CMS_TARGET_STUDIO_BUCKET }}
         run: |
           set -euo pipefail
-          id=$(npx --no-install firebase --non-interactive functions:secrets:access CMS_MEDIA_R2_ACCESS_KEY_ID --project "$CMS_TARGET_FIREBASE_PROJECT")
-          secret=$(npx --no-install firebase --non-interactive functions:secrets:access CMS_MEDIA_R2_SECRET_ACCESS_KEY --project "$CMS_TARGET_FIREBASE_PROJECT")
+          id=$(node scripts/lib/provider-call.mjs "Functions secret access" -- npx --no-install firebase --non-interactive functions:secrets:access CMS_MEDIA_R2_ACCESS_KEY_ID --project "$CMS_TARGET_FIREBASE_PROJECT")
+          secret=$(node scripts/lib/provider-call.mjs "Functions secret access" -- npx --no-install firebase --non-interactive functions:secrets:access CMS_MEDIA_R2_SECRET_ACCESS_KEY --project "$CMS_TARGET_FIREBASE_PROJECT")
           echo "::add-mask::$id"
           echo "::add-mask::$secret"
           if [[ -z "$id" || -z "$secret" ]]; then
@@ -1489,12 +1489,12 @@ jobs:
         run: |
           set -euo pipefail
           CMS_MEDIA_R2_ACCESS_KEY_ID="$(
-            npx --no-install firebase --non-interactive functions:secrets:access \
+            node scripts/lib/provider-call.mjs "Functions secret access" -- npx --no-install firebase --non-interactive functions:secrets:access \
               CMS_MEDIA_R2_ACCESS_KEY_ID --project "$CMS_TARGET_FIREBASE_PROJECT"
           )"
           export CMS_MEDIA_R2_ACCESS_KEY_ID
           CMS_MEDIA_R2_SECRET_ACCESS_KEY="$(
-            npx --no-install firebase --non-interactive functions:secrets:access \
+            node scripts/lib/provider-call.mjs "Functions secret access" -- npx --no-install firebase --non-interactive functions:secrets:access \
               CMS_MEDIA_R2_SECRET_ACCESS_KEY --project "$CMS_TARGET_FIREBASE_PROJECT"
           )"
           export CMS_MEDIA_R2_SECRET_ACCESS_KEY
@@ -1549,7 +1549,7 @@ jobs:
         # explicitly so old build images do not accumulate charges and the
         # successful backend deploy can release the reviewed admin artifact.
         run: |
-          npx --no-install firebase functions:artifacts:setpolicy \
+          node scripts/lib/provider-call.mjs "artifact cleanup policy" -- npx --no-install firebase functions:artifacts:setpolicy \
             --project "$CMS_TARGET_FIREBASE_PROJECT" \
             --location us-central1 \
             --days 7 \
@@ -1574,12 +1574,23 @@ jobs:
         id: deploy_rules_before_preview
         if: (inputs.target == 'development' || vars.CMS_PREVIEW_CLOUD_ENABLED == 'true') && needs.firebase-preflight.outputs.preview_pause_late == 'true'
         run: |
-          npx --no-install firebase deploy \
+          node scripts/lib/provider-call.mjs "Firebase rules and indexes" -- npx --no-install firebase deploy \
             --project "$CMS_TARGET_FIREBASE_PROJECT" --config "$CMS_TARGET_FIREBASE_CONFIG" \
             --only "$CMS_TARGET_FIREBASE_RULES" \
             --non-interactive
       - name: Deploy ordinary Functions before the preview pause
         id: deploy_functions_before_preview
+        # The Functions retry has no count; the deploy step timeouts are its only ceiling. A
+        # step that passes its timeout fails, so the failure() and recovery steps after it still
+        # run; only the job's timeout cancels them. Measured in runs 45191230409, 44613342087,
+        # 45310500950, 45504015954 and 45506446346: the steps before the deploy took at most
+        # 1m57s, the recovery steps after a failed deploy at most 6 s, and the full deploy at
+        # most 36m24s (44613342087). This subset is smaller than the full deploy, so it gets 30
+        # minutes; the step that deploys all functions gets 60 (24 minutes of paced retries
+        # beyond the measured full deploy). Both paths leave 17 of the job's 107 minutes for
+        # other work against a measured 3. No measured run has taken this late-pause path;
+        # the first development run that does resizes these two numbers (#636).
+        timeout-minutes: 30
         if: (inputs.target == 'development' || vars.CMS_PREVIEW_CLOUD_ENABLED == 'true') && needs.firebase-preflight.outputs.preview_pause_late == 'true' && needs.firebase-preflight.outputs.functions_before_preview != ''
         env:
           DEPLOY_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
@@ -1608,6 +1619,9 @@ jobs:
             site/scripts/deploy-cms-preview-cloud.ts pause "$RENDERER_SHA"
       - name: Deploy Firebase rules, indexes, and functions
         id: deploy_functions
+        # Budget beside "Deploy ordinary Functions before the preview pause": 60 minutes for the
+        # step that deploys all functions.
+        timeout-minutes: 60
         if: needs.firebase-preflight.outputs.functions_mutated == 'true'
         env:
           FIRESTORE_DEPLOYED_BEFORE_PREVIEW: ${{ steps.deploy_rules_before_preview.outcome }}
@@ -1623,7 +1637,7 @@ jobs:
             exit 1
           fi
           if [ "$FIRESTORE_DEPLOYED_BEFORE_PREVIEW" != success ]; then
-            npx --no-install firebase deploy --project "$CMS_TARGET_FIREBASE_PROJECT" --config "$CMS_TARGET_FIREBASE_CONFIG" \
+            node scripts/lib/provider-call.mjs "Firebase rules and indexes" -- npx --no-install firebase deploy --project "$CMS_TARGET_FIREBASE_PROJECT" --config "$CMS_TARGET_FIREBASE_CONFIG" \
               --only "$CMS_TARGET_FIREBASE_RULES" --non-interactive
           fi
           node scripts/component-runner.mjs functions deploy
@@ -1638,6 +1652,7 @@ jobs:
             scripts/check-cms-secret-iam.mjs
             scripts/lib/cms-target.mjs
             scripts/lib/functions-deploy-inventory.mjs
+            scripts/lib/provider-call.mjs
             scripts/lib/functions-readbacks.sh
           persist-credentials: false
       - name: Isolate trusted event IAM gate
@@ -1733,7 +1748,7 @@ jobs:
       - name: Deploy Firestore and Storage rules without Functions
         if: needs.firebase-preflight.outputs.functions_mutated != 'true'
         run: |
-          npx --no-install firebase deploy \
+          node scripts/lib/provider-call.mjs "Firebase rules and indexes" -- npx --no-install firebase deploy \
             --only "$CMS_TARGET_FIREBASE_RULES" --config "$CMS_TARGET_FIREBASE_CONFIG" \
             --project "$CMS_TARGET_FIREBASE_PROJECT" \
             --non-interactive
