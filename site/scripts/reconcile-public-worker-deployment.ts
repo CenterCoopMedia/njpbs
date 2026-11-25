@@ -27,6 +27,7 @@ import {
   publicWorkerTarget,
   type PublicationAccess,
   requestCloudflareJson,
+  reportActivationFault,
   requestPublicPublicationReceipt,
   workerApiPath,
 } from "./activate-public-worker-candidate";
@@ -392,6 +393,7 @@ async function collectActivationEvidence({
     probe.searchParams.set("version", state.candidate.workerVersionId);
     const body = await (access ? requestPublication(probe.toString(), access) : requestPublication(probe.toString()));
     if (!publicPublicationReceiptMatchesPreparedArtifact(body, prepared)) {
+      reportActivationFault("public receipt", new Error("The public publication receipt names another artifact"));
       return { action: "reconcile" };
     }
     await verifyNoBuildPostPublicRoute({ firestore, candidate: state.candidate,
@@ -404,7 +406,8 @@ async function collectActivationEvidence({
     assertPublicWorkerTriggers(finalTriggerResponse, workerTag, selected);
     await assertDevelopmentWorkerPrivate(selected, requestJson, cloudflareApiToken);
     return evidence;
-  } catch {
+  } catch (error) {
+    reportActivationFault("reconcile readback", error);
     return { action: "reconcile" };
   }
 }
@@ -554,6 +557,9 @@ export async function restorePublicWorkerPredecessor({ firestore, cloudflareApiT
       generation: previous.generation, commitSha: previous.commitSha, deploymentId: active.deploymentId, versionId: active.versionId,
       artifactDigest: previous.artifactDigest, artifactReceiptDigest: previous.artifactReceiptDigest,
       publicationReceiptDigest: previous.publicationReceiptDigest, mediaManifestDigest: previous.mediaManifestDigest } };
-  } catch { /* Ambiguity retains the same reconciliation lease. */ }
+  } catch (error) {
+    // Ambiguity retains the same reconciliation lease.
+    reportActivationFault("predecessor restore", error);
+  }
   return settleWithFallback({ firestore, lease: state.lease, evidence, settleOutcome: settleOwned });
 }
