@@ -207,9 +207,17 @@ describe("return of a deployment lease with no deployment write", () => {
     await runtimeRef.update({ "cloud.commitSha": "c".repeat(40) });
     await refuses(() => run(cloudflare([list, list]), leaseAt), /control names another publisher/);
     await runtimeRef.update({ "cloud.commitSha": COMMIT });
+    const { job } = (await journalRef().get()).data()!;
     await journalRef().update({ "job.queueId": "R".repeat(20) });
-    await refuses(() => run(cloudflare([list, list]), leaseAt), /journal holds another release/);
+    await refuses(() => run(cloudflare([list, list]), leaseAt), /journal does not hold this release/);
     await journalRef().update({ job: null });
+    await refuses(() => run(cloudflare([list, list]), leaseAt), /journal does not hold this release/);
+    await journalRef().update({ job });
+    const { newestEligibleGeneration, newestEligibleBuildBatchId, lastReservedGeneration } = (await pointerRef().get()).data()!;
+    await pointerRef().update({ lastReservedGeneration: lastReservedGeneration + 1, newestEligibleGeneration: newestEligibleGeneration + 1,
+      newestEligibleBuildBatchId: `cms-${"N".repeat(20)}` });
+    await refuses(() => run(cloudflare([list, list]), leaseAt), /A newer release is eligible/);
+    await pointerRef().update({ lastReservedGeneration, newestEligibleGeneration, newestEligibleBuildBatchId });
     expect((await run(cloudflare([list, list]), leaseAt, { apply: false })).result.outcome).toBe("dry-run");
     await requestRef().update({ status: "deployed" });
     await refuses(() => run(cloudflare([list, list]), leaseAt, { now: () => leaseAt + 60 * MINUTE }), /release request does not match/);

@@ -24,7 +24,7 @@ import type { PublicationTarget } from "../../functions/lib/publication-target";
 const require = createRequire(import.meta.url);
 const { publicationTarget } = require("../../functions/lib/publication-target.js") as
   typeof import("../../functions/lib/publication-target");
-const { assertPublicDeploymentLeaseBatch, assertPublicDeploymentPointer, timestampMillis } = require("../../functions/lib/public-deployment.js");
+const { assertPublicDeploymentLeaseBatch, assertPublicDeploymentPointer, planPublicDeploymentLeaseAcquisition, timestampMillis } = require("../../functions/lib/public-deployment.js");
 const { publicBuildBatchRef, publicDeploymentRef } = require("../../functions/lib/public-deployment-coordinator.js");
 const { RUNTIME_DOCUMENT_PATH, cloudCmsPublicationRuntimeControl } = require("../../functions/lib/cms-publication-runtime-control.js");
 const { assertPublicationOwner } = require("../../functions/lib/publication-runtime-owner.js");
@@ -138,15 +138,16 @@ async function giveLeaseBack({ firestore, target, buildBatchId, leaseToken, now,
     if (!request || request.buildBatchId !== buildBatchId || request.commitSha !== batch.commitSha ||
         !["pending", "failed"].includes(request.status)) refuse("The release request does not match the lease");
     assertPublicationOwner(request, batch.runtime);
-    // The publisher of this commit takes the journal job it holds, or an empty journal (publisher/pending-work.ts).
     const journal = journalRow.data();
-    if (journal?.job && (journal.job.queueId !== queueId || journal.job.commitSha !== batch.commitSha ||
-        !isDeepStrictEqual(journal.runtime, batch.runtime))) refuse("The publisher journal holds another release");
+    // A write of this lease that lands late serves the version that its next lease serves. So this release must be the next one.
+    if (!journal?.job || journal.job.queueId !== queueId || journal.job.commitSha !== batch.commitSha ||
+        !isDeepStrictEqual(journal.runtime, batch.runtime)) refuse("The publisher journal does not hold this release");
     const control = cloudCmsPublicationRuntimeControl(controlRow.data());
     if (control.commitSha !== batch.commitSha || control.serializerId !== target.serializerId) refuse("The publication control names another publisher");
     const nextPointer = assertPublicDeploymentPointer({ ...without(pointer, [...LEASE_FIELDS, "runtime", "candidateGeneration",
       "candidateBuildBatchId", "candidateCommitSha"]), state: "idle" });
     const nextBatch = assertPublicDeploymentLeaseBatch({ ...without(batch, LEASE_FIELDS), status: "ready" }, buildBatchId);
+    if (planPublicDeploymentLeaseAcquisition(nextPointer, nextBatch).action !== "acquire") refuse("A newer release is eligible");
     if (!write) return;
     const timestamp = firebaseAdminRuntime.FieldValue.serverTimestamp();
     transaction.set(pointerRef, { ...nextPointer, updatedAt: timestamp });

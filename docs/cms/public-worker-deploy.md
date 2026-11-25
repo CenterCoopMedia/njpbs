@@ -74,8 +74,9 @@ refused.
 [return-public-deployment-lease.ts](../../site/scripts/return-public-deployment-lease.ts)
 gives it back. It reads Cloudflare twice, 30 seconds apart: the active
 deployment must be the lease predecessor, with no deployment after the lease.
-It refuses another release's lease, an installed publisher, publication control
-or publisher journal of another commit, and an attempt that can still write.
+It refuses another release's lease, an installed publisher or publication control
+of another commit, a publisher journal that does not hold this release, a newer
+eligible release, and an attempt that can still write.
 The attempt has ended when its release request says so, or when its container
 stopped or was replaced. The operator runs ten minutes after that time and
 names the time when it refuses. Without `--apply` it only reads.
