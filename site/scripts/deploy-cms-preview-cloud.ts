@@ -218,7 +218,7 @@ export function releaseSecretsFor(rawAccount: string, rawStorage: string, token:
 }
 
 // Neither wait has a limit of its own: each ends on the state it reads. The
-// workflow step's limit ends a hang and the next step pauses the runtime.
+// hosted job limit ends a hang and a separate workflow job pauses the runtime.
 async function waitFor(description: string, check: () => Promise<boolean>) {
   const started = Date.now();
   while (!await check()) {

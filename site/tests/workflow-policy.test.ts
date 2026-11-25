@@ -656,18 +656,18 @@ describe("cms staging deploy surface", () => {
     }
   });
 
-  it("pauses the preview runtime after every renderer deploy that can be stopped", () => {
+  it("pauses the preview runtime in its own job when the renderer deploy job does not succeed", () => {
     const { jobs } = parse(readFileSync(stagingDeployWorkflowPath, "utf8"));
-    const steps = Object.values(jobs).flatMap((job: any) => (job.steps ?? []).map((step: any, index: number) => ({ job, step, next: job.steps[index + 1] })));
-    const deploys = steps.filter(({ step }) => /deploy-cms-preview-cloud\.ts deploy /.test(step.run ?? ""));
-    expect(deploys.length).toBeGreaterThan(0);
-    for (const { job, step, next } of deploys) {
-      expect(step["timeout-minutes"]).toBe(330);
-      expect(job["timeout-minutes"]).toBeUndefined();
-      expect(next.if).toBe(`always() && (steps.${step.id}.outcome == 'failure' || steps.${step.id}.outcome == 'cancelled')`);
-      expect(next.run).toContain('deploy-cms-preview-cloud.ts pause "$RENDERER_SHA"');
-      expect(next.env).toEqual(step.env);
-    }
+    const deploys = Object.entries<any>(jobs).filter(([, job]) => job.steps?.some((step: any) => /deploy-cms-preview-cloud\.ts deploy /.test(step.run ?? "")));
+    expect(deploys.map(([name]) => name)).toEqual(["preview-renderer"]);
+    expect(deploys[0][1]["timeout-minutes"]).toBeUndefined();
+    const pause = jobs["preview-pause"];
+    expect(pause.needs).toContain("preview-renderer");
+    expect(pause.if).toContain("always() && (needs.preview-renderer.result == 'failure' || needs.preview-renderer.result == 'cancelled')");
+    expect(pause.if).toContain("needs.firebase-preflight.outputs.preview_paused == 'true'");
+    expect(pause.steps.at(-1).run).toContain('deploy-cms-preview-cloud.ts pause "$RENDERER_SHA"');
+    expect(pause.steps.at(-1).env).toEqual(deploys[0][1].steps.find((step: any) => /deploy-cms-preview-cloud\.ts deploy /.test(step.run ?? "")).env);
+    expect(pause.steps.some((step: any) => step.name === "Require reviewed renderer source")).toBe(true);
   });
 
   it("writes explicit bootstrap and account-email values without admission lists", () => {
