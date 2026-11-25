@@ -377,7 +377,8 @@ async function enqueuePreview(fields, deps = {}) {
     let runtime = runtimeSnapshot.data();
     let selectedPair = null;
     previewPairId = undefined;
-    rendererSha = configuredRendererSha;
+    // The live renderer names itself; a site-only change then needs no Functions deploy.
+    rendererSha = runtime?.schemaVersion === 1 && SHA_PATTERN.test(runtime.rendererSha) ? runtime.rendererSha : configuredRendererSha;
     if (runtime?.schemaVersion === 2) {
       const updating = () => new PreviewRequestError("Preview renderer is updating; try again shortly", 503, {
         code: "preview-renderer-updating",

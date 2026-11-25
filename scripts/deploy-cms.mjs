@@ -93,7 +93,7 @@ const steps = {
     await run("npm", ["run", "functions:build"]);
     await node(["scripts/prepare-cloud-publication-wake.mjs", environment, String(!dev)]);
     await node(["scripts/component-runner.mjs", "functions", "configure"], { env: {
-      CMS_ADMIN_BUILD_REVISION: functionsSha, CMS_PREVIEW_RENDERER_SHA: rendererSha, VITE_LIVE_PRODUCTION_ENABLED: dev ? "false" : env.LIVE_PRODUCTION_ENABLED || "false" } });
+      CMS_ADMIN_BUILD_REVISION: functionsSha, CMS_PREVIEW_RENDERER_SHA: functionsSha, VITE_LIVE_PRODUCTION_ENABLED: dev ? "false" : env.LIVE_PRODUCTION_ENABLED || "false" } });
   },
   async seed() {
     await node(["scripts/backfill-page-seed-media.mjs"]);
