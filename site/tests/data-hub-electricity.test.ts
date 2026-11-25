@@ -114,7 +114,10 @@ describe("Data Hub electricity price from an approved dataset release", () => {
     };
     for (const start of ["-", "=", "+", "@", "\t", "\r"]) {
       const text = await csv(applyHubElectricity(reader, { ...figure, release: { ...figure.release, methodNote: `${start}1+1 note`,
+        source: { ...figure.release.source, publisher: `${start}3+3 publisher` },
+        comparators: figure.release.comparators.map(item => ({ ...item, source: { ...item.source, publisher: `${start}3+3 publisher` } })),
         reuse: { ...figure.release.reuse, note: `${start}2+2 credit` } } }), "electricity");
+      expect(text.match(/,"'[^"]3\+3 publisher, /g)).toHaveLength(4);
       expect(text).toContain(`,"'${start}1+1 note","'${start}2+2 credit"\r\n`);
     }
     expect(await csv(applyHubElectricity(reader, figure), "electricity")).toContain(',"Average price <per> kWh.","Example <credit>"\r\n');

@@ -1211,8 +1211,8 @@
  const rows=[['period','geography','price_cents_per_kwh','source_name','source_url','released','checked','status',...extra.map(x=>x[0])]];
  const all=electricRows(m);
  for(const r of all){
-  rows.push([electricMonth(m)+" "+r.year,"New Jersey",r.nj.toFixed(2),m.source,m.sourceUrl,m.released,m.checked,m.datasetRelease?"see method note":r===all[1]?"preliminary":"final",...extra.map(x=>x[1])]);
-  rows.push([electricMonth(m)+" "+r.year,"United States",r.us.toFixed(2),m.source,m.sourceUrl,m.released,m.checked,m.datasetRelease?"see method note":r===all[1]?"preliminary":"final",...extra.map(x=>x[1])]);
+  rows.push([electricMonth(m)+" "+r.year,"New Jersey",r.nj.toFixed(2),plain(m.source),m.sourceUrl,m.released,m.checked,m.datasetRelease?"see method note":r===all[1]?"preliminary":"final",...extra.map(x=>x[1])]);
+  rows.push([electricMonth(m)+" "+r.year,"United States",r.us.toFixed(2),plain(m.source),m.sourceUrl,m.released,m.checked,m.datasetRelease?"see method note":r===all[1]?"preliminary":"final",...extra.map(x=>x[1])]);
  }
  return rows.map(row=>row.map(quoteCSV).join(',')).join('\r\n')+'\r\n';
 }
