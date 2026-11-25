@@ -13,6 +13,8 @@ import { fingerprintInputs, fingerprintPaths, RECEIPT_INPUT_PATHS, configuration
 import { readEnabledCmsReaderProviders } from "./lib/cms-enabled-reader-provider.mjs";
 
 import { productionReaderBinding } from "./lib/production-reader-authorization.mjs";
+import { faultLine } from "./lib/provider-call.mjs";
+
 export { productionReaderBinding } from "./lib/production-reader-authorization.mjs";
 const refuse = () => { throw new Error("Production reader deployment refused; preserve the original run for reconciliation"); };
 const supported = { previewRequest: [1], postChrome: [1], settings: [1], capabilities: [1], adminSession: [1, 2] };
@@ -165,8 +167,8 @@ async function main() {
         writeFileSync(artifact, `${JSON.stringify(result, null, 2)}\n`, { flag: "wx", mode: 0o600 });
       }
     }
-  } catch {
-    console.error("Production reader deployment refused; preserve original run/candidate evidence for reconciliation");
+  } catch (error) {
+    console.error(`Production reader deployment refused; preserve original run/candidate evidence for reconciliation; cause: ${faultLine(error)}`);
     process.exitCode = 1;
   } finally { if (app) await deleteApp(app); }
 }

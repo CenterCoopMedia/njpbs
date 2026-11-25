@@ -22,6 +22,7 @@ import cms from "../functions/lib/cms-preview-pair.js";
 import { RECEIPT_INPUT_PATHS, fingerprintPaths, fingerprintInputs, configurationFingerprint, readReceipt, startReceipt, startCandidateReceipt,
   verifyCandidateReceipt, completeReceipt, commitLiveReaderReceipt, candidateReceiptRef } from "./lib/cms-component-receipt.mjs";
 import { readEnabledCmsReaderProviders } from "./lib/cms-enabled-reader-provider.mjs";
+import { faultLine } from "./lib/provider-call.mjs";
 
 const refuse = () => { throw new Error("Dev reader deployment refused; retain the original attempt for reconciliation"); };
 const supported = { previewRequest: [1], postChrome: [1], settings: [1], capabilities: [1], adminSession: [1, 2] };
@@ -218,8 +219,8 @@ async function main() {
     phase = "write-artifact";
     writeFileSync(process.argv[2], `${JSON.stringify(result, null, 2)}\n`, { flag: "wx", mode: 0o600 });
     console.log("Dev reader deployments verified; original install proofs and selectors unchanged");
-  } catch {
-    console.error(`Dev reader deployment refused at ${phase}; preserve original run/candidate evidence for reconciliation`); process.exitCode = 1;
+  } catch (error) {
+    console.error(`Dev reader deployment refused at ${phase}; preserve original run/candidate evidence for reconciliation; cause: ${faultLine(error)}`); process.exitCode = 1;
   } finally { if (app) await deleteApp(app); }
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) await main();
