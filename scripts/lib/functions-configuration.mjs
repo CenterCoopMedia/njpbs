@@ -6,7 +6,7 @@ import { cmsTarget, isDevelopmentName } from "./cms-target.mjs";
 const require = createRequire(import.meta.url);
 
 export class FunctionsConfigurationError extends Error { name = "FunctionsConfigurationError"; }
-export const configurationFailure = message => { throw new FunctionsConfigurationError(message); };
+export const configurationFailure = (message, options) => { throw new FunctionsConfigurationError(message, options); };
 const freezeRows = rows => Object.freeze(Object.fromEntries(Object.entries(rows).map(([key, row]) => [key, Object.freeze(row)])));
 const table = validateConfigurationTable(JSON.parse(readFileSync(new URL("../../config/functions-configuration.json", import.meta.url), "utf8")));
 function knownKeys(record, allowed) {
@@ -170,7 +170,10 @@ export function servingRuntimeParameters(parameters) {
     try {
       const { ParamValue } = require("firebase-tools/lib/deploy/functions/params.js");
       serving[name] = new ParamValue(serving[name], false, { list: true }).toSDK();
-    } catch { configurationFailure(`Invalid Firebase list parameter: ${name}`); }
+    } catch (error) {
+      // The staged receipt helpers load this module without provider-call. A code (MODULE_NOT_FOUND) carries no parameter value.
+      configurationFailure(`Invalid Firebase list parameter: ${name}${/^[A-Z][A-Z0-9_]+$/.test(error?.code ?? "") ? ` (${error.code})` : ""}`);
+    }
   }
   return serving;
 }

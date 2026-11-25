@@ -20,6 +20,13 @@ export const RECEIPT_SCHEMA_VERSION = 1;
 export const FUNCTION_GRAPH_VERSION = 2;
 const FUNCTIONS_CONFIGURATION_TABLE = "config/functions-configuration.json";
 export const RECEIPT_COMPONENTS = Object.freeze(["functions", "renderer", "cmsApi"]);
+// These tools run or check a deployment; a Function contains none of them, so a
+// change to one never redeploys Functions. They stay in RECEIPT_INPUT_PATHS,
+// because stored receipts hold fingerprints of that list. Only the plan's own
+// comparison of two commits leaves them out.
+export const FUNCTION_DEPLOY_TOOLS = Object.freeze([
+  "scripts/deploy-cms-function-batches.mjs", "scripts/lib/provider-call.mjs", "scripts/smoke-cms-functions.mjs",
+]);
 export const RECEIPT_INPUT_PATHS = Object.freeze({
   functions: Object.freeze([
     ...contractInputs,
@@ -88,14 +95,20 @@ const FINGERPRINT = /^[0-9a-f]{64}$/;
 const RUN_ID = /^[0-9]{1,20}$/;
 
 export class ComponentReceiptError extends Error {
-  constructor(message) {
-    super(message);
+  constructor(message, options) {
+    super(message, options);
     this.name = "ComponentReceiptError";
   }
 }
 
 function fail(message) {
   throw new ComponentReceiptError(message);
+}
+
+// Provider code loads on use, as in readProvider.
+async function failFrom(message, error) {
+  const { faultCause } = await import("./provider-call.mjs");
+  throw new ComponentReceiptError(message, faultCause(error));
 }
 
 export function requireComponent(value) {
@@ -585,12 +598,14 @@ async function buildFunctionGraph(sourceSha, deps, env, manifest) {
     const shared = [...new Set([...globalPaths, ...startup])];
     const graph = { version: FUNCTION_GRAPH_VERSION, globalFingerprint: digest([...shared]), exports };
     if (!deps.includeRuntimeInputs) return graph;
+    const comparedPath = path => !FUNCTION_DEPLOY_TOOLS.includes(path) || reachable.has(path);
+    const comparedPaths = receiptPaths.filter(comparedPath);
     const { parameters, secrets, provider } = JSON.parse(await read(FUNCTIONS_CONFIGURATION_TABLE));
     return { graph, reads, sharedFingerprint: digest(shared.filter(path =>
-      path !== FUNCTIONS_CONFIGURATION_TABLE || startup.has(path))),
+      comparedPath(path) && (path !== FUNCTIONS_CONFIGURATION_TABLE || startup.has(path)))),
       configurationContract: stableObjectFingerprint({ parameters, secrets, provider }),
-      unattributedFingerprint: digest(receiptPaths.filter(path => path !== FUNCTIONS_CONFIGURATION_TABLE && !reachable.has(path))),
-      sourceWithoutConfigurationTable: digest(receiptPaths.filter(path => path !== FUNCTIONS_CONFIGURATION_TABLE)) };
+      unattributedFingerprint: digest(comparedPaths.filter(path => path !== FUNCTIONS_CONFIGURATION_TABLE && !reachable.has(path))),
+      sourceWithoutConfigurationTable: digest(comparedPaths.filter(path => path !== FUNCTIONS_CONFIGURATION_TABLE)) };
   } catch {
     // Discovery uncertainty chooses a full deploy, including at receipt write.
     return null;
@@ -730,7 +745,7 @@ export async function completeReceipt(firestore, input, { readPageReaderSource =
     if (!file.trim()) return null;
     if (file.trim() !== descriptor) fail("CMS API Page reader source is invalid");
     return await git(["show", `${source}:${descriptor}`]);
-  } catch { fail("CMS API Page reader source could not be verified"); }
+  } catch (error) { return failFrom("CMS API Page reader source could not be verified", error); }
 } } = {}) {
   const component = requireComponent(input.component);
   const providerIdentities = parseProviderIdentities(input.providerIdentities);
@@ -1166,9 +1181,9 @@ async function readProvider(fetchFn, url, token) {
 
 export async function readConsistentRendererApplication(fetchFn, account, token, deps) {
   const base = `https://api.cloudflare.com/client/v4/accounts/${account}/containers/applications`;
-  const read = async (url, error) => {
+  const read = async (url, message) => {
     try { return await readProvider(fetchFn, url, token); }
-    catch { fail(error); }
+    catch (error) { return failFrom(message, error); }
   };
   const releases = async () => deps.rendererRelease
     ? releasesOfCommit(deps.rendererRelease, deps.rendererSha)
@@ -1242,8 +1257,8 @@ export async function collectLiveIdentities(component, deps = {}) {
       const request = async (url, pageToken) => {
         try {
           return await requestDeploymentInventory(client, url, pageToken);
-        } catch {
-          fail("Live function inventory could not be read");
+        } catch (error) {
+          return failFrom("Live function inventory could not be read", error);
         }
       };
       return listPages(
@@ -1285,7 +1300,7 @@ export async function collectLiveIdentities(component, deps = {}) {
     const version = application.version ?? application.current_version ?? application.configuration?.version ?? null;
     const deploymentBody = await readProvider(fetchFn,
       `https://api.cloudflare.com/client/v4/accounts/${account}/workers/scripts/${rendererWorker}/deployments`, token, deps)
-      .catch(() => fail("Renderer Worker deployment identity could not be read"));
+      .catch(error => failFrom("Renderer Worker deployment identity could not be read", error));
     const workerDeploymentId = deploymentBody?.result?.deployments?.[0]?.id
       ?? deploymentBody?.result?.[0]?.id;
     if (typeof workerDeploymentId !== "string" || workerDeploymentId.length === 0 || workerDeploymentId.length > 80) {
@@ -1293,7 +1308,7 @@ export async function collectLiveIdentities(component, deps = {}) {
     }
     const scheduleBody = await readProvider(fetchFn,
       `https://api.cloudflare.com/client/v4/accounts/${account}/workers/scripts/${rendererWorker}/schedules`, token, deps)
-      .catch(() => fail("Renderer Worker schedule identity could not be read"));
+      .catch(error => failFrom("Renderer Worker schedule identity could not be read", error));
     const schedules = Array.isArray(scheduleBody?.result?.schedules)
       ? scheduleBody.result.schedules
       : Array.isArray(scheduleBody?.result) ? scheduleBody.result : null;
@@ -1332,7 +1347,7 @@ export async function collectLiveIdentities(component, deps = {}) {
     const { cmsApiWorker } = cmsTarget();
     return await readCmsApiDeployment(cmsApiWorker, () => readProvider(fetchFn,
       `https://api.cloudflare.com/client/v4/accounts/${account}/workers/scripts/${cmsApiWorker}/deployments`, token, deps)
-      .catch(() => fail("CMS API deployment identity could not be read")), deps.expectedWorkerVersion);
+      .catch(error => failFrom("CMS API deployment identity could not be read", error)), deps.expectedWorkerVersion);
   } catch (error) {
     if (error instanceof CmsApiReadbackError || error instanceof WorkerReadbackMismatch) fail(error.message);
     throw error;

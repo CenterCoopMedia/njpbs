@@ -19,6 +19,8 @@ import {
   extractProductionExports,
   runCmsFunctionSmoke,
 } from "../../scripts/smoke-cms-functions.mjs";
+import { componentFailureDiagnostic } from "../../scripts/component-runner.mjs";
+import { CALLER_REFUSED } from "../../scripts/lib/provider-call.mjs";
 import { ENDPOINTS } from "../../cms-api/src/config.ts";
 import { assertR2Lifecycle } from "../../scripts/assert-r2-lifecycle.mjs";
 import { configurationInputs, CONFIGURATION_INPUTS, NATIVE_CONFIGURATION } from "../../scripts/lib/functions-configuration.mjs";
@@ -661,6 +663,22 @@ if(process.env.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP)process.exit(8); require("node:
     await expect(runCmsFunctionSmoke({ baseUrl: BASE_URL, request: async () => { throw Object.assign(Error("synthetic-private-provider-body"), { stderr: "PERMISSION_DENIED" }); } }))
       .rejects.toMatchObject({ message: "health request failed" });
   });
+
+  it.each([["a marked refusal", 0], ["a marked refusal after six unmarked errors", 6]])(
+    "names the cause when the request callback throws %s", async (_name, unmarked) => {
+      const message = "method HEAD not allowed by the caller's request callback";
+      let calls = 0;
+      const request = vi.fn(async () => { throw Object.assign(new Error(message), calls++ >= unmarked && { code: CALLER_REFUSED }); });
+      const log = vi.spyOn(console, "error").mockReturnValue();
+      vi.useFakeTimers();
+      try {
+        const failed = runCmsFunctionSmoke({ baseUrl: BASE_URL, request }).catch(error => error);
+        await vi.advanceTimersByTimeAsync(10 * 60_000);
+        expect(componentFailureDiagnostic(await failed)).toBe(`health request failed; cause: CALLER_REFUSED: ${message}`);
+        expect(request).toHaveBeenCalledTimes(unmarked + 1);
+        if (unmarked) expect(log.mock.calls.flat().join("\n")).toContain(message);
+      } finally { vi.useRealTimers(); log.mockRestore(); }
+    });
 
   it("bounds direct-origin probes and keeps edge probes serial", async () => {
     const active = new Map(), peak = new Map();

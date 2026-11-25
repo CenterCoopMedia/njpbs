@@ -6,15 +6,12 @@ import { getFirestore } from "firebase-admin/firestore";
 import { cmsTarget } from "./lib/cms-target.mjs";
 import { ComponentReceiptError, collectLiveIdentities, edgeOriginSecretFingerprint, fingerprintFunctionGraph, fingerprintInputs, readReceipt } from "./lib/cms-component-receipt.mjs";
 import { fingerprintRendererGraph } from "./lib/cms-renderer-graph.mjs";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { createRequire } from "node:module";
 import { currentVersionMatches } from "./lib/functions-secret-versions.mjs";
 import { studioTitleFilesParameter } from "./lib/studio-title-files.mjs";
 import { resolveDiscovery } from "./configure-cms-functions.mjs";
 import { configurationInputs, RUNTIME_PARAMETERS, runtimeParameters, servingRuntimeParameters } from "./lib/functions-configuration.mjs";
 import {
-  ADMIN_REVISION_INTAKE_FLOOR,
   adminRevisionChanges,
   assertLegacyCmsWorkflow,
   baselineMutation,
@@ -33,7 +30,6 @@ import {
   runtimeParameterChanges,
 } from "./lib/cms-release-plan.mjs";
 
-const execFileAsync = promisify(execFile);
 
 export async function desiredRuntimeParameters(env, execute) {
   // Invalid enabled Studio configuration must abort preflight, rather than
@@ -45,16 +41,6 @@ export async function desiredRuntimeParameters(env, execute) {
   } catch {
     // Errors may contain secret-derived parameter input or child env details.
     return null;
-  }
-}
-
-async function isAncestor(floor, sha, cwd) {
-  if (!sha) return false;
-  try {
-    await execFileAsync("git", ["merge-base", "--is-ancestor", floor, sha], { cwd });
-    return true;
-  } catch {
-    return false;
   }
 }
 
@@ -174,8 +160,8 @@ export async function main() {
         liveFunctions = functionsForRuntimeComparison(functions, withoutFunctions(functionGraph, omittedNames));
       },
     }).catch(() => null);
-    // Production intake resolves the Admin revision from live status after the
-    // revision floor. The renderer pin follows the independent preview plan.
+    // Production intake resolves the Admin revision from live status itself.
+    // The renderer pin follows the independent preview plan.
     const comparedParameterKeys = Object.keys(RUNTIME_PARAMETERS).filter(key =>
       key !== "CMS_ADMIN_BUILD_REVISION" && key !== "CMS_PREVIEW_RENDERER_SHA");
     const parameterChanges = runtimeParameterChanges(liveFunctions, desiredParameters, runtime?.reads, comparedParameterKeys);
@@ -195,9 +181,6 @@ export async function main() {
     const rendererToken = cmsTarget().environment === "development"
       ? { cloudflareToken: process.env.CLOUDFLARE_DEV_PREVIEW_RENDERER_TOKEN ?? "" } : {};
     const liveRendererIdentities = await collectLiveIdentities("renderer", { firestore, ...rendererToken }).catch(() => null);
-    const liveFunctionsSha = functionsReceipt?.state === "complete"
-      ? functionsReceipt.mutation?.sourceSha
-      : functionsReceipt?.lastComplete?.sourceSha;
     const [functionsRunCompleted, rendererRunCompleted] = await Promise.all([functionsReceipt, rendererReceipt].map(receipt =>
       componentReceiptRunCompleted(receipt, { token: process.env.GITHUB_TOKEN, repository: process.env.GITHUB_REPOSITORY,
         currentRunId: process.env.GITHUB_RUN_ID, currentRunAttempt: process.env.GITHUB_RUN_ATTEMPT })));
@@ -234,16 +217,6 @@ export async function main() {
         runId: process.env.GITHUB_RUN_ID,
         runAttempt: process.env.GITHUB_RUN_ATTEMPT,
       },
-      targetHasAdminRevisionIntake: await isAncestor(
-        ADMIN_REVISION_INTAKE_FLOOR,
-        deploySha,
-        process.env.GITHUB_WORKSPACE,
-      ),
-      liveHasAdminRevisionIntake: await isAncestor(
-        ADMIN_REVISION_INTAKE_FLOOR,
-        liveFunctionsSha,
-        process.env.GITHUB_WORKSPACE,
-      ),
     });
     if (plan.abort) {
       if (plan.blockedComponent === "renderer") {

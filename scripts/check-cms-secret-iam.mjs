@@ -5,7 +5,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { resolve } from "node:path";
 import { loadFunctionSource, functionDeployManifest, readFunctionsDeployInventory, requestDeploymentInventory, FunctionsDeployInventoryError } from "./lib/functions-deploy-inventory.mjs";
 import { cmsTarget } from "./lib/cms-target.mjs";
-import { providerGcloud, providerJson } from "./lib/provider-call.mjs";
+import { failureText, faultCause, providerGcloud, providerJson } from "./lib/provider-call.mjs";
 
 
 const PROJECT = cmsTarget().projectId;
@@ -43,8 +43,8 @@ export function secretRequirements(source, projectNumber) {
 function gcloud(args) {
   try {
     return providerGcloud(args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
-  } catch {
-    throw new FunctionsDeployInventoryError(`Could not read CMS IAM metadata: gcloud ${args.join(" ")}`);
+  } catch (error) {
+    throw new FunctionsDeployInventoryError(`Could not read CMS IAM metadata: gcloud ${args.join(" ")}`, faultCause(error));
   }
 }
 
@@ -54,7 +54,7 @@ export function checkSecretIam(requirements, readPolicy, deployAccount = DEPLOY_
   for (const [secret, runtimes] of requirements) {
     let policy;
     try { policy = JSON.parse(readPolicy(secret)); }
-    catch { throw new FunctionsDeployInventoryError(`Could not read IAM policy for secret ${secret}`); }
+    catch (error) { throw new FunctionsDeployInventoryError(`Could not read IAM policy for secret ${secret}`, faultCause(error)); }
     if (!policy || typeof policy !== "object" || Array.isArray(policy) ||
         !Array.isArray(policy.bindings ?? [])) throw new FunctionsDeployInventoryError(`Invalid IAM policy for secret ${secret}`);
     const needs = [[deployAccount, ["roles/secretmanager.viewer", "roles/secretmanager.admin"]],
@@ -87,9 +87,9 @@ export function eventTriggerRequirements(source, projectNumber) {
 function eventPolicy(value) {
   try {
     const policy = JSON.parse(value);
-    if (!policy || typeof policy !== "object" || Array.isArray(policy) || !Array.isArray(policy.bindings ?? [])) throw new FunctionsDeployInventoryError();
+    if (!policy || typeof policy !== "object" || Array.isArray(policy) || !Array.isArray(policy.bindings ?? [])) throw new FunctionsDeployInventoryError("policy has no binding list");
     return policy;
-  } catch { throw new FunctionsDeployInventoryError("Could not read event trigger IAM policy metadata"); }
+  } catch (error) { throw new FunctionsDeployInventoryError("Could not read event trigger IAM policy metadata", faultCause(error)); }
 }
 
 function eventRole(policy, account, role) {
@@ -152,9 +152,9 @@ async function firstDeployFunctionNames() {
     } };
     const inventory = await readFunctionsDeployInventory(PROJECT, (url, pageToken) => requestDeploymentInventory(client, url, pageToken));
     if (!inventory.length || inventory.some(fn => typeof fn.name !== "string" ||
-        !new RegExp(`^projects/${PROJECT}/locations/[a-z]+-[a-z]+\\d/functions/[A-Za-z][A-Za-z0-9-]*$`).test(fn.name))) throw new FunctionsDeployInventoryError();
+        !new RegExp(`^projects/${PROJECT}/locations/[a-z]+-[a-z]+\\d/functions/[A-Za-z][A-Za-z0-9-]*$`).test(fn.name))) throw new FunctionsDeployInventoryError("inventory is empty or names another project");
     return new Set(inventory.map(fn => fn.name));
-  } catch { throw new FunctionsDeployInventoryError("Complete nonempty Functions inventory required for first deployment"); }
+  } catch (error) { throw new FunctionsDeployInventoryError("Complete nonempty Functions inventory required for first deployment", faultCause(error)); }
 }
 
 // The post-deploy step grants invocation on new trigger services. Without this
@@ -162,19 +162,19 @@ async function firstDeployFunctionNames() {
 const INVOKER_GRANT_PERMISSIONS = ["run.services.getIamPolicy", "run.services.setIamPolicy"];
 async function requireInvokerGrantPermission() {
   const token = gcloud(["auth", "print-access-token"]);
-  let granted = [];
+  let granted = [], fault;
   try {
     granted = (await providerJson("deploy identity permission test", () => fetch(`https://cloudresourcemanager.googleapis.com/v1/projects/${PROJECT}:testIamPermissions`, {
       method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
       body: JSON.stringify({ permissions: INVOKER_GRANT_PERMISSIONS }), redirect: "error" }))).permissions ?? [];
-  } catch { /* Reported below without provider response details. */ }
+  } catch (error) { fault = faultCause(error); }
   if (!INVOKER_GRANT_PERMISSIONS.every(permission => granted.includes(permission))) {
-    throw new FunctionsDeployInventoryError(`New event trigger services need an invoker grant after deployment; the deploy identity needs ${INVOKER_GRANT_PERMISSIONS.join(" and ")} on ${PROJECT}`);
+    throw new FunctionsDeployInventoryError(`New event trigger services need an invoker grant after deployment; the deploy identity needs ${INVOKER_GRANT_PERMISSIONS.join(" and ")} on ${PROJECT}`, fault);
   }
 }
 
 function requirePostDeployCredential(project, development) {
-  let valid = false;
+  let valid = false, fault;
   try {
     const credential = JSON.parse(readFileSync(process.env.GOOGLE_APPLICATION_CREDENTIALS, "utf8"));
     valid = development
@@ -182,8 +182,8 @@ function requirePostDeployCredential(project, development) {
         credential.service_account_impersonation_url ===
           `https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/${DEPLOY_ACCOUNT}:generateAccessToken`
       : credential.type === "service_account" && credential.project_id === project && credential.client_email === DEPLOY_ACCOUNT;
-  } catch { /* Keep credential file contents and parser diagnostics private. */ }
-  if (!valid) throw new FunctionsDeployInventoryError("Invalid Firebase IAM read credential");
+  } catch (error) { fault = faultCause(error); }
+  if (!valid) throw new FunctionsDeployInventoryError("Invalid Firebase IAM read credential", fault);
   process.env.CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE = process.env.GOOGLE_APPLICATION_CREDENTIALS;
 }
 
@@ -245,8 +245,8 @@ export async function main(sourceRoot = new URL("../", import.meta.url), { preDe
             `--member=serviceAccount:${account}`, "--role=roles/run.invoker", "--condition=None",
             `--region=${region}`, `--project=${project}`, "--format=json"],
           { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
-        } catch {
-          throw new FunctionsDeployInventoryError(`Could not grant roles/run.invoker on ${serviceName} to serviceAccount:${account} for event trigger ${name}; the deploy identity needs run.services.setIamPolicy`);
+        } catch (error) {
+          throw new FunctionsDeployInventoryError(`Could not grant roles/run.invoker on ${serviceName} to serviceAccount:${account} for event trigger ${name}; the deploy identity needs run.services.setIamPolicy`, faultCause(error));
         }
         console.log(`Granted roles/run.invoker on ${serviceName} for event trigger ${name}`);
       }
@@ -277,5 +277,5 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     }
     await main(source ? pathToFileURL(`${resolve(source)}/`) : undefined,
       { preDeploy: mode === "--pre-deploy", postDeploy: mode?.startsWith("--post-deploy"), development: mode === "--post-deploy-development" });
-  } catch (error) { console.error(error.message); process.exitCode = 1; }
+  } catch (error) { console.error(failureText(error)); process.exitCode = 1; }
 }

@@ -8,12 +8,12 @@ import { ComponentReceiptError, assertLegacyPreviewProtocol, readReceipt, requir
 import { extractProductionExports } from "./smoke-cms-functions.mjs";
 import { FUNCTION_DEPLOY_REGION, cloudWakeFunctionPlan, explicitCloudWakeDecision, functionTargets, main as deployFunctions } from "./deploy-cms-function-batches.mjs";
 import { readFunctionsDeployInventory } from "./lib/functions-deploy-inventory.mjs";
-import { providerJson } from "./lib/provider-call.mjs";
+import { faultCause, httpFault, providerJson } from "./lib/provider-call.mjs";
 import { cmsTarget } from "./lib/cms-target.mjs";
 import { applyFunctionRetirements, planFunctionRetirements, requireRetirementScope, validateRetirementPlan } from "./lib/functions-retirement.mjs";
 
 const execute = promisify(execFile);
-const refuse = () => { throw new ComponentReceiptError("Functions retirement original attempt or provider proof is unavailable"); };
+const refuse = options => { throw new ComponentReceiptError("Functions retirement original attempt or provider proof is unavailable", options); };
 
 export function retirementContext(firestore, env = process.env) {
   const sourceSha = requireSha(env.DEPLOY_SHA), trustedWorkflowSha = requireSha(env.GITHUB_SHA);
@@ -66,14 +66,14 @@ export function retirementProvider(scope, readToken, fetchImpl = fetch, launch =
     if (method === "GET") target.searchParams.set("pageSize", "100");
     try {
       const token = await readToken();
-      if (!token || typeof token.access_token !== "string") refuse();
+      if (!token || typeof token.access_token !== "string") throw new Error("no Google access token");
       const send = () => fetchImpl(target, { method, headers: { authorization: `Bearer ${token.access_token}` },
         redirect: "error", signal: AbortSignal.timeout(15000) });
       if (method === "GET") return await providerJson(`Google ${target.pathname}`, send, { wait });
       const response = await send();
-      if (!response.ok) { await response.body?.cancel(); refuse(); }
+      if (!response.ok) { await response.body?.cancel(); throw httpFault(response); }
       return {};
-    } catch { refuse(); }
+    } catch (error) { refuse(faultCause(error)); }
   };
   return {
     listFunctions: () => readFunctionsDeployInventory(scope.projectId, request, { includeMetadata: true }),

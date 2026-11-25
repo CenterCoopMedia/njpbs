@@ -5,7 +5,8 @@
 // for 30 days of releases.
 // Each slice that removes sites runs
 //   node tests/scripts/release-path-files.mjs --write-remaining
-// so the remaining counts only go down. The file goes when it reaches {}.
+// so the remaining counts only go down. The file goes when it reaches {}:
+// https://github.com/CenterCoopMedia/njpbs/issues/651 names each site.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
