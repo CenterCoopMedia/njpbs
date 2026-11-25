@@ -10,9 +10,7 @@ import { openCmsPublicationCloudTokenJournal } from "../../site/scripts/cms-publ
 import * as sourceGuard from "../../site/scripts/cms-publication-runtime-guard";
 
 const load = createRequire(import.meta.url);
-const { assertPublicDeploymentRefusedCloudReleaseBatch, assertPublicDeploymentRetiredCloudReleaseBatch } = load("../../functions/lib/public-deployment.js");
-const { assertMediaLifecycleDeploymentFence } = load("../../functions/lib/public-deployment-pointer.js");
-const { reservePublicBuildBatch } = load("../../functions/lib/public-deployment-coordinator.js");
+const { assertPublicDeploymentRetiredCloudReleaseBatch } = load("../../functions/lib/public-deployment.js");
 const queueId = "3440aaaaaaaaaaaaaaaa", buildBatchId = `cms-${queueId}`;
 const newSha = "a".repeat(40);
 const requestPath = `cmsPublicationSerializerJournals/cloudflare-publisher/releases/${queueId}`;
@@ -172,107 +170,3 @@ it.each([["a provider failure", { status: "reserved" }, async () => { throw Obje
     expect((await journal.read())?.queueId).toBe(queueId);
     expect((await firestore.doc(batchPath).get()).data()).toMatchObject(batch);
   }));
-
-const activeBatchPath = "system/publicDeployment/buildBatches/cms-active";
-const receiptPath = "system/publicDeployment/bootstrapReceipts/fixture";
-paths.push(activeBatchPath, receiptPath);
-
-const lease = { leaseToken: "lease", leaseAcquiredAt: at(1_700_000_000_002) };
-const candidateRow = { [`${batchPath}/candidates/worker`]: { schemaVersion: 1 } };
-const ready = { status: "ready", readyAt: at(1_700_000_000_001) };
-const activePointer = { newestEligibleGeneration: 318, newestEligibleBuildBatchId: "cms-active" };
-type Row = { state: string; batch?: object; pointer?: object; request?: object; rows?: Record<string, object>; settles: boolean; eligibility?: "unchanged" | "none" };
-// Every state of the batch, the active pointer and the request when refused bytes are met.
-const states: Row[] = [
-  { state: "after a normal deploy, batch reserved", pointer: activePointer, settles: true },
-  { state: "after a normal deploy, candidate eligible", batch: ready, rows: candidateRow, settles: true },
-  { state: "after a verified restore gave the active release a new deployment ID, batch reserved", settles: true,
-    pointer: { ...activePointer, activeDeploymentId: "deployment-restored" } },
-  { state: "after a verified restore, candidate eligible", batch: ready, rows: candidateRow, pointer: { activeDeploymentId: "deployment-restored" }, settles: true },
-  { state: "after a restore that did not settle (pointer reconciling)", batch: ready, rows: candidateRow, pointer: { state: "reconciling", leaseToken: "other" }, settles: false },
-  { state: "while another candidate deploys", pointer: { ...activePointer, state: "deploying", leaseToken: "other" }, settles: false },
-  { state: "its own activation is uncertain", batch: { ...ready, status: "reconciling", ...lease }, settles: false },
-  { state: "crash after its lease was acquired", batch: { ...ready, status: "deploying", ...lease }, settles: false },
-  { state: "crash after the media manifest and before the candidate", batch: ready, pointer: activePointer, settles: true },
-  { state: "crash after a claim and before settlement", request: { attempts: 3, failureReason: null }, pointer: activePointer, settles: true },
-  { state: "parked by main, batch ready with a candidate", batch: ready, rows: candidateRow, request: { attempts: 4, nextAttemptAt: null }, settles: true },
-  { state: "parked by main, batch reserved", request: { attempts: 4, nextAttemptAt: null }, pointer: activePointer, settles: true },
-  { state: "a newer candidate is eligible", batch: ready, rows: candidateRow, settles: true,
-    pointer: { lastReservedGeneration: 330, newestEligibleGeneration: 330, newestEligibleBuildBatchId: "cms-newer" } },
-  { state: "the active release cannot be identified", batch: ready, rows: { ...candidateRow, [activeBatchPath]: { status: "deployed", generation: 318, commitSha: newSha }, [receiptPath]: { generation: 318, commitSha: newSha, buildBatchId: "cms-x" } }, settles: true, eligibility: "unchanged" },
-  { state: "initial deployment, nothing active", batch: { ...ready, reservedAgainstGeneration: 0, reservedAgainstCommitSha: null, reservedAgainstDeploymentId: null },
-    rows: candidateRow, pointer: { mediaLifecycleReady: false, activeGeneration: 0, activeCommitSha: null, activeDeploymentId: null }, settles: true, eligibility: "none" },
-  { state: "an earlier candidate failed and is still eligible", settles: true, pointer: { newestEligibleGeneration: 319, newestEligibleBuildBatchId: "cms-failed" } },
-  { state: "media lifecycle closed by a baseline recovery", pointer: { ...activePointer, mediaLifecycleReady: false }, settles: true },
-  { state: "schema-two selector", pointer: { schemaVersion: 2, state: undefined as never }, settles: false },
-  { state: "its generation is not above the active one", pointer: { ...activePointer, activeGeneration: 320, newestEligibleGeneration: 320 }, settles: false },
-];
-// The active release has a deployed batch, or only the receipt of a bootstrap.
-const starts = (["deployed batch", "bootstrap receipt"] as const).flatMap(active => states.map(row => ({ ...row, active })));
-it.each(starts)("refused bytes, $active, $state: settles $settles", async ({ batch, pointer, request, rows, settles, eligibility, active }) => quietly(async () => {
-  const journal = await seedReserved(request);
-  await seed(active === "deployed batch" ? { [activeBatchPath]: { status: "deployed", generation: 318, commitSha: oldSha, deploymentId: "deployment-318" } }
-    : { [receiptPath]: { generation: 318, commitSha: oldSha, buildBatchId: "cms-active" } });
-  const before = { schemaVersion: 1, mediaLifecycleReady: true, state: "idle", activeCommitSha: oldSha, activeGeneration: 318,
-    activeDeploymentId: "deployment-318", lastReservedGeneration: 320, newestEligibleGeneration: 320, newestEligibleBuildBatchId: buildBatchId, ...pointer };
-  if (before.state === undefined) delete (before as { state?: string }).state;
-  await firestore.doc(pointerPath).set(before);
-  if (batch) await firestore.doc(batchPath).update(batch);
-  await seed(rows ?? {});
-  await runRelease(async () => Buffer.from("other bytes"));
-  const after = (await firestore.doc(pointerPath).get()).data()!, stored = (await firestore.doc(batchPath).get()).data()!;
-  const requestRow = (await firestore.doc(requestPath).get()).data()!;
-  expect(after.lastReservedGeneration).toBe(before.lastReservedGeneration);
-  // Every write a second time: the same refused bytes change nothing.
-  const all = async () => Promise.all([requestPath, batchPath, pointerPath, journalPath].map(async name => (await firestore.doc(name).get()).data()));
-  const once = await all();
-  await runRelease(async () => Buffer.from("other bytes"));
-  expect(await all()).toEqual(once);
-  if (!settles) {
-    expect((await journal.read())?.queueId).toBe(queueId);
-    expect(after).toEqual(before);
-    expect(stored.status).toBe((batch as { status?: string })?.status ?? "reserved");
-    expect(requestRow).toMatchObject({ status: "failed" });
-    expect(requestRow.nextAttemptAt).toBeGreaterThan(Date.now());
-    return;
-  }
-  expect(await journal.read()).toBeNull();
-  expect(requestRow).toMatchObject({ status: "failed", nextAttemptAt: null, refusalReceipt: { reason: "cloud_release_input_refused" } });
-  expect(after).toMatchObject(eligibility === "none" ? { newestEligibleGeneration: 0, newestEligibleBuildBatchId: null }
-    : before.newestEligibleBuildBatchId === buildBatchId && eligibility !== "unchanged" ? activePointer
-    : { newestEligibleGeneration: before.newestEligibleGeneration, newestEligibleBuildBatchId: before.newestEligibleBuildBatchId });
-  // The same validators the pause drain applies.
-  const validate = stored.readyAt ? assertPublicDeploymentRefusedCloudReleaseBatch : assertPublicDeploymentRetiredCloudReleaseBatch;
-  expect(validate(stored, buildBatchId)).toEqual(stored);
-  // The counter is ahead, so a prepared release is refused; an ordinary reservation is admitted.
-  expect(() => assertMediaLifecycleDeploymentFence(after)).toThrow();
-  const { batch: next } = await reservePublicBuildBatch({ firestore, buildBatchId: `cms-${nextQueueId}`, commitSha: newSha,
-    runtime: { owner: "cloudflare", release: newSha } });
-  expect(next.generation).toBe(before.lastReservedGeneration + 1);
-  await firestore.doc(pointerPath).update({ activeGeneration: next.generation, activeCommitSha: newSha, activeDeploymentId: "deployment-next",
-    newestEligibleGeneration: next.generation, newestEligibleBuildBatchId: `cms-${nextQueueId}` });
-  if (before.mediaLifecycleReady) expect(assertMediaLifecycleDeploymentFence((await firestore.doc(pointerPath).get()).data()))
-    .toMatchObject({ generation: next.generation });
-}));
-
-it("leaves no journal job behind a request the operator superseded after it was read", async () => {
-  await seed({ ...documents(), [requestPath]: { ...documents()[requestPath], attempts: 1, nextAttemptAt: 0 } });
-  const journal = await openCmsPublicationCloudTokenJournal({ firestore, serializerId: "cloudflare-publisher", runtime: { owner: "cloudflare", release: newSha } });
-  const begin = firestore.runTransaction.bind(firestore);
-  // The operator's supersession commits between the runner's read and its claim.
-  const raced = vi.spyOn(firestore, "runTransaction").mockImplementationOnce(async (...args: Parameters<typeof begin>) => {
-    await firestore.doc(requestPath).update({ status: "superseded", nextAttemptAt: null });
-    await firestore.doc(batchPath).update({ status: "retired" });
-    return begin(...args) as never;
-  });
-  const readInput = vi.fn();
-  try {
-    await runNoBuildCloudRelease({ firestore, serializerId: "cloudflare-publisher", commitSha: newSha, stateDirectory: scratch,
-      cloudflareApiToken: "fixture-token", previewStorageCredential: {} as never, storage: { readInput } as never });
-  } finally { raced.mockRestore(); }
-  expect(readInput).not.toHaveBeenCalled();
-  expect((await firestore.doc(requestPath).get()).data()).toMatchObject({ status: "superseded", nextAttemptAt: null });
-  expect(await journal.read()).toBeNull();
-  const other = "3440cccccccccccccccc";
-  expect((await journal.reserve({ queueId: other, buildBatchId: `cms-${other}`, commitSha: newSha })).job.queueId).toBe(other);
-});

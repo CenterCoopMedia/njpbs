@@ -2154,28 +2154,48 @@ describe("code verification with runtime admission", () => {
 });
 
 // A cloud release whose stored input does not match its sealed digest.
-async function refusedRelease(commitSha) {
-  const queueId = "66666666666666666666", buildBatchId = `cms-${queueId}`, runtime = { owner: "cloudflare", release: commitSha };
+/** A release whose sealed bytes are refused, up to its real reservation or its
+ * real candidate. Its request row is written here: the real writer stages a
+ * complete artifact first. */
+async function refusedRelease(commitSha, queueId = "66666666666666666666") {
+  const buildBatchId = `cms-${queueId}`, runtime = { owner: "cloudflare", release: commitSha };
   const requestRef = db.doc(`cmsPublicationSerializerJournals/cloudflare-publisher/releases/${queueId}`);
   const batchRef = db.doc(`system/publicDeployment/buildBatches/${buildBatchId}`);
   const journal = await openCmsPublicationCloudTokenJournal({ firestore: db, serializerId: "cloudflare-publisher", runtime });
+  const durable = () => Promise.all([requestRef, batchRef, db.doc("system/publicDeployment")].map(async ref => (await ref.get()).data()));
   return { queueId, buildBatchId, due: () => requestRef.update({ nextAttemptAt: 0 }),
-    async seed({ generation }) {
-      const pointer = (await db.doc("system/publicDeployment").get()).data(), time = firebaseAdminRuntime.Timestamp.fromMillis(1_700_000_000_000);
-      await batchRef.set({ schemaVersion: 1, buildBatchId, status: "ready", runtime, commitSha, generation, cutoffAt: time, reservedAt: time, readyAt: time,
-        reservedAgainstGeneration: pointer.activeGeneration, reservedAgainstCommitSha: pointer.activeCommitSha,
-        reservedAgainstDeploymentId: pointer.activeDeploymentId });
+    async stage({ candidate: staged }) {
+      const { batch } = await coordinator.reservePublicBuildBatch({ firestore: db, buildBatchId, commitSha, runtime });
       await requestRef.set({ schemaVersion: 1, queueId, buildBatchId, runtime, commitSha, inputSha256: "c".repeat(64),
         artifactCheckpointDigest: "d".repeat(64), status: "pending", attempts: 0, nextAttemptAt: 0 });
-      await journal.reserve({ queueId, buildBatchId, commitSha });
+      if (!staged) return batch.generation;
+      const inventory = createPublicArtifactInventoryReceipt({ reservation: batch, pages: [], programs: [], authors: [], settings: [], posts: [] });
+      const directory = await mkdtemp(join(tmpdir(), "refused-release-dist-"));
+      returnDirectories.push(directory);
+      await writeFile(join(directory, "index.html"), "<html>Release</html>");
+      const prepared = await preparePublicWorkerArtifact({ artifactReceipt: inventory, distDirectory: directory, outputPath: `${directory}.json` });
+      await rm(`${directory}.json`);
+      const manifest = manifestContract.createPublicMediaManifest({ reservation: batch, owners: inventory.owners,
+        artifactInventory: inventory.families.map(family => ({ collection: family.collection, complete: true, documentIds: family.artifacts.map(artifact => artifact.documentId) })) });
+      await manifestStore.stagePublicMediaManifest({ firestore: db, manifest });
+      await manifestStore.markPublicMediaManifestReady({ firestore: db, manifest });
+      const candidate = { schemaVersion: 1, runtime, ...prepared, workerName: "njpbs-production", workerVersionId: "99999999-9999-4999-8999-999999999999",
+        workerVersionTag: candidateContract.publicWorkerCandidateTag(prepared), versionCreatedOn: "2026-10-09T04:00:00.000Z", wranglerVersion: "4.123.0" };
+      delete candidate.digestAlgorithm;
+      await candidateStore.recordPublicWorkerCandidate({ firestore: db, candidate, runtime });
+      return batch.generation;
     },
     async run() {
       const guarded = vi.spyOn(sourceGuard, "assertCmsPublicationSourceCheckout").mockResolvedValue(undefined);
       const logged = vi.spyOn(console, "error").mockImplementation(() => {});
       const state = await mkdtemp(join(tmpdir(), "refused-release-"));
+      const pass = () => runNoBuildCloudRelease({ firestore: db, serializerId: "cloudflare-publisher", commitSha, stateDirectory: state,
+        cloudflareApiToken: "fixture-token", previewStorageCredential: {}, storage: { readInput: async () => Buffer.from("other") } });
       try {
-        await runNoBuildCloudRelease({ firestore: db, serializerId: "cloudflare-publisher", commitSha, stateDirectory: state,
-          cloudflareApiToken: "fixture-token", previewStorageCredential: {}, storage: { readInput: async () => Buffer.from("other") } });
+        await pass();
+        const once = await durable();
+        await pass(); // The second pass changes nothing.
+        expect(await durable()).toEqual(once);
       } finally { logged.mockRestore(); guarded.mockRestore(); await rm(state, { recursive: true, force: true }); }
       return { job: (await journal.read())?.queueId ?? null, batch: (await batchRef.get()).data().status };
     } };
@@ -2238,7 +2258,9 @@ describe("one-Post static return", () => {
     const ambiguous = await restorePublicWorkerPredecessor({ ...input, requestPublication: async () => "{}" });
     expect(ambiguous.outcome).toBe("reconciling");
     // A restore that did not settle keeps every owner, so a refused release waits.
-    await refused.seed({ generation: 4 });
+    const generation = await refused.stage({ candidate: true });
+    const eligible = { newestEligibleGeneration: generation, newestEligibleBuildBatchId: refused.buildBatchId };
+    expect((await db.doc("system/publicDeployment").get()).data()).toMatchObject({ state: "reconciling", ...eligible });
     expect(await refused.run()).toMatchObject({ job: refused.queueId, batch: "ready" });
     expect((await db.doc("system/publicDeployment").get()).data().runtime).toEqual(runtime);
     const restored = await restorePublicWorkerPredecessor(input);
@@ -2252,13 +2274,18 @@ describe("one-Post static return", () => {
     // The real restore gave the active release a new deployment ID.
     const active = (await db.doc("system/publicDeployment").get()).data();
     expect(active.activeDeploymentId).not.toBe((await fixture.predecessor.batchRef.get()).data().deploymentId);
-    await db.doc("system/publicDeployment").update({ lastReservedGeneration: 4, newestEligibleGeneration: 4,
-      newestEligibleBuildBatchId: refused.buildBatchId });
+    // The restore kept the separately prepared newer candidate.
+    expect(active).toMatchObject(eligible);
     await refused.due();
     expect(await refused.run()).toMatchObject({ job: null, batch: "retired" });
-    expect((await db.doc("system/publicDeployment").get()).data()).toMatchObject({ state: "idle", lastReservedGeneration: 4,
-      newestEligibleGeneration: 2, newestEligibleBuildBatchId: fixture.predecessor.batch.buildBatchId,
-      activeDeploymentId: active.activeDeploymentId });
+    const restoredEligibility = { state: "idle", newestEligibleGeneration: 2,
+      newestEligibleBuildBatchId: fixture.predecessor.batch.buildBatchId, activeDeploymentId: active.activeDeploymentId };
+    expect((await db.doc("system/publicDeployment").get()).data()).toMatchObject({ ...restoredEligibility, lastReservedGeneration: generation });
+    // After the same restore, a release that has only its reservation.
+    const reserved = await refusedRelease(runtime.release, "67676767676767676767");
+    const reservedGeneration = await reserved.stage({ candidate: false });
+    expect(await reserved.run()).toMatchObject({ job: null, batch: "retired" });
+    expect((await db.doc("system/publicDeployment").get()).data()).toMatchObject({ ...restoredEligibility, lastReservedGeneration: reservedGeneration });
   });
 
   it("restores the exact predecessor after context movement and recovers dropped responses before fresh intent", async () => {

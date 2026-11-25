@@ -83,6 +83,22 @@ it("atomically installs OLD and one immutable source-bound receipt, then returns
   const rpc = await serving.readPublicReleaseSelector({ firestore: db, environment: "development" });
   expect(protocol.parsePublicReleaseSelector(rpc.selector).selectedPair.pairId).toBe(currentPair.pairId);
 });
+// A refused cloud release needs an open reservation, so it never meets the schema-two selector.
+it("never installs the selector over an open reservation, and admits no reservation after it", async () => {
+  const runtime = { owner: "cloudflare" as const, release: currentPair.commitSha }, commitSha = currentPair.commitSha;
+  const reserve = (id: string) => coordinator.reservePublicBuildBatch({ firestore: db, buildBatchId: id, commitSha, runtime, target });
+  await run(false);
+  const selected = (await db.doc("system/publicDeployment").get()).data();
+  await expect(reserve("cms-after-the-selector")).rejects.toThrow();
+  expect((await db.doc("system/publicDeployment").get()).data()).toEqual(selected);
+  expect((await db.doc("system/publicDeployment/buildBatches/cms-after-the-selector").get()).exists).toBe(false);
+  await db.recursiveDelete(db.collection("system/publicDeployment/bootstrapSelectors"));
+  await db.doc("system/publicDeployment").set(before);
+  await reserve("cms-before-the-selector");
+  const reserved = (await db.doc("system/publicDeployment").get()).data();
+  await expect(run(false, { operationId: "bootstrap-two", expectedSourceDigest: protocol.publicReleaseDigest(reserved) })).rejects.toThrow();
+  expect((await db.doc("system/publicDeployment").get()).data()).toEqual(reserved);
+});
 it("refuses a mismatched source, unverified provider, unknown root or missing actual guard", async () => {
   await expect(run(false, { expectedSourceDigest: "0".repeat(64) })).rejects.toThrow();
   const base = work.publicReleasePairPath(currentPair.pairId);
