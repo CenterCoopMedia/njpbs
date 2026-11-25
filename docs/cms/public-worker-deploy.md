@@ -74,6 +74,8 @@ any failure reason. It needs both publication phases `paused` at this release, o
 both `ready` at this release while another source is active; it never changes
 them. With a candidate, `--end-exhausted` ends the ready batch as failed, clears
 the job and makes the active release the newest eligible one.
+The next release starts with `--apply`; `--prepare` refuses until that release
+is active, because the ended reservation keeps its generation.
 
 During reconciliation, the read-only CMS diagnostics observer
 (`scripts/cms-diagnostics.mjs --firebase`) checks the candidate bound to the
