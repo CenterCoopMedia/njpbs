@@ -63,7 +63,6 @@ export async function main(args = process.argv.slice(2), environment: NodeJS.Pro
   try {
     const { action, queueId, commitSha, apply } = parsePreparedReleaseArguments(args);
     const target = preparedReleaseTarget(environment);
-    // Shared release records treat an absent target as production.
     // Every release record call names its target, production included.
     const scoped = { target };
     assertProductionFirestoreRouting(environment);

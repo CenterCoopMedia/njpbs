@@ -12,6 +12,10 @@ import mediaDiscovery from "../../functions/lib/media-discovery.js";
 import mediaStore from "../../functions/lib/public-media-manifest-store.js";
 import candidateStore from "../../functions/lib/public-worker-candidate-store.js";
 import { createHash } from "node:crypto";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { stageCmsPublicationCloudRelease } from "../../site/scripts/stage-cms-publication-cloud-release";
 import { runNoBuildCloudRelease } from "../../site/scripts/no-build-cloud-release";
 import { publicationTarget } from "../../functions/lib/publication-target.js";
 const PRODUCTION_TARGET = publicationTarget("production");
@@ -299,6 +303,22 @@ it("atomically changes both OLD-paused pins, reserves the planned generation and
   expect((await db.doc(`cmsPublicationSerializerJournals/cloudflare-publisher/releases/${preparationId}`).get()).data())
     .toMatchObject({ status: "pending", attempts: 0, preparationId, commitSha });
   expect((await db.doc(`system/publicDeployment/buildBatches/cms-${preparationId}/candidates/worker`).get()).exists).toBe(false);
+});
+
+// The operator's own call of the real preparation, for each target.
+it.each(["production", "development"])("freezes the detached %s reservation through the staging command", async environment => {
+  const target = publicationTarget(environment);
+  await db.doc("system/cmsPublicationRuntime").update({ "cloud.serializerId": target.serializerId });
+  const stateDirectory = await mkdtemp(join(tmpdir(), "detached-staging-"));
+  try {
+    // Nothing after the reservation is read: the frozen input read ends the command.
+    await expect(stageCmsPublicationCloudRelease({ firestore: db, queueId: preparationId, commitSha, prepareAgainstCommitSha: oldCommitSha,
+      stateDirectory, buildEnvironment: publicBuildSettings.values, dependencies: { assertSourceCheckout: async () => {} },
+      storage: { assertReady: async () => {}, readInput: async () => { throw new Error("the frozen input is not part of this test"); } },
+      ...(environment === "development" ? { target } : {}) })).rejects.toThrow();
+  } finally { await rm(stateDirectory, { recursive: true, force: true }); }
+  expect((await db.doc(path).get()).exists).toBe(true);
+  expect(await preparation.readPublicReleasePreparation({ target, firestore: db, preparationId, commitSha })).toMatchObject({ generation: 8 });
 });
 
 it("prepares, seals, hands over and promotes a development release on development records only", async () => {

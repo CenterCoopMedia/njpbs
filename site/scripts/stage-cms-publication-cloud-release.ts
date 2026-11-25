@@ -190,7 +190,7 @@ interface StageDependencies {
   reserveBatch: (input: { firestore: Firestore; buildBatchId: string; commitSha: string;
     runtime: { owner: "cloudflare"; release: string } }) => Promise<{ batch: { generation: number; cutoffAt: { toMillis(): number } } }>;
   prepareDetached: (input: { firestore: Firestore; preparationId: string; commitSha: string; oldCommitSha: string;
-    target?: PublicationTarget }) =>
+    target: PublicationTarget }) =>
     Promise<{ generation: number; cutoffAt: { toMillis(): number } }>;
   readContent: (firestore: Firestore, identity: { buildBatchId: string; commitSha: string; preparationId?: string }, scratch: string) => Promise<Buffer>;
   freezeExternalInputs: typeof freezeBackgroundPublicationInputs;
@@ -317,8 +317,6 @@ async function produceCloudRelease({ firestore, storage, queueId, commitSha, sta
     operatorError("The detached release predecessor is invalid");
   }
   const dependencies = { ...defaultDependencies, ...overrides };
-  // Shared release records treat an absent target as production.
-  const scoped = target.environment === "development" ? { target } : {};
   // The build child compiles for the target, so the expected settings follow it.
   const compileTarget = target.environment === "development" ? { CMS_DEPLOYMENT_ENVIRONMENT: target.environment } : {};
   const expectedValues = prepareAgainstCommitSha ? expectedPublicBuildValues(commitSha, { ...buildEnvironment, ...compileTarget }) : undefined;
@@ -352,7 +350,7 @@ async function produceCloudRelease({ firestore, storage, queueId, commitSha, sta
 
   setStage("input freeze");
   const batch = prepareAgainstCommitSha
-    ? await dependencies.prepareDetached({ firestore, preparationId: queueId, commitSha, oldCommitSha: prepareAgainstCommitSha, ...scoped })
+    ? await dependencies.prepareDetached({ firestore, preparationId: queueId, commitSha, oldCommitSha: prepareAgainstCommitSha, target })
     : (await dependencies.reserveBatch({ firestore, buildBatchId, commitSha, runtime })).batch;
   const directory = path.join(stateDirectory, "releases", queueId);
   await rm(directory, { recursive: true, force: true });
@@ -423,7 +421,7 @@ async function produceCloudRelease({ firestore, storage, queueId, commitSha, sta
     const publicBuildSettings = await readPreparedPublicBuildSettings(directory, commitSha, expectedValues!);
     setStage("checkpoint record");
     await dependencies.recordCheckpoint({ firestore, preparationId: queueId, commitSha,
-      inputSha256: identity.inputSha256, artifactCheckpointDigest, preparedArtifact: prepared, publicBuildSettings, ...scoped });
+      inputSha256: identity.inputSha256, artifactCheckpointDigest, preparedArtifact: prepared, publicBuildSettings, target });
     return { queueId, buildBatchId, commitSha, generation: batch.generation, artifactDigest: prepared.artifactDigest,
       artifactCheckpointDigest, status: "prepared" as const };
   }

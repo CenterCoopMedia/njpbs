@@ -25,8 +25,7 @@ export async function sealPreparedCloudRelease({ firestore, storage, queueId, co
   firestore: Firestore; storage: ReturnType<typeof createCmsPublicationCloudStorage>; queueId: string; commitSha: string;
   stateDirectory: string; cloudflareApiToken: string; previewStorageCredential: PreviewStorageCredential;
   buildEnvironment: Record<string, string | undefined>;
-  /** Development only; shared release records treat an absent target as production. */
-  target?: PublicationTarget;
+  target: PublicationTarget;
 }) {
   const expectedValues = expectedPublicBuildValues(commitSha, buildEnvironment);
   await assertCmsPublicationSourceCheckout(commitSha);
@@ -69,7 +68,7 @@ export async function sealPreparedCloudRelease({ firestore, storage, queueId, co
 /** The short paused step reads only small sealed Firestore records. It never
  * restores an artifact, uploads a Worker, or retains preview context. */
 export async function promotePreparedCloudRelease({ firestore, queueId, commitSha, apply = false, target }: {
-  firestore: Firestore; queueId: string; commitSha: string; apply?: boolean; target?: PublicationTarget;
+  firestore: Firestore; queueId: string; commitSha: string; apply?: boolean; target: PublicationTarget;
 }) {
   await assertCmsPublicationSourceCheckout(commitSha);
   return promotePreparedPublicRelease({ firestore, preparationId: queueId, commitSha, apply, target });
