@@ -180,7 +180,8 @@ const origins = {
 type Origin = keyof typeof origins;
 const park = () => db.doc(requestPath).update({ status: "failed", attempts: 4, nextAttemptAt: null });
 const reserveJournal = async () => (await journal()).reserve({ queueId, buildBatchId, commitSha });
-const uncertain = async () => { await settle(await acquire(queueId), { action: "reconcile" }); };
+let lease: unknown;
+const uncertain = async () => { lease = await acquire(queueId); await settle(lease, { action: "reconcile" }); };
 type Row = { state: string; arrange(origin: Origin): Promise<unknown>; settles: boolean; batch: string; only?: Origin;
   /** Where eligibility ends: at the active release, or where it was. */
   eligibility?: "active" | "unchanged"; logs?: string };
@@ -272,6 +273,34 @@ it.each(matrix)("refused bytes, active release with a $origin, $state: settles $
   await activate(admitted, "55555555-5555-4555-8555-555555555555");
   expect(await pointer()).toMatchObject({ activeGeneration: next.generation, mediaLifecycleReady: before.mediaLifecycleReady });
   if (before.mediaLifecycleReady) expect(assertMediaLifecycleDeploymentFence(await pointer())).toMatchObject({ generation: next.generation });
+});
+
+// The batch ends after the attempt read it and before it settles: the pointer is
+// idle again, and only the batch state shows that another owner ended it.
+it.each((Object.keys(origins) as Origin[]).flatMap(origin => [
+  { origin, end: "failed", before: async () => { await stage(); await uncertain(); }, during: async () => {
+    await settle(lease, { action: "terminal-failure", buildBatchId, outcome: "fail" });
+  } },
+  { origin, end: "superseded", before: async () => { await stage(); await stage(nextId); }, during: async () => {
+    expect((await acquirePublicDeploymentLease({ firestore: db, buildBatchId, commitSha, runtime })).outcome).toBe("superseded");
+  } },
+]))("leaves a batch that another owner ended as $end to that owner ($origin)", async ({ origin, end, before, during }) => {
+  await origins[origin]();
+  await before();
+  let ended = false;
+  const readInput = async () => { if (!ended) { ended = true; await during(); } return Buffer.from("other bytes"); };
+  await run({ readInput });
+  const waiting = (await db.doc(requestPath).get()).data()!, pointerAfter = (await pointer())!;
+  expect(pointerAfter.state).toBe("idle");
+  expect((await db.doc(batchPath).get()).data()).toMatchObject({ status: end });
+  expect(waiting.refusalReceipt).toBeUndefined();
+  expect((await (await journal()).read())?.queueId).toBe(queueId);
+  // The next pass takes the batch's own end and frees the journal.
+  await run({ readInput });
+  expect((await db.doc(requestPath).get()).data()).toMatchObject({ status: end, nextAttemptAt: null });
+  expect((await db.doc(requestPath).get()).data()!.refusalReceipt).toBeUndefined();
+  expect(await (await journal()).read()).toBeNull();
+  expect(await pointer()).toEqual(pointerAfter);
 });
 
 it.each(Object.keys(origins) as Origin[])("leaves no journal job behind a request the operator superseded after it was read (%s)", async origin => {

@@ -241,7 +241,7 @@ async function settleRefusedCloudRelease({ firestore, serializerId, commitSha, i
     if (!ownsClaim(current, claim) || current.inputSha256 !== request.inputSha256 ||
         current.artifactCheckpointDigest !== request.artifactCheckpointDigest ||
         job?.queueId !== identity.queueId || job?.claimToken !== claim.claimToken || job?.commitSha !== commitSha ||
-        !["reserved", "ready"].includes(batch.status) || batch.leaseToken !== undefined ||
+        !["reserved", "ready"].includes(batch.status) ||
         pointer.state !== "idle" || pointer.leaseToken != null || pointer.activeGeneration >= batch.generation ||
         pointer.candidateBuildBatchId === identity.buildBatchId) return false;
     const eligible = pointer.newestEligibleBuildBatchId === identity.buildBatchId && pointer.newestEligibleGeneration === batch.generation;
