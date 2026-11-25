@@ -4,6 +4,7 @@
   "workflows": [
     ".github/workflows/admin-ci.yml",
     ".github/workflows/ci.yml",
+    ".github/workflows/cms-deploy.yml",
     ".github/workflows/cms-dev-deploy.yml",
     ".github/workflows/cms-dev-publish.yml",
     ".github/workflows/cms-staging-deploy.yml",
@@ -22,6 +23,7 @@
     ".github/workflows/schedule-bake.yml"
   ],
   "wrangler": [
+    "admin/wrangler.dev.jsonc",
     "admin/wrangler.jsonc",
     "cms-api/wrangler.dev.jsonc",
     "cms-api/wrangler.jsonc",
@@ -1285,6 +1287,7 @@
     {"id":"install-admin-provider","kind":"deploy","sources":["scripts/lib/paired-admin-provider-operation.mjs"],"states":["reserved","issued","fenced","uploaded","failed"]},
     {"id":"install-rehearsal-journal","kind":"deploy","sources":["scripts/lib/rehearsal-installed-journal.mjs"],"states":["initialized","prefix_complete","all_steps_complete","invalid"]},
     {"id":"workflow-cms-deploy","kind":"deploy","sources":[".github/workflows/cms-staging-deploy.yml"],"states":["prechecks","planned","functions_mutating","functions_confirmed","api_mutating","renderer_mutating","admin_upload","smoke_complete","partial_failure"]},
+    {"id":"workflow-cms-deploy-script","kind":"deploy","sources":[".github/workflows/cms-deploy.yml","scripts/deploy-cms.mjs"],"states":["refused","running","all_steps_done","steps_failed"]},
     {"id":"workflow-dev-publish","kind":"deploy","sources":[".github/workflows/cms-dev-publish.yml"],"states":["enabled_preparing","frozen_built","uploading","uncertain","reconciling","settled"]},
     {"id":"workflow-ci","kind":"deploy","sources":[".github/workflows/ci.yml"],"states":["policy","consumers","fallback_all","reused","success","failure","metadata_only"]},
     {"id":"workflow-schedule","kind":"deploy","sources":[".github/scripts/merge-schedule-pr.sh",".github/workflows/schedule-bake.yml"],"states":["unchanged","pr_open","ci_pending","admitted","behind","merged","failed_or_deferred"]},

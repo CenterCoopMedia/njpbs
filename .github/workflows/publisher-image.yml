@@ -1,6 +1,7 @@
 name: Publisher image
 # Production keeps the default title; a development run names its target and source.
-run-name: ${{ inputs.target == 'development' && format('Publisher image development {0}', inputs.sha) || 'Publisher image' }}
+# The release CLI's dispatch ID ends the title, so the CLI finds its run after a lost answer.
+run-name: ${{ inputs.target == 'development' && format('Publisher image development {0}', inputs.sha) || 'Publisher image' }}${{ inputs.release_dispatch_id && format(' [{0}]', inputs.release_dispatch_id) || '' }}
 
 on:
   workflow_dispatch:
@@ -15,6 +16,11 @@ on:
         type: choice
         default: production
         options: [production, development]
+      release_dispatch_id:
+        description: Release CLI correlation ID
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: read

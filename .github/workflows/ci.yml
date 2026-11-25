@@ -127,6 +127,7 @@ jobs:
           scripts/assert-dev-cms-targets.test.mjs
           scripts/cms-debug-browser.test.mjs
           scripts/smoke-signed-in-preview.test.mjs
+          scripts/firebase-provider-limit.test.mjs
           .github/scripts/ensure-panel-browser-deps.test.mjs
           tests/scripts/check-dev-machine-receipt.test.mjs
           tests/scripts/dev-access-guards.test.mjs

@@ -282,6 +282,19 @@ describe("metered-API source scan runs before any scanned code executes", () => 
     }
   });
 
+  it("checks the CMS deploy's owner and commit, then scans, before code or secrets can run", () => {
+    const job = workflowJob(read("../../.github/workflows/cms-deploy.yml"), "deploy");
+    for (const check of ["github.repository_id == vars.CANONICAL_GITHUB_REPOSITORY_ID",
+      "github.triggering_actor == vars.CMS_DEPLOY_OWNER", "github.ref == 'refs/heads/main'"]) expect(job).toContain(check);
+    expect(job).toContain('git merge-base --is-ancestor "$DEPLOY_SHA" "$GITHUB_SHA"');
+    expect(job).toContain("environment: ${{ inputs.target == 'development' && 'development' || 'production' }}");
+    const scan = "run: node .github/scripts/metered-api-scan.mjs";
+    expectOrdered(job, "- name: Require a full commit SHA", "uses: actions/checkout@v7");
+    expectOrdered(job, "- name: Require a commit on main", scan);
+    expectOrdered(job, scan, 'run: node scripts/deploy-cms.mjs "$TARGET"');
+    expect(job.slice(0, job.indexOf(scan))).not.toContain("secrets.");
+  });
+
   it("checks the selected CMS rollback floor before code or secrets can run", () => {
     const adminBuild = workflowJob(cmsStaging, "admin-build");
     const compatibilityCommand =

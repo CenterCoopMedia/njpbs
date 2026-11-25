@@ -204,6 +204,10 @@ test("names the missing wait and where the preview tab settled", async () => {
     ok: false, code: "private_preview_unavailable", missing: ["document"],
     session: { status: 204 }, job: { status: "building" }, document: null, popup: { place: "about:blank", progress: "building" },
   });
+  // A long wait says what it waits for.
+  const said = [];
+  await check({ noDocument: true, job: { status: "building" } }, { previewMs: 100, noteMs: 20, note: text => said.push(text) });
+  assert.match(said[0], /^Still waiting: private_preview_unavailable, \{.*"job":\{"status":"building"\}/);
   // A failed older job alone does not end the wait; Admin's terminal state does, and the receipt names the job error.
   assert.deepEqual(await check({ noDocument: true, job: { status: "failed", error: timeoutText, previewUrl: null },
     progress: "waiting", later: { progress: "error" } }), {

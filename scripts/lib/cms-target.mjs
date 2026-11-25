@@ -31,14 +31,15 @@ export function isDevelopmentHostname(value) {
   return /^[a-z0-9.-]+\.[a-z]{2,}$/i.test(value ?? "") && (first === "dev" || first.startsWith("dev-"));
 }
 
-function devName(env, key) {
-  // config-input: CMS_DEV_API_WORKER, CMS_DEV_PREVIEW_RENDERER, CMS_DEV_ADMIN_PAGES
+export function devName(env, key) {
+  // config-input: CMS_DEV_API_WORKER, CMS_DEV_PREVIEW_RENDERER, CMS_DEV_ADMIN_PAGES, CMS_DEV_STUDIO_BUCKET, CMS_DEV_MEDIA_BUCKET, CMS_DEV_PREVIEW_BUCKET
+  // config-input: CMS_DEV_PREVIEW_STAFF_WORKER, CMS_DEV_PREVIEW_WORKER, CMS_DEV_SITE_PAGES, CLOUDFLARE_DEV_PUBLIC_WORKER
   const value = env[key]?.trim();
   if (!isDevelopmentName(value)) throw new CmsTargetError(`${key} must name a development resource`);
   return value;
 }
-function devOrigin(env, key) {
-  // config-input: CMS_DEV_ADMIN_ORIGIN, CMS_DEV_API_ORIGIN, CMS_DEV_PUBLIC_ORIGIN, CMS_DEV_MEDIA_ORIGIN
+export function devOrigin(env, key) {
+  // config-input: CMS_DEV_ADMIN_ORIGIN, CMS_DEV_API_ORIGIN, CMS_DEV_PUBLIC_ORIGIN, CMS_DEV_MEDIA_ORIGIN, CMS_DEV_PREVIEW_ORIGIN
   const value = env[key]?.trim() ?? "";
   let url;
   try { url = new URL(value); } catch { throw new CmsTargetError(`${key} must be a development origin`); }
@@ -84,6 +85,21 @@ export function assertDevelopmentWorkerConfig(config, { name, hostnames }) {
       hostnames.some(host => !isDevelopmentHostname(host)) || bound.some(value => !isDevelopmentName(value)) ||
       config.vars?.FIREBASE_PROJECT_ID !== undefined && config.vars.FIREBASE_PROJECT_ID !== "njpbs-site-dev") {
     throw new CmsTargetError("The development Worker config names a production resource");
+  }
+  return config;
+}
+
+// Pages takes no --config: it deploys whatever admin/wrangler.jsonc names, and
+// Pages bindings replace the project's own. A development upload may name only
+// its own project and the dev CMS API; any other key or name stops it.
+export function assertDevelopmentPagesConfig(config, { adminPages, cmsApiWorker }) {
+  const service = config?.services?.[0];
+  if (!config || Object.keys(config).sort().join() !== "compatibility_date,name,pages_build_output_dir,services" ||
+      config.name !== adminPages || !isDevelopmentName(adminPages) || config.pages_build_output_dir !== "./dist" ||
+      config.services.length !== 1 || Object.keys(service).sort().join() !== "binding,entrypoint,service" ||
+      service.binding !== "STAFF_ACCESS" || service.service !== cmsApiWorker || !isDevelopmentName(cmsApiWorker) ||
+      service.entrypoint !== "StaffSiteEntrypoint") {
+    throw new CmsTargetError("The development Admin Pages config names a production resource");
   }
   return config;
 }

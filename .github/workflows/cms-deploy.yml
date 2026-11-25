@@ -1,0 +1,96 @@
+name: CMS deploy
+# The release CLI finds its run by this name.
+run-name: CMS deploy [${{ inputs.release_dispatch_id }}]
+
+# Deploys the CMS of one commit on main: docs/cms/deploy.md.
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "CMS to deploy"
+        required: true
+        type: choice
+        options:
+          - development
+          - production
+      ref:
+        description: "Full commit SHA on main to deploy"
+        required: true
+        type: string
+      release_dispatch_id:
+        description: "Release CLI correlation ID"
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+  issues: read
+
+concurrency:
+  group: cms-deploy-${{ inputs.target }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    # Use triggering_actor rather than actor so a collaborator cannot re-run a
+    # deployment started by the owner.
+    if: >-
+      (vars.CANONICAL_GITHUB_REPOSITORY != '' && vars.CANONICAL_GITHUB_REPOSITORY_ID != '' && github.repository == vars.CANONICAL_GITHUB_REPOSITORY && github.repository_id == vars.CANONICAL_GITHUB_REPOSITORY_ID) &&
+      (vars.CMS_DEPLOY_OWNER != '' && github.triggering_actor == vars.CMS_DEPLOY_OWNER) && github.ref == 'refs/heads/main'
+    # The repository holds no secrets: each target reads only its own environment's.
+    environment: ${{ inputs.target == 'development' && 'development' || 'production' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Require a full commit SHA
+        env:
+          DEPLOY_SHA: ${{ inputs.ref }}
+        run: '[[ "$DEPLOY_SHA" =~ ^[a-f0-9]{40}$ ]]'
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Require a commit on main
+        env:
+          DEPLOY_SHA: ${{ inputs.ref }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$DEPLOY_SHA"
+          git merge-base --is-ancestor "$DEPLOY_SHA" "$GITHUB_SHA"
+      - name: Metered-API source scan (before any scanned code runs)
+        run: node .github/scripts/metered-api-scan.mjs
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22.23.5"
+          package-manager-cache: false
+      - name: Deploy the CMS
+        env:
+          TARGET: ${{ inputs.target }}
+          CMS_DEPLOYMENT_VARIABLES_JSON: ${{ toJSON(vars) }}
+          GITHUB_TOKEN: ${{ github.token }}
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CMS_ADMIN_ACCESS_API_TOKEN: ${{ secrets.CMS_ADMIN_ACCESS_API_TOKEN }}
+          CMS_EDGE_ORIGIN_SECRET: ${{ secrets.CMS_EDGE_ORIGIN_SECRET }}
+          CMS_PREVIEW_R2_CREDENTIAL: ${{ secrets.CMS_PREVIEW_R2_CREDENTIAL }}
+          CMS_PREVIEW_SMOKE_CREDENTIAL: ${{ secrets.CMS_PREVIEW_SMOKE_CREDENTIAL }}
+          # The Functions parameters refuse to build without these two.
+          CMS_BUG_REPORT_TELEGRAM_CHAT_ID: ${{ secrets.CMS_BUG_REPORT_TELEGRAM_CHAT_ID }}
+          CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP: ${{ secrets.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP }}
+          CLOUDFLARE_DEV_PAGES_TOKEN: ${{ inputs.target == 'development' && secrets.CLOUDFLARE_DEV_PAGES_TOKEN || '' }}
+          CLOUDFLARE_DEV_PREVIEW_RENDERER_TOKEN: ${{ inputs.target == 'development' && secrets.CLOUDFLARE_DEV_PREVIEW_RENDERER_TOKEN || '' }}
+          CLOUDFLARE_DEV_WORKER_TOKEN: ${{ inputs.target == 'development' && secrets.CLOUDFLARE_DEV_WORKER_TOKEN || '' }}
+          CMS_DEV_ACCESS_CLIENT_ID: ${{ inputs.target == 'development' && secrets.CMS_DEV_ACCESS_CLIENT_ID || '' }}
+          CMS_DEV_ACCESS_CLIENT_SECRET: ${{ inputs.target == 'development' && secrets.CMS_DEV_ACCESS_CLIENT_SECRET || '' }}
+          CMS_DEV_PREVIEW_FIREBASE_ACCOUNT: ${{ inputs.target == 'development' && secrets.CMS_DEV_PREVIEW_FIREBASE_ACCOUNT || '' }}
+          CMS_DEV_PREVIEW_R2_CREDENTIAL: ${{ inputs.target == 'development' && secrets.CMS_DEV_PREVIEW_R2_CREDENTIAL || '' }}
+          # toJSON(vars) adds the repository's variables on development; these two switches stay off there.
+          AUTHOR_PAGES_LIVE: ${{ inputs.target == 'production' && vars.AUTHOR_PAGES_LIVE || 'false' }}
+          VITE_VIDEO_REPLACEMENT_ENABLED: ${{ inputs.target == 'production' && vars.VITE_VIDEO_REPLACEMENT_ENABLED || 'false' }}
+          VITE_CMS_STUDIO_CONFIGURATION: ${{ secrets.VITE_CMS_STUDIO_CONFIGURATION }}
+          VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY || secrets.VITE_FIREBASE_API_KEY }}
+          VITE_FIREBASE_APP_ID: ${{ vars.VITE_FIREBASE_APP_ID || secrets.VITE_FIREBASE_APP_ID }}
+          VITE_FIREBASE_APPCHECK_SITE_KEY: ${{ vars.VITE_FIREBASE_APPCHECK_SITE_KEY || secrets.VITE_FIREBASE_APPCHECK_SITE_KEY }}
+        run: node scripts/deploy-cms.mjs "$TARGET"

@@ -1,11 +1,11 @@
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import { launchCmsBrowser, parseBrowserCredential, submitCmsSignIn } from "./cms-debug-browser.mjs";
+import { editorPath } from "./lib/cms-development-settings.mjs";
 import { developmentInstallAccess } from "./lib/development-install-credentials.mjs";
 import { developmentValues } from "./render-development-config.mjs";
 
 const production = { admin: "https://admin.njpbs.org", preview: "https://preview.njpbs.org" };
-const editorPath = /^\/content\/(?:pages|post)\/[A-Za-z0-9][A-Za-z0-9_-]{0,127}\/edit$/;
 const previewPath = /^\/p\/[A-Za-z0-9]{20}\//;
 
 export function previewSmokeSettings(environment, env) {
@@ -57,12 +57,13 @@ export function abortCode(error) {
 class PreviewSmokeFailure extends Error {}
 
 export async function checkSignedInPreview(browser, { admin, preview, credential, editor, heading, access },
-  { stageMs = STAGE_HANG_BACKSTOP_MS, previewMs = PREVIEW_HANG_BACKSTOP_MS } = {}) {
+  { stageMs = STAGE_HANG_BACKSTOP_MS, previewMs = PREVIEW_HANG_BACKSTOP_MS, noteMs, note = text => console.error(text) } = {}) {
   let phase = "admin_unavailable";
   let popup;
   let watchTab;
   const saw = {};
   const hang = hangBackstop();
+  const notes = noteMs && setInterval(() => note(`Still waiting: ${phase}, ${JSON.stringify(saw)}`), noteMs);
   try {
     const context = await browser.newContext({ serviceWorkers: "block", acceptDownloads: false });
     // Every wait below ends on what the browser, Admin or the preview reports; the backstop only ends a hang.
@@ -181,6 +182,7 @@ export async function checkSignedInPreview(browser, { admin, preview, credential
       popup: await describePopup(popup, { admin, preview }) };
   } finally {
     clearInterval(watchTab);
+    clearInterval(notes);
     hang.clear();
   }
 }
@@ -219,6 +221,9 @@ export const STAGE_HANG_BACKSTOP_MS = 5 * 60_000;
 // PREVIEW_BUILD_TIMEOUT_MS (45 min), and an older job can hold the requested one for the same
 // time first; 95 min is two of those limits and 5 min for Admin to show the result.
 export const PREVIEW_HANG_BACKSTOP_MS = 95 * 60_000;
+// deploy-cms.mjs waits longer (--wait) and prints a line each minute: 30 min past the longest
+// measured smoke for a stage, and 30 min past the limits above for the preview job.
+export const DEPLOY_WAIT = { stageMs: 31 * 60_000, previewMs: 125 * 60_000, noteMs: 60_000 };
 // The errors that the editor shows when its record cannot load (ContentTab.tsx, EditorWorkspace.tsx).
 const editorUnavailable = /(?:do not have permission to edit this (?:page|record)\.|This page is no longer available\.|The (?:page|record) could not be loaded\. Reload to try again\.|Deleted records cannot be edited here\.)/;
 // The reasons the editor gives for a disabled Preview button (EditorWorkspace.tsx), as receipt codes.
@@ -325,7 +330,7 @@ async function main() {
   try {
     const [environment, mode] = process.argv.slice(2);
     if (process.env.DEBUG || process.env.PWDEBUG || process.env.NODE_OPTIONS ||
-        process.argv.length > 4 || (mode !== undefined && mode !== "--check-config")) throw new Error();
+        process.argv.length > 4 || (mode !== undefined && !["--check-config", "--wait"].includes(mode))) throw new Error();
     const settings = previewSmokeSettings(environment, process.env);
     delete process.env.CMS_PREVIEW_SMOKE_CREDENTIAL;
     if (mode === "--check-config") {
@@ -334,7 +339,7 @@ async function main() {
       result = { ok: false, code: "browser_unavailable" };
       const { chromium } = createRequire(import.meta.url)("@playwright/test");
       browser = await launchCmsBrowser(chromium);
-      result = await checkSignedInPreview(browser, settings);
+      result = await checkSignedInPreview(browser, settings, mode === "--wait" ? DEPLOY_WAIT : {});
     }
   } catch { /* Browser errors and settings never enter the smoke receipt. */ }
   finally { await browser?.close().catch(() => {}); }
