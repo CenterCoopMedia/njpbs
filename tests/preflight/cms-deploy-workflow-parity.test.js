@@ -498,7 +498,7 @@ describe("CMS deploy target", () => {
         checked++;
       }
     }
-    expect(checked).toBe(20);
+    expect(checked).toBe(22);
     // Every release-script step takes the dev Access client on dev (preview storage reads and the Worker secret).
     expect(renderer.filter(row => /deploy-cms-preview-cloud\.ts /.test(row.run ?? ""))
       .map(row => [row.env.CMS_DEV_ACCESS_CLIENT_ID, row.env.CMS_DEV_ACCESS_CLIENT_SECRET])).toEqual(Array(4).fill([
