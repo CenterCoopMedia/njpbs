@@ -179,7 +179,9 @@ describe("Data Hub electricity price from an approved dataset release", () => {
     expect(hubElectricityBinding({ ...page(figure), datasetFigures: undefined })).toBeUndefined();
     expect(hubElectricityBinding({ ...page(figure), dataHubCompositionVersion: undefined })).toBeUndefined();
   });
+});
 
+describe("Data Hub electricity credit, layout and refusals", () => {
   it("shows the release's credit on the card, without JavaScript and in every download", async () => {
     const figure = projection();
     const note = `Example <credit> ${"W".repeat(700)}`;
