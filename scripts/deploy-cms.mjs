@@ -2,7 +2,7 @@
 // Deploys the CMS of the checked-out commit: node scripts/deploy-cms.mjs <development|production> [step ...]
 // Every step runs, also after a failed one. The run ends with the list of failed steps.
 import { spawn } from "node:child_process";
-import { chownSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chownSync, copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -26,7 +26,7 @@ env.GITHUB_REPOSITORY ||= env.CANONICAL_GITHUB_REPOSITORY;
 env.VITE_CANONICAL_GITHUB_REPOSITORY ||= env.CANONICAL_GITHUB_REPOSITORY;
 env.WRANGLER_SEND_METRICS = "false";
 
-const { assertDevelopmentWorkerConfig, cmsTarget } = await import("./lib/cms-target.mjs");
+const { assertDevelopmentPagesConfig, assertDevelopmentWorkerConfig, cmsTarget } = await import("./lib/cms-target.mjs");
 const target = cmsTarget();
 const project = target.projectId;
 env.GCLOUD_PROJECT = project; env.GOOGLE_CLOUD_PROJECT = project;
@@ -193,8 +193,16 @@ const steps = {
       VITE_FIREBASE_PROJECT_ID: project, VITE_FIREBASE_AUTH_DOMAIN: `${project}.firebaseapp.com` } });
   },
   async "admin-deploy"() {
-    await npx(["wrangler", "pages", "deploy", "dist", "--project-name", target.adminPages, "--branch", "main", "--commit-hash", sha, "--commit-dirty=true"], { cwd: join(root, "admin"),
-      env: { CLOUDFLARE_API_TOKEN: dev && env.CLOUDFLARE_DEV_PAGES_TOKEN || env.CLOUDFLARE_API_TOKEN } });
+    const config = join(root, "admin/wrangler.jsonc");
+    try {
+      // Pages reads this tracked file from its directory; it names production's bindings.
+      if (dev) {
+        copyFileSync(join(root, "admin/wrangler.dev.jsonc"), config);
+        assertDevelopmentPagesConfig(JSON.parse(readFileSync(config, "utf8")), target);
+      }
+      await npx(["wrangler", "pages", "deploy", "dist", "--project-name", target.adminPages, "--branch", "main", "--commit-hash", sha, "--commit-dirty=true"], { cwd: join(root, "admin"),
+        env: { CLOUDFLARE_API_TOKEN: dev && env.CLOUDFLARE_DEV_PAGES_TOKEN || env.CLOUDFLARE_API_TOKEN } });
+    } finally { if (dev) await run("git", ["checkout", "--", "admin/wrangler.jsonc"]); }
   },
   async "admin-shell"() {
     if (dev) return console.log("The dev Admin stays behind Access");

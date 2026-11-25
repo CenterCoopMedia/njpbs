@@ -87,3 +87,18 @@ export function assertDevelopmentWorkerConfig(config, { name, hostnames }) {
   }
   return config;
 }
+
+// Pages takes no --config: it deploys whatever admin/wrangler.jsonc names, and
+// Pages bindings replace the project's own. A development upload may name only
+// its own project and the dev CMS API; any other key or name stops it.
+export function assertDevelopmentPagesConfig(config, { adminPages, cmsApiWorker }) {
+  const service = config?.services?.[0];
+  if (!config || Object.keys(config).sort().join() !== "compatibility_date,name,pages_build_output_dir,services" ||
+      config.name !== adminPages || !isDevelopmentName(adminPages) || config.pages_build_output_dir !== "./dist" ||
+      config.services.length !== 1 || Object.keys(service).sort().join() !== "binding,entrypoint,service" ||
+      service.binding !== "STAFF_ACCESS" || service.service !== cmsApiWorker || !isDevelopmentName(cmsApiWorker) ||
+      service.entrypoint !== "StaffSiteEntrypoint") {
+    throw new CmsTargetError("The development Admin Pages config names a production resource");
+  }
+  return config;
+}

@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { describe, expect, it, vi } from "vitest";
-import { assertDevelopmentWorkerConfig, cmsTarget, isDevelopmentHostname, isDevelopmentName } from "../../scripts/lib/cms-target.mjs";
+import { assertDevelopmentPagesConfig, assertDevelopmentWorkerConfig, cmsTarget, isDevelopmentHostname, isDevelopmentName } from "../../scripts/lib/cms-target.mjs";
 import { configurationInputs, runtimeParameters } from "../../scripts/lib/functions-configuration.mjs";
 
 const read = path => JSON.parse(readFileSync(new URL(`../../${path}`, import.meta.url), "utf8"));
@@ -54,6 +54,27 @@ describe("development Cloudflare writes", () => {
     ["a workers.dev route", config => ({ ...config, workers_dev: true })],
   ])("refuses a dev CMS API config with %s", (_label, change) => {
     expect(() => assertDevelopmentWorkerConfig(change(read("cms-api/wrangler.dev.jsonc")), api)).toThrow(/production resource/);
+  });
+
+  const pages = { adminPages: "template-dev-admin", cmsApiWorker: "template-dev-cms-api" };
+  it("admits the committed dev Admin Pages config and refuses the production one", () => {
+    const production = JSON.parse(readFileSync(new URL("../../admin/wrangler.jsonc", import.meta.url), "utf8").replace(/^\s*\/\/.*$/gm, ""));
+    expect(production.services[0].service).toBe("njpbs-cms-api");
+    expect(() => assertDevelopmentPagesConfig(read("admin/wrangler.dev.jsonc"), pages)).not.toThrow();
+    expect(() => assertDevelopmentPagesConfig(production, pages)).toThrow(/production resource/);
+    expect(() => assertDevelopmentPagesConfig(production, { adminPages: "njpbs-admin", cmsApiWorker: "njpbs-cms-api" })).toThrow(/production resource/);
+  });
+
+  it.each([
+    ["the production CMS API", config => ({ ...config, services: [{ ...config.services[0], service: "njpbs-cms-api" }] })],
+    ["a second service", config => ({ ...config, services: [...config.services, { binding: "OTHER", service: "njpbs-production", entrypoint: "default" }] })],
+    ["no service", config => ({ ...config, services: [] })],
+    ["the production guide bucket", config => ({ ...config, r2_buckets: [{ binding: "GUIDE_VIDEOS", bucket_name: "njpbs-admin-guide" }] })],
+    ["a production database", config => ({ ...config, d1_databases: [{ binding: "DB", database_id: "production" }] })],
+    ["production settings", config => ({ ...config, env: { production: { services: [{ binding: "STAFF_ACCESS", service: "njpbs-cms-api" }] } } })],
+    ["the production project", config => ({ ...config, name: "njpbs-admin" })],
+  ])("refuses a dev Admin Pages config with %s", (_label, change) => {
+    expect(() => assertDevelopmentPagesConfig(change(read("admin/wrangler.dev.jsonc")), pages)).toThrow(/production resource/);
   });
 
   it("purges only dev media hostnames for a development target", async () => {

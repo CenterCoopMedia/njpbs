@@ -136,6 +136,7 @@
       "kind": "resource",
       "placeholder": "template-dev-admin",
       "files": [
+        "admin/wrangler.dev.jsonc",
         "cms-api/src/index.ts",
         "scripts/assert-dev-cms-targets.mjs",
         "scripts/fixtures/dev-targets.json",
@@ -177,6 +178,7 @@
       "kind": "resource",
       "placeholder": "template-dev-cms-api",
       "files": [
+        "admin/wrangler.dev.jsonc",
         "scripts/lib/cms-public-contract.mjs",
         "cms-api/wrangler.dev.jsonc",
         "functions/lib/public-worker-candidate.js",
