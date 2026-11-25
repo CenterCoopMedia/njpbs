@@ -257,8 +257,8 @@ describe("failed aggregate retry projection contract (#4616)", () => {
         taskPath: `cmsPublishQueue/${operationId}/backgroundOutputs/${output}` };
     }
     docs["cmsBackgroundOutputs/listings"].status = "failed";
-    // The exhausted task shape written by post-background-outputs after #4596:
-    // four attempts, no normal retry, and one transient retry ten minutes later.
+    // The shape the removed four-attempt cap left: no normal retry, and one slow
+    // retry ten minutes later. It resumes there whatever its failure class.
     docs[retryTaskPath] = { schemaVersion: 1, owner: "post-background-v1", output: "listings", revision: 1,
       runtime: cloudRuntime, contextOnly: true, postId: null, contextDigest: digest,
       status: "failed", attempts: 4, claim: null, nextAttemptAt: null, slowRetryAt: NOW,
@@ -304,7 +304,7 @@ describe("failed aggregate retry projection contract (#4616)", () => {
 
   it.each([
     ["timeout", true], ["storage_readback", true], ["lease_lost", true],
-    ["validation", false], ["context_changed", false],
+    ["validation", true], ["context_changed", true],
   ])("matches Node for a due %s failure and projects only bounded retry fields", async (failureClass, expected) => {
     vi.spyOn(Date, "now").mockReturnValue(NOW);
     const { docs, request, taskMasks } = fixture();
@@ -328,12 +328,14 @@ describe("failed aggregate retry projection contract (#4616)", () => {
   });
 
   it.each([
-    ["nonretryable", { lastAttempt: { failureClass: "timeout", retryable: false } }, false],
-    ["missing retry evidence", { lastAttempt: null }, false],
+    ["nonretryable", { lastAttempt: { failureClass: "timeout", retryable: false } }, true],
+    ["missing retry evidence", { lastAttempt: null }, true],
+    ["no retry time", { slowRetryAt: null }, false],
     ["later slow retry", { slowRetryAt: NOW + 1 }, false],
     ["expired final claim", { claim: "00000000-0000-4000-8000-000000000001", nextAttemptAt: NOW, slowRetryAt: null }, true],
     ["live final claim", { claim: "00000000-0000-4000-8000-000000000001", nextAttemptAt: NOW + 1, slowRetryAt: null }, false],
-    ["unclaimed exhaustion", { nextAttemptAt: NOW, slowRetryAt: null }, false],
+    ["unclaimed due attempt", { nextAttemptAt: NOW, slowRetryAt: null }, true],
+    ["unclaimed later attempt", { nextAttemptAt: NOW + 1, slowRetryAt: null }, false],
     ["superseded", { status: "superseded" }, false],
     ["other owner", { runtime: { ...cloudRuntime, owner: "node-compute" } }, false],
     ["other release", { runtime: { ...cloudRuntime, release: "b".repeat(40) } }, false],
