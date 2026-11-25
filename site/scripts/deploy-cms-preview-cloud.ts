@@ -13,7 +13,7 @@ import { parsePreviewStorageCredential } from "./run-cms-preview-serializer";
 import { createCmsPreviewCloudStorage, retainCloudPreviewPublicContext } from "./cms-preview-cloud-storage";
 import { canonicalPublicationReceipt } from "../src/lib/public-publication-receipt";
 import { PUBLICATION_PROBE_ORIGIN, PUBLICATION_PROBE_PATH, requestPublicPublicationReceipt } from "./activate-public-worker-candidate";
-import { PREVIEW_RUNTIME_DOCUMENT, parsePreviewRuntimeControl, pausePreviewRuntime, previewRuntimeDrained } from "./cms-preview-cloud-control";
+import { PREVIEW_RUNTIME_DOCUMENT, openPreviewRuntime, parsePreviewRuntimeControl, pausePreviewRuntime, previewRuntimeDrained } from "./cms-preview-cloud-control";
 export { pausePreviewRuntime, previewRuntimeDrained } from "./cms-preview-cloud-control";
 import { collectLiveIdentities } from "../../scripts/lib/cms-component-receipt.mjs";
 import { identitiesMatch } from "../../scripts/lib/cms-release-plan.mjs";
@@ -112,7 +112,7 @@ export async function readCloudPreviewRollouts(readPage: (query: string) => Prom
   }
 }
 
-/** Ends when the exact renderer attests ready, or when the platform names a
+/** Ends when the exact renderer reports its startup, or when the platform names a
  * failure. No clock ends it: rollout 147480fa completed after 305 s with no
  * errors, where the five before it took 106 to 169 s. */
 export async function waitForCloudPreviewStartup(rendererSha: string, {
@@ -128,10 +128,10 @@ export async function waitForCloudPreviewStartup(rendererSha: string, {
   const report = (state: string) => log(`Preview startup, ${Math.round((now() - started) / 1_000)} s: ${state}`);
   for (;;) {
     const current = parsePreviewRuntimeControl(await readControl());
-    if (current.rendererSha !== rendererSha || current.serializerId !== SERIALIZER || current.phase === "paused") {
+    if (current.rendererSha !== rendererSha || current.serializerId !== SERIALIZER || current.phase !== "starting") {
       throw new Error("Cloud preview release identity changed during startup");
     }
-    if (current.phase === "ready") return;
+    if (current.checkedAt) return;
     let rawRollouts: unknown;
     let application: unknown;
     try {
@@ -217,8 +217,8 @@ export function releaseSecretsFor(rawAccount: string, rawStorage: string, token:
   return secrets;
 }
 
-// Neither wait has a limit of its own: each ends on the state it reads. The
-// hosted job limit ends a hang and a separate workflow job pauses the runtime.
+// Neither wait has a limit of its own: each ends on the state it reads. Both
+// run while admission is paused, so a hang costs runner time and admits nothing.
 async function waitFor(description: string, check: () => Promise<boolean>) {
   const started = Date.now();
   while (!await check()) {
@@ -408,6 +408,7 @@ export async function deployPreviewRuntime({ firestore, rendererSha, token, rawA
     readApplication: async () => cloudflare(token, `/${await resolveStartupId()}`),
     previousRolloutIds,
   });
+  await openPreviewRuntime(firestore, rendererSha, SERIALIZER);
   process.stdout.write(`Cloud preview renderer verified at ${rendererSha}\n`);
 }
 

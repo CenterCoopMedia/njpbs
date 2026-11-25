@@ -43,7 +43,9 @@ Run the coordinated workflow from trusted `main` with the full pinned NEW
    occur in either order: old APIs use cron; an old renderer may reject the
    optional wake. This cannot reopen admission early.
 5. Set runtime `starting`, enable the existing cron, verify exact source/package,
-   sandbox, retained context and pending index, then record `ready` transactionally.
+   sandbox, retained context and pending index. The renderer reports its startup
+   on `starting`; the deploy process alone then records `ready` transactionally.
+   A deploy that ends early leaves `starting`, which admits nothing.
 6. Deploy Admin afterward. Verify live sources, readiness and private serving;
    separately exercise saved Page/Post, media and retained recovery in an
    authorized staff browser.

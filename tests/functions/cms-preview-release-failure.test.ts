@@ -116,6 +116,7 @@ describe("Wrangler failure summaries", () => {
 describe("cloud preview target startup wait", () => {
   const sha = "a".repeat(40);
   const starting = { schemaVersion: 1, rendererSha: sha, serializerId: "cloudflare-preview", phase: "starting" };
+  const reported = { ...starting, checkedAt: "2026-11-25T09:51:07.000Z" };
   const rollout = { id: "current-rollout", created_at: "2026-10-28T09:54:30Z", status: "progressing",
     health: { errors: [], instances: { healthy: 0, active: 0, assigned: 0 } },
     progress: { version_distribution: { target_version_instances: 0, current_version_instances: 0 } } };
@@ -139,7 +140,7 @@ describe("cloud preview target startup wait", () => {
       progress: { version_distribution: { target_version_instances: done() ? 1 : 0, current_version_instances: 0 } } }]);
     deps.readApplication.mockImplementation(async () => ({ id: "application", active_rollout_id: null,
       health: { instances: { healthy: done() ? 1 : 0 } } }));
-    deps.readControl.mockImplementation(async () => deps.now() >= 320_000 ? { ...starting, phase: "ready" } : starting);
+    deps.readControl.mockImplementation(async () => deps.now() >= 320_000 ? reported : starting);
     await expect(waitForCloudPreviewStartup(sha, deps)).resolves.toBeUndefined();
     expect(deps.now()).toBe(320_000);
     expect(deps.log).toHaveBeenCalledTimes(32);
@@ -211,7 +212,7 @@ describe("cloud preview target startup wait", () => {
   it("ignores historical rollout errors and preserves exact ready verification", async () => {
     const stale = { ...rollout, id: "previous-rollout", status: "reverted", health: { errors: [{ event: { name: "VMFailed" } }] } };
     const deps = fixture([stale, rollout]);
-    deps.readControl.mockImplementation(async () => deps.now() >= 120_000 ? { ...starting, phase: "ready" } : starting);
+    deps.readControl.mockImplementation(async () => deps.now() >= 120_000 ? reported : starting);
     await expect(waitForCloudPreviewStartup(sha, { ...deps, previousRolloutIds: [stale.id] })).resolves.toBeUndefined();
     expect(deps.now()).toBe(120_000);
   });
@@ -220,7 +221,7 @@ describe("cloud preview target startup wait", () => {
     const deps = fixture([{ ...rollout, health: { instances: { healthy: 1, active: 0, assigned: 0 } },
       progress: { version_distribution: { target_version_instances: 1, current_version_instances: 0 } } }]);
     deps.readApplication.mockResolvedValue({ id: "application", active_rollout_id: null, health: { instances: { healthy: 1 } } });
-    deps.readControl.mockImplementation(async () => deps.now() >= 240_000 ? { ...starting, phase: "ready" } : starting);
+    deps.readControl.mockImplementation(async () => deps.now() >= 240_000 ? reported : starting);
     await expect(waitForCloudPreviewStartup(sha, deps)).resolves.toBeUndefined();
     expect(deps.now()).toBe(240_000);
   });
@@ -229,7 +230,7 @@ describe("cloud preview target startup wait", () => {
     const deps = fixture([{ ...rollout, progress: { version_distribution: { target_version_instances: 1, current_version_instances: 0 } } }]);
     deps.readApplication.mockImplementation(async () => ({ id: "application", active_rollout_id: null,
       health: { instances: { healthy: deps.now() < 170_000 ? 1 : 0 } } }));
-    deps.readControl.mockImplementation(async () => deps.now() >= 240_000 ? { ...starting, phase: "ready" } : starting);
+    deps.readControl.mockImplementation(async () => deps.now() >= 240_000 ? reported : starting);
     await expect(waitForCloudPreviewStartup(sha, deps)).resolves.toBeUndefined();
     expect(deps.now()).toBe(240_000);
   });
@@ -239,7 +240,7 @@ describe("cloud preview target startup wait", () => {
       progress: { version_distribution: { target_version_instances: 1, current_version_instances: 0 } } }]);
     deps.readApplication.mockImplementation(async () => ({ id: "application", active_rollout_id: null,
       health: { instances: { healthy: deps.now() < 170_000 ? 1 : 0 } } }));
-    deps.readControl.mockImplementation(async () => deps.now() >= 240_000 ? { ...starting, phase: "ready" } : starting);
+    deps.readControl.mockImplementation(async () => deps.now() >= 240_000 ? reported : starting);
     await expect(waitForCloudPreviewStartup(sha, deps)).resolves.toBeUndefined();
     expect(deps.now()).toBe(240_000);
   });
@@ -247,7 +248,7 @@ describe("cloud preview target startup wait", () => {
   it("allows a healthy same-image retry with no new rollout to attest exact ready", async () => {
     const deps = fixture();
     deps.readApplication.mockResolvedValue({ id: "application", active_rollout_id: null, health: { instances: { healthy: 1 } } });
-    deps.readControl.mockImplementation(async () => deps.now() >= 240_000 ? { ...starting, phase: "ready" } : starting);
+    deps.readControl.mockImplementation(async () => deps.now() >= 240_000 ? reported : starting);
     await expect(waitForCloudPreviewStartup(sha, { ...deps, previousRolloutIds: [rollout.id] })).resolves.toBeUndefined();
     expect(deps.now()).toBe(240_000);
   });
@@ -255,7 +256,7 @@ describe("cloud preview target startup wait", () => {
   it("lets a same-image retry recover despite an undated retained error on its active rollout", async () => {
     const deps = fixture([{ ...rollout, health: { errors: [{ event: { name: "VMFailed" } }], instances: { healthy: 0 } } }]);
     deps.readApplication.mockResolvedValue({ id: "application", active_rollout_id: rollout.id, health: { instances: { healthy: 0 } } });
-    deps.readControl.mockImplementation(async () => deps.now() >= 120_000 ? { ...starting, phase: "ready" } : starting);
+    deps.readControl.mockImplementation(async () => deps.now() >= 120_000 ? reported : starting);
     await expect(waitForCloudPreviewStartup(sha, { ...deps, previousRolloutIds: [rollout.id] })).resolves.toBeUndefined();
   });
 
@@ -263,7 +264,7 @@ describe("cloud preview target startup wait", () => {
     const deps = fixture([{ ...rollout, health: { errors: [{ event: { name: "VMFailed" } }], instances: { healthy: 0 } },
       progress: { version_distribution: { target_version_instances: 1, current_version_instances: 0 } } }]);
     deps.readApplication.mockResolvedValue({ id: "application", active_rollout_id: rollout.id, health: { instances: { healthy: 1 } } });
-    deps.readControl.mockImplementation(async () => deps.now() >= 240_000 ? { ...starting, phase: "ready" } : starting);
+    deps.readControl.mockImplementation(async () => deps.now() >= 240_000 ? reported : starting);
     await expect(waitForCloudPreviewStartup(sha, { ...deps, previousRolloutIds: [rollout.id] })).resolves.toBeUndefined();
     expect(deps.now()).toBe(240_000);
   });
@@ -277,7 +278,7 @@ describe("cloud preview target startup wait", () => {
 
   it("waits for first-application cron propagation", async () => {
     const deps = fixture([]);
-    deps.readControl.mockImplementation(async () => deps.now() >= 15 * 60_000 ? { ...starting, phase: "ready" } : starting);
+    deps.readControl.mockImplementation(async () => deps.now() >= 15 * 60_000 ? reported : starting);
     await expect(waitForCloudPreviewStartup(sha, deps)).resolves.toBeUndefined();
     expect(deps.now()).toBe(15 * 60_000);
   });
@@ -292,7 +293,7 @@ describe("cloud preview target startup wait", () => {
   });
 
   it("does not restore ready or wait when control identity changes or admission is paused", async () => {
-    for (const control of [{ ...starting, rendererSha: "b".repeat(40) }, { ...starting, phase: "paused" }]) {
+    for (const control of [{ ...starting, rendererSha: "b".repeat(40) }, { ...starting, phase: "paused" }, { ...starting, phase: "ready" }]) {
       const deps = fixture();
       deps.readControl.mockResolvedValue(control);
       await expect(waitForCloudPreviewStartup(sha, deps)).rejects.toThrow("identity changed");
@@ -303,7 +304,7 @@ describe("cloud preview target startup wait", () => {
   it("tolerates one transient health read failure before the exact renderer attests ready", async () => {
     const deps = fixture();
     deps.readRollouts.mockRejectedValueOnce(new CloudPreviewProviderReadError());
-    deps.readControl.mockImplementation(async () => deps.now() >= 120_000 ? { ...starting, phase: "ready" } : starting);
+    deps.readControl.mockImplementation(async () => deps.now() >= 120_000 ? reported : starting);
     await expect(waitForCloudPreviewStartup(sha, deps)).resolves.toBeUndefined();
     expect(deps.now()).toBe(120_000);
   });
@@ -311,7 +312,7 @@ describe("cloud preview target startup wait", () => {
   it("keeps reading while the provider cannot be read", async () => {
     const deps = fixture();
     deps.readRollouts.mockRejectedValue(new CloudPreviewProviderReadError());
-    deps.readControl.mockImplementation(async () => deps.now() >= 1_800_000 ? { ...starting, phase: "ready" } : starting);
+    deps.readControl.mockImplementation(async () => deps.now() >= 1_800_000 ? reported : starting);
     await expect(waitForCloudPreviewStartup(sha, deps)).resolves.toBeUndefined();
     expect(deps.log).toHaveBeenLastCalledWith("Preview startup, 1790 s: control starting, container state not read");
   });
@@ -327,7 +328,7 @@ describe("cloud preview target startup wait", () => {
       if (deps.now() >= 780_000 && !failed) { failed = true; throw new CloudPreviewProviderReadError(); }
       return [];
     });
-    deps.readControl.mockImplementation(async () => deps.now() >= 900_000 ? { ...starting, phase: "ready" } : starting);
+    deps.readControl.mockImplementation(async () => deps.now() >= 900_000 ? reported : starting);
     await expect(waitForCloudPreviewStartup(sha, deps)).resolves.toBeUndefined();
     expect(failed).toBe(true);
     expect(deps.now()).toBe(900_000);

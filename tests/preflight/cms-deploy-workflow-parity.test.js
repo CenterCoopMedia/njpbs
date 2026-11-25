@@ -153,7 +153,7 @@ describe("Route D Cut A boundary placement", () => {
   const production = parse(deploy), development = parse(read(".github/workflows/cms-dev-deploy.yml"));
   const proof = (steps, boundary) => steps.findIndex(row => row.name === `Verify the singleton public contract at ${boundary}`);
   it("isolates both contract jobs and keeps triggers and production ancestry admission", () => {
-    expect(Object.keys(production.jobs).sort()).toEqual(["admin-build", "verify", "firebase-preflight", "cms-api", "firebase", "preview-renderer", "preview-pause", "admin-contract", "live-smoke", "admin-deploy", "contract-settlement"].sort());
+    expect(Object.keys(production.jobs).sort()).toEqual(["admin-build", "verify", "firebase-preflight", "cms-api", "firebase", "preview-renderer", "admin-contract", "live-smoke", "admin-deploy", "contract-settlement"].sort());
     expect(Object.keys(development.jobs).sort()).toEqual(["deploy"]);
     expect(Object.keys(production.on)).toEqual(["workflow_dispatch"]);
     expect(Object.keys(development.on)).toEqual(["workflow_dispatch"]);
@@ -373,7 +373,7 @@ describe("CMS deploy target", () => {
     expect(workflow.on.workflow_dispatch.inputs.target).toEqual({ description: expect.any(String), required: false,
       default: "production", type: "choice", options: ["production", "development"] });
     const environments = Object.entries(workflow.jobs).filter(([, job]) => job.environment).map(([name]) => name);
-    expect(environments).toHaveLength(11);
+    expect(environments).toHaveLength(10);
     for (const name of environments) expect(workflow.jobs[name].environment).toBe("${{ inputs.target == 'development' && 'development' || 'production' }}");
     expect(Object.fromEntries(["CMS_TARGET", "CMS_TARGET_FIREBASE_PROJECT", "CMS_TARGET_ADMIN_ORIGIN", "CMS_TARGET_API_ORIGIN",
       "CMS_TARGET_PUBLIC_ORIGIN", "CMS_TARGET_MEDIA_ORIGIN", "CMS_TARGET_MEDIA_BUCKET", "CMS_TARGET_ADMIN_PAGES", "CMS_TARGET_RENDER_SCOPE"]

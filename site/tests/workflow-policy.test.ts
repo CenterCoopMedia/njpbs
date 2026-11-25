@@ -656,20 +656,6 @@ describe("cms staging deploy surface", () => {
     }
   });
 
-  it("pauses the preview runtime in its own job when the renderer deploy job does not succeed", () => {
-    const { jobs } = parse(readFileSync(stagingDeployWorkflowPath, "utf8"));
-    const deploys = Object.entries<any>(jobs).filter(([, job]) => job.steps?.some((step: any) => /deploy-cms-preview-cloud\.ts deploy /.test(step.run ?? "")));
-    expect(deploys.map(([name]) => name)).toEqual(["preview-renderer"]);
-    expect(deploys[0][1]["timeout-minutes"]).toBeUndefined();
-    const pause = jobs["preview-pause"];
-    expect(pause.needs).toContain("preview-renderer");
-    expect(pause.if).toContain("always() && (needs.preview-renderer.result == 'failure' || needs.preview-renderer.result == 'cancelled')");
-    expect(pause.if).toContain("needs.firebase-preflight.outputs.preview_paused == 'true'");
-    expect(pause.steps.at(-1).run).toContain('deploy-cms-preview-cloud.ts pause "$RENDERER_SHA"');
-    expect(pause.steps.at(-1).env).toEqual(deploys[0][1].steps.find((step: any) => /deploy-cms-preview-cloud\.ts deploy /.test(step.run ?? "")).env);
-    expect(pause.steps.some((step: any) => step.name === "Require reviewed renderer source")).toBe(true);
-  });
-
   it("writes explicit bootstrap and account-email values without admission lists", () => {
     const stagingDeployWorkflow = readCmsDeployWorkflow();
 

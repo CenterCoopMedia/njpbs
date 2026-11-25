@@ -1807,6 +1807,7 @@ jobs:
       (vars.CMS_DEPLOY_OWNER != '' && github.triggering_actor == vars.CMS_DEPLOY_OWNER) && github.ref == 'refs/heads/main'
     # Wrangler builds the renderer container image and needs a Docker engine.
     runs-on: ubuntu-24.04
+    # Every wait ends on a named state; GitHub's 360-minute job limit only bounds cost.
     steps:
       - uses: actions/checkout@v7
         if: (inputs.target == 'development' || vars.CMS_PREVIEW_CLOUD_ENABLED == 'true')
@@ -1909,79 +1910,6 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           RENDERER_TARGET_SHA: ${{ needs.firebase-preflight.outputs.renderer_target_sha }}
         run: node scripts/component-runner.mjs renderer confirm --source-sha "$RENDERER_TARGET_SHA"
-
-  # A failed or killed renderer deploy cannot pause the runtime itself, and a
-  # renderer that starts afterward would reopen admission. A separate job runs
-  # however that job ended, including at GitHub's 360-minute hosted job limit,
-  # the only bound on its waits: each of them ends on a named state.
-  preview-pause:
-    env:
-      CMS_DEPLOY_OWNER: ${{ vars.CMS_DEPLOY_OWNER }}
-    needs: [admin-build, firebase-preflight, preview-renderer]
-    environment: ${{ inputs.target == 'development' && 'development' || 'production' }}
-    if: >-
-      always() && (needs.preview-renderer.result == 'failure' || needs.preview-renderer.result == 'cancelled') &&
-      needs.firebase-preflight.outputs.preview_paused == 'true' && (inputs.target == 'development' || vars.CMS_PREVIEW_CLOUD_ENABLED == 'true') &&
-      (vars.CANONICAL_GITHUB_REPOSITORY != '' && vars.CANONICAL_GITHUB_REPOSITORY_ID != '' && github.repository == vars.CANONICAL_GITHUB_REPOSITORY && github.repository_id == vars.CANONICAL_GITHUB_REPOSITORY_ID) &&
-      (vars.CMS_DEPLOY_OWNER != '' && github.triggering_actor == vars.CMS_DEPLOY_OWNER) && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          ref: ${{ needs.admin-build.outputs.deploy_sha }}
-          fetch-depth: 0
-          persist-credentials: false
-      - name: Check out trusted release source gate
-        uses: actions/checkout@v7
-        with:
-          ref: ${{ github.sha }}
-          path: .release-gate
-          sparse-checkout-cone-mode: false
-          sparse-checkout: |
-            .github/scripts
-            scripts/render-development-config.mjs
-            config/development-inputs.json
-          persist-credentials: false
-      - name: Isolate trusted release-gate checkout
-        run: |
-          set -euo pipefail
-          mv .release-gate "$RUNNER_TEMP/release-gate"
-          ln -s "$GITHUB_WORKSPACE/node_modules" "$RUNNER_TEMP/release-gate/node_modules"
-      - name: Require reviewed renderer source
-        env:
-          EMERGENCY_RELEASE: ${{ inputs.emergency_release || false }}
-          EMERGENCY_AUTHORIZATION: ${{ inputs.emergency_authorization || '' }}
-        run: node "$RUNNER_TEMP/release-gate"/.github/scripts/require-release-source.mjs
-      - name: Require pinned release and trusted workflow identities
-        env:
-          CMS_RELEASE_CHECKS_SHA: ${{ inputs.deploy_ref }}
-          CMS_TRUSTED_WORKFLOW_SHA: ${{ github.sha }}
-        run: node "$RUNNER_TEMP/release-gate"/.github/scripts/require-cms-release-sources.mjs
-      - name: Metered-API source scan (before any scanned code runs)
-        run: node "$RUNNER_TEMP/release-gate"/.github/scripts/metered-api-scan.mjs --target-root "$GITHUB_WORKSPACE"
-      - name: Render deployment resource configuration
-        run: node "$RUNNER_TEMP/release-gate/scripts/render-development-config.mjs" "${CMS_TARGET_RENDER_SCOPE:?}" --root "$GITHUB_WORKSPACE"
-      - uses: actions/setup-node@v7
-        with:
-          node-version: "22.23.5"
-          package-manager-cache: false
-      - name: Install release dependencies
-        run: |
-          npm ci --ignore-scripts --no-audit --no-fund
-          npm --prefix site ci --ignore-scripts --no-audit --no-fund
-          npm run functions:build --if-present
-      - name: Pause the preview runtime after an unfinished renderer deploy
-        env:
-          CMS_PREVIEW_FIREBASE_ACCOUNT: ${{ inputs.target == 'development' && secrets.CMS_DEV_PREVIEW_FIREBASE_ACCOUNT || inputs.target != 'development' && secrets.FIREBASE_SERVICE_ACCOUNT || '' }}
-          CMS_PREVIEW_R2_CREDENTIAL: ${{ inputs.target == 'development' && secrets.CMS_DEV_PREVIEW_R2_CREDENTIAL || inputs.target != 'development' && secrets.CMS_PREVIEW_R2_CREDENTIAL || '' }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_API_TOKEN: ${{ inputs.target == 'development' && secrets.CLOUDFLARE_DEV_PREVIEW_RENDERER_TOKEN || inputs.target != 'development' && secrets.CLOUDFLARE_API_TOKEN || '' }}
-          CMS_DEV_ACCESS_CLIENT_ID: ${{ inputs.target == 'development' && secrets.CMS_DEV_ACCESS_CLIENT_ID || '' }}
-          CMS_DEV_ACCESS_CLIENT_SECRET: ${{ inputs.target == 'development' && secrets.CMS_DEV_ACCESS_CLIENT_SECRET || '' }}
-          RENDERER_SHA: ${{ needs.admin-build.outputs.deploy_sha }}
-        run: |
-          node --import ./site/node_modules/tsx/dist/loader.mjs \
-            site/scripts/deploy-cms-preview-cloud.ts pause "$RENDERER_SHA"
 
   live-smoke:
     env:
