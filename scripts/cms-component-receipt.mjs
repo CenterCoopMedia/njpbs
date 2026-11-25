@@ -127,6 +127,30 @@ function credential() {
   return parsed;
 }
 
+const RENDERER_CONTROL = "system/cmsPreviewRuntime";
+
+// A complete renderer receipt with a reported control that still says starting
+// is an open that did not happen: the run ended between them. The open follows
+// the receipt and nothing else writes ready, so it is idempotent.
+async function openPendingPreview(firestore, collect = collectLiveIdentities) {
+  const controlRef = firestore.doc(RENDERER_CONTROL);
+  const receiptDoc = firestore.collection("cmsDeploymentReceipts").doc("renderer");
+  const pending = (control, receipt) => control?.phase === "starting" && receipt?.state === "complete"
+    && receipt.mutation?.sourceSha === control.rendererSha;
+  const [control, receipt] = (await Promise.all([controlRef.get(), receiptDoc.get()])).map(row => row.data());
+  if (!pending(control, receipt)) return false;
+  const live = await collect("renderer", { firestore, reportedRendererSha: control.rendererSha });
+  if (!identitiesMatch(live, receipt.mutation.providerIdentities)) fail("The pending renderer differs from its receipt");
+  await firestore.runTransaction(async transaction => {
+    const [now, stored] = [(await transaction.get(controlRef)).data(), (await transaction.get(receiptDoc)).data()];
+    if (!pending(now, stored) || now.rendererSha !== control.rendererSha || now.checkedAt !== control.checkedAt) {
+      fail("Preview admission changed during the open");
+    }
+    transaction.set(controlRef, { ...now, phase: "ready" });
+  });
+  return true;
+}
+
 async function withFirestore(work) {
   const app = getApps()[0] || initializeApp({ credential: cert(credential()), projectId: cmsTarget().projectId });
   try {
@@ -139,6 +163,11 @@ async function withFirestore(work) {
 
 async function main(argv = process.argv.slice(2)) {
   const command = argv[0];
+  if (command === "open-pending") {
+    const opened = await withFirestore(firestore => openPendingPreview(firestore));
+    process.stdout.write(opened ? "Preview admission opened for a complete receipt\n" : "No preview admission is pending\n");
+    return;
+  }
   if (command === "protocol") {
     await withFirestore(assertLegacyCmsWorkflow);
     process.stdout.write("preview_protocol=schema-one\n");
@@ -242,11 +271,11 @@ async function main(argv = process.argv.slice(2)) {
     const identities = optionalArg("--provider-identities", argv) ?? optionalArg("--provider-identities-file", argv);
     const result = await withFirestore(async (firestore) => {
       const providerIdentities = live
-        ? await collectLiveIdentities(component, { firestore, expectedWorkerVersion })
+        ? await collectLiveIdentities(component, { firestore, expectedWorkerVersion, ...(component === "renderer" ? { reportedRendererSha: sourceSha } : {}) })
         : (identities && !identities.trim().startsWith("{")
           ? readFileSync(resolve(identities), "utf8")
           : identities);
-      return completeReceipt(firestore, {
+      const completed = await completeReceipt(firestore, {
         component,
         sourceSha,
         runId,
@@ -255,6 +284,8 @@ async function main(argv = process.argv.slice(2)) {
         configurationFingerprint,
         variablesFingerprint: optionalArg("--variables-fingerprint", argv),
       });
+      if (live && component === "renderer") await openPendingPreview(firestore);
+      return completed;
     });
     process.stdout.write(`${component} receipt ${result.receipt.state}\n`);
     return;
@@ -264,7 +295,7 @@ async function main(argv = process.argv.slice(2)) {
 
 
 
-export { main, recordedIdentityMatchesSource, withFirestore };
+export { main, openPendingPreview, recordedIdentityMatchesSource, withFirestore };
 
 export function selectiveReceiptResumable(receipt, input) {
   const mutation = receipt?.mutation;

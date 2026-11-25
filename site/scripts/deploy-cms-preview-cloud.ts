@@ -13,7 +13,7 @@ import { parsePreviewStorageCredential } from "./run-cms-preview-serializer";
 import { createCmsPreviewCloudStorage, retainCloudPreviewPublicContext } from "./cms-preview-cloud-storage";
 import { canonicalPublicationReceipt } from "../src/lib/public-publication-receipt";
 import { PUBLICATION_PROBE_ORIGIN, PUBLICATION_PROBE_PATH, requestPublicPublicationReceipt } from "./activate-public-worker-candidate";
-import { PREVIEW_RUNTIME_DOCUMENT, openPreviewRuntime, parsePreviewRuntimeControl, pausePreviewRuntime, previewRuntimeDrained } from "./cms-preview-cloud-control";
+import { PREVIEW_RUNTIME_DOCUMENT, parsePreviewRuntimeControl, pausePreviewRuntime, previewRuntimeDrained } from "./cms-preview-cloud-control";
 export { pausePreviewRuntime, previewRuntimeDrained } from "./cms-preview-cloud-control";
 import { collectLiveIdentities } from "../../scripts/lib/cms-component-receipt.mjs";
 import { identitiesMatch } from "../../scripts/lib/cms-release-plan.mjs";
@@ -408,7 +408,6 @@ export async function deployPreviewRuntime({ firestore, rendererSha, token, rawA
     readApplication: async () => cloudflare(token, `/${await resolveStartupId()}`),
     previousRolloutIds,
   });
-  await openPreviewRuntime(firestore, rendererSha, SERIALIZER);
   process.stdout.write(`Cloud preview renderer verified at ${rendererSha}\n`);
 }
 

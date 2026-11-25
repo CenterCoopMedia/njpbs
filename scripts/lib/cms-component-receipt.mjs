@@ -1269,9 +1269,16 @@ export async function collectLiveIdentities(component, deps = {}) {
     if (!firestore) fail("Firestore is required for renderer identities");
     const snapshot = await firestore.doc("system/cmsPreviewRuntime").get();
     const data = snapshot.exists ? snapshot.data() : null;
+    // A renderer receipt is written before admission opens. Only its writer and
+    // the open pass reportedRendererSha. The deploy replaces the whole control
+    // when it sets starting, so a report in it belongs to that deploy.
+    const reported = data?.phase === "starting" && data.schemaVersion === 1
+      && data.rendererSha === deps.reportedRendererSha && typeof data.checkedAt === "string"
+      && data.dataHubCompositionVersion === 1 && data.liveBlogVersion === 1
+      && [1, 2].includes(data.electionResultsVersion);
     if (
       !data
-      || data.phase !== "ready"
+      || (data.phase !== "ready" && !reported)
       || !/^[a-f0-9]{40}$/.test(data.rendererSha ?? "")
       || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/.test(data.serializerId ?? "")
     ) {
@@ -1311,7 +1318,7 @@ export async function collectLiveIdentities(component, deps = {}) {
     if (crons.length !== schedules.length) fail("Renderer Worker schedule identity is invalid");
     return {
       identityVersion: "2",
-      phase: String(data.phase),
+      phase: "ready",
       rendererSha: data.rendererSha,
       serializerId: data.serializerId,
       applicationId: String(application.id),

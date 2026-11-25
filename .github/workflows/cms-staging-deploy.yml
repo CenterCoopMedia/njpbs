@@ -751,6 +751,14 @@ jobs:
         run: node "$RUNNER_TEMP/cms-smoke-gate/scripts/cms-reader-binding.mjs" select
       - name: Require the legacy preview protocol before provider mutations
         run: node scripts/component-runner.mjs functions protocol
+      - name: Open preview admission that an ended run left pending
+        # Trusted main code decides, so an older release source never fails this read.
+        if: (inputs.target == 'development' || vars.CMS_PREVIEW_CLOUD_ENABLED == 'true')
+        env:
+          CMS_PREVIEW_FIREBASE_ACCOUNT: ${{ inputs.target == 'development' && secrets.CMS_DEV_PREVIEW_FIREBASE_ACCOUNT || inputs.target != 'development' && secrets.FIREBASE_SERVICE_ACCOUNT || '' }}
+          CLOUDFLARE_API_TOKEN: ${{ inputs.target == 'development' && secrets.CLOUDFLARE_DEV_PREVIEW_RENDERER_TOKEN || inputs.target != 'development' && secrets.CLOUDFLARE_API_TOKEN || '' }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node "$RUNNER_TEMP/cms-smoke-gate/scripts/component-runner.mjs" renderer open-pending
       - name: Verify the singleton public contract at preflight
         env:
           CMS_DEV_PUBLISH_ENABLED: ${{ inputs.target == 'development' && vars.CMS_DEV_PUBLISH_ENABLED || '' }}

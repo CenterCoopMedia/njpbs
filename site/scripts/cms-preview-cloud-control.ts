@@ -84,8 +84,8 @@ export async function previewRuntimeDrained(firestore: Firestore) {
 }
 
 /** The renderer reports its startup and never opens admission: only
- * openPreviewRuntime turns `starting` into `ready`. A restart of an open
- * runtime refreshes its report, and a paused runtime takes none. */
+ * the renderer receipt step turns `starting` into `ready`, after the receipt. A
+ * restart of an open runtime refreshes its report, and a paused one takes none. */
 export async function confirmPreviewRuntimeReady(firestore: Firestore, rendererSha: string, serializerId: string, timingsMs?: Record<string, number>) {
   const ref = firestore.doc(PREVIEW_RUNTIME_DOCUMENT);
   return firestore.runTransaction(async transaction => {
@@ -114,20 +114,6 @@ export async function confirmPreviewRuntimeReady(firestore: Firestore, rendererS
     // Startup verifies that bundle and renderer before it can attest readiness.
     transaction.set(ref, { ...control, dataHubCompositionVersion: 1, liveBlogVersion: 1, electionResultsVersion: 2, checkedAt: new Date().toISOString(),
       startupTimingsMs: previewTimings(timingsMs) });
-  });
-}
-
-/** The deploy that set `starting` opens admission for its exact renderer, after
- * that renderer's report. A deploy that ended leaves `starting`, which admits nothing. */
-export async function openPreviewRuntime(firestore: Firestore, rendererSha: string, serializerId: string) {
-  const ref = firestore.doc(PREVIEW_RUNTIME_DOCUMENT);
-  await firestore.runTransaction(async transaction => {
-    const control = parsePreviewRuntimeControl((await transaction.get(ref)).data());
-    if (control.phase !== "starting" || control.rendererSha !== rendererSha || control.serializerId !== serializerId ||
-        typeof control.checkedAt !== "string") {
-      throw new Error("Cloud preview release changed during startup");
-    }
-    transaction.set(ref, { ...control, phase: "ready" });
   });
 }
 

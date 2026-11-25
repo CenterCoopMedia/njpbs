@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { expect, it, vi } from "vitest";
 import type { Firestore } from "firebase-admin/firestore";
-import { parsePreviewRuntimeControl, confirmPreviewRuntimeReady, openPreviewRuntime, assertPreviewRuntimeIdentity } from "../scripts/cms-preview-cloud-control";
+import { parsePreviewRuntimeControl, confirmPreviewRuntimeReady, assertPreviewRuntimeIdentity } from "../scripts/cms-preview-cloud-control";
 
 const rendererSha = "a".repeat(40);
 const serializerId = "cloud-preview-primary";
@@ -51,18 +51,6 @@ it("keeps an open runtime open when its renderer restarts", async () => {
   const db = database({ ...control, phase: "ready" });
   await confirmPreviewRuntimeReady(db.firestore, rendererSha, serializerId);
   expect(db.set).toHaveBeenCalledWith(db.ref, expect.objectContaining({ phase: "ready", checkedAt: expect.any(String) }));
-});
-it("opens admission for the exact renderer that reported its startup", async () => {
-  const reported = { ...control, checkedAt: "2026-11-25T09:51:07.000Z" };
-  const db = database(reported);
-  await openPreviewRuntime(db.firestore, rendererSha, serializerId);
-  expect(db.set).toHaveBeenCalledExactlyOnceWith(db.ref, { ...reported, phase: "ready" });
-});
-it.each([{}, { phase: "paused", checkedAt: "x" }, { phase: "ready", checkedAt: "x" },
-  { rendererSha: "b".repeat(40), checkedAt: "x" }, { serializerId: "other", checkedAt: "x" }])("refuses to open admission for %j", async change => {
-  const db = database({ ...control, ...change });
-  await expect(openPreviewRuntime(db.firestore, rendererSha, serializerId)).rejects.toThrow("changed during startup");
-  expect(db.set).not.toHaveBeenCalled();
 });
 it("does not reopen a runtime paused while startup was in progress", async () => {
   const db = database({ ...control, phase: "paused" });

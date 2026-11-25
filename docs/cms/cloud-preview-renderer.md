@@ -44,8 +44,10 @@ Run the coordinated workflow from trusted `main` with the full pinned NEW
    optional wake. This cannot reopen admission early.
 5. Set runtime `starting`, enable the existing cron, verify exact source/package,
    sandbox, retained context and pending index. The renderer reports its startup
-   on `starting`; the deploy process alone then records `ready` transactionally.
-   A deploy that ends early leaves `starting`, which admits nothing.
+   on `starting`. The renderer receipt completes first; the receipt step then
+   opens admission transactionally. A run that ends before the open leaves
+   `starting`, which admits nothing. The next run's preflight opens it when the
+   receipt is complete and the live renderer matches it.
 6. Deploy Admin afterward. Verify live sources, readiness and private serving;
    separately exercise saved Page/Post, media and retained recovery in an
    authorized staff browser.

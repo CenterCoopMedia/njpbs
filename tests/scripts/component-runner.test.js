@@ -22,6 +22,7 @@ describe("component runner", () => {
 
   it.each([
     ["functions", "protocol", "cms-component-receipt.mjs", ["protocol"]],
+    ["renderer", "open-pending", "cms-component-receipt.mjs", ["open-pending"]],
     ["functions", "plan", "cms-release-plan.mjs", []],
     ["functions", "deploy", "retire-cms-functions.mjs", ["deploy"]],
     ["functions", "prepare", "retire-cms-functions.mjs", ["prepare"]],

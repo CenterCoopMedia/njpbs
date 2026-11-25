@@ -17,7 +17,7 @@ import {
   edgeOriginSecretFingerprint,
   startReceipt,
 } from "../../scripts/lib/cms-component-receipt.mjs";
-import { main as receiptCli, recordedIdentityMatchesSource, selectiveReceiptResumable } from "../../scripts/cms-component-receipt.mjs";
+import { main as receiptCli, openPendingPreview, recordedIdentityMatchesSource, selectiveReceiptResumable } from "../../scripts/cms-component-receipt.mjs";
 
 const SOURCE = "a".repeat(40);
 const RENDERER_APP_ID = "11111111-1111-1111-1111-111111111111";
@@ -79,6 +79,70 @@ function readyRendererFirestore(startedAt = "2026-09-20T00:00:00Z", receipt = { 
 function cloudflareResult(result) {
   return { ok: true, json: async () => ({ result }) };
 }
+
+describe("renderer admission order", () => {
+  const REPORT = { schemaVersion: 1, rendererSha: SOURCE, serializerId: "cloudflare-preview", checkedAt: "2026-11-25T09:51:07.000Z",
+    dataHubCompositionVersion: 1, liveBlogVersion: 1, electionResultsVersion: 2 };
+  const identity = { identityVersion: "2", phase: "ready", rendererSha: SOURCE, serializerId: "cloudflare-preview", applicationId: RENDERER_APP_ID,
+    identityFingerprint: "1".repeat(64), workerScript: "njpbs-cms-preview-renderer", workerDeploymentId: "worker-deployment", workerScheduleFingerprint: "2".repeat(64) };
+  const receiptOf = (state, sha = SOURCE) => ({ state, mutation: { sourceSha: sha, providerIdentities: identity } });
+  function database(control, receipt) {
+    const rows = { control, receipt };
+    const ref = name => ({ name, get: async () => ({ data: () => rows[name] }) });
+    return { rows, firestore: { doc: () => ref("control"), collection: () => ({ doc: () => ref("receipt") }),
+      runTransaction: async run => run({ get: async target => ({ data: () => rows[target.name] }),
+        set: (target, value) => { rows[target.name] = value; } }) } };
+  }
+  const collect = async () => identity;
+
+  it("leaves admission closed when a run is killed after it verified and before its receipt", async () => {
+    const db = database({ ...REPORT, phase: "starting" }, receiptOf("in_progress"));
+    expect(await openPendingPreview(db.firestore, collect)).toBe(false);
+    expect(db.rows.control.phase).toBe("starting");
+  });
+
+  it("opens admission after the receipt in the normal order", async () => {
+    const db = database({ ...REPORT, phase: "starting" }, receiptOf("in_progress"));
+    expect(await openPendingPreview(db.firestore, collect)).toBe(false);
+    db.rows.receipt = receiptOf("complete");
+    expect(await openPendingPreview(db.firestore, collect)).toBe(true);
+    expect(db.rows.control.phase).toBe("ready");
+  });
+
+  it("opens only, when a run was killed after its receipt, and is idempotent", async () => {
+    const db = database({ ...REPORT, phase: "starting" }, receiptOf("complete"));
+    expect(await openPendingPreview(db.firestore, collect)).toBe(true);
+    expect(db.rows.control).toEqual({ ...REPORT, phase: "ready" });
+    expect(await openPendingPreview(db.firestore, collect)).toBe(false);
+    expect(db.rows.receipt).toEqual(receiptOf("complete"));
+  });
+
+  it.each([["paused", {}], ["ready", {}], ["starting", { rendererSha: "b".repeat(40) }]])("opens nothing for a %s control %j", async (phase, change) => {
+    const control = { ...REPORT, phase, ...change };
+    const db = database(control, receiptOf("complete"));
+    expect(await openPendingPreview(db.firestore, collect)).toBe(false);
+    expect(db.rows.control).toEqual(control);
+  });
+
+  it("refuses a pending renderer that differs from its receipt", async () => {
+    const db = database({ ...REPORT, phase: "starting" }, receiptOf("complete"));
+    await expect(openPendingPreview(db.firestore, async () => ({ ...identity, applicationId: "other" }))).rejects.toThrow("differs from its receipt");
+    expect(db.rows.control.phase).toBe("starting");
+  });
+
+  it("collects a starting renderer only for the writer that names its sha and only with the full report", async () => {
+    const collectWith = (control, deps) => collectLiveIdentities("renderer", { cloudflareToken: "t", cloudflareAccount: "a",
+      firestore: { ...readyRendererFirestore(), doc: () => ({ get: async () => ({ exists: true, data: () => control }) }) }, ...deps });
+    const starting = { ...REPORT, phase: "starting" };
+    // Past the control check, the missing provider is the failure.
+    await expect(collectWith(starting, { reportedRendererSha: SOURCE, fetchFn: async () => ({ ok: false, status: 403, body: null }) })).rejects.not.toThrow("not ready");
+    for (const [control, sha] of [[starting, undefined], [starting, "b".repeat(40)], [{ ...starting, checkedAt: undefined }, SOURCE],
+      [{ ...starting, electionResultsVersion: undefined }, SOURCE], [{ ...starting, liveBlogVersion: 2 }, SOURCE],
+      [{ ...starting, phase: "paused" }, SOURCE]]) {
+      await expect(collectWith(control, { reportedRendererSha: sha })).rejects.toThrow("Live renderer identity is not ready");
+    }
+  });
+});
 
 describe("cms component receipt contract", () => {
   it("fingerprints API-consumed Admin runtime sources without selecting unrelated Admin edits", async () => {

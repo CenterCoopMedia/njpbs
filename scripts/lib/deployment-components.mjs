@@ -88,6 +88,8 @@ export const DEPLOYMENT_COMPONENTS = Object.freeze(Object.fromEntries(
         verify: { module: "retire-cms-functions.mjs", args: ["verify"] },
         manifest: { module: "smoke-cms-functions.mjs", args: ["--manifest-only", "--index", "functions/index.js"] },
         smoke: { module: "smoke-cms-functions.mjs", args: ["--live-only", "--index", "functions/index.js"] },
+      } : component === "renderer" ? {
+        "open-pending": { module: "cms-component-receipt.mjs", args: ["open-pending"] },
       } : component === "cmsApi" ? {
         plan: { module: "cms-component-receipt.mjs", args: ["plan", "--component", component] },
       } : {}),
