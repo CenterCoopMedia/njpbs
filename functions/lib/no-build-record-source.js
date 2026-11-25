@@ -1,7 +1,7 @@
 "use strict";
 
 const { pagePublicationTarget } = require("./no-build-page-target");
-const { assertPublicDeploymentPointer, assertMediaLifecycleFenceInTransaction } = require("./public-deployment");
+const { assertPublicDeploymentPointer, assertMediaLifecycleFenceInTransaction } = require("./public-deployment-pointer");
 const { readPublicContextRevisionInTransaction, publicContextDigest } = require("./public-context-revision");
 const { validateNoBuildRecordSnapshot, recordSnapshotDigest, validRecordId } = require("./no-build-record-contract");
 const { publiclyVisible } = require("./public-video-references");

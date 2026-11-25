@@ -4,7 +4,7 @@ const { preparePublicReleaseProducerInTransaction, publicContentChange } = requi
 
 const { createHash } = require("node:crypto");
 const { FieldValue } = require("firebase-admin/firestore");
-const { assertPublicDeploymentPointer, assertMediaLifecycleFenceInTransaction, assertPublishedMediaReadiness } = require("./public-deployment");
+const { assertPublicDeploymentPointer, assertMediaLifecycleFenceInTransaction, assertPublishedMediaReadiness } = require("./public-deployment-pointer");
 const { assertPublishedAssetProjection } = require("./published-media-safety");
 const { selectedAssets } = require("./public-content-projection");
 const { mediaReplacementRef } = require("./media-replacement");

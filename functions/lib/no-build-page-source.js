@@ -4,7 +4,7 @@ const { readNoBuildFamilyAdmission, admitsNoBuildPage } = require("./no-build-fa
 const { validateNoBuildPageSnapshot } = require("./no-build-page-contract");
 const { projectPublicPageDocument, publicAssetRequirementsForDocument, PublicContentProjectionError, legacyBlockOnlySnapshot } = require("./public-content-projection");
 const { assertPublishedAssetProjection } = require("./published-media-safety");
-const { assertMediaLifecycleFenceInTransaction } = require("./public-deployment");
+const { assertMediaLifecycleFenceInTransaction } = require("./public-deployment-pointer");
 const { mediaReplacementRef } = require("./media-replacement");
 const { pagePublicationTarget } = require("./no-build-page-target");
 

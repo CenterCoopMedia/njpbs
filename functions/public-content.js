@@ -22,8 +22,7 @@ const {
 const {
   assertPublishedAssetProjection,
 } = require("./lib/published-media-safety");
-const { assertMediaLifecycleFenceInTransaction } = require("./lib/public-deployment");
-const { PublicDeploymentFenceError, readPublicDeploymentPointer } = require("./lib/public-deployment-pointer");
+const { assertMediaLifecycleFenceInTransaction, PublicDeploymentFenceError, readPublicDeploymentPointer } = require("./lib/public-deployment-pointer");
 const {
   acceptsGzip,
   createPublicDecisionCache,

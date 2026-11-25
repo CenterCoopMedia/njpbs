@@ -2,8 +2,7 @@
 
 const { shapeJoinedRecord, joinedAssetIds, pairedAssetPaths, projectPairedAsset } = require("./joined-records");
 const { PublishedMediaSafetyError } = require("./published-media-safety");
-const { assertMediaLifecycleFenceInTransaction } = require("./public-deployment");
-const { PublicDeploymentFenceError } = require("./public-deployment-pointer");
+const { assertMediaLifecycleFenceInTransaction, PublicDeploymentFenceError } = require("./public-deployment-pointer");
 const { mediaReplacementRef } = require("./media-replacement");
 const { selectedAssets } = require("./public-content-projection");
 const { newsletterCardData, projectHomeNewsletterRecord } = require("./home-retained-sources");

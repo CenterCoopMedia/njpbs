@@ -233,4 +233,25 @@ function assertMediaLifecycleDeploymentFence(value) {
   });
 }
 
-module.exports = { PUBLIC_DEPLOYMENT_SCHEMA_VERSION, PublicDeploymentStateError, PublicDeploymentFenceError, assertPublishedMediaReadiness, assertMediaLifecycleDeploymentFence, plainObject, isPublicDeploymentIdentifier, isCommitSha, timestampMillis, hasOnlyFields, validDeploymentReceipt, initialPublicDeploymentPointer, assertPublicDeploymentPointer, readPublicDeploymentPointer };
+// A reservation above the active generation keeps uploaded media closed while it
+// can still go live. One that ended cannot, so it no longer keeps media closed.
+
+const ENDED_RESERVATION_STATUSES = new Set(["failed", "superseded", "cancelled", "retired"]);
+async function assertMediaLifecycleFenceInTransaction({ firestore, transaction = null, pointer: value }) {
+  let pointer;
+  try { pointer = assertPublicDeploymentPointer(value); } catch { throw new PublicDeploymentFenceError(); }
+  const reserved = pointer.lastReservedGeneration - pointer.activeGeneration;
+  if (reserved === 0 || pointer.newestEligibleGeneration !== pointer.activeGeneration) {
+    return assertMediaLifecycleDeploymentFence(pointer);
+  }
+  const query = firestore.collection("system/publicDeployment/buildBatches")
+    .where("generation", ">", pointer.activeGeneration).orderBy("generation");
+  const rows = (await (transaction ? transaction.get(query) : query.get())).docs;
+  if (rows.length !== reserved || rows.some(row => !ENDED_RESERVATION_STATUSES.has(row.get("status")))) {
+    throw new PublicDeploymentFenceError();
+  }
+  return assertMediaLifecycleDeploymentFence({ ...pointer, lastReservedGeneration: pointer.activeGeneration });
+}
+
+module.exports = {
+  assertMediaLifecycleFenceInTransaction, PUBLIC_DEPLOYMENT_SCHEMA_VERSION, PublicDeploymentStateError, PublicDeploymentFenceError, assertPublishedMediaReadiness, assertMediaLifecycleDeploymentFence, plainObject, isPublicDeploymentIdentifier, isCommitSha, timestampMillis, hasOnlyFields, validDeploymentReceipt, initialPublicDeploymentPointer, assertPublicDeploymentPointer, readPublicDeploymentPointer };

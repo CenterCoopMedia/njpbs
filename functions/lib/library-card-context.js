@@ -3,7 +3,7 @@
 const { createHash } = require("node:crypto");
 const { shapeJoinedRecord, joinedAssetIds } = require("./joined-records");
 const { assertPublishedAssetProjection } = require("./published-media-safety");
-const { assertMediaLifecycleFenceInTransaction } = require("./public-deployment");
+const { assertMediaLifecycleFenceInTransaction } = require("./public-deployment-pointer");
 const { selectedAssets } = require("./public-content-projection");
 const { mediaReplacementRef } = require("./media-replacement");
 

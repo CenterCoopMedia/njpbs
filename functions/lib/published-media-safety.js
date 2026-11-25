@@ -11,8 +11,7 @@ const {
 const { isDeepStrictEqual } = require("node:util");
 const { mediaProjection } = require("./media-contract");
 const { PAGE_EDITOR_TEMPLATES, editorTemplateForPage } = require("./public-page-contract");
-const { assertMediaLifecycleFenceInTransaction } = require("./public-deployment");
-const { PublicDeploymentFenceError } = require("./public-deployment-pointer");
+const { assertMediaLifecycleFenceInTransaction, PublicDeploymentFenceError } = require("./public-deployment-pointer");
 const { recordKindHasPublicRoute } = require("./public-record-kinds");
 const { parsePublishInstant } = require("./publish-instant");
 

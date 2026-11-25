@@ -12,8 +12,7 @@ const { parseHomeHero } = require("./home-hero");
 const { mediaProjection } = require("./media-contract");
 const { isMediaAssetId } = require("./media-library");
 const { mediaReplacementRef } = require("./media-replacement");
-const { assertMediaLifecycleFenceInTransaction } = require("./public-deployment");
-const { PublicDeploymentFenceError } = require("./public-deployment-pointer");
+const { assertMediaLifecycleFenceInTransaction, PublicDeploymentFenceError } = require("./public-deployment-pointer");
 const {
   CMS_SETTINGS_SCHEMAS,
   CmsSettingsContractError,

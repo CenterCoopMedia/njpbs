@@ -4,7 +4,7 @@ import { beforeAll, beforeEach, expect, it } from "vitest";
 import { clearEmulatorFirestore, isolatedFirestore } from "../helpers/emulator-firestore.js";
 
 const requireModule = createRequire(import.meta.url);
-const { assertMediaLifecycleFenceInTransaction, PublicDeploymentFenceError } = requireModule("../../functions/lib/public-deployment.js");
+const { assertMediaLifecycleFenceInTransaction, PublicDeploymentFenceError } = requireModule("../../functions/lib/public-deployment-pointer.js");
 const { assertPublishedMediaSafe } = requireModule("../../functions/lib/published-media-safety.js");
 
 let db: Firestore;
