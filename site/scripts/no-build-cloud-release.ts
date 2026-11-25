@@ -89,11 +89,15 @@ export function cloudReleaseFailureReason(stage: CloudReleaseFailureStage, error
   return `${message}${detail && ` (${detail})`}.`.slice(0, 300);
 }
 
+/** A fault of this machine, anywhere in an error's causes: a Node errno. */
+const localFault = (error: unknown): boolean => Boolean(error) && typeof error === "object" &&
+  (/^E[A-Z0-9]+$/.test(String((error as NodeJS.ErrnoException).code ?? "")) || localFault((error as Error).cause));
+
 /** Local read faults keep their error; every other refusal of these exact bytes is final. */
 async function verifyRelease(directory: string, identity: CloudPublicationIdentity) {
   try { return await verifyReleaseBytes(directory, identity); }
   catch (error) {
-    if ((error as NodeJS.ErrnoException)?.code !== undefined) throw error;
+    if (localFault(error)) throw error;
     throw new CloudPublicationBytesRefused((error as Error).message, { cause: error });
   }
 }
@@ -188,15 +192,37 @@ async function materializePreparedRelease(firestore: Firestore, preparationId: s
   await recordPublicWorkerCandidate({ firestore, candidate: retained.candidate, runtime: { owner: "cloudflare", release: commitSha }, target });
 }
 
+/** One attempt's exact hold on its request. Every later write of the attempt
+ * requires it, so a write that landed and lost its answer is not repeated and a
+ * request that another writer ended is never reopened. */
+type ReleaseClaim = { claimToken: string; attempts: number; until: number };
+const ownsClaim = (current: DocumentData, claim: ReleaseClaim) => ["pending", "failed"].includes(current.status) &&
+  current.attempts === claim.attempts && current.nextAttemptAt === claim.until;
+
+/** The eligibility of the active release: none before the first deployment, its
+ * deployed batch, or the bootstrap receipt of a release adopted without one. */
+async function activeEligibility(tx: Transaction, firestore: Firestore, pointer: DocumentData) {
+  const generation = pointer.activeGeneration;
+  if (generation === 0) return { newestEligibleGeneration: 0, newestEligibleBuildBatchId: null };
+  const [batches, receipts] = [await tx.get(firestore.collection("system/publicDeployment/buildBatches")
+    .where("generation", "==", generation).where("status", "==", "deployed").limit(2)),
+  await tx.get(firestore.collection("system/publicDeployment/bootstrapReceipts").where("generation", "==", generation).limit(2))];
+  // A verified restore gives the active release a new deployment ID, which its
+  // batch does not carry. Its generation and commit identify it.
+  const ids = [...batches.docs.map(row => [row.data().commitSha, row.id]), ...receipts.docs.map(row => [row.data().commitSha, row.data().buildBatchId])]
+    .filter(([commitSha]) => commitSha === pointer.activeCommitSha).map(([, id]) => id as string);
+  return new Set(ids).size === 1 ? { newestEligibleGeneration: generation as number, newestEligibleBuildBatchId: ids[0] } : null;
+}
+
 /** Settle a request whose sealed bytes are refused before any activation. The
  * request, its reservation and its own journal job end in one transaction, so
  * a later release can start. An uploaded candidate also loses its eligibility,
  * which returns to the active release. The reservation counter only moves
  * forward, and the publisher pins stay. A batch with a lease or an uncertain
  * activation keeps its owner. */
-async function settleRefusedCloudRelease({ firestore, serializerId, commitSha, identity, request, claimToken, failureReason }: {
+async function settleRefusedCloudRelease({ firestore, serializerId, commitSha, identity, request, claim, failureReason }: {
   firestore: Firestore; serializerId: string; commitSha: string; identity: CloudPublicationIdentity;
-  request: DocumentData; claimToken: string; failureReason: string;
+  request: DocumentData; claim: ReleaseClaim; failureReason: string;
 }) {
   const requestRef = firestore.doc(`${cloudReleaseCollection(serializerId)}/${identity.queueId}`);
   const batchRef = firestore.doc(`system/publicDeployment/buildBatches/${identity.buildBatchId}`);
@@ -207,22 +233,22 @@ async function settleRefusedCloudRelease({ firestore, serializerId, commitSha, i
       pointerRef, batchRef.collection("candidates").doc("worker"),
       firestore.doc(`cmsPublishQueue/${identity.queueId}`), journalRef);
     const current = requestRow.data(), batch = batchRow.data(), pointer = pointerRow.data(), job = journalRow.data()?.job;
+    if (current?.refusalReceipt !== undefined) return true;
     if (!current || !batch || !pointer) return false;
     const runtime = { owner: "cloudflare" as const, release: commitSha };
     assertPublicationOwner(current, runtime);
     assertPublicationOwner(batch, runtime);
-    if (current.status === "deployed" || current.attempts !== request.attempts + 1 || current.inputSha256 !== request.inputSha256 ||
+    if (!ownsClaim(current, claim) || current.inputSha256 !== request.inputSha256 ||
         current.artifactCheckpointDigest !== request.artifactCheckpointDigest ||
-        job?.queueId !== identity.queueId || job?.claimToken !== claimToken || job?.commitSha !== commitSha ||
+        job?.queueId !== identity.queueId || job?.claimToken !== claim.claimToken || job?.commitSha !== commitSha ||
         !["reserved", "ready"].includes(batch.status) || batch.leaseToken !== undefined ||
         pointer.state !== "idle" || pointer.leaseToken != null || pointer.activeGeneration >= batch.generation ||
         pointer.candidateBuildBatchId === identity.buildBatchId) return false;
     const eligible = pointer.newestEligibleBuildBatchId === identity.buildBatchId && pointer.newestEligibleGeneration === batch.generation;
-    const active = eligible ? (await tx.get(firestore.collection("system/publicDeployment/buildBatches")
-      .where("generation", "==", pointer.activeGeneration).where("status", "==", "deployed").limit(2))).docs : [];
-    // A verified restore gives the active release a new deployment ID, which its
-    // batch does not carry. Its generation and commit identify it.
-    if (eligible && (active.length !== 1 || active[0].data().commitSha !== pointer.activeCommitSha)) return false;
+    // An active release that no record identifies cannot hold the journal: the
+    // batch still ends, and its eligibility ends with the next larger generation.
+    const restored = eligible ? await activeEligibility(tx, firestore, pointer) : null;
+    if (eligible && !restored) console.error("release settlement: the active release has no deployed batch or bootstrap receipt; eligibility is unchanged");
     const settledAt = firebaseAdminRuntime.FieldValue.serverTimestamp();
     tx.update(requestRef, { status: "failed", nextAttemptAt: null, failureReason,
       refusalReceipt: { schemaVersion: 1, reason: "cloud_release_input_refused", settledAt } });
@@ -240,8 +266,7 @@ async function settleRefusedCloudRelease({ firestore, serializerId, commitSha, i
           activeGeneration: pointer.activeGeneration, activeCommitSha: pointer.activeCommitSha,
           activeDeploymentId: pointer.activeDeploymentId } });
     }
-    if (eligible) tx.update(pointerRef, { newestEligibleGeneration: pointer.activeGeneration,
-      newestEligibleBuildBatchId: active[0].id, updatedAt: settledAt });
+    if (restored) tx.update(pointerRef, { ...restored, updatedAt: settledAt });
     tx.update(journalRef, { job: null });
     return true;
   });
@@ -299,10 +324,15 @@ export async function runNoBuildCloudRelease({ firestore, storage, serializerId,
     }
     if (!due(current) || current.attempts !== request.attempts) return null;
     reservation.write();
-    tx.update(row.ref, { attempts: current.attempts + 1, nextAttemptAt: Date.now() + 10 * 60_000, failureReason: null });
-    return reservation.job;
+    const claim: ReleaseClaim = { claimToken: reservation.job.claimToken, attempts: current.attempts + 1, until: Date.now() + 10 * 60_000 };
+    tx.update(row.ref, { attempts: claim.attempts, nextAttemptAt: claim.until, failureReason: null });
+    return { ...reservation.job, claim };
   });
   if (!job) return;
+  const writeOwned = (fields: DocumentData) => firestore.runTransaction(async tx => {
+    const current = (await tx.get(row.ref)).data();
+    if (current && ownsClaim(current, job.claim)) tx.update(row.ref, fields);
+  });
   let stage: CloudReleaseFailureStage = "source check";
   try {
     await assertCmsPublicationSourceCheckout(commitSha, sourceGit);
@@ -352,9 +382,9 @@ export async function runNoBuildCloudRelease({ firestore, storage, serializerId,
     if (["deployed", "failed", "superseded"].includes(result.outcome)) {
       const failureReason = result.outcome === "failed" ? cloudReleaseFailureReason(stage) : null;
       if (failureReason) console.error(failureReason);
-      await row.ref.update({ status: result.outcome, nextAttemptAt: null, failureReason });
+      await writeOwned({ status: result.outcome, nextAttemptAt: null, failureReason });
       await journal.clear({ queueId: job.queueId, claimToken: job.claimToken });
-    } else await row.ref.update({ nextAttemptAt: Date.now() + 60_000 });
+    } else await writeOwned({ nextAttemptAt: Date.now() + 60_000 });
   } catch (error) {
     // Keep original ownership and journal after uncertainty. A failed attempt
     // is retried after a backoff with no attempt limit; its reason stays visible.
@@ -362,7 +392,7 @@ export async function runNoBuildCloudRelease({ firestore, storage, serializerId,
     const failureReason = cloudReleaseFailureReason(stage, error);
     console.error(failureReason);
     if (error instanceof CloudPublicationBytesRefused &&
-        await settleRefusedCloudRelease({ firestore, serializerId, commitSha, identity, request, claimToken: job.claimToken, failureReason }).catch(() => false)) return;
-    await row.ref.update({ status: "failed", failureReason, nextAttemptAt: Date.now() + cloudReleaseRetryPause(request.attempts) });
+        await settleRefusedCloudRelease({ firestore, serializerId, commitSha, identity, request, claim: job.claim, failureReason }).catch(() => false)) return;
+    await writeOwned({ status: "failed", failureReason, nextAttemptAt: Date.now() + cloudReleaseRetryPause(request.attempts) });
   }
 }

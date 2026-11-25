@@ -44,8 +44,11 @@ interface ArtifactFileReceipt {
   digest: string;
 }
 
-function invalid(message = "The prepared public Worker artifact is invalid"): never {
-  throw new PublicWorkerArtifactError(message);
+function invalid(message = "The prepared public Worker artifact is invalid", cause?: unknown): never {
+  const error = new PublicWorkerArtifactError(message);
+  // A local read that failed keeps its cause, so it is never read as wrong bytes.
+  if (cause !== undefined) error.cause = cause;
+  throw error;
 }
 
 function compareText(left: string, right: string): number {
@@ -74,14 +77,12 @@ async function hashFile(filePath: string): Promise<{ bytes: number; digest: stri
       after.size !== before.size ||
       after.mtimeMs !== before.mtimeMs
     ) {
-      invalid("The public Worker artifact changed while it was hashed");
+      invalid("The public Worker artifact changed while it was hashed", Object.assign(new Error("changed"), { code: "ESTALE" }));
     }
     return { bytes: before.size, digest: digest.digest("hex") };
   } catch (error) {
     if (error instanceof PublicWorkerArtifactError) throw error;
-    throw new PublicWorkerArtifactError(
-      "The public Worker artifact file could not be hashed",
-    );
+    return invalid("The public Worker artifact file could not be hashed", error);
   } finally {
     await handle?.close().catch(() => {});
   }
@@ -92,14 +93,14 @@ export async function artifactFiles(
   directory = distRoot,
 ): Promise<ArtifactFileReceipt[]> {
   const entries = await readdir(directory, { withFileTypes: true })
-    .catch(() => invalid("The public Worker artifact directory could not be read"));
+    .catch((cause) => invalid("The public Worker artifact directory could not be read", cause));
   entries.sort((left, right) => compareText(left.name, right.name));
   const files: ArtifactFileReceipt[] = [];
   for (const entry of entries) {
     if (directory === distRoot && entry.name === PUBLIC_PUBLICATION_PATH) continue;
     const target = path.join(directory, entry.name);
     const status = await lstat(target)
-      .catch(() => invalid("The public Worker artifact entry could not be read"));
+      .catch((cause) => invalid("The public Worker artifact entry could not be read", cause));
     if (status.isSymbolicLink()) {
       invalid("The public Worker artifact contains a symbolic link");
     }
@@ -234,7 +235,7 @@ export async function verifyPreparedPublicWorkerArtifact({
 }): Promise<PreparedPublicWorkerArtifact> {
   const prepared = assertPreparedPublicWorkerArtifact(preparedArtifact);
   const distRoot = await realpath(distDirectory)
-    .catch(() => invalid("The public Worker artifact directory could not be read"));
+    .catch((cause) => invalid("The public Worker artifact directory could not be read", cause));
   const [content, publication] = await Promise.all([
     artifactContentSummary(distRoot),
     hashFile(path.join(distRoot, PUBLIC_PUBLICATION_PATH)),
