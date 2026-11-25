@@ -1,5 +1,5 @@
 import { createRequire } from "node:module";
-import { faultCause } from "./provider-call.mjs";
+import { faultCause, kindCause } from "./provider-call.mjs";
 
 const pairApi = () => createRequire(import.meta.url)("../../functions/lib/cms-preview-pair.js");
 
@@ -245,7 +245,7 @@ export async function publishPairedAdminManifest(firestore, {
       tx.set(lock, { schemaVersion: 2, state: "complete", operationId, requestDigest: digest(request) });
       return complete;
     });
-  } catch {
+  } catch (error) {
     // The original holder can release its own unused permission here. Other
     // callers require the durable journal reconciliation above.
     const complete = await firestore.runTransaction(async tx => {
@@ -265,7 +265,7 @@ export async function publishPairedAdminManifest(firestore, {
       return null;
     });
     if (complete) return complete;
-    if (permission.mutate && !providerInvoked) throw new Error(`Paired Admin manifest was not uploaded (${stage}); correct the precondition and use a new operation`);
-    throw new Error(`Paired Admin manifest was not confirmed (${stage}); reconcile this operation read-only before another upload`);
+    if (permission.mutate && !providerInvoked) throw new Error(`Paired Admin manifest was not uploaded (${stage}); correct the precondition and use a new operation`, kindCause(error));
+    throw new Error(`Paired Admin manifest was not confirmed (${stage}); reconcile this operation read-only before another upload`, kindCause(error));
   }
 }

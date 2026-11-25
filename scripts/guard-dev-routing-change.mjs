@@ -6,6 +6,7 @@ import { pathToFileURL } from 'node:url';
 import { checkDevAnonymousRefusal, DEV_HOSTS } from './check-dev-anonymous-refusal.mjs';
 import { checkDevMachineReceipt } from './check-dev-machine-receipt.mjs';
 import { verifyGuardedRouteTarget } from './deploy-dev-staff-gateway.mjs';
+import { failureText, faultKind, kindCause } from './lib/provider-call.mjs';
 
 const ACCOUNT = (process.env.CLOUDFLARE_ACCOUNT_ID ?? "");
 const ID = /^[a-f0-9]{32}$/;
@@ -98,7 +99,7 @@ export async function guardDevRoutingChange({ plan, receiptPath, apply = false, 
       const data = await response.json();
       requireState(response.ok && data.success === true, 'Cloudflare request refused');
       return data.result;
-    } catch { throw new GuardError('Cloudflare request failed; inspect the private receipt'); }
+    } catch (error) { throw new GuardError('Cloudflare request failed; inspect the private receipt', kindCause(error)); }
   }
   const zones = await api(`/zones?name=njpbs.org&account.id=${ACCOUNT}`);
   requireState(Array.isArray(zones) && zones.length === 1 && ID.test(zones[0].id) &&
@@ -122,7 +123,7 @@ export async function guardDevRoutingChange({ plan, receiptPath, apply = false, 
         routeId: plan.recordId, owner, versionId: plan.versionId, sourceSha: plan.sourceSha,
         audience: env.DEV_ACCESS_AUDIENCE, expectedRoutes });
       initialRoutes ??= routes;
-    } catch { throw new GuardError('Staged gateway or zone route verification failed; no transfer may be accepted'); }
+    } catch (error) { throw new GuardError('Staged gateway or zone route verification failed; no transfer may be accepted', kindCause(error)); }
   }
   await verifyTarget(before.script);
   const previous = writable(before, plan.kind);
@@ -167,7 +168,7 @@ export async function guardDevRoutingChange({ plan, receiptPath, apply = false, 
     } while (true);
     record('accepted');
     log('Dev change passed the observation window');
-  } catch {
+  } catch (cause) {
     // Ignore cancellation during recovery. A timed-out PUT can still commit
     // after the first restore, so watch and repair drift through a full window.
     const recoveryDeadline = now() + windowMs;
@@ -179,7 +180,7 @@ export async function guardDevRoutingChange({ plan, receiptPath, apply = false, 
       } catch {
         if (now() >= recoveryDeadline) {
           log('RESTORE FAILED: Keep writers held; restore from the private receipt now');
-          throw new GuardError('Dev change failed and restoration is unverified');
+          throw new GuardError('Dev change failed and restoration is unverified', kindCause(cause));
         }
         log('Restore request failed; retrying within the recovery window');
         await wait(Math.min(intervalMs, recoveryDeadline - now()));
@@ -197,10 +198,10 @@ export async function guardDevRoutingChange({ plan, receiptPath, apply = false, 
             await restoreReadback(true);
           } catch {
             log('RESTORE FAILED: Keep writers held; restore from the private receipt now');
-            throw new GuardError('Dev change failed and restoration is unverified');
+            throw new GuardError('Dev change failed and restoration is unverified', kindCause(cause));
           }
           log('RESTORED BUT PROOF FAILED: Keep writers held; escalate the dev access failure');
-          throw new GuardError('Dev record restored but HTTP verification failed');
+          throw new GuardError('Dev record restored but HTTP verification failed', kindCause(cause));
         }
         log('Restored record proof failed; recovery remains active');
         await wait(Math.min(intervalMs, recoveryDeadline - now()));
@@ -227,8 +228,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       apply: apply === '--apply', signal: controller.signal });
   } catch (error) {
     // Parser, transport and filesystem errors may quote input or credentials.
-    console.error(error instanceof GuardError ? error.message :
-      'Dev routing guard failed; check the safe status lines and private receipt');
+    console.error(error instanceof GuardError ? failureText(error) :
+      `Dev routing guard failed (${faultKind(error)}); check the safe status lines and private receipt`);
     process.exitCode = 1;
   } finally {
     process.off('SIGINT', stop);

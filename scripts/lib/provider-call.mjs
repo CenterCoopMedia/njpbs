@@ -168,7 +168,8 @@ export function faultLine(error) {
 export function faultKind(error) {
   const status = httpStatus(error);
   if (status !== undefined) return `HTTP ${status}`;
-  if (/^[A-Z][A-Z0-9_]{2,40}$/.test(error?.code ?? "")) return error.code;
+  // ENOENT, provider-http-refused, auth/invalid-credential.
+  if (/^[A-Za-z][A-Za-z0-9_-]{1,40}(?:\/[a-z-]{1,40})?$/.test(error?.code ?? "")) return error.code;
   if (Number.isInteger(error?.code)) return `code ${error.code}`;
   if (isChildFault(error) && Number.isInteger(error.status)) return `exit ${error.status}`;
   return [error?.name, error?.constructor?.name].find(value => /^[A-Za-z]{1,40}$/.test(value ?? "")) ?? "none";

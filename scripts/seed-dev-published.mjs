@@ -28,6 +28,7 @@ import { isPublishable } from '../packages/content-core/src/publish-gate.ts';
 import { assertContextMatchesPublication } from '../site/src/lib/retained-public-context.ts';
 import { canonicalPublicationReceipt } from '../site/src/lib/public-publication-receipt.ts';
 import { PAGE_SEED_MEDIA } from './backfill-page-seed-media.mjs';
+import { failureText, faultKind, kindCause } from './lib/provider-call.mjs';
 
 export const SOURCE = 'njpbs-site';
 export const DESTINATION = 'njpbs-site-dev';
@@ -67,7 +68,7 @@ export function canonical(value) {
 export const digest = value => createHash('sha256').update(canonical(value)).digest('hex');
 const pick = (value, keys) => Object.fromEntries(keys.filter(key => value?.[key] !== undefined).map(key => [key, value[key]]));
 class SeedError extends Error {}
-const fail = message => { throw new SeedError(message); };
+const fail = (message, options) => { throw new SeedError(message, options); };
 function instant(value) {
   if (typeof value !== 'string' || !Number.isFinite(Date.parse(value))) fail('Invalid seed timestamp');
   return new Date(value).toISOString();
@@ -194,7 +195,7 @@ function publicAuthor(id, value) {
 }
 export function assertPublicMediaUrl(value) {
   let url;
-  try { url = new URL(value); } catch { fail('Invalid public media URL'); }
+  try { url = new URL(value); } catch (error) { fail('Invalid public media URL', kindCause(error)); }
   // The source is always production, even when the operator runs in a dev shell.
   const hosts = publicAssetHosts.production;
   const admittedPath = (hosts.media.includes(url.hostname) && url.pathname.startsWith('/cms-media/')) ||
@@ -312,7 +313,7 @@ function projectAt(collection, id, project) {
   try { return project(); }
   catch (error) {
     if (error instanceof SeedError) throw error;
-    fail(`Invalid published contract: ${collection}/${id}`);
+    fail(`Invalid published contract: ${collection}/${id}`, kindCause(error));
   }
 }
 function finishManifest(body) {
@@ -873,7 +874,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
   main().catch(error => {
     // Only messages authored here can be printed. SDK, JSON and credential errors
     // can embed request bodies or credential input and must remain suppressed.
-    console.error(error instanceof SeedError ? `Dev seed refused: ${error.message}` : 'Dev seed failed: Contract, credential input or transport error. No payload was logged.');
+    console.error(error instanceof SeedError ? `Dev seed refused: ${failureText(error)}` : `Dev seed failed: Contract, credential input or transport error (${faultKind(error)}). No payload was logged.`);
     process.exitCode = 1;
   });
 }
