@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { createRequire } from "node:module";
 import { readFileSync } from "node:fs";
 import { parse } from "yaml";
-import { FUNCTION_RUNTIME_VARIABLES, functionsForRuntimeComparison, runtimeParametersMatch, boundSecretVersionsCurrent, boundSecretVersionChanges, runtimeParameterChanges, CMS_RELEASE_SECRET_NAMES, deploymentSecretsUnchanged, deploymentVariablesFingerprint, cloudWakeConfigurationFingerprint, decideRelease, explicitCloudWakeDecision, fingerprintExecutionSource, fingerprintFunctionsRenderSource, identitiesMatch, planCmsApiRelease, componentReceiptRunCompleted, CLOUD_WAKE_FUNCTIONS, READER_FUNCTIONS, adminRevisionChanges, omittedFunctionNames, withoutFunctions } from "../../scripts/lib/cms-release-plan.mjs";
+import { FUNCTION_RUNTIME_VARIABLES, functionsForRuntimeComparison, runtimeParametersMatch, boundSecretVersionsCurrent, boundSecretVersionChanges, runtimeParameterChanges, CMS_RELEASE_SECRET_NAMES, deploymentSecretsUnchanged, deploymentVariablesFingerprint, cloudWakeConfigurationFingerprint, decideRelease, rendererSourceProof, explicitCloudWakeDecision, fingerprintExecutionSource, fingerprintFunctionsRenderSource, identitiesMatch, planCmsApiRelease, componentReceiptRunCompleted, CLOUD_WAKE_FUNCTIONS, READER_FUNCTIONS, adminRevisionChanges, omittedFunctionNames, withoutFunctions } from "../../scripts/lib/cms-release-plan.mjs";
 import { releasePlanOutputLines, desiredRuntimeParameters } from "../../scripts/cms-release-plan.mjs";
 
 const SHA = "a".repeat(40);
@@ -434,18 +434,58 @@ describe("stopped component receipt recovery", () => {
     expect(request.signal).toBeInstanceOf(AbortSignal);
   });
 
-  it.each(["success", "failure", "cancelled", "timed_out"])("releases both sides after a %s renderer run", async conclusion => {
+  const stale = () => ({ ...eligible(), rendererReceipt: { ...receipt, lastComplete: completeReceipt("renderer").mutation },
+    // A paused renderer has no live identity.
+    rendererRunCompleted: true, liveRendererIdentities: null });
+
+  it.each(["success", "failure", "cancelled", "timed_out"])("repeats the renderer rollout after a %s renderer run", async conclusion => {
     const rendererRunCompleted = await componentReceiptRunCompleted(receipt, {
       ...options, fetchImpl: response({ ...completedRun, conclusion }),
     });
     expect(rendererRunCompleted).toBe(true);
-    expect(decideRelease({
-      functionGraph: GRAPH, deploySha: OTHER, rendererGraphAvailable: true,
-      functionsReceipt: completeReceipt("functions"), rendererReceipt: receipt, rendererRunCompleted,
-    })).toMatchObject({
-      abort: false, functionsMutated: true, previewPaused: true, configurationRequiresRelease: true,
-      rendererTargetSha: null, liveFunctionsSha: SHA, releaseReason: "stale_renderer_receipt",
+    expect(decideRelease({ ...stale(), rendererRunCompleted })).toMatchObject({
+      abort: false, functionsMutated: true, previewPaused: true, previewPauseLate: true, configurationRequiresRelease: false,
+      rendererTargetSha: OTHER, liveFunctionsSha: SHA, releaseReason: "stale_renderer_receipt",
+      functionDeployTargets: "functions:cmsPreview,functions:cmsPreviewStatus", functionsBeforePreview: "",
     });
+  });
+
+  it("selects the renderer alone when the complete Functions receipt already pins this commit", () => {
+    const input = stale();
+    Object.assign(input.functionsReceipt.mutation, { sourceSha: OTHER, previewRendererSha: OTHER });
+    expect(decideRelease(input)).toMatchObject({
+      functionsMutated: false, functionDeployTargets: "", previewPaused: true, rendererTargetSha: OTHER,
+      liveFunctionsSha: OTHER, releaseReason: "stale_renderer_receipt", configurationRequiresRelease: false,
+    });
+  });
+
+  it.each([
+    ["no complete renderer to return to", input => { input.rendererReceipt.lastComplete = null; }, "stale_renderer_receipt"],
+    ["an unfinished Functions receipt", input => {
+      Object.assign(input.functionsReceipt, { state: "in_progress", lastComplete: input.functionsReceipt.mutation });
+      input.functionsRunCompleted = true;
+    }, "stale_functions_receipt"],
+    ["no Functions receipt", input => { input.functionsReceipt = null; }, "missing_functions_receipt"],
+    ["other live Functions", input => { input.liveFunctionsIdentities = null; }, "live_functions_identity_mismatch"],
+    ["an unknown renderer graph", input => { input.rendererGraphAvailable = false; }, "renderer_graph_unavailable"],
+    ["a changed configuration", input => { input.configurationFingerprint = null; }, "functions_configuration_changed"],
+  ])("keeps the full release for a stale renderer receipt with %s", (_label, change, releaseReason) => {
+    const input = stale();
+    change(input);
+    expect(decideRelease(input)).toMatchObject({ functionsMutated: true, functionDeployTargets: "all", previewPaused: true, releaseReason });
+  });
+
+  it("compares renderer sources, not the stored bytes, only after the receipt reproduces", () => {
+    const graph = fields => ({ fingerprint: "1".repeat(64), sourceFingerprint: "2".repeat(64), ...fields });
+    const target = graph({ fingerprint: "3".repeat(64) });
+    expect(rendererSourceProof(graph(), target, "1".repeat(64))).toBe(true);
+    expect(rendererSourceProof(graph(), graph({ sourceFingerprint: "4".repeat(64) }), "1".repeat(64))).toBe(false);
+    expect(rendererSourceProof(graph(), target, "5".repeat(64))).toBe(false);
+    expect(rendererSourceProof(null, target, "1".repeat(64))).toBe(false);
+    expect(rendererSourceProof(graph(), null, "1".repeat(64))).toBe(false);
+    const input = { ...eligible(), rendererFingerprint: "9".repeat(64) };
+    expect(decideRelease({ ...input, rendererSourceMatches: true })).toMatchObject({ functionsMutated: false, previewPaused: false, releaseReason: "unchanged" });
+    expect(decideRelease({ ...input, rendererSourceMatches: false })).toMatchObject({ previewPaused: true, releaseReason: "renderer_inputs_changed" });
   });
 
   it.each([

@@ -24,6 +24,7 @@ import {
   fingerprintFunctionsRenderSource,
   functionsForRuntimeComparison,
   functionSourceProof,
+  rendererSourceProof,
   omittedFunctionNames,
   withoutFunctions,
   componentReceiptRunCompleted,
@@ -142,9 +143,13 @@ export async function main() {
     const baseline = baselineMutation(functionsReceipt, {
       runId: process.env.GITHUB_RUN_ID, runAttempt: process.env.GITHUB_RUN_ATTEMPT,
     }).mutation;
-    const [receiptRenderFingerprint, priorRuntime] = await Promise.all([
+    const rendererBaseline = baselineMutation(rendererReceipt, {
+      runId: process.env.GITHUB_RUN_ID, runAttempt: process.env.GITHUB_RUN_ATTEMPT,
+    }).mutation;
+    const [receiptRenderFingerprint, priorRuntime, priorRenderer] = await Promise.all([
       fingerprintFunctionsRenderSource(baseline?.trustedWorkflowSha, { cwd: process.env.GITHUB_WORKSPACE }),
       fingerprintFunctionGraph(baseline?.sourceSha, { cwd: process.env.GITHUB_WORKSPACE, includeRuntimeInputs: true }),
+      fingerprintRendererGraph(rendererBaseline?.sourceSha, { cwd: process.env.GITHUB_WORKSPACE }),
     ]);
     // Contract capture uses the committed graphs without the deploy job's manifest.
     const sourceProof = functionSourceProof(priorRuntime, runtime, baseline?.functionGraph);
@@ -209,6 +214,7 @@ export async function main() {
         : null,
       rendererFingerprint,
       rendererGraphAvailable: rendererGraph !== null,
+      rendererSourceMatches: rendererSourceProof(priorRenderer, rendererGraph, rendererBaseline?.inputFingerprint),
       renderFingerprint,
       receiptRenderFingerprint,
       liveFunctionsIdentities,

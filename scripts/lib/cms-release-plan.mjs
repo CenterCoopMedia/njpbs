@@ -143,6 +143,12 @@ export function functionSourceProof(prior, target, receiptGraph) {
   };
 }
 
+// The prior graph must reproduce the receipt's stored fingerprint before it stands in for it.
+export function rendererSourceProof(prior, target, receiptFingerprint) {
+  return Boolean(prior && target) && prior.fingerprint === receiptFingerprint
+    && prior.sourceFingerprint === target.sourceFingerprint;
+}
+
 export function runtimeParametersMatch(functions, expected) {
   return Array.isArray(functions) && functions.length > 0 && expected
     && Object.keys(expected).length > 0 && Object.values(expected).every(value => typeof value === "string")
@@ -428,6 +434,7 @@ export function decideRelease({
   sourceProof,
   rendererFingerprint,
   rendererGraphAvailable = false,
+  rendererSourceMatches = false,
   renderFingerprint,
   receiptRenderFingerprint,
   liveFunctionsIdentities = null,
@@ -468,10 +475,10 @@ export function decideRelease({
     return full("force_firebase", functionsBase.mutation?.sourceSha);
   }
   const rendererBase = baselineMutation(rendererReceipt, currentRun);
-  if (rendererBase.blocked === "in_progress_receipt") {
-    if (rendererRunCompleted === true) {
-      return full("stale_renderer_receipt", functionsBase.mutation?.sourceSha);
-    }
+  // A stopped run left the renderer unproven and possibly paused. A complete Functions
+  // receipt keeps its own proof below, so only the renderer rollout repeats.
+  const staleRenderer = rendererBase.blocked === "in_progress_receipt" && rendererRunCompleted === true;
+  if (rendererBase.blocked === "in_progress_receipt" && !staleRenderer) {
     return {
       abort: true,
       functionsMutated: false,
@@ -487,7 +494,8 @@ export function decideRelease({
   if (functionsBase.blocked) {
     return full(functionsBase.blocked === "missing_receipt" ? "missing_functions_receipt" : functionsBase.blocked);
   }
-  if (rendererBase.blocked) {
+  if (staleRenderer && !rendererReceipt.lastComplete) return full("stale_renderer_receipt", functionsBase.mutation.sourceSha);
+  if (rendererBase.blocked && !staleRenderer) {
     return full(
       rendererBase.blocked === "missing_receipt" ? "missing_renderer_receipt" : rendererBase.blocked,
       functionsBase.mutation.sourceSha,
@@ -506,13 +514,14 @@ export function decideRelease({
   if (!identitiesMatch(liveFunctionsIdentities, functionsBase.mutation.providerIdentities)) {
     return full("live_functions_identity_mismatch", functionsBase.mutation.sourceSha);
   }
-  if (!identitiesMatch(liveRendererIdentities, rendererBase.mutation.providerIdentities)) {
+  if (!staleRenderer && !identitiesMatch(liveRendererIdentities, rendererBase.mutation.providerIdentities)) {
     return full("live_renderer_identity_mismatch", functionsBase.mutation.sourceSha);
   }
-  if (
-    (functionsBase.mutation.previewRendererSha ?? functionsBase.mutation.sourceSha) !== rendererBase.mutation.sourceSha ||
+  const previewRendererSha = functionsBase.mutation.previewRendererSha ?? functionsBase.mutation.sourceSha;
+  if (!staleRenderer && (
+    previewRendererSha !== rendererBase.mutation.sourceSha ||
     liveRendererIdentities?.rendererSha !== rendererBase.mutation.sourceSha
-  ) {
+  )) {
     return full("paired_release_mismatch", functionsBase.mutation.sourceSha);
   }
   const committedPrior = functionsBase.mutation.functionGraph;
@@ -545,14 +554,17 @@ export function decideRelease({
     return full("runtime_variables_changed", functionsBase.mutation.sourceSha);
   }
   if (!rendererGraphAvailable) return full("renderer_graph_unavailable", functionsBase.mutation.sourceSha);
-  const rendererChanged = rendererFingerprint !== rendererBase.mutation.inputFingerprint;
+  const rendererChanged = staleRenderer
+    || (rendererFingerprint !== rendererBase.mutation.inputFingerprint && rendererSourceMatches !== true);
   const sourceChanged = names.filter(name => functionGraph.exports[name].fingerprint !== priorGraph.exports[name].fingerprint);
   // A changed export that this target omits still accounts for the changed Functions input.
   const omittedChanged = omittedNames.some(name =>
     committedGraph.exports[name]?.fingerprint !== committedPrior.exports[name]?.fingerprint);
   const { targets, reasons: functionReasons } = selectFunctionTargets(names, {
     sourceChanged, runtimeChanges, readerBinding,
-    rendererAffected: rendererChanged ? names.filter(name => functionGraph.exports[name].preview) : [],
+    // Functions that already pin this renderer need no new pin.
+    rendererAffected: rendererChanged && previewRendererSha !== deploySha
+      ? names.filter(name => functionGraph.exports[name].preview) : [],
   });
   // A runtime or renderer target cannot account for a change to Functions source.
   if ((functionsFingerprint !== functionsBase.mutation.inputFingerprint
@@ -570,7 +582,7 @@ export function decideRelease({
     liveFunctionsSha: functionsBase.mutation.sourceSha,
     rendererTargetSha: rendererChanged ? deploySha : rendererBase.mutation.sourceSha,
     configurationRequiresRelease: false,
-    releaseReason: rendererChanged ? "renderer_inputs_changed" : sourceChanged.length ? "functions_modules_changed"
+    releaseReason: staleRenderer ? "stale_renderer_receipt" : rendererChanged ? "renderer_inputs_changed" : sourceChanged.length ? "functions_modules_changed"
       : targets.some(name => functionReasons[name].some(reason => reason !== "reader_binding_changed")) ? "functions_runtime_inputs_changed"
       : targets.length ? "reader_binding_changed" : "unchanged",
     functionReasons,

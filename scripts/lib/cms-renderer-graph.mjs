@@ -43,6 +43,9 @@ const GUARDS = ["site", "preview-renderer", "packages", ".npmrc", "package.json"
   ...contractInputs,
   "functions/package.json", "admin/package.json", "cms-api/package.json", "scripts/prepare-preview-renderer.mjs",
   "scripts/lib/cms-renderer-graph.mjs", "scripts/lib/cms-component-receipt.mjs"];
+// Build steps that write the image source. The other guarded scripts plan a
+// release; the plan compares them by output, not by bytes.
+const BUILD_STEPS = [...contractInputs, "scripts/prepare-preview-renderer.mjs"];
 const MODULE = /\.(?:[cm]?js|[cm]?ts|jsx|tsx|astro)$/;
 class UnknownGraph extends Error {}
 const unknown = code => { throw new UnknownGraph(code); };
@@ -409,11 +412,16 @@ export async function fingerprintRendererGraph(sourceSha, deps = {}) {
     const inputs = [...new Set([...files.keys()].filter(guard).concat([...visited], [...extra], dependencyPaths))].sort();
     const nonRegular = inputs.find(file => !files.get(file)?.startsWith("100"));
     if (nonRegular) { activeFile = nonRegular; unknown("non_regular_input"); }
-    const configured = deploymentInputFingerprint(inputs, env, manifest);
-    const fingerprint = createHash("sha256").update("njpbs-renderer-require-graph-v1\n")
-      .update(inputs.map(file => `${files.get(file)}\t${file}`).join("\n"))
-      .update(configured ? `\nrender-inputs:${configured}` : "").digest("hex");
-    return { version: 1, fingerprint, dependencyPaths };
+    const digest = paths => {
+      const configured = deploymentInputFingerprint(paths, env, manifest);
+      return createHash("sha256").update("njpbs-renderer-require-graph-v1\n")
+        .update(paths.map(file => `${files.get(file)}\t${file}`).join("\n"))
+        .update(configured ? `\nrender-inputs:${configured}` : "").digest("hex");
+    };
+    const imported = new Set([...visited, ...extra, ...dependencyPaths]);
+    // Receipts store `fingerprint`. Only the plan's comparison of two commits uses `sourceFingerprint`.
+    return { version: 1, fingerprint: digest(inputs), dependencyPaths, sourceFingerprint: digest(inputs.filter(file =>
+      !file.startsWith("scripts/") || imported.has(file) || BUILD_STEPS.includes(file))) };
   } catch (error) {
     if (Array.isArray(error?.errors)) deps.onDiagnostics?.(error.errors.map(item => ({ id: item.id,
       file: item.location?.file, line: item.location?.line, code: /^[a-z_]+$/.test(item.text) ? item.text : "bundler_error" })));
