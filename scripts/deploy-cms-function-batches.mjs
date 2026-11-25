@@ -5,7 +5,7 @@ import { existsSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { setTimeout as pause } from "node:timers/promises";
 import { stripVTControlCharacters } from "node:util";
-import { explicitCloudWakeDecision } from "./lib/cms-release-plan.mjs";
+import { CLOUD_WAKE_FUNCTIONS, explicitCloudWakeDecision } from "./lib/cms-release-plan.mjs";
 import { assertNoFunctionDeletions, loadFunctionDeployManifest, readFunctionsDeployInventory, requestDeploymentInventory } from "./lib/functions-deploy-inventory.mjs";
 import { cmsTarget } from "./lib/cms-target.mjs";
 import { lastProviderLine, permanentFailure } from "./lib/provider-call.mjs";
@@ -13,7 +13,6 @@ import { lastProviderLine, permanentFailure } from "./lib/provider-call.mjs";
 const PROJECT = cmsTarget().projectId;
 const REGION = "us-central1";
 export { REGION as FUNCTION_DEPLOY_REGION };
-const CLOUD_WAKE_FUNCTIONS = ["onNoBuildCloudState", "onNoBuildCloudCandidate", "onNoBuildCloudRelease"];
 
 export { explicitCloudWakeDecision, requestDeploymentInventory };
 
