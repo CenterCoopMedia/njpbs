@@ -101,6 +101,19 @@ test("dry renders every runtime/config consumer, preserving target comparisons a
   for (const [filename, source] of before) assert.equal(readFileSync(join(directory, filename), "utf8"), source);
 }));
 
+test("renders the seed publisher's origins and takes the token only from the rendered API", () => fixture(async directory => {
+  renderDevelopmentConfig(directory, inputs);
+  const seed = "scripts/publish-dev-seed.mjs";
+  assert.match(readFileSync(join(directory, seed), "utf8"), new RegExp(`const ADMIN = '${inputs.CMS_DEV_ADMIN_ORIGIN}';`));
+  const rendered = readFileSync(join(directory, seed), "utf8");
+  // Run the rendered origin and capture as they are, without the publisher's own imports.
+  const capture = [/const API = .*;/, /export function apiToken[\s\S]*?\n}/].map(part => rendered.match(part)[0]).join("\n");
+  const { apiToken } = await import(`data:text/javascript,${encodeURIComponent(capture)}`);
+  const request = origin => ({ url: () => `${origin}/cmsListContent`, headers: () => ({ authorization: "Bearer fixture" }) });
+  assert.equal(apiToken(request(inputs.CMS_DEV_API_ORIGIN)), "Bearer fixture");
+  for (const origin of ["https://dev-api.example.org", inputs.CMS_DEV_ADMIN_ORIGIN]) assert.equal(apiToken(request(origin)), undefined);
+}));
+
 test("keeps worker output hosts outside development render inputs", async () => {
   const render = environment => fixture(directory => {
     renderDevelopmentConfig(directory, environment);

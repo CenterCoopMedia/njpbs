@@ -30,6 +30,12 @@ const say = value => console.log(JSON.stringify({ at: new Date().toISOString(), 
 const authored = message => Object.assign(new Error(message.slice(0, 200)), { authored: true });
 const refused = (step, reply) => authored(`${step} refused: ${reply.status} ${reply.body?.error ?? ''}`);
 
+/** The signed-in token of a request to the dev API, and of no other request. */
+export function apiToken(request) {
+  const header = request.headers().authorization;
+  return header?.startsWith('Bearer ') && new URL(request.url()).origin === API ? header : undefined;
+}
+
 export function refuseUnsafeEnvironment(env = process.env) {
   // config-input: DEBUG, NODE_OPTIONS, PWDEBUG
   const set = REFUSED_ENVIRONMENT.filter(name => env[name] !== undefined && env[name] !== '');
@@ -157,8 +163,7 @@ async function main() {
     page.setDefaultTimeout(60_000);
     let token = '';
     page.on('request', request => {
-      const header = request.headers().authorization;
-      if (header?.startsWith('Bearer ') && new URL(request.url()).origin === API) token = header;
+      token = apiToken(request) ?? token;
     });
     await page.goto(`${ADMIN}/`, { waitUntil: 'domcontentloaded' });
     if (new URL(page.url()).origin !== ADMIN) throw authored('The dev Boardwalk did not open');
