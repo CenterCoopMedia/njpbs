@@ -112,4 +112,4 @@ ambiguous claim to free capacity. A storage/reconciliation failure keeps capacit
 held and needs its original guarded recovery. Prove rejection and quota behavior
 with synthetic local objects; a real submission/upload is separately authorized.
 Shared source/receipt rules are in the
-[coordinated release contract](../../docs/cms/staging-deploy-runbook.md).
+[coordinated release contract](../../docs/cms/deploy.md).

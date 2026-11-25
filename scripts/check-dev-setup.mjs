@@ -15,7 +15,7 @@ const require = createRequire(import.meta.url);
 const { publicationTarget } = require("../functions/lib/publication-target");
 
 const target = publicationTarget("development");
-const SETUP = "docs/cms/functions-deploy.md#development-project-setup";
+const SETUP = "docs/cms/deploy.md";
 
 // Project permissions the release reader uses, with the role that grants each.
 // The release's post-CMS smoke reads Functions and Scheduler metadata

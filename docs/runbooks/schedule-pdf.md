@@ -147,4 +147,4 @@ Do not run full builds merely to validate prose.
 
 Tagged text and local checks do not establish full PDF/UA conformance without
 an external validator receipt. Public publication needs its own deployment
-and ordinary-URL readback in the [release contract](../cms/staging-deploy-runbook.md).
+and ordinary-URL readback in the [release contract](../cms/deploy.md).

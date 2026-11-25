@@ -67,12 +67,12 @@ export function checkSecretIam(requirements, readPolicy, deployAccount = DEPLOY_
     }
   }
   if (missing.length) {
-    throw new FunctionsDeployInventoryError(`${missing.join("; ")}. Explicit provision-config grants each binding (docs/cms/functions-deploy.md#development-project-setup)`);
+    throw new FunctionsDeployInventoryError(`${missing.join("; ")}. Explicit provision-config grants each binding (docs/cms/deploy.md)`);
   }
 }
 
 // Firebase uses the declared Gen 2 runtime identity for its Eventarc trigger,
-// falling back to Compute Engine's default account. See docs/cms/functions-deploy.md#event-trigger-iam.
+// falling back to Compute Engine's default account. See docs/cms/deploy.md.
 export function eventTriggerRequirements(source, projectNumber) {
   if (!/^[1-9][0-9]*$/.test(projectNumber)) throw new FunctionsDeployInventoryError("Invalid project number for event trigger IAM");
   return functionDeployManifest(Object.keys(source), source).filter(fn => fn.platform === "gcfv2" && fn.eventType)

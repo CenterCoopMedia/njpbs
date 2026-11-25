@@ -2,8 +2,8 @@
 
 Saved Preview renders one exact acknowledged content version without publishing
 it. Code identity, editorial context identity and public CODE generation are
-distinct. Use the [CMS release](staging-deploy-runbook.md) and its
-[receipt view](staging-deploy-runbook.md#receipt-view) for fresh deployment proof.
+distinct. Use the [CMS release](deploy.md) and its
+[receipt view](deploy.md) for fresh deployment proof.
 
 ## Build and startup
 

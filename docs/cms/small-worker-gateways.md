@@ -2,7 +2,7 @@
 
 Each gateway keeps its own identity, bindings, route owner and non-delivery
 proof. A source change does not authorize a route, Access, DNS or provider write.
-Use the [release contract](staging-deploy-runbook.md) for source/receipt handling.
+Use the [release contract](deploy.md) for source/receipt handling.
 
 ## Development publication
 

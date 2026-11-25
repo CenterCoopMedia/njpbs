@@ -35,8 +35,8 @@ Deliver the replacement to the same-name secret in the public source repository'
 production Actions environment. Keep the old provider credential valid until
 adoption is proved. An Actions update timestamp alone does not prove adoption.
 
-Follow [Functions configuration and provisioning](functions-deploy.md#configuration-and-provisioning)
-and the [coordinated release](staging-deploy-runbook.md) at one reviewed deploy SHA.
+Follow [Functions configuration and provisioning](deploy.md)
+and the [coordinated release](deploy.md) at one reviewed deploy SHA.
 Use a clean checkout at that SHA, including its verified production render, and
 the complete declared input set. The scoped session supplies private inputs at
 use time. Routine deployment runs `verify-config`; it refuses a replacement that

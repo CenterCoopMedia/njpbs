@@ -180,7 +180,7 @@ export async function nativeConfigurationProvider(env, { execute = execFileSync,
   };
 }
 
-// Each refusal names its fix (docs/cms/functions-deploy.md#development-project-setup):
+// Each refusal names its fix (docs/cms/deploy.md):
 // dev CMS runs on Nov. 23, 2026 found both by hand, one run at a time.
 export async function verifyMediaLifecycle(account, bucket, token, fetchImpl = fetch, wait = undefined) {
   let body;

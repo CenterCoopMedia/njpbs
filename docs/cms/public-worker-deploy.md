@@ -3,7 +3,7 @@
 The public Worker serves one active code generation with independently owned
 content families. Source controls, deployment lease and actual predecessor
 checks prevent stale or mixed activation. Use the [publisher](cloud-publisher.md)
-and [coordinated CMS release](staging-deploy-runbook.md) at the same pinned SHA.
+and [coordinated CMS release](deploy.md) at the same pinned SHA.
 
 ## Artifact and candidate
 

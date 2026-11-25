@@ -133,7 +133,7 @@ without a path or trailing slash. The schedule monitor reads its configured
 `SCHEDULE_MONITOR_KUMA_ORIGIN` from the service environment.
 
 The public site uses the [Cloudflare release workflow](docs/cms/public-worker-deploy.md).
-The [production branch promotion workflow](docs/release/production-branch.md)
+The [production branch promotion workflow](.github/workflows/promote.yml)
 fast-forwards to the selected reviewed source after its required CI passes.
 
 Read [the contributor rules](AGENTS.md) and [support guide](SUPPORT.md) before
