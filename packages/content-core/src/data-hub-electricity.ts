@@ -58,7 +58,7 @@ const cents = (value: number) => value.toFixed(2);
 const percent = (to: number, from: number) => ((to / from - 1) * 100).toFixed(1);
 const signed = (value: string, minus = "-") => Number(value) > 0 ? `+${value}` : value.replace("-", minus);
 const size = (value: string) => value.replace("-", "");
-const side = (gap: number) => gap >= 0 ? "above" : "below";
+const side = (nj: number, us: number) => cents(nj) === cents(us) ? "the same as" : nj > us ? "above" : "below";
 const moved = (value: string) => Number(value) === 0 ? "was unchanged" : `${Number(value) > 0 ? "increased" : "declined"} ${size(value)}%`;
 
 /** Replace the compiled electricity record and its two server-rendered copies. */
@@ -75,7 +75,7 @@ export function applyHubElectricity(html: string, projection: DatasetPublicProje
   seed.releaseCalendar = seed.releaseCalendar.filter((row: { dataset: string }) => row.dataset !== "electricity");
   const payload = JSON.stringify(seed).replace(/</g, "\\u003c");
   const released = new Intl.DateTimeFormat("en-US", { timeZone: "UTC", month: "short", day: "numeric", year: "numeric" }).format(new Date(`${release.releasedOn}T00:00:00Z`));
-  const gap = side(pair[1].nj - pair[1].us);
+  const gap = side(pair[1].nj, pair[1].us);
   const finding = `<li data-latest-metric="electricity"><time datetime="${release.releasedOn}">Source released ${released}</time><h3><a href="#metric-electricity" data-go-figure="electricity">NJ electricity prices were ${gap} the U.S. average</a></h3><p>${escape(metric.insight)} This is not an average bill.</p><p class="latest-findings__period">Data: ${metric.period}</p></li>`;
   const row = `<tr><th scope="row">${escape(metric.title)}</th><td>${metric.display}</td><td>${metric.period}</td><td><a href="${escape(metric.sourceUrl)}">${escape(metric.source)}</a>${credit(metric)}</td></tr>`;
   return swap(swap(swap(html, SOURCE_DATA, (_all, open, _json, close) => open + payload + close),
@@ -92,14 +92,14 @@ function hubElectricityMetric(base: Record<string, unknown>, projection: Dataset
   const month = MONTHS[Number(release.period.start.slice(5, 7)) - 1];
   const period = `${month} ${now.year}`, priorPeriod = `${month} ${before.year}`;
   const nj = percent(now.nj, before.nj), us = percent(now.us, before.us);
-  const gap = cents(Math.abs(now.nj - now.us)), gapPercent = size(percent(now.nj, now.us)), above = side(now.nj - now.us);
+  const gap = cents(Math.abs(now.nj - now.us)), gapPercent = size(percent(now.nj, now.us)), above = side(now.nj, now.us), same = above === "the same as";
   const source = `${release.source.publisher}, ${release.source.title}`, sourceUrl = release.source.url;
   const public_ = (label: string, value: string, detail: string, when: string, kind: string) => ({ label, value, detail, period: when, kind, sourceUrl });
   const kept = Object.fromEntries(Object.entries(base).filter(([field]) => field !== "nextCheck" && field !== "nextReleaseLabel"));
   return { ...kept, id: "electricity", title: String(base.title), checked: release.verifiedOn, released: release.releasedOn,
     value: now.nj, display: `${cents(now.nj)}¢/kWh`, period,
     description: `Average New Jersey residential electricity price per kilowatt-hour in ${period}, not a household's monthly electricity bill.`,
-    insight: `In ${month}, New Jersey's average residential electricity price ${moved(nj)} year over year, while the U.S. average ${moved(us)}. New Jersey was ${gapPercent}% ${above} the U.S. price per kWh.`,
+    insight: `In ${month}, New Jersey's average residential electricity price ${moved(nj)} year over year, while the U.S. average ${moved(us)}. ${same ? "New Jersey's price per kWh was the same as the U.S. price." : `New Jersey was ${gapPercent}% ${above} the U.S. price per kWh.`}`,
     source, sourceUrl, historySource: source, historySourceUrl: sourceUrl,
     points: [{ label: priorPeriod, value: before.nj }, { label: period, value: now.nj }],
     history: pair.map(row => ({ date: String(row.year), value: row.nj })),
@@ -107,7 +107,7 @@ function hubElectricityMetric(base: Record<string, unknown>, projection: Dataset
     historyChartNote: release.chartText, methodNote: release.methodNote,
     comparisonsPublic: [
       public_("U.S. residential average", `${cents(now.us)}¢/kWh`, `Same source and sector · ${period}`, period, "national"),
-      public_(`NJ ${above} U.S.`, `${above === "above" ? "+" : "−"}${gap}¢/kWh (${above === "above" ? "+" : "−"}${gapPercent}%)`, "Same month, source table and sector", period, "difference"),
+      public_(same ? "NJ and U.S. prices" : `NJ ${above} U.S.`, same ? "The same" : `${above === "above" ? "+" : "−"}${gap}¢/kWh (${above === "above" ? "+" : "−"}${gapPercent}%)`, "Same month, source table and sector", period, "difference"),
       public_(`NJ change since ${priorPeriod}`, `${signed(nj, "−")}%`, `${cents(before.nj)}¢/kWh to ${cents(now.nj)}¢/kWh`, `${priorPeriod}–${period}`, "historical"),
       public_(`U.S. change since ${priorPeriod}`, `${signed(us, "−")}%`, `${cents(before.us)}¢/kWh to ${cents(now.us)}¢/kWh`, `${priorPeriod}–${period}`, "historical"),
     ],
@@ -167,8 +167,8 @@ export function hubElectricityEmbed(shell: string, metric: HubElectricityMetric,
   const pair = metric.electricityComparison, [before, now] = pair;
   const month = metric.period.split(" ")[0], color = view === "chart" ? builtPalette(shell) : undefined, link = escape(metric.sourceUrl);
   const opens = '<span class="sr-only"> (opens in new tab)</span></a>';
-  const gap = now.nj - now.us;
-  const body = view === "number" ? "" : `<p class="context">${escape(metric.insight)}</p><div class="history-block v7-history"><div class="history-block__head"><p class="history-block__title">${month} electricity prices: ${before.year} and ${now.year}</p><p class="history-block__unit">New Jersey vs. United States · residential cents per kilowatt-hour</p></div><div class="history-plot">${chart(pair, month, false, color!)}${chart(pair, month, true, color!)}</div><p class="v7-reading">Since ${month} ${before.year}, NJ's average price changed ${signed(percent(now.nj, before.nj))}%; the U.S. price changed ${signed(percent(now.us, before.us))}%. In ${month} ${now.year}, New Jersey was ${cents(Math.abs(gap))}¢/kWh (${size(percent(now.nj, now.us))}%) ${side(gap)} the U.S.</p><p class="v7-reading">Prices per kilowatt-hour, not average monthly utility bills.</p><details><summary>View all four source prices as a table</summary><div class="history-table-scroller"><table><caption>${month} residential electricity prices · EIA Table 5.6.A · cents per kilowatt-hour</caption><thead><tr><th scope="col">Month</th><th scope="col">New Jersey</th><th scope="col">United States</th></tr></thead><tbody>${pair.map(row => `<tr><th scope="row">${month} ${row.year}</th><td>${cents(row.nj)}¢/kWh</td><td>${cents(row.us)}¢/kWh</td></tr>`).join("")}</tbody></table></div></details><details class="v7-source-notes"><summary>Method and limitations</summary><p>${escape(metric.methodNote)}</p><p><a href="${link}" target="_blank" rel="noopener noreferrer">Official EIA source${opens}</p></details></div>`;
+  const gap = side(now.nj, now.us);
+  const body = view === "number" ? "" : `<p class="context">${escape(metric.insight)}</p><div class="history-block v7-history"><div class="history-block__head"><p class="history-block__title">${month} electricity prices: ${before.year} and ${now.year}</p><p class="history-block__unit">New Jersey vs. United States · residential cents per kilowatt-hour</p></div><div class="history-plot">${chart(pair, month, false, color!)}${chart(pair, month, true, color!)}</div><p class="v7-reading">Since ${month} ${before.year}, NJ's average price changed ${signed(percent(now.nj, before.nj))}%; the U.S. price changed ${signed(percent(now.us, before.us))}%. In ${month} ${now.year}, ${gap === "the same as" ? "New Jersey's price was the same as the U.S. price." : `New Jersey was ${cents(Math.abs(now.nj - now.us))}¢/kWh (${size(percent(now.nj, now.us))}%) ${gap} the U.S.`}</p><p class="v7-reading">Prices per kilowatt-hour, not average monthly utility bills.</p><details><summary>View all four source prices as a table</summary><div class="history-table-scroller"><table><caption>${month} residential electricity prices · EIA Table 5.6.A · cents per kilowatt-hour</caption><thead><tr><th scope="col">Month</th><th scope="col">New Jersey</th><th scope="col">United States</th></tr></thead><tbody>${pair.map(row => `<tr><th scope="row">${month} ${row.year}</th><td>${cents(row.nj)}¢/kWh</td><td>${cents(row.us)}¢/kWh</td></tr>`).join("")}</tbody></table></div></details><details class="v7-source-notes"><summary>Method and limitations</summary><p>${escape(metric.methodNote)}</p><p><a href="${link}" target="_blank" rel="noopener noreferrer">Official EIA source${opens}</p></details></div>`;
   const main = `<main><h1>${escape(metric.title)}</h1><p class="value">${escape(metric.display)}</p><p class="period">${escape(metric.period)}</p>${body}
       <footer class="meta"><p><strong>Source:</strong> <a href="${link}" target="_blank" rel="noopener noreferrer">${escape(metric.source)}${opens}</p><p><strong>Checked:</strong> ${dateLabel(metric.checked)}. Latest published figure.</p><p class="note">Published on NJ PBS${credit(metric)}</p></footer>
     <footer class="njpbs-figure-credit"><p>Data snapshot: <time datetime="${metric.datasetRelease.approvedOn}">${dateLabel(metric.datasetRelease.approvedOn)}</time> · <a href="https://njpbs.org/data-hub/" target="_blank" rel="noopener noreferrer">NJ PBS Data Hub${opens}</p></footer></main>`;

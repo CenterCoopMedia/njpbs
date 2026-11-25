@@ -80,6 +80,47 @@ describe("Data Hub electricity price from an approved dataset release", () => {
     } finally { await window.happyDOM.close(); }
   });
 
+  it("says equal prices are the same on the Hub page, in the reader's chart and in the embed", async () => {
+    const html = applyHubElectricity(reader, projection({ now: ["2026-09", 18.5, 18.5], before: ["2025-09", 17, 18] }));
+    const metric = readHubElectricity(html)!;
+    expect(metric.insight).toContain("New Jersey's price per kWh was the same as the U.S. price.");
+    expect(html).toContain("NJ electricity prices were the same as the U.S. average</a>");
+    expect(metric.comparisonsPublic).toContainEqual(expect.objectContaining({ kind: "difference", label: "NJ and U.S. prices", value: "The same" }));
+    const window = mount(html);
+    try {
+      (window.document.querySelector('[data-open-figure="electricity"]') as unknown as { click(): void }).click();
+      const drawn = (window.document.querySelector("#figure-frame") as unknown as { srcdoc: string }).srcdoc;
+      const embedded = hubElectricityEmbed(built("electricity"), metric, "chart");
+      for (const text of [drawn, embedded]) {
+        expect(text).toContain("In September 2026, New Jersey's price was the same as the U.S. price.</p>");
+        expect(text.match(/<main>[\s\S]*<\/main>/)![0]).not.toMatch(/\b(above|below)\b/);
+      }
+    } finally { await window.happyDOM.close(); }
+  });
+
+  it("keeps staff text in the CSV from running as a formula and leaves negative numbers as they are", async () => {
+    const figure = projection();
+    const csv = async (html: string, id: string) => {
+      const window = mount(html);
+      const downloads: Blob[] = [];
+      Object.defineProperty(window.URL, "createObjectURL", { value: (blob: Blob) => { downloads.push(blob); return "blob:test"; } });
+      Object.defineProperty(window.URL, "revokeObjectURL", { value: () => {} });
+      try {
+        const click = (selector: string) => (window.document.querySelector(selector) as unknown as { click(): void }).click();
+        click(`[data-open-figure="${id}"]`);
+        click('[data-export-format="csv"]');
+        return await downloads[0].text();
+      } finally { await window.happyDOM.close(); }
+    };
+    for (const start of ["-", "=", "+", "@", "\t", "\r"]) {
+      const text = await csv(applyHubElectricity(reader, { ...figure, release: { ...figure.release, methodNote: `${start}1+1 note`,
+        reuse: { ...figure.release.reuse, note: `${start}2+2 credit` } } }), "electricity");
+      expect(text).toContain(`,"'${start}1+1 note","'${start}2+2 credit"\r\n`);
+    }
+    expect(await csv(applyHubElectricity(reader, figure), "electricity")).toContain(',"Average price <per> kWh.","Example <credit>"\r\n');
+    expect(await csv(reader, "industryjobs")).toMatch(/,"-\d/);
+  });
+
   it("serves the Hub's price in the latest embed and leaves every other embed byte-identical", async () => {
     const hub = applyHubElectricity(reader, projection());
     for (const view of ["chart", "number"]) {
