@@ -9,6 +9,7 @@ import { assertNoFunctionDeletions, loadFunctionDeployManifest, readFunctionsDep
 import { functionsInventoryIdentity } from "./lib/cms-component-receipt.mjs";
 import { runtimeParametersMatch, selectFunctionTargets } from "./lib/cms-release-plan.mjs";
 import { servingRuntimeParameters } from "./lib/functions-configuration.mjs";
+import { failureText, faultCause } from "./lib/provider-call.mjs";
 
 const projectId = "njpbs-site-dev";
 const codebase = "dev";
@@ -21,14 +22,14 @@ async function readDevFunctions(root, request) {
       const { GoogleAuth } = createRequire(new URL("package.json", root))("google-auth-library");
       const client = await new GoogleAuth({ scopes: ["https://www.googleapis.com/auth/cloud-platform"] }).getClient();
       request = options => client.request(options);
-    } catch { throw new Error("Could not authenticate the dev Functions inventory read"); }
+    } catch (error) { throw new Error("Could not authenticate the dev Functions inventory read", faultCause(error)); }
   }
   return readFunctionsDeployInventory(projectId, async (url, pageToken) => {
     try {
       const fields = url.includes("/v1/") ? "functions(name,labels,eventTrigger),nextPageToken,unreachable" :
         "functions(name,labels,environment,eventTrigger,state,updateTime,buildConfig,serviceConfig),nextPageToken,unreachable";
       return (await request({ url, params: { pageSize: 100, fields, ...(pageToken ? { pageToken } : {}) }, retry: false })).data;
-    } catch { throw new Error("Could not read live Functions deployment inventory"); }
+    } catch (error) { throw new Error("Could not read live Functions deployment inventory", faultCause(error)); }
   }, { includeMetadata: true });
 }
 
@@ -115,7 +116,7 @@ export async function deployDevFunctions({ env = process.env, root = new URL("..
   try {
     runCommand("npx", ["--no-install", "firebase", "deploy", "--project", projectId,
       "--config", "firebase.dev.json", "--only", filter, "--force", "--non-interactive"], { stdio: "inherit" });
-  } catch { throw new Error("Dev Functions deployment did not complete"); }
+  } catch (error) { throw new Error("Dev Functions deployment did not complete", faultCause(error)); }
   console.log(`Dev Functions deploy: ${Math.round(performance.now() - started)} ms`);
   await afterDeploy(names);
 }
@@ -126,6 +127,6 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     console.error("Expected no arguments or --verify-deployed");
     process.exitCode = 1;
   } else {
-    deployDevFunctions({ verifyOnly: args.length === 1 }).catch(error => { console.error(error.message); process.exitCode = 1; });
+    deployDevFunctions({ verifyOnly: args.length === 1 }).catch(error => { console.error(failureText(error)); process.exitCode = 1; });
   }
 }

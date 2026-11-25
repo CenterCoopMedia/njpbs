@@ -6,6 +6,7 @@ import { appendFileSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { verifyDevPublicWorkerPrivate } from './lib/dev-private-worker.mjs';
 import targetContract from '../functions/lib/publication-target.js';
+import { failureText, faultCause } from './lib/provider-call.mjs';
 
 const ACCOUNT = (process.env.CMS_DEV_CLOUDFLARE_ACCOUNT_ID ?? "");
 const WORKER = 'njpbs-dev-staff-sites';
@@ -234,7 +235,7 @@ export async function run({ env = process.env, fetchImpl = fetch, spawn = spawnS
         redirect: 'error',
       });
       body = await response.json();
-    } catch { throw new Error('Cloudflare request failed; reconcile before retrying'); }
+    } catch (error) { throw new Error('Cloudflare request failed; reconcile before retrying', faultCause(error)); }
     requireState(response.ok && body.success === true, 'Cloudflare request refused; reconcile before retrying');
     return body.result;
   }
@@ -349,5 +350,5 @@ export async function run({ env = process.env, fetchImpl = fetch, spawn = spawnS
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  run().catch(error => { console.error(error.message); process.exitCode = 1; });
+  run().catch(error => { console.error(failureText(error)); process.exitCode = 1; });
 }

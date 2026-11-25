@@ -1,4 +1,5 @@
 import { createRequire } from "node:module";
+import { faultCause } from "./provider-call.mjs";
 
 const pairApi = () => createRequire(import.meta.url)("../../functions/lib/cms-preview-pair.js");
 
@@ -48,10 +49,10 @@ async function reconcileAdminAttempt(firestore, ref, lock, liveRef, request, ada
     operation = await adapter.reconcileOperation({ operationId: request.operationId,
       operationDigest: before.operationDigest, manifestDigest: request.manifestDigest, signal });
   }
-  catch {
+  catch (error) {
     const completed = (await ref.get()).data();
     if (completed?.state === "complete" && digest(completed.request) === digest(request)) return completed;
-    throw new Error("Admin operation journal unavailable; reconcile without another upload");
+    throw new Error("Admin operation journal unavailable; reconcile without another upload", faultCause(error));
   }
   if (operation?.operationId !== request.operationId || operation?.operationDigest !== before.operationDigest
     || operation?.providerSettled !== true || !["not_written", "uploaded", "failed"].includes(operation?.outcome)) {
@@ -170,8 +171,8 @@ export async function publishPairedAdminManifest(firestore, {
   let observed;
   try {
     observed = await adapter.readLiveReaderIdentities();
-  } catch {
-    throw new Error("Admin reader provider readback is unavailable");
+  } catch (error) {
+    throw new Error("Admin reader provider readback is unavailable", faultCause(error));
   }
   if (digest(observed) !== digest(initial.identities)) throw new Error("Admin reader provider identities changed");
   signal?.throwIfAborted();

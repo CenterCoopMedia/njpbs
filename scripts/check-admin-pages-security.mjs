@@ -2,7 +2,7 @@
 
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
-import { httpFault, providerCall } from "./lib/provider-call.mjs";
+import { failureText, httpFault, providerCall } from "./lib/provider-call.mjs";
 
 const CLOUDFLARE_API = "https://api.cloudflare.com/client/v4";
 const PROJECT_NAME = "njpbs-admin";
@@ -248,7 +248,7 @@ async function main() {
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   main().catch((error) => {
-    console.error(`error: ${error.message}`);
+    console.error(`error: ${failureText(error)}`);
     process.exitCode = 1;
   });
 }

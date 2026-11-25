@@ -2,7 +2,7 @@
 
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
-import { providerCall } from "./lib/provider-call.mjs";
+import { failureText, providerCall } from "./lib/provider-call.mjs";
 
 const CLOUDFLARE_API = "https://api.cloudflare.com/client/v4";
 const ADMIN_DOMAIN = "admin.njpbs.org";
@@ -128,7 +128,7 @@ async function main() {
 const invokedPath = process.argv[1] ? resolve(process.argv[1]) : "";
 if (invokedPath === fileURLToPath(import.meta.url)) {
   main().catch((error) => {
-    console.error(error instanceof Error ? error.message : String(error));
+    console.error(failureText(error));
     process.exitCode = 1;
   });
 }
