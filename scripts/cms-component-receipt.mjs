@@ -15,7 +15,7 @@ import {
   readReceipt,
   startReceipt,
 } from "./lib/cms-component-receipt.mjs";
-import { assertLegacyCmsWorkflow, fingerprintExecutionSource, fingerprintReceiptExecutionSource, identitiesMatch, planCmsApiRelease } from "./lib/cms-release-plan.mjs";
+import { assertLegacyCmsWorkflow, fingerprintWorkerUpload, fingerprintReceiptWorkerUpload, identitiesMatch, planCmsApiRelease } from "./lib/cms-release-plan.mjs";
 
 function fail(message) {
   throw new ComponentReceiptError(message);
@@ -69,8 +69,8 @@ async function readWorkerPlan(firestore, { pairing, cwd, sourceSha, trustedWorkf
   const baseline = receipt?.state === "complete" ? receipt.mutation : null;
   const [inputFingerprint, trustedFingerprint, trustedReceiptFingerprint, liveIdentities] = await Promise.all([
     quiet(fingerprintInputs(sourceSha, "cmsApi", { cwd })),
-    quiet(fingerprintExecutionSource(sourceSha, trustedWorkflowSha, { cwd })),
-    fingerprintReceiptExecutionSource(baseline, { cwd }),
+    quiet(fingerprintWorkerUpload(sourceSha, trustedWorkflowSha, { cwd })),
+    fingerprintReceiptWorkerUpload(baseline, { cwd }),
     quiet(collectLiveIdentities("cmsApi", { firestore })),
   ]);
   return planCmsApiRelease({ ...pairing, receipt, inputFingerprint, trustedFingerprint, trustedReceiptFingerprint,

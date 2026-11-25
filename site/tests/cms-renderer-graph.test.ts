@@ -40,6 +40,15 @@ describe("committed renderer inputs", () => {
     expect(original).not.toBeNull();
     expect((await graph(commit(path, content(path) + "\n ")))?.fingerprint).toBe(original!.fingerprint);
   });
+  it.each(["scripts/lib/cms-component-receipt.mjs", "scripts/lib/cms-renderer-graph.mjs"])("keeps a planner edit in the stored fingerprint and out of the source comparison (%s)", async path => {
+    const edited = await graph(commit(path, content(path) + "\n// planner edit\n"));
+    expect(edited!.fingerprint).not.toBe(original!.fingerprint);
+    expect(edited!.sourceFingerprint).toBe(original!.sourceFingerprint);
+  });
+  it.each(["package.json", "site/src/lib/admin-docs.ts", "scripts/functions-contract-sources.json", "functions/package.json"])("counts a renderer source or declared build input in the source comparison (%s)", async path => {
+    const edited = await graph(commit(path, content(path) + "\n "));
+    expect(edited!.sourceFingerprint).not.toBe(original!.sourceFingerprint);
+  });
   it("resolves actual renderer and retained-reader closures without running them", () => {
     expect(original).not.toBeNull();
     for (const path of ["functions/lib/home-retained-sources.js", "functions/lib/current-public-code-source.js", "functions/lib/media-usage.js"]) {

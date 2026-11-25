@@ -20,8 +20,16 @@ effective parameter, exports bound to an older enabled secret version, and
 the required preview readers. It emits the sorted decision for each export
 without parameter values or secret payloads. Variable-list edits can skip a
 rollout when the deployed settings, source closures and shared inputs agree.
-A change to a script that only runs or checks the deployment
-(`FUNCTION_DEPLOY_TOOLS`) selects no Function.
+The comparison of two commits counts the `functions` directory, the import
+closure of each Function and the declared build and package inputs
+(`FUNCTION_BUILD_INPUTS`). A tool that configures or deploys Functions is
+compared by its output, so an edit that changes no output selects no Function.
+A renderer rollout selects the exports whose closure names the renderer pin
+(`CMS_PREVIEW_RENDERER_SHA`), unless the Functions already pin that renderer. A
+renderer receipt that a stopped run left in progress repeats that rollout and
+no other Function, while the Functions receipt and the live Functions agree.
+The CMS API Worker deploys when its bundle inputs, configuration, upload step,
+render step or live version differ. A gate or workflow edit selects nothing.
 Shared startup, package, provider configuration, or export inventory changes
 take the full path. So do unreadable live inputs and ownership that the module
 graph cannot prove. Rules/indexes and Storage rules retain

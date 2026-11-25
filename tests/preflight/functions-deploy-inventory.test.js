@@ -9,7 +9,6 @@ import { join } from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
 import { fingerprintInputs } from "../../scripts/lib/cms-component-receipt.mjs";
-import { fingerprintTrustedSource } from "../../scripts/lib/cms-release-plan.mjs";
 
 const require = createRequire(import.meta.url);
 const { onRequest } = require("firebase-functions/v2/https");
@@ -181,7 +180,7 @@ describe("forced Functions deployment inventory", () => {
     expect(() => assertNoFunctionDeletions(functionDeployManifest(["handler"], { handler: onMessagePublished("replacement", () => {}) }), functions, target)).toThrow("trigger routing");
   });
 
-  it("changes both release fingerprints when only the force guard changes", async () => {
+  it("changes the stored Functions fingerprint when only the force guard changes", async () => {
     const root = mkdtempSync(join(tmpdir(), "functions-guard-fingerprint-"));
     const git = (...args) => execFileSync("git", args, { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
     try {
@@ -194,7 +193,6 @@ describe("forced Functions deployment inventory", () => {
       git("add", path); git("commit", "-m", "Changed guard version"); const after = git("rev-parse", "HEAD");
       const deps = { listTree: async (sha, paths) => git("ls-tree", "-r", sha, "--", ...paths) };
       expect(await fingerprintInputs(before, "functions", deps)).not.toBe(await fingerprintInputs(after, "functions", deps));
-      expect(await fingerprintTrustedSource(before, deps)).not.toBe(await fingerprintTrustedSource(after, deps));
     } finally { rmSync(root, { recursive: true, force: true }); }
   });
 });

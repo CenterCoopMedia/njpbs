@@ -1,6 +1,5 @@
 import { repositoryMatches } from "./repository-identity.mjs";
 import { ComponentReceiptError, assertLegacyPreviewProtocol, configurationFingerprint, fingerprintPaths, functionGraphsMatch, FUNCTION_GRAPH_VERSION } from "./cms-component-receipt.mjs";
-import { contractInputs } from "./functions-contracts.mjs";
 import { cmsTarget } from "./cms-target.mjs";
 
 // Equal to the runtime list in functions/lib/cloud-publication-wake-deployment.js, which the
@@ -143,6 +142,12 @@ export function functionSourceProof(prior, target, receiptGraph) {
   };
 }
 
+// The prior graph must reproduce the receipt's stored fingerprint before it stands in for it.
+export function rendererSourceProof(prior, target, receiptFingerprint) {
+  return Boolean(prior && target) && prior.fingerprint === receiptFingerprint
+    && prior.sourceFingerprint === target.sourceFingerprint;
+}
+
 export function runtimeParametersMatch(functions, expected) {
   return Array.isArray(functions) && functions.length > 0 && expected
     && Object.keys(expected).length > 0 && Object.values(expected).every(value => typeof value === "string")
@@ -202,49 +207,9 @@ const FUNCTIONS_RENDER_PATHS = Object.freeze([
   "config/development-inputs.json",
 ]);
 
-export const TRUSTED_RELEASE_PATHS = Object.freeze([
-  ...FUNCTIONS_RENDER_PATHS,
-  ".github/workflows/cms-staging-deploy.yml",
-  ".github/scripts",
-  "scripts/lib/production-reader-authorization.mjs",
-  "scripts/check-cms-secret-iam.mjs",
-  "scripts/lib/functions-deploy-inventory.mjs",
-  "scripts/lib/provider-call.mjs",
-  "scripts/lib/functions-readbacks.sh",
-  "scripts/assert-r2-lifecycle.mjs",
-]);
-
-export const RELEASE_CHECK_PATHS = Object.freeze([
-  ...contractInputs,
-  "scripts/configure-cms-functions.mjs",
-  "scripts/lib/functions-configuration.mjs",
-  "config/functions-configuration.json",
-  "config/functions-deployment.json",
-  "config/functions-deployment.development.json",
-  "scripts/lib/cms-target.mjs",
-  "firebase.dev.json",
-  "scripts/check-cms-secret-iam.mjs",
-  "scripts/assert-r2-lifecycle.mjs",
-  "scripts/retire-cms-functions.mjs", "scripts/lib/functions-retirement.mjs",
-  "scripts/component-runner.mjs", "scripts/lib/deployment-components.mjs",
-  "scripts/deploy-cms-function-batches.mjs",
-  "scripts/lib/functions-deploy-inventory.mjs",
-  "scripts/lib/provider-call.mjs",
-  "scripts/lib/functions-secret-versions.mjs",
-  "scripts/smoke-cms-functions.mjs",
-  "scripts/cms-component-receipt.mjs",
-  "scripts/lib/cms-component-receipt.mjs",
-  "scripts/deploy-cms-api-worker.mjs",
-  "scripts/lib/cloudflare-worker-readback.mjs",
-  "scripts/lib/cms-renderer-graph.mjs",
-  "scripts/lib/cms-release-plan.mjs",
-  "scripts/lib/repository-identity.mjs",
-  "scripts/lib/studio-title-files.mjs",
-  "agents/vmix/configuration.mjs",
-  "scripts/cms-release-plan.mjs",
-  "scripts/confirm-admin-revision.mjs",
-  "scripts/check-admin-pages-security.mjs",
-]);
+// The step that uploads the Worker. Its bundle, configuration and packages are in
+// the cmsApi component fingerprint; the gates and the workflow upload nothing.
+const WORKER_UPLOAD_PATHS = Object.freeze(["scripts/deploy-cms-api-worker.mjs"]);
 
 function sortKeys(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return value;
@@ -428,6 +393,8 @@ export function decideRelease({
   sourceProof,
   rendererFingerprint,
   rendererGraphAvailable = false,
+  rendererSourceMatches = false,
+  rendererReaders = null,
   renderFingerprint,
   receiptRenderFingerprint,
   liveFunctionsIdentities = null,
@@ -468,10 +435,10 @@ export function decideRelease({
     return full("force_firebase", functionsBase.mutation?.sourceSha);
   }
   const rendererBase = baselineMutation(rendererReceipt, currentRun);
-  if (rendererBase.blocked === "in_progress_receipt") {
-    if (rendererRunCompleted === true) {
-      return full("stale_renderer_receipt", functionsBase.mutation?.sourceSha);
-    }
+  // A stopped run left the renderer unproven and possibly paused. A complete Functions
+  // receipt keeps its own proof below, so only the renderer rollout repeats.
+  const staleRenderer = rendererBase.blocked === "in_progress_receipt" && rendererRunCompleted === true;
+  if (rendererBase.blocked === "in_progress_receipt" && !staleRenderer) {
     return {
       abort: true,
       functionsMutated: false,
@@ -487,7 +454,8 @@ export function decideRelease({
   if (functionsBase.blocked) {
     return full(functionsBase.blocked === "missing_receipt" ? "missing_functions_receipt" : functionsBase.blocked);
   }
-  if (rendererBase.blocked) {
+  if (staleRenderer && !rendererReceipt.lastComplete) return full("stale_renderer_receipt", functionsBase.mutation.sourceSha);
+  if (rendererBase.blocked && !staleRenderer) {
     return full(
       rendererBase.blocked === "missing_receipt" ? "missing_renderer_receipt" : rendererBase.blocked,
       functionsBase.mutation.sourceSha,
@@ -506,13 +474,14 @@ export function decideRelease({
   if (!identitiesMatch(liveFunctionsIdentities, functionsBase.mutation.providerIdentities)) {
     return full("live_functions_identity_mismatch", functionsBase.mutation.sourceSha);
   }
-  if (!identitiesMatch(liveRendererIdentities, rendererBase.mutation.providerIdentities)) {
+  if (!staleRenderer && !identitiesMatch(liveRendererIdentities, rendererBase.mutation.providerIdentities)) {
     return full("live_renderer_identity_mismatch", functionsBase.mutation.sourceSha);
   }
-  if (
-    (functionsBase.mutation.previewRendererSha ?? functionsBase.mutation.sourceSha) !== rendererBase.mutation.sourceSha ||
+  const previewRendererSha = functionsBase.mutation.previewRendererSha ?? functionsBase.mutation.sourceSha;
+  if (!staleRenderer && (
+    previewRendererSha !== rendererBase.mutation.sourceSha ||
     liveRendererIdentities?.rendererSha !== rendererBase.mutation.sourceSha
-  ) {
+  )) {
     return full("paired_release_mismatch", functionsBase.mutation.sourceSha);
   }
   const committedPrior = functionsBase.mutation.functionGraph;
@@ -545,23 +514,30 @@ export function decideRelease({
     return full("runtime_variables_changed", functionsBase.mutation.sourceSha);
   }
   if (!rendererGraphAvailable) return full("renderer_graph_unavailable", functionsBase.mutation.sourceSha);
-  const rendererChanged = rendererFingerprint !== rendererBase.mutation.inputFingerprint;
+  const rendererChanged = staleRenderer
+    || (rendererFingerprint !== rendererBase.mutation.inputFingerprint && rendererSourceMatches !== true);
   const sourceChanged = names.filter(name => functionGraph.exports[name].fingerprint !== priorGraph.exports[name].fingerprint);
   // A changed export that this target omits still accounts for the changed Functions input.
   const omittedChanged = omittedNames.some(name =>
     committedGraph.exports[name]?.fingerprint !== committedPrior.exports[name]?.fingerprint);
+  // The exports whose closure names the renderer pin. Without that proof, every preview export.
+  const pinReaders = names.filter(name => rendererReaders ? rendererReaders.includes(name) : functionGraph.exports[name].preview);
   const { targets, reasons: functionReasons } = selectFunctionTargets(names, {
     sourceChanged, runtimeChanges, readerBinding,
-    rendererAffected: rendererChanged ? names.filter(name => functionGraph.exports[name].preview) : [],
+    // Functions that already pin this renderer need no new pin.
+    rendererAffected: rendererChanged && previewRendererSha !== deploySha ? pinReaders : [],
   });
   // A runtime or renderer target cannot account for a change to Functions source.
   if ((functionsFingerprint !== functionsBase.mutation.inputFingerprint
       && ((!sourceChanged.length && !omittedChanged && !sourceProof?.sourceWithoutConfigurationTableMatches)
         || (sourceProof && !sourceProof.unattributedInputsMatch)))
-    || (rendererChanged && !names.some(name => functionGraph.exports[name].preview))
+    || (rendererChanged && !pinReaders.length)
     || ((targets.length || rendererChanged) && !SHA_PATTERN.test(deploySha ?? ""))) {
     return full("function_graph_unavailable", functionsBase.mutation.sourceSha);
   }
+  const functionTargets = selected => selected.map(name => `functions:${name}`).join(",");
+  // With no preview target there is nothing to order around the pause: the one deploy step takes every target.
+  const previewTargets = rendererChanged ? targets.filter(name => functionGraph.exports[name].preview) : [];
   return {
     abort: false,
     ...(readerBinding ? { readerRebind: targets.length > 0 } : {}),
@@ -570,19 +546,15 @@ export function decideRelease({
     liveFunctionsSha: functionsBase.mutation.sourceSha,
     rendererTargetSha: rendererChanged ? deploySha : rendererBase.mutation.sourceSha,
     configurationRequiresRelease: false,
-    releaseReason: rendererChanged ? "renderer_inputs_changed" : sourceChanged.length ? "functions_modules_changed"
+    releaseReason: staleRenderer ? "stale_renderer_receipt" : rendererChanged ? "renderer_inputs_changed" : sourceChanged.length ? "functions_modules_changed"
       : targets.some(name => functionReasons[name].some(reason => reason !== "reader_binding_changed")) ? "functions_runtime_inputs_changed"
       : targets.length ? "reader_binding_changed" : "unchanged",
     functionReasons,
-    functionDeployTargets: targets.map(name => `functions:${name}`).join(","),
+    functionDeployTargets: functionTargets(targets),
     previewPauseLate: rendererChanged,
-    functionsBeforePreview: rendererChanged ? targets.filter(name => !functionGraph.exports[name].preview).map(name => `functions:${name}`).join(",") : "",
-    functionsDuringPreview: rendererChanged ? targets.filter(name => functionGraph.exports[name].preview).map(name => `functions:${name}`).join(",") : "",
+    functionsBeforePreview: previewTargets.length ? functionTargets(targets.filter(name => !previewTargets.includes(name))) : "",
+    functionsDuringPreview: functionTargets(previewTargets),
   };
-}
-
-export async function fingerprintTrustedSource(sha, deps = {}) {
-  return fingerprintPaths(sha, TRUSTED_RELEASE_PATHS, deps);
 }
 
 export async function fingerprintFunctionsRenderSource(sha, deps = {}) {
@@ -593,20 +565,21 @@ export async function fingerprintFunctionsRenderSource(sha, deps = {}) {
   }
 }
 
-// Compare the code that runs, using each receipt's separate source pins.
-export async function fingerprintExecutionSource(sourceSha, trustedWorkflowSha, deps = {}) {
-  const [releaseChecks, trustedWorkflow] = await Promise.all([
-    fingerprintPaths(sourceSha, RELEASE_CHECK_PATHS, deps),
-    fingerprintTrustedSource(trustedWorkflowSha, deps),
+// The upload step runs at the release source and the render step at the trusted
+// workflow, so each is compared at its own pin.
+export async function fingerprintWorkerUpload(sourceSha, trustedWorkflowSha, deps = {}) {
+  const [upload, render] = await Promise.all([
+    fingerprintPaths(sourceSha, WORKER_UPLOAD_PATHS, deps),
+    fingerprintPaths(trustedWorkflowSha, FUNCTIONS_RENDER_PATHS, deps),
   ]);
-  return configurationFingerprint({ releaseChecks, trustedWorkflow });
+  return configurationFingerprint({ upload, render });
 }
 
 // A retired freeze commit can be absent from fetched main history. An unknown
 // baseline requires a full release; it must not prevent that release entirely.
-export async function fingerprintReceiptExecutionSource(mutation, deps = {}) {
+export async function fingerprintReceiptWorkerUpload(mutation, deps = {}) {
   try {
-    return await fingerprintExecutionSource(mutation?.sourceSha, mutation?.trustedWorkflowSha, deps);
+    return await fingerprintWorkerUpload(mutation?.sourceSha, mutation?.trustedWorkflowSha, deps);
   } catch {
     return null;
   }

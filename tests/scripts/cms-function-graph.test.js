@@ -3,10 +3,10 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync } from "nod
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { configurationFingerprint, fingerprintFunctionGraph, FUNCTION_DEPLOY_TOOLS, fingerprintInputs, fingerprintPaths, functionGraphSource, readCommittedBlobs, startReceipt, completeReceipt } from "../../scripts/lib/cms-component-receipt.mjs";
+import { configurationFingerprint, fingerprintFunctionGraph, fingerprintInputs, fingerprintPaths, functionGraphSource, readCommittedBlobs, RECEIPT_INPUT_PATHS, startReceipt, completeReceipt } from "../../scripts/lib/cms-component-receipt.mjs";
 import { INDEPENDENT_INPUTS } from "../../scripts/lib/deployment-components.mjs";
 import { functionDeploymentPhase, selectedFunctionNames } from "../../scripts/deploy-cms-function-batches.mjs";
-import { contractRecipe } from "../../scripts/lib/functions-contracts.mjs";
+import { contractInputs, contractRecipe } from "../../scripts/lib/functions-contracts.mjs";
 import { cloudWakeConfigurationFingerprint, decideRelease, deploymentVariablesFingerprint, functionSourceProof,
   READER_FUNCTIONS, runtimeParameterChanges } from "../../scripts/lib/cms-release-plan.mjs";
 
@@ -53,6 +53,38 @@ async function releaseInputs(before, after, cwd) {
   };
 }
 
+// Edits functions/media-collections.js and its library, and nothing else that a Function contains.
+const FUNCTION_EDIT = { before: "489a896edcdef0caaa3f8ce932855e9e9d14e4b5", after: "a51a0b8ddba16d734aa5ddb1b8d13e7d4df3e2ef" };
+
+// A second reading of the committed modules, without esbuild, so an expected target
+// list does not come from the graph under test.
+function exportsReaching(sha, reaches) {
+  const git = (...args) => execFileSync("git", args, { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+  const files = new Set(git("ls-tree", "-r", "--name-only", sha, "--", "functions").split("\n"));
+  const sources = new Map(), imports = new Map();
+  const read = path => { if (!sources.has(path)) sources.set(path, git("show", `${sha}:${path}`)); return sources.get(path); };
+  const resolve = (from, specifier) => {
+    const base = join(dirname(from), specifier);
+    return [base, `${base}.js`, `${base}.json`, `${base}.mjs`, join(base, "index.js")].find(path => files.has(path));
+  };
+  const edges = path => {
+    if (!imports.has(path)) imports.set(path, path.endsWith(".json") ? [] : [...read(path)
+      .matchAll(/(?:require\(|import\(|from\s+|import\s+)\s*["'](\.[^"']+)["']/g)].map(match => resolve(path, match[1])).filter(Boolean));
+    return imports.get(path);
+  };
+  const index = read("functions/index.js");
+  return [...index.matchAll(/^lazyExport\("(\w+)", "(\.\/[^"]+)"/gm)].filter(([, , specifier]) => {
+    const seen = new Set(), queue = [resolve("functions/index.js", specifier)];
+    while (queue.length) {
+      const path = queue.pop();
+      if (seen.has(path)) continue;
+      seen.add(path);
+      queue.push(...edges(path));
+    }
+    return [...seen].some(path => reaches(path, read));
+  }).map(([, name]) => name).sort();
+}
+
 describe("committed Functions module graph", () => {
   it("replays the November 19 rollout from both committed sources", async () => {
     const { before, after, removedVariable, count } =
@@ -91,6 +123,27 @@ describe("committed Functions module graph", () => {
       "CMS_READER_BRIDGE_CMS_API_CANDIDATE"].some(key => reads[name].keys.includes(key)));
     expect(readers.length).toBeGreaterThan(0);
     expect(READER_FUNCTIONS).toEqual(expect.arrayContaining(readers));
+  });
+
+  // A renderer rollout selects these exports, so a reader outside the set would keep the old pin.
+  it("selects each export that reaches the renderer pin at this commit", async () => {
+    const head = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+    const selected = (await fingerprintFunctionGraph(head, { includeRuntimeInputs: true })).rendererReaders.sort();
+    expect(selected.length).toBeGreaterThan(0);
+    expect(selected).toEqual(exportsReaching(head, (path, read) => /CMS_PREVIEW_RENDERER_SHA/.test(read(path))));
+  });
+  it.each([
+    'exports.health = process.env.CMS_PREVIEW_RENDERER_SHA;',
+    'const { CMS_PREVIEW_RENDERER_SHA: sha } = process.env; exports.health = sha;',
+    'const { defineString } = require("firebase-functions/params"); exports.health = defineString("CMS_PREVIEW_RENDERER_SHA");',
+    'const read = (env = process.env) => env["CMS_PREVIEW_RENDERER_SHA"]; exports.health = read;',
+  ])("adds a Function to the renderer rollout when it starts to read the pin: %s", async source => {
+    const repo = repository();
+    repo.write("functions/package.json", '{"dependencies":{"firebase-functions":"1"}}');
+    const graph = () => fingerprintFunctionGraph(repo.commit(), { cwd: repo.cwd, includeRuntimeInputs: true });
+    expect((await graph()).rendererReaders).not.toContain("health");
+    repo.write("functions/lib/shared.js", source);
+    expect((await graph()).rendererReaders).toContain("health");
   });
 
   it("skips a variable-list edit when the committed closures and deployed values agree", async () => {
@@ -300,22 +353,71 @@ describe("committed Functions module graph", () => {
     expect(await repo.graph(repo.commit())).toBeNull();
   });
 
-  // Dev run 45562533334 deployed all 187 Functions after #641 changed four lines of the deploy script.
-  it("selects no Function when only deploy tools change", async () => {
+  // Dev runs 45562533334 and 45583430289 deployed all 187 Functions after edits to
+  // deploy tools. Each tool is in a stored fingerprint and in no Function.
+  it("selects no Function when only tools change, whichever tool it is", async () => {
     const repo = repository();
-    for (const path of FUNCTION_DEPLOY_TOOLS) repo.write(path, "export const before = 1;");
+    const tools = RECEIPT_INPUT_PATHS.functions.filter(path => path.startsWith("scripts/")
+      && ![...contractInputs, "scripts/render-development-config.mjs"].includes(path));
+    expect(tools).toEqual(expect.arrayContaining(["scripts/configure-cms-functions.mjs", "scripts/lib/functions-configuration.mjs",
+      "scripts/lib/functions-secret-versions.mjs", "scripts/lib/provider-call.mjs", "scripts/resolve-media-purge.sh"]));
+    const others = ["packages/content-core/src/unbuilt.ts", "admin/package.json", "cms-api/package.json"];
+    const edit = value => [...tools, ...others].forEach(path => repo.write(path, `// ${value}`));
+    edit(1);
     const before = repo.commit();
-    for (const path of FUNCTION_DEPLOY_TOOLS) repo.write(path, "export const after = 2;");
-    const tools = repo.commit();
-    const { plan, prior, target } = await releaseInputs(before, tools, repo.cwd);
+    edit(2);
+    const changed = repo.commit();
+    const { plan, prior, target } = await releaseInputs(before, changed, repo.cwd);
     expect(decideRelease(plan)).toMatchObject({ functionsMutated: false, functionDeployTargets: "", releaseReason: "unchanged" });
     // Receipts store these two values, so both still count the tools.
     expect(plan.functionsFingerprint).not.toBe(plan.functionsReceipt.mutation.inputFingerprint);
     expect(target.graph.globalFingerprint).not.toBe(prior.graph.globalFingerprint);
-    for (const path of FUNCTION_DEPLOY_TOOLS) repo.write(path, "export const after = 3;");
+    edit(3);
     repo.write("functions/health.js", "exports.health = 2;");
-    const { plan: both } = await releaseInputs(tools, repo.commit(), repo.cwd);
+    const { plan: both } = await releaseInputs(changed, repo.commit(), repo.cwd);
     expect(decideRelease(both)).toMatchObject({ functionsMutated: true, functionDeployTargets: "functions:health" });
+  });
+
+  it.each(["scripts/compile-functions-contracts.mjs", "scripts/render-development-config.mjs",
+    "firebase.json", "firebase.dev.json", ".firebaserc", "package.json", "package-lock.json", ".npmrc", "functions/assets/logo.png",
+    "functions/unreached.js", "config/functions-deployment.json"])("deploys every Function for a declared build or package input: %s", async path => {
+    const repo = repository(), before = (repo.write(path, "{}"), repo.commit());
+    repo.write(path, '{"changed":true}');
+    const { plan } = await releaseInputs(before, repo.commit(), repo.cwd);
+    expect(decideRelease(plan)).toMatchObject({ functionDeployTargets: "all" });
+  });
+
+  it("selects what a changed configuration output governs", async () => {
+    const repo = repository();
+    const table = value => JSON.stringify({ inputs: {}, parameters: {}, secrets: {}, provider: { ttlField: value } });
+    repo.write("functions/health.js", "exports.health = process.env.TVSS_CALLSIGN;");
+    repo.write("scripts/lib/functions-configuration.mjs", "// first");
+    repo.write("config/functions-configuration.json", table("expireAt"));
+    const before = repo.commit();
+    repo.write("scripts/lib/functions-configuration.mjs", "// second");
+    const tool = repo.commit();
+    const { plan, target } = await releaseInputs(before, tool, repo.cwd);
+    const live = Object.keys(target.graph.exports).map(name => ({ name, serviceConfig: { environmentVariables: { TVSS_CALLSIGN: "old" } } }));
+    const output = value => runtimeParameterChanges(live, { TVSS_CALLSIGN: value }, target.reads, ["TVSS_CALLSIGN"]);
+    expect(decideRelease({ ...plan, runtimeChanges: output("old") })).toMatchObject({ functionDeployTargets: "" });
+    expect(decideRelease({ ...plan, runtimeChanges: output("new") })).toMatchObject({ functionDeployTargets: "functions:health" });
+    repo.write("config/functions-configuration.json", table("expiresAt"));
+    const { plan: contract } = await releaseInputs(tool, repo.commit(), repo.cwd);
+    expect(decideRelease(contract)).toMatchObject({ functionDeployTargets: "all", releaseReason: "functions_configuration_changed" });
+  });
+
+  // Real commits. Run 45583430289 compared the first pair and deployed 187 Functions.
+  it("plans real commits from what their Functions contain", async () => {
+    const tools = await releaseInputs("902756382a711cab0fdddf2aed6ff7c818a49081", "c9d9b8e36d34e6cdd394705c889f48000b1d0bd2");
+    expect(tools.target.graph.globalFingerprint).not.toBe(tools.prior.graph.globalFingerprint);
+    expect(decideRelease(tools.plan)).toMatchObject({ functionsMutated: false, functionDeployTargets: "", releaseReason: "unchanged" });
+    const { before, after } = FUNCTION_EDIT;
+    const { plan } = await releaseInputs(before, after);
+    const edited = ["functions/media-collections.js", "functions/lib/media-collections.js"];
+    const changed = exportsReaching(after, path => edited.includes(path));
+    expect(changed).toEqual(expect.arrayContaining(["cmsListMediaCollections", "cmsSetMediaCollectionItems"]));
+    expect(changed).not.toContain("health");
+    expect(decideRelease(plan)).toMatchObject({ functionDeployTargets: changed.map(name => `functions:${name}`).join(",") });
   });
 
   it("invalidates the full-release configuration for assets, manifests and index changes", async () => {

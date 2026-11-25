@@ -272,8 +272,8 @@ test("every CMS consumer pins clean release helpers separately from trusted work
     });
     for (const step of steps) assert.doesNotMatch(step.run ?? "", /cp .*\/scripts\/lib\/repository-identity\.mjs/);
   }
-  const { RELEASE_CHECK_PATHS } = await import('../../scripts/lib/cms-release-plan.mjs');
-  for (const path of ['scripts/lib/repository-identity.mjs', 'scripts/lib/studio-title-files.mjs', 'agents/vmix/configuration.mjs']) {
-    assert.ok(RELEASE_CHECK_PATHS.includes(path));
+  const { CMS_RELEASE_CHECK_FILES } = await import('./require-cms-release-sources.mjs');
+  for (const path of ['scripts/lib/studio-title-files.mjs', 'agents/vmix/configuration.mjs']) {
+    assert.ok(CMS_RELEASE_CHECK_FILES.includes(path));
   }
 });
