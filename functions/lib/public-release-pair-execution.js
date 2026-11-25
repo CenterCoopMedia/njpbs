@@ -32,14 +32,19 @@ const isPairFailureCode = code => PAIR_FAILURE_CODES.has(code);
 const TRANSPORT_GRPC = new Set([4, 8, 10, 13, 14]);
 // The host has no room or handle now.
 const HOST_CAPACITY = new Set(["ENOSPC", "EMFILE", "ENFILE", "ENOMEM", "EAGAIN"]);
+/** The error, or a cause of it, is the host having no room or handle. */
+function isHostCapacityFailure(error) {
+  for (let cause = error; cause && typeof cause === "object"; cause = cause.cause) if (HOST_CAPACITY.has(cause.code)) return true;
+  return false;
+}
 const transportStatus = status => status === 408 || status === 429 || Number.isInteger(status) && status >= 500 && status <= 599;
 /** A service did not answer, or answered that it cannot serve now. The next
  * attempt can differ, so this is never evidence about content. */
 function isPairTransportFailure(error) {
   if (error instanceof PublicReleaseProtocolError) return false;
-  if (noAnswer(error)) return true;
+  if (noAnswer(error) || isHostCapacityFailure(error)) return true;
   for (let cause = error; cause && typeof cause === "object"; cause = cause.cause) {
-    if (cause.code === "storage-unavailable" || cause.name === "TimeoutError" || HOST_CAPACITY.has(cause.code) ||
+    if (cause.code === "storage-unavailable" || cause.name === "TimeoutError" ||
         // A child process error carries its exit code in the same field.
         cause.cmd === undefined && TRANSPORT_GRPC.has(cause.code) ||
         [cause.code, cause.status, cause.statusCode, cause.response?.status, cause.$metadata?.httpStatusCode].some(transportStatus)) return true;
@@ -63,4 +68,4 @@ function assertPrivatePairResources(pair) {
       targets.some(target => pair.publisher.journalNamespace === target.serializerId)) throw new PublicReleaseProtocolError();
 }
 
-module.exports = { WAITING_FAILURE_CODES, isPairFailureCode, isPairFinalFailure, isPairTransportFailure, rethrowPairTransport, PairExecutionError, assertPrivatePairResources };
+module.exports = { WAITING_FAILURE_CODES, isPairFailureCode, isPairFinalFailure, isHostCapacityFailure, isPairTransportFailure, rethrowPairTransport, PairExecutionError, assertPrivatePairResources };
