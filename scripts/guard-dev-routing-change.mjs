@@ -6,7 +6,7 @@ import { pathToFileURL } from 'node:url';
 import { checkDevAnonymousRefusal, DEV_HOSTS } from './check-dev-anonymous-refusal.mjs';
 import { checkDevMachineReceipt } from './check-dev-machine-receipt.mjs';
 import { verifyGuardedRouteTarget } from './deploy-dev-staff-gateway.mjs';
-import { failureText, faultKind, kindCause } from './lib/provider-call.mjs';
+import { failureText, faultCause, faultKind, faultLine, kindCause } from './lib/provider-call.mjs';
 
 const ACCOUNT = (process.env.CLOUDFLARE_ACCOUNT_ID ?? "");
 const ID = /^[a-f0-9]{32}$/;
@@ -14,6 +14,8 @@ const DNS_FIELDS = ['name', 'type', 'content', 'ttl', 'proxied', 'comment', 'tag
 
 // Only these fixed operator messages may leave the CLI error boundary.
 class GuardError extends Error {}
+// A guard refusal is a fixed sentence. Another error can quote provider data.
+const guardCause = error => error instanceof GuardError ? faultCause(error) : kindCause(error);
 
 function requireState(condition, message) {
   if (!condition) throw new GuardError(message);
@@ -99,7 +101,7 @@ export async function guardDevRoutingChange({ plan, receiptPath, apply = false, 
       const data = await response.json();
       requireState(response.ok && data.success === true, 'Cloudflare request refused');
       return data.result;
-    } catch (error) { throw new GuardError('Cloudflare request failed; inspect the private receipt', kindCause(error)); }
+    } catch (error) { throw new GuardError('Cloudflare request failed; inspect the private receipt', guardCause(error)); }
   }
   const zones = await api(`/zones?name=njpbs.org&account.id=${ACCOUNT}`);
   requireState(Array.isArray(zones) && zones.length === 1 && ID.test(zones[0].id) &&
@@ -123,7 +125,7 @@ export async function guardDevRoutingChange({ plan, receiptPath, apply = false, 
         routeId: plan.recordId, owner, versionId: plan.versionId, sourceSha: plan.sourceSha,
         audience: env.DEV_ACCESS_AUDIENCE, expectedRoutes });
       initialRoutes ??= routes;
-    } catch (error) { throw new GuardError('Staged gateway or zone route verification failed; no transfer may be accepted', kindCause(error)); }
+    } catch (error) { throw new GuardError('Staged gateway or zone route verification failed; no transfer may be accepted', guardCause(error)); }
   }
   await verifyTarget(before.script);
   const previous = writable(before, plan.kind);
@@ -180,7 +182,7 @@ export async function guardDevRoutingChange({ plan, receiptPath, apply = false, 
       } catch (error) {
         if (now() >= recoveryDeadline) {
           log('RESTORE FAILED: Keep writers held; restore from the private receipt now');
-          throw new GuardError(`Dev change failed (${faultKind(cause)}) and restoration is unverified`, kindCause(error));
+          throw new GuardError(`Dev change failed (${faultLine(cause)}) and restoration is unverified`, faultCause(error));
         }
         log('Restore request failed; retrying within the recovery window');
         await wait(Math.min(intervalMs, recoveryDeadline - now()));
@@ -198,10 +200,10 @@ export async function guardDevRoutingChange({ plan, receiptPath, apply = false, 
             await restoreReadback(true);
           } catch (error) {
             log('RESTORE FAILED: Keep writers held; restore from the private receipt now');
-            throw new GuardError(`Dev change failed (${faultKind(cause)}) and restoration is unverified`, kindCause(error));
+            throw new GuardError(`Dev change failed (${faultLine(cause)}) and restoration is unverified`, faultCause(error));
           }
           log('RESTORED BUT PROOF FAILED: Keep writers held; escalate the dev access failure');
-          throw new GuardError(`Dev change failed (${faultKind(cause)}); record restored but HTTP verification failed`, kindCause(error));
+          throw new GuardError(`Dev change failed (${faultLine(cause)}); record restored but HTTP verification failed`, faultCause(error));
         }
         log('Restored record proof failed; recovery remains active');
         await wait(Math.min(intervalMs, recoveryDeadline - now()));
@@ -213,7 +215,7 @@ export async function guardDevRoutingChange({ plan, receiptPath, apply = false, 
     } while (true);
     log('Previous dev record restored');
     record('restored');
-    throw new GuardError('Dev change failed; previous record restored', kindCause(cause));
+    throw new GuardError('Dev change failed; previous record restored', faultCause(cause));
   }
 }
 
