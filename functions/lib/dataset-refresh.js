@@ -3,6 +3,7 @@ const { DatasetError, validDatasetId } = require("./datasets");
 const { digest, figureBlocks, validateFrozenDatasetFigures, readApprovedDatasetProjection } = require("./dataset-dependencies");
 const { prepareDatasetUsageWrites, useId } = require("./dataset-usage");
 const { assertSameSourceRefresh, editorialSnapshotDigest } = require("./dataset-refresh-identity");
+const { isHubElectricity, hubElectricityProblem } = require("./data-hub-electricity");
 const { hasElectionResults, readElectionEditorialDigest } = require("./election-source-lineage");
 const { publiclyVisible } = require("./public-video-references");
 const { readPublicContextRevisionInTransaction, publicContextDigest } = require("./public-context-revision");
@@ -16,13 +17,21 @@ const transientCodes = new Set([4, 8, 10, 13, 14,
 function affectedUse(use, action, releaseId) {
   return action === "archive" || action === "correction" && use.releaseId === releaseId || action === "new_release" && use.releasePolicy === "latestApproved";
 }
-async function captureDatasetRefresh({ firestore, transaction, datasetId, action, releaseId, revision, approvedDigest, expectedUseCount, requestId }) {
+async function captureDatasetRefresh({ firestore, transaction, datasetId, action, releaseId, revision, approvedDigest, expectedUseCount, requestId, release }) {
   const uses = await transaction.get(firestore.collection("cmsDatasetUses").where("datasetId", "==", datasetId).limit(501));
   if (uses.size > 500) fail("This dataset exceeds 500 published uses.");
   if (uses.docs.some(row => !["cmsPages", "cmsPosts"].includes(row.data().collection) || !validDatasetId(row.data().documentId) ||
     !validDatasetId(row.data().blockId) || !["pinned", "latestApproved"].includes(row.data().releasePolicy))) fail("A dataset use needs repair before approval.");
   const affected = uses.docs.filter(row => affectedUse(row.data(), action, releaseId));
   if (affected.length !== expectedUseCount) fail("The affected use count changed. Review it again.");
+  // A release the Hub cannot show would fail every refresh and block its own correction.
+  const hubUse = release && affected.map(row => row.data()).find(use => use.collection === "cmsPages" && use.documentId === "data-hub");
+  if (hubUse) {
+    const problem = hubElectricityProblem(release);
+    if (problem) fail(problem);
+    const shown = (await transaction.get(firestore.doc(`cmsDatasets/${datasetId}/releases/${hubUse.releaseId}/revisions/${hubUse.revision}`))).data();
+    if (shown && isHubElectricity(shown.release) !== isHubElectricity(release)) fail("Remove this data figure from the Data Hub Page before you change whether it is the electricity price.");
+  }
   const owners = new Map();
   const storedEditorialDigests = new Map();
   for (const row of affected) {

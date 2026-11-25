@@ -1,11 +1,14 @@
+import { hubElectricityEmbed, readHubElectricity } from "./data-hub-electricity.ts";
 import { SECURITY_HEADER_BASELINE } from "./public-security-headers";
 
 const basePath = /^\/data\/figures\/([a-z0-9-]+)\/embed\/?$/;
 const savedPath = /^\/data\/figures\/[a-z0-9-]+\/embed\/(?:number|\d{4}-\d{2}-\d{2}\/(?:chart|number))\/$/;
 const embedFamily = /^\/data\/figures\/[^/]+\/embed(?:\/|$)/;
 
-/** Only the script-free public figure documents allow third-party framing. */
-export function serveDataHubEmbed(request: Request, fetchAsset: (request: Request) => Promise<Response>): Response | Promise<Response> | null {
+/** Only the script-free public figure documents allow third-party framing.
+ * The latest electricity embed shows the record in the Hub page being served. */
+export function serveDataHubEmbed(request: Request, fetchAsset: (request: Request) => Promise<Response>,
+  hubPage: () => Promise<Response | null> = () => fetchAsset(new Request(new URL("/data-hub/", request.url)))): Response | Promise<Response> | null {
   const url = new URL(request.url);
   const base = basePath.exec(url.pathname);
   if (!embedFamily.test(url.pathname)) return null;
@@ -22,16 +25,28 @@ export function serveDataHubEmbed(request: Request, fetchAsset: (request: Reques
     headers.set("allow", "GET, HEAD");
     return new Response(null, { status: 405, headers });
   }
+  let latest: "chart" | "number" | undefined = url.pathname === "/data/figures/electricity/embed/number/" ? "number" : undefined;
   if (base) {
     const view = url.searchParams.get("view") ?? "chart";
     const revision = url.searchParams.get("revision");
     if (!["chart", "number"].includes(view) || revision !== null && !/^\d{4}-\d{2}-\d{2}$/.test(revision)) return missing();
+    if (base[1] === "electricity" && revision === null) latest = view as "chart" | "number";
     url.pathname = `/data/figures/${base[1]}/embed/` + (revision ? `${revision}/${view}/` : view === "number" ? "number/" : "");
   }
   url.search = "";
   // Avoid a cached site-shell 304 or partial response carrying a different body.
-  return fetchAsset(new Request(url, { method: "GET" })).then(asset => {
+  return (async () => {
+    const asset = await fetchAsset(new Request(url, { method: "GET" }));
     if (asset.status !== 200 || !asset.headers.get("content-type")?.startsWith("text/html")) return missing();
-    return new Response(request.method === "HEAD" ? null : asset.body, { headers });
-  });
+    // The Hub worker already tries its retained copies. A page it will not serve has no current price to show.
+    const hub = latest ? await hubPage().catch(() => null) : undefined;
+    if (hub && (hub.status === 404 || hub.status === 410)) return missing();
+    if (hub !== undefined && hub?.status !== 200) {
+      headers.set("cache-control", "no-store");
+      return new Response(request.method === "HEAD" ? null : "Figure unavailable", { status: 503, headers });
+    }
+    if (request.method === "HEAD") return new Response(null, { headers });
+    const metric = hub ? readHubElectricity(await hub.text()) : null;
+    return new Response(metric ? hubElectricityEmbed(await asset.text(), metric, latest!) : asset.body, { headers });
+  })();
 }

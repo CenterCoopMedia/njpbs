@@ -22,6 +22,7 @@ functions/cloud-publication-wake.generated.json
 /functions/lib/county-comparison.js
 /functions/lib/data-figure.js
 /functions/lib/data-hub-composition.js
+/functions/lib/data-hub-electricity.js
 /functions/lib/data-hub-reporting-sources.js
 /functions/lib/data-hub-reporting.js
 /functions/lib/data-table.js

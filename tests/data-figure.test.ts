@@ -287,6 +287,20 @@ describe("frozen data figure admission", () => {
     expect(resolve("figure-a", { ...data, version: { mode: "pinned", releaseId: "different-release" } })).toBeNull();
   });
 
+  it("refuses two electricity figures on the Data Hub, also when they share one release", async () => {
+    const { validateFrozenDatasetFigures } = await import("../functions/lib/dataset-dependencies.js");
+    const { defaultDataHubBlocks } = await import("../packages/content-core/src/data-hub-composition");
+    const { electricityProjection } = await import("../site/tests/fixtures/hub-electricity");
+    const figure = electricityProjection();
+    const block = (id: string, order: number) => ({ id, type: "data_figure", order, visible: true,
+      data: { datasetId: figure.datasetId, version: { mode: "latestApproved" }, display: "expanded" } });
+    const snapshot = (ids: string[]) => ({ blocks: [...defaultDataHubBlocks(), ...ids.map((id, index) => block(id, 25 + index))],
+      datasetFigures: { figures: ids.map(blockId => ({ blockId, datasetId: figure.datasetId, releaseId: figure.releaseId,
+        revision: figure.revision, digest: figure.digest })), releases: [figure] } });
+    expect(() => validateFrozenDatasetFigures(snapshot(["one"]))).not.toThrow();
+    expect(() => validateFrozenDatasetFigures(snapshot(["one", "two"]))).toThrow("Keep one electricity data figure");
+  });
+
   it("refuses a small deduplicated input whose repeated figures exceed the HTML budget", async () => {
     const { validateFrozenDatasetFigures } = await import("../functions/lib/dataset-dependencies.js");
     const release = projection();

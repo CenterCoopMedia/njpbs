@@ -309,7 +309,7 @@
       <div class="measure__comparison">${chart}</div>
       <div class="measure__footer">
         <div class="measure__actions" aria-label="Reuse ${escape(m.title)}"><button type="button" data-open-figure="${escape(m.id)}" data-figure-mode="embed">Embed / download</button></div>
-        <p class="measure__source"><strong>Source:</strong> ${sourceAnchor}</p>
+        <p class="measure__source"><strong>Source:</strong> ${sourceAnchor}${creditText(m)}</p>
         <p class="measure__next"><strong>Next review:</strong> ${escape(dateLabel(m.nextCheck))}</p>
         <details class="measure__details"><summary>Definition and notes</summary>
           <p>${escape(m.methodNote || m.description || '')}</p>
@@ -466,9 +466,10 @@
       m.editorialOverride ? unitFormat(m.value,m.unit) : m.display || unitFormat(m.value,m.unit);
   }
   function sourceLine(m) { return m.source || 'Source awaiting confirmation'; }
+  function creditText(m) { return m.datasetRelease?.credit ? ' · ' + escape(m.datasetRelease.credit) : ''; }
   function reuseWarnings(m) {
     return m.editorialOverride ? 'Unpublished editorial draft — not for publication' :
-      'Published on NJ PBS';
+      'Published on NJ PBS' + (m.datasetRelease?.credit ? ' · ' + m.datasetRelease.credit : '');
   }
   function reuseStatus(m) {
     return m.editorialOverride ? 'draft' : m.status === 'verified' && m.value !== null ? 'source-verified' : 'pending';
@@ -499,7 +500,7 @@
     const attrSource = link ? `<a href="${xml(link)}" target="_blank" rel="noopener noreferrer">${xml(sourceLine(m))}<span class="sr-only"> (opens in new tab)</span></a>` : xml(sourceLine(m));
     const context = m.insight ? `<p class="context">${xml(m.insight)}</p>` : '';
     const external = view==='chart' && approvedThirdParty ? `<iframe src="${xml(approvedThirdParty)}" loading="lazy" sandbox="allow-scripts" referrerpolicy="no-referrer" title="Approved external chart for ${xml(m.title)}" style="display:block;width:100%;height:350px;border:0"></iframe>` : '';
-    const revisionText = revisionMode === 'pinned' ? 'Snapshot of this published figure.' : 'This download preserves a dated snapshot and does not fetch live data.';
+    const revisionText = m.datasetRelease ? 'Latest published figure.' : revisionMode === 'pinned' ? 'Snapshot of this published figure.' : 'This download preserves a dated snapshot and does not fetch live data.';
     return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>${xml(m.title)} – NJ PBS data figure</title><style>${srOnlyStyle}
       :root{color-scheme:dark;font:400 16px/1.5 "PBS Sans","Avenir Next",Avenir,"Segoe UI",sans-serif;background:${palette['--bg-0']};color:${palette['--text']}}
       *{box-sizing:border-box}body{margin:0;padding:clamp(1rem,4vw,1.65rem);background:${palette['--bg-0']}}
@@ -582,8 +583,10 @@
       <footer class="meta"><p><strong>Source:</strong> ${attrSource}</p><p><strong>Checked:</strong> ${xml(dateLabel(m.checked || seed.asOf))}. ${xml(revisionText)}</p><p class="note">${xml(reuseWarnings(m))}</p></footer>
     </main></body></html>`;
   }
+  // A figure published from Boardwalk has no dated embed file. Its date is its approval date.
+  const snapshotDate = m => m.datasetRelease?.approvedOn || seed.asOf;
   function creditedFigureDocument(m, view, revisionMode) {
-    const credit = `<footer class="njpbs-figure-credit"><p>Data snapshot: <time datetime="${xml(seed.asOf)}">${xml(dateLabel(seed.asOf))}</time> · <a href="https://njpbs.org/data-hub/" target="_blank" rel="noopener noreferrer">NJ PBS Data Hub<span class="sr-only"> (opens in new tab)</span></a></p></footer>`;
+    const credit = `<footer class="njpbs-figure-credit"><p>Data snapshot: <time datetime="${xml(snapshotDate(m))}">${xml(dateLabel(snapshotDate(m)))}</time> · <a href="https://njpbs.org/data-hub/" target="_blank" rel="noopener noreferrer">NJ PBS Data Hub<span class="sr-only"> (opens in new tab)</span></a></p></footer>`;
     const fonts = `<style>@font-face{font-family:"PBS Sans";font-style:normal;font-weight:400;font-display:swap;src:url("https://njpbs.org/brand/fonts/PBSSans.woff2") format("woff2")}@font-face{font-family:"PBS Sans";font-style:normal;font-weight:700 900;font-display:swap;src:url("https://njpbs.org/brand/fonts/PBSSans-Bold.woff2") format("woff2")}</style>`;
     return figureDocument(m,view,revisionMode).replace('</head>',fonts+'</head>').replace('</main>',credit+'</main>');
   }
@@ -620,7 +623,9 @@
   function chartAsSVG(m, view) {
     if (view === 'chart' && (historySeries(m).length || (m.id==='medianrent' && !m.editorialOverride && m.status==='verified'))) return historyFigureSVG(m);
     const points = view==='chart' ? cleanPoints(m.points) : [];
-    const H = Math.max(650,430 + points.length*60);
+    // Credits use Latin text only (hubElectricityProblem); 50 of its widest characters fit here.
+    const publication = v7WrapText(reuseWarnings(m),50), overflow = (publication.length-1)*30;
+    const H = Math.max(650,430 + points.length*60) + overflow;
     const title = m.title.length>48 ? m.title.slice(0,45)+'…' : m.title;
     const subtitle = m.period||'Date pending';
     const topY=290;
@@ -630,9 +635,9 @@
       const w=Math.min(680,Math.max(0,p.value/max*680));
       return `<text x="72" y="${y+20}" font-size="23" fill="${palette['--color-data-hub-muted']}">${xml(p.label)}</text><rect x="280" y="${y}" width="680" height="20" fill="${palette['--color-data-hub-chart-track']}"/><rect x="280" y="${y}" width="${w.toFixed(2)}" height="20" fill="${palette['--color-data-hub-export-bar']}"/><text x="1130" y="${y+20}" text-anchor="end" font-size="23" font-weight="700" fill="${palette['--text']}">${xml(unitFormat(p.value,m.unit))}</text>`;
     }).join('');
-    const footerY=H-122;
+    const footerY=H-122-overflow;
     const source = sourceLine(m).length>82 ? sourceLine(m).slice(0,79)+'…' : sourceLine(m);
-    return `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="${H}" viewBox="0 0 1200 ${H}" role="img" aria-labelledby="title description"><title id="title">${xml(m.title)} — ${xml(reuseValue(m))}</title><desc id="description">${xml(subtitle)}; source: ${xml(sourceLine(m))}. ${xml(reuseWarnings(m))}. ${xml(points.map(p=>`${p.label}: ${unitFormat(p.value,m.unit)}`).join('; '))}</desc><rect width="1200" height="${H}" fill="${palette['--bg-0']}"/><text x="72" y="83" font-family="PBS Sans,Avenir Next,Arial,sans-serif" font-size="52" font-weight="700" fill="${palette['--text']}">${xml(title)}</text><text x="72" y="195" font-family="PBS Sans,Avenir Next,Arial,sans-serif" font-size="80" font-weight="700" fill="${palette['--text']}">${xml(reuseValue(m))}</text><text x="72" y="240" font-family="PBS Sans,Avenir Next,Arial,sans-serif" font-size="26" fill="${palette['--color-data-hub-muted']}">${xml(subtitle.length>73?subtitle.slice(0,70)+'…':subtitle)}</text><g font-family="PBS Sans,Avenir Next,Arial,sans-serif">${rows}</g><path d="M72 ${footerY} H1128" stroke="${palette['--color-data-hub-chart-rule']}" stroke-width="1"/><text x="72" y="${footerY+40}" font-family="PBS Sans,Avenir Next,Arial,sans-serif" font-size="24" fill="${palette['--color-data-hub-muted']}">Source: ${xml(source)}</text><text x="72" y="${footerY+72}" font-family="PBS Sans,Avenir Next,Arial,sans-serif" font-size="22" fill="${palette['--color-data-hub-muted']}">${xml(reuseWarnings(m))}</text></svg>`;
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="${H}" viewBox="0 0 1200 ${H}" role="img" aria-labelledby="title description"><title id="title">${xml(m.title)} — ${xml(reuseValue(m))}</title><desc id="description">${xml(subtitle)}; source: ${xml(sourceLine(m))}. ${xml(reuseWarnings(m))}. ${xml(points.map(p=>`${p.label}: ${unitFormat(p.value,m.unit)}`).join('; '))}</desc><rect width="1200" height="${H}" fill="${palette['--bg-0']}"/><text x="72" y="83" font-family="PBS Sans,Avenir Next,Arial,sans-serif" font-size="52" font-weight="700" fill="${palette['--text']}">${xml(title)}</text><text x="72" y="195" font-family="PBS Sans,Avenir Next,Arial,sans-serif" font-size="80" font-weight="700" fill="${palette['--text']}">${xml(reuseValue(m))}</text><text x="72" y="240" font-family="PBS Sans,Avenir Next,Arial,sans-serif" font-size="26" fill="${palette['--color-data-hub-muted']}">${xml(subtitle.length>73?subtitle.slice(0,70)+'…':subtitle)}</text><g font-family="PBS Sans,Avenir Next,Arial,sans-serif">${rows}</g><path d="M72 ${footerY} H1128" stroke="${palette['--color-data-hub-chart-rule']}" stroke-width="1"/><text x="72" y="${footerY+40}" font-family="PBS Sans,Avenir Next,Arial,sans-serif" font-size="24" fill="${palette['--color-data-hub-muted']}">Source: ${xml(source)}</text>${publication.map((line,i)=>`<text x="72" y="${footerY+72+i*30}" font-family="PBS Sans,Avenir Next,Arial,sans-serif" font-size="22" fill="${palette['--color-data-hub-muted']}">${xml(line)}</text>`).join('')}</svg>`;
   }
   function csvRows(m) {
     const points=cleanPoints(m.points);
@@ -650,7 +655,7 @@
     if (safeEmbed(m.embedUrl) && view==='chart' && (format==='svg'||format==='png')) {reuseFeedback.textContent='External charts cannot be exported as NJ PBS image files. Export HTML or data, or switch to Number only.';return;}
     if (format==='csv') return downloadBlob(new Blob(['\ufeff',csvRows(m)],{type:'text/csv;charset=utf-8'}),base+'.csv');
     if (format==='json') {
-      const record={format:'njpbs-data-figure-prototype-v1',previewOnly:false,editorialStatus:status,updateMode:reuseRevisionMode(),asOf:seed.asOf,metric:m};
+      const record={format:'njpbs-data-figure-prototype-v1',previewOnly:false,editorialStatus:status,updateMode:reuseRevisionMode(),asOf:snapshotDate(m),metric:m};
       return downloadBlob(new Blob([JSON.stringify(record,null,2)],{type:'application/json;charset=utf-8'}),base+'.json');
     }
     if (format==='html') return downloadBlob(new Blob([creditedFigureDocument(m,view,reuseRevisionMode())],{type:'text/html;charset=utf-8'}),base+'.html');
@@ -677,6 +682,9 @@
   function updateReuseDialog() {
     const m=currentReuseMetric();
     if (!m) {reuseDialog.close();return;}
+    const pinnedChoice=document.querySelector('input[name="figure-revision"][value="pinned"]');
+    pinnedChoice.disabled=Boolean(m.datasetRelease);
+    if(m.datasetRelease)document.querySelector('input[name="figure-revision"][value="latest"]').checked=true;
     const view=reuseView(), rev=reuseRevisionMode();
     const draftish=m.editorialOverride || m.value===null || m.value===undefined || m.status !== 'verified';
     $('figure-dialog-title').textContent=m.title;
@@ -1068,7 +1076,7 @@
     propertytax:{heading:'How the average bill has changed',scope:'Selected years only · nominal dollars',reading:'The pale section of the 2025 bar is the $475 increase since 2024. Unshown intervening years are not zero.'},
     precipitation:{heading:'Which months were wetter or drier than normal?',scope:'January–October 2026 · monthly departure from 1991–2020 normal · inches',reading:'January–June were drier than normal; July–September were wetter, followed by a drier October. The January–October total remained below normal. All values use one revised Rutgers nClimDiv statewide monthly table.'},
     minimumwage:{heading:'Minimum hourly wage for most NJ workers, 2020–2026',scope:'Actual rate effective January 1 each year · dollars per hour',reading:'Each zero-based bar is an effective historical January 1 rate for most workers. The $16.48 rate announced for January 1, 2027 is shown separately, not as an effective historical rate.'},
-    electricity:{heading:electricMonth(m)+' electricity prices: 2025 and 2026',scope:'New Jersey vs. United States · residential cents per kilowatt-hour',reading:'Both years and both geographies are from EIA Table 5.6.A. Prices per kWh are not average monthly household bills.'},
+    electricity:{heading:electricMonth(m)+' electricity prices: '+electricRows(m).map(r=>r.year).join(' and '),scope:'New Jersey vs. United States · residential cents per kilowatt-hour',reading:'Both years and both geographies are from EIA Table 5.6.A. Prices per kWh are not average monthly household bills.'},
     medianrent:{heading:'Uncertainty around the 2024 rent estimate',scope:'ACS one-year survey · no prior series published yet',reading:'The margin describes sampling uncertainty, not the spread of rents households pay.'},
     medianincome:{heading:incomeView==='regional'?'Regional median household income':'New Jersey vs. United States',scope:'2025 ACS one-year estimates · 2025 inflation-adjusted dollars · zero-based scale',reading:'Both views use the same Census survey and reporting year. Medians are not adjusted for regional living costs; 90% sampling margins are shown for every estimate.'},
     housingpermits:{heading:'Monthly housing units authorized, 2025 vs. 2026',scope:'January–September · unadjusted monthly units · same Census series',reading:'Each pair compares the same month in 2025 and 2026, showing proposed housing units authorized, not completed homes. September 2026 is preliminary.'},
@@ -1159,18 +1167,17 @@
     for(const r of m.history)rows.push(['NJ historical estimate',incomeView,r.date,r.value,r.date==='2025'?m.incomeGeographies.find(row=>row.id==='nj').moe:1023,r.date+' ACS 1-year','2025 inflation-adjusted dollars',m.sourceUrl,m.checked]);
     return rows.map(row=>row.map(quoteCSV).join(',')).join('\r\n')+'\r\n';
   }
+  function electricMonth(m){return escape(String(m?.period||'').split(' ')[0]);}
+  function electricChange(to,from){const value=((to/from-1)*100).toFixed(1);return (Number(value)>0?'+':'')+value;}
   function electricRows(m){
  const r=m?.electricityComparison;
- return m?.id==='electricity'&&!m.editorialOverride&&m.status==='verified'&&Array.isArray(r)&&r.length===2&&r[0].year===2025&&r[1].year===2026&&r.every(x=>Number.isFinite(x.nj)&&Number.isFinite(x.us))?r:[];
+ return m?.id==='electricity'&&!m.editorialOverride&&m.status==='verified'&&Array.isArray(r)&&r.length===2&&r[1].year===r[0].year+1&&r.every(x=>Number.isFinite(x.nj)&&Number.isFinite(x.us))?r.map(x=>({year:Number(x.year),nj:x.nj,us:x.us})):[];
 }
-
-  function electricMonth(m){return String(m?.period||'').split(' ')[0];}
 
   function electricSVG(m,compact=false,instance="page"){
  const rows=electricRows(m);if(!rows.length)return "";
- const month=electricMonth(m);
  const W=compact?480:1000,H=compact?365:370,C=v7Palette;
- const start=compact?130:172,end=compact?380:870,max=30,width=end-start;
+ const start=compact?130:172,end=compact?380:870,max=Math.max(30,Math.ceil(Math.max(...rows.flatMap(r=>[r.nj,r.us]))/10)*10),width=end-start,month=electricMonth(m);
  let parts="";
  for(let i=0;i<rows.length;i++){
   const r=rows[i],groupY=34+i*149;
@@ -1184,25 +1191,28 @@
  }
  const axisY=333;
  parts+=v7Line(start,axisY,end,axisY,C.grid,1);
- for(const v of [0,15,30])parts+=v7Text(start+width*v/max,axisY+29,v+"¢",compact?17:18,450,v===0?"start":v===30?"end":"middle",C.secondary);
+ for(const v of [0,max/2,max])parts+=v7Text(start+width*v/max,axisY+29,v+"¢",compact?17:18,450,v===0?"start":v===max?"end":"middle",C.secondary);
  const id="electricity-"+instance+"-"+(compact?"mobile":"desktop");
  const detail=rows.map(r=>month+" "+r.year+": NJ "+r.nj.toFixed(2)+"¢/kWh, U.S. "+r.us.toFixed(2)+"¢/kWh").join("; ");
- return `<svg class="${compact?'history-svg--mobile':'history-svg--desktop'} v7-viz" xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-labelledby="${id}-title ${id}-desc"><title id="${id}-title">New Jersey and U.S. residential electricity prices, ${month} 2025 and 2026</title><desc id="${id}-desc">${escape(detail)}. Source: EIA Table 5.6.A, residential sector. The bars begin at zero. The 2026 data are preliminary.</desc>${parts}</svg>`;
+ return `<svg class="${compact?'history-svg--mobile':'history-svg--desktop'} v7-viz" xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-labelledby="${id}-title ${id}-desc"><title id="${id}-title">New Jersey and U.S. residential electricity prices, ${month} ${rows[0].year} and ${rows[1].year}</title><desc id="${id}-desc">${escape(detail)}. Source: EIA Table 5.6.A, residential sector. The bars begin at zero.${m.datasetRelease?"":` The ${rows[1].year} data are preliminary.`}</desc>${parts}</svg>`;
 }
 
   function electricMarkup(m,instance="page"){
  const rows=electricRows(m);if(!rows.length)return '';
- const copy=v7ChartCopy(m),month=electricMonth(m),change=(to,from)=>{const value=((to/from-1)*100).toFixed(1);return (Number(value)>0?'+':'')+value;},nj=change(rows[1].nj,rows[0].nj),us=change(rows[1].us,rows[0].us);
- const gap=(rows[1].nj-rows[1].us).toFixed(2),gapPercent=((rows[1].nj/rows[1].us-1)*100).toFixed(1);
+ const copy=v7ChartCopy(m),month=electricMonth(m),[before,now]=rows,nj=electricChange(now.nj,before.nj),us=electricChange(now.us,before.us),gap=now.nj-now.us;
  const src=safeUrl(m.sourceUrl);
- return `<div class="history-block v7-history"><div class="history-block__head"><p class="history-block__title">${escape(copy.heading)}</p><p class="history-block__unit">${escape(copy.scope)}</p></div><div class="history-plot">${electricSVG(m,false,instance)}${electricSVG(m,true,instance)}</div><p class="v7-reading">Since ${month} 2025, NJ's average price changed ${nj}%; the U.S. price changed ${us}%. In ${month} 2026, New Jersey was ${gap}¢/kWh (${gapPercent}%) above the U.S.</p><p class="v7-reading">Prices per kilowatt-hour, not average monthly utility bills.</p><details><summary>View all four source prices as a table</summary><div class="history-table-scroller"><table><caption>${month} residential electricity prices · EIA Table 5.6.A · cents per kilowatt-hour</caption><thead><tr><th scope="col">Month</th><th scope="col">New Jersey</th><th scope="col">United States</th></tr></thead><tbody>${rows.map(r=>`<tr><th scope="row">${month} ${r.year}</th><td>${r.nj.toFixed(2)}¢/kWh</td><td>${r.us.toFixed(2)}¢/kWh</td></tr>`).join('')}</tbody></table></div></details><details class="v7-source-notes"><summary>Method and limitations</summary><p>${escape(m.methodNote)}</p>${src?`<p><a href="${escape(src)}" target="_blank" rel="noopener noreferrer">Official EIA source<span class="sr-only"> (opens in new tab)</span></a></p>`:''}</details></div>`;
+ return `<div class="history-block v7-history"><div class="history-block__head"><p class="history-block__title">${escape(copy.heading)}</p><p class="history-block__unit">${escape(copy.scope)}</p></div><div class="history-plot">${electricSVG(m,false,instance)}${electricSVG(m,true,instance)}</div><p class="v7-reading">Since ${month} ${before.year}, NJ's average price changed ${nj}%; the U.S. price changed ${us}%. In ${month} ${now.year}, ${now.nj.toFixed(2)===now.us.toFixed(2)?"New Jersey's price was the same as the U.S. price.":`New Jersey was ${Math.abs(gap).toFixed(2)}¢/kWh (${Math.abs((now.nj/now.us-1)*100).toFixed(1)}%) ${gap>=0?'above':'below'} the U.S.`}</p><p class="v7-reading">Prices per kilowatt-hour, not average monthly utility bills.</p><details><summary>View all four source prices as a table</summary><div class="history-table-scroller"><table><caption>${month} residential electricity prices · EIA Table 5.6.A · cents per kilowatt-hour</caption><thead><tr><th scope="col">Month</th><th scope="col">New Jersey</th><th scope="col">United States</th></tr></thead><tbody>${rows.map(r=>`<tr><th scope="row">${month} ${r.year}</th><td>${r.nj.toFixed(2)}¢/kWh</td><td>${r.us.toFixed(2)}¢/kWh</td></tr>`).join('')}</tbody></table></div></details><details class="v7-source-notes"><summary>Method and limitations</summary><p>${escape(m.methodNote)}</p>${src?`<p><a href="${escape(src)}" target="_blank" rel="noopener noreferrer">Official EIA source<span class="sr-only"> (opens in new tab)</span></a></p>`:''}</details></div>`;
 }
 
   function electricCSV(m){
- const rows=[['period','geography','price_cents_per_kwh','source_name','source_url','released','checked','status']];
- for(const r of electricRows(m)){
-  rows.push([electricMonth(m)+" "+r.year,"New Jersey",r.nj.toFixed(2),m.source,m.sourceUrl,m.released,m.checked,r.year===2026?"preliminary":"final"]);
-  rows.push([electricMonth(m)+" "+r.year,"United States",r.us.toFixed(2),m.source,m.sourceUrl,m.released,m.checked,r.year===2026?"preliminary":"final"]);
+ // Staff text must not run as a spreadsheet formula. Numbers keep their sign, so quoteCSV does not cover "-".
+ const plain=value=>String(value??'').replace(/^(?=\s*[=+@-]|[\t\r])/,"'");
+ const extra=m.datasetRelease?[['method_note',plain(m.methodNote)],['credit',plain(m.datasetRelease.credit)]]:[];
+ const rows=[['period','geography','price_cents_per_kwh','source_name','source_url','released','checked','status',...extra.map(x=>x[0])]];
+ const all=electricRows(m);
+ for(const r of all){
+  rows.push([electricMonth(m)+" "+r.year,"New Jersey",r.nj.toFixed(2),plain(m.source),m.sourceUrl,m.released,m.checked,m.datasetRelease?"see method note":r===all[1]?"preliminary":"final",...extra.map(x=>x[1])]);
+  rows.push([electricMonth(m)+" "+r.year,"United States",r.us.toFixed(2),plain(m.source),m.sourceUrl,m.released,m.checked,m.datasetRelease?"see method note":r===all[1]?"preliminary":"final",...extra.map(x=>x[1])]);
  }
  return rows.map(row=>row.map(quoteCSV).join(',')).join('\r\n')+'\r\n';
 }
@@ -1518,7 +1528,7 @@
     const W=1200,plot=v7Viz(m,false,"export"),plotH=Number((plot.match(/height="(\d+)"/)||[])[1]||354);
     const placeY=356,visualH=Math.round(plotH*1.1),footerY=placeY+visualH+26;
     const copy=v7ChartCopy(m), title=v7WrapText(m.title,45),note=v7WrapText(copy.reading,105),source=v7WrapText('Source: '+(m.historySource||m.source||'Official public source'),102),period=v7WrapText(m.period||'',95);
-    const foot=[...(m.id==='precipitation'&&v9PrecipTotals(m)?[ `Same months in 2025: ${unitFormat(m.ytd.priorYearTotal,'in')}; 2026 received ${v9Signed(m.ytd.differenceFrom2025)} in. more.`, `Jan.–Oct. 1991–2020 normal: ${unitFormat(m.ytd.normalTotal,'in')}; 2026 was ${Math.abs(m.ytd.differenceFromNormal).toFixed(2)} in. below normal.` ]:[]),...(m.id==='housingpermits'&&v9HousingTotals(m)?[`Same months in 2025: ${numberCount(m.ytd.priorYearTotal)} authorized units; 2026 change: ${v9Signed(m.ytd.pctChange)}%.`]:[]),...note,...source,'Checked: '+dateLabel(m.checked||seed.asOf)+' · Published on NJ PBS'];
+    const foot=[...(m.id==='precipitation'&&v9PrecipTotals(m)?[ `Same months in 2025: ${unitFormat(m.ytd.priorYearTotal,'in')}; 2026 received ${v9Signed(m.ytd.differenceFrom2025)} in. more.`, `Jan.–Oct. 1991–2020 normal: ${unitFormat(m.ytd.normalTotal,'in')}; 2026 was ${Math.abs(m.ytd.differenceFromNormal).toFixed(2)} in. below normal.` ]:[]),...(m.id==='housingpermits'&&v9HousingTotals(m)?[`Same months in 2025: ${numberCount(m.ytd.priorYearTotal)} authorized units; 2026 change: ${v9Signed(m.ytd.pctChange)}%.`]:[]),...note,...source,...(m.datasetRelease?.credit?v7WrapText(m.datasetRelease.credit,50):[]),'Checked: '+dateLabel(m.checked||seed.asOf)+' · Published on NJ PBS'];
     const H=footerY+26+foot.length*29+33;
     const nested=plot.replace(/\swidth="\d+"\sheight="\d+"/,'').replace('<svg ',`<svg x="55" y="${placeY}" width="1090" height="${visualH}" `);
     return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-labelledby="v7-fig-title v7-fig-desc"><title id="v7-fig-title">${escape(m.title)} — ${escape(unitFormat(m.value,m.unit))}</title><desc id="v7-fig-desc">${escape(copy.reading)} ${escape(m.period)}. Source: ${escape(m.historySource||m.source||'Official source')}. Published on NJ PBS.</desc><rect width="${W}" height="${H}" fill="${v7Palette.bg}"/>${title.map((t,i)=>v7Text(64,75+i*55,t,47,750,'start',v7Palette.ink)).join('')}${v7Text(64,192,unitFormat(m.value,m.unit),75,800,'start',v7Palette.ink)}${period.map((t,i)=>v7Text(64,232+i*29,t,25,450,'start',v7Palette.secondary)).join('')}${v7Line(62,275,1138,275,v7Palette.grid,1)}${v7Text(64,315,copy.heading,27,650,'start',v7Palette.ink)}${nested}${v7Line(62,footerY,1138,footerY,v7Palette.grid,1)}${foot.map((t,i)=>v7Text(64,footerY+30+i*29,t,21,450,'start',v7Palette.secondary)).join('')}</svg>`;
@@ -1533,6 +1543,7 @@
     if(m.uncertaintyNote)parts.push(m.uncertaintyNote);
     parts.push(m.historyChartNote||m.methodNote||'');
     parts.push(`Source: ${m.historySource||m.source||'Official source'}${m.historySourceUrl?' · '+m.historySourceUrl:m.sourceUrl?' · '+m.sourceUrl:''}`);
+    if(m.datasetRelease?.credit)parts.push(m.datasetRelease.credit);
     parts.push(`Dataset checked ${dateLabel(m.checked||seed.asOf)}. Published on NJ PBS.`);
     return parts.filter(Boolean).join('\n\n');
   }
@@ -1579,6 +1590,7 @@
         const copy=v7ChartCopy(m),href=safeUrl(m.historySourceUrl)||safeUrl(m.sourceUrl);
         const plot=m.id==='medianincome' && !m.editorialOverride ? incomeMarkup(m,false,'focus') : makeChart(m);
         $('v7-focus-content').innerHTML=`<p class="v7-focus-number">${escape(reuseValue(m))}</p><p class="v7-focus-period">${escape(m.period)}</p>${plot}<p class="v7-focus-provenance"><strong>Source:</strong> ${href?`<a href="${escape(href)}" target="_blank" rel="noopener noreferrer">${escape(m.historySource||m.source)}<span class="sr-only"> (opens in new tab)</span></a>`:escape(m.historySource||m.source)}. Figures checked ${escape(dateLabel(m.checked||seed.asOf))}; published on NJ PBS.</p>`;
+        if(m.datasetRelease?.credit)$('v7-focus-content').querySelector('.v7-focus-provenance').append(' '+m.datasetRelease.credit);
         $('v7-focus-dialog').showModal();return;
       }
     });

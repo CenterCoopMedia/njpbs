@@ -13,10 +13,13 @@ import type { BakedScheduleData } from "../src/lib/schedule-feed";
 import { defaultDataHubBlocks } from "../../packages/content-core/src/data-hub-composition";
 import type { CmsRenderContext } from "../src/lib/cms-render-context";
 import { readFileSync } from "node:fs";
+import DataHubRoute from "../src/pages/data-hub/[...hub].astro";
+import { readHubElectricity } from "../../packages/content-core/src/data-hub-electricity";
+import { electricityProjection } from "../tests/fixtures/hub-electricity";
 import { dataHubSectionHtml } from "../src/lib/data-hub-composition-render";
 
 let container: Awaited<ReturnType<typeof AstroContainer.create>>;
-beforeAll(async () => { container = await AstroContainer.create(); });
+beforeAll(async () => { container = await AstroContainer.create({ astroConfig: { site: "https://njpbs.org" } }); });
 
 describe("existing templates with request-scoped content", () => {
   it.each([["schedule", "/schedule/"], ["tv-listings", "/tv-listings/"]])(
@@ -186,4 +189,37 @@ it("renders Data Hub sections and prose through standard CmsBlocks with private/
     expect(html).toContain("Staff context between the figures.");
     expect(html).toContain("NJ Department of Labor and Workforce Development");
   }
+});
+
+it("renders the Data Hub route from its approved electricity release and draws no second chart", async () => {
+  const value = input();
+  value.pageId = "data-hub";
+  value.snapshot = { id: "data-hub", version: 7, template: "genericPage", title: "Exact Data Hub",
+    dataHubCompositionVersion: 1, blocks: defaultDataHubBlocks() } as unknown as typeof value.snapshot;
+  const sealed = fixture(value);
+  const draft = projectCmsPreviewContent(sealed.bytes, sealed.request, now);
+  const figure = electricityProjection();
+  const block = { id: "price", type: "data_figure", order: 25, visible: true,
+    data: { datasetId: figure.datasetId, version: { mode: "latestApproved" }, display: "expanded" } };
+  const render = (bound: boolean) => {
+    const page = projectCmsPage({ id: "data-hub", status: "published", publishAt: now.toISOString(),
+      published: { sourceVersion: 7, publishedAt: now.toISOString(), blocks: [...defaultDataHubBlocks(), ...(bound ? [block] : [])],
+        metadata: { title: "Exact Data Hub", template: "genericPage", dataHubCompositionVersion: 1 },
+        ...(bound ? { datasetFigures: { figures: [{ blockId: "price", datasetId: figure.datasetId, releaseId: figure.releaseId,
+          revision: 1, digest: figure.digest }], releases: [figure] } } : {}) } }, { mode: "published", now, assets: new Map() })!;
+    return container.renderToString(DataHubRoute as unknown as typeof CmsBlocks, { request: new Request("https://njpbs.org/data-hub/"), partial: false,
+      locals: { cmsRender: { content: { ...draft, kind: "public-page", pages: [page], navigationPages: [],
+        dataHubSources: { posts: [], cutoffAt: now.toISOString() } }, homeSources: {} } as unknown as CmsRenderContext } });
+  };
+  const compiled = await render(false);
+  const display = JSON.parse(readFileSync(new URL("../src/data/njpbs-data-hub-v16.html", import.meta.url), "utf8")
+    .match(/<script id="source-data" type="application\/json">([\s\S]*?)<\/script>/)![1])
+    .metrics.find((item: { id: string }) => item.id === "electricity").display;
+  expect(compiled).toContain(display);
+  expect(readHubElectricity(compiled)).toBeNull();
+  const html = await render(true);
+  expect(readHubElectricity(html)).toMatchObject({ display: "31.25¢/kWh", period: "February 2027" });
+  expect(html).not.toContain(display);
+  expect(html).not.toContain("cms-data-figure__");
+  expect(html.includes("data-hub--composed")).toBe(compiled.includes("data-hub--composed"));
 });

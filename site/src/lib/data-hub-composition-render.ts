@@ -91,7 +91,7 @@ const COMPOSITION_READER = String.raw`
   }
 `;
 
-interface CompiledMetric {id: string; title: string; description?: string; display: string; period: string; source: string; sourceUrl: string; methodNote?: string; released?: string; checked?: string}
+interface CompiledMetric {id: string; title: string; description?: string; display: string; period: string; source: string; sourceUrl: string; methodNote?: string; released?: string; checked?: string; datasetRelease?: {credit: string}}
 function compiledMetrics(html: string): CompiledMetric[] {
   const source = html.match(/<script id="source-data" type="application\/json">([\s\S]*?)<\/script>/)?.[1];
   if (!source) throw new Error("The compiled Data Hub source slot is unavailable.");
@@ -137,6 +137,6 @@ export function dataHubSectionHtml(html: string, input: DataHubSectionData, leve
   const heading = data.heading || metric?.title || DATA_HUB_SECTIONS[data.sectionId];
   const introduction = data.introduction || metric?.description || "";
   const fallback = metric ? `<h${level}>${escapeHtml(heading)}</h${level}>${introduction ? `<p>${escapeHtml(introduction)}</p>` : ""}` +
-    `<table><caption>${escapeHtml(metric.title)}</caption><thead><tr><th scope="col">Value</th><th scope="col">Reporting period</th><th scope="col">Source</th></tr></thead><tbody><tr><td>${escapeHtml(metric.display)}</td><td>${escapeHtml(metric.period)}</td><td><a href="${escapeHtml(metric.sourceUrl)}">${escapeHtml(metric.source)}</a></td></tr></tbody></table><p>${escapeHtml(metric.methodNote || "")}</p><p>Source published: ${escapeHtml(metric.released || "")}. Checked: ${escapeHtml(metric.checked || "")}.</p>` : compiledSectionFallback(html, data, level);
+    `<table><caption>${escapeHtml(metric.title)}</caption><thead><tr><th scope="col">Value</th><th scope="col">Reporting period</th><th scope="col">Source</th></tr></thead><tbody><tr><td>${escapeHtml(metric.display)}</td><td>${escapeHtml(metric.period)}</td><td><a href="${escapeHtml(metric.sourceUrl)}">${escapeHtml(metric.source)}</a>${metric.datasetRelease?.credit ? ` · ${escapeHtml(metric.datasetRelease.credit)}` : ""}</td></tr></tbody></table><p>${escapeHtml(metric.methodNote || "")}</p><p>Source published: ${escapeHtml(metric.released || "")}. Checked: ${escapeHtml(metric.checked || "")}.</p>` : compiledSectionFallback(html, data, level);
   return `<section data-data-hub-section="${data.sectionId}" data-data-hub-heading="${level}" class="data-hub-composed-section"><noscript>${fallback}</noscript></section>`;
 }

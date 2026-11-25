@@ -5,6 +5,7 @@ const { isDataFigureData } = require("./data-figure");
 const { isDatasetFigures, createDatasetFigureResolver, renderDataFigure } = require("./dataset-figures");
 const { visibleLayoutBlocks } = require("./content-layout");
 const { figureSelections } = require("./scroll-story");
+const { isHubElectricity, hubElectricityProblem } = require("./data-hub-electricity");
 function canonical(value) {
   if (Array.isArray(value)) return value.map(canonical);
   if (value && typeof value === "object") return Object.fromEntries(Object.keys(value).sort().map(key => [key, canonical(value[key])]));
@@ -23,6 +24,14 @@ function validateFrozenDatasetFigures(snapshot, { complete = true } = {}) {
   if (figures === undefined && !blocks.length) return;
   if (!isDatasetFigures(figures) || figures.figures.length !== blocks.length) fail("The frozen data figures are invalid.");
   const resolve = createDatasetFigureResolver(figures);
+  // The public Hub shows one electricity figure, so its release must hold the four matched prices.
+  if (snapshot.blocks?.some(block => block.type === "data_hub_section")) {
+    const resolved = blocks.map(block => resolve(block.id, block.data));
+    const electricity = resolved.filter(item => item && isHubElectricity(item.release));
+    if (electricity.length > 1) fail("The Data Hub shows one electricity price. Keep one electricity data figure.");
+    const problem = electricity[0] && hubElectricityProblem(electricity[0].release);
+    if (problem) fail(problem);
+  }
   let htmlBytes = 0;
   for (const block of blocks) {
     if (!isDataFigureData(block.data, true)) fail("Select an approved dataset for each data figure.");

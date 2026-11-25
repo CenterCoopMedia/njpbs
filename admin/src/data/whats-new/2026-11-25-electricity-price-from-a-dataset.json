@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-25",
+  "kind": "new",
+  "title": "Update the Data Hub electricity price from a dataset",
+  "body": "Add a Data figure block with the electricity dataset to the Data Hub Page and choose Latest approved release. After that, approving a new release updates the Data Hub figure and its latest embeds.",
+  "prs": []
+}
