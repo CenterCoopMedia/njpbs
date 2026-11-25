@@ -3,10 +3,15 @@ import work from "../../functions/lib/public-release-pair-work.js";
 /** The sandboxed renderer has no output channel but its exit code. It exits with
  * this code (EX_TEMPFAIL) when the host had no room or handle for it. */
 export const PAIR_RENDER_RETRY_EXIT = 75;
+// No platform limit ends a hung render: its container stays awake while it is
+// busy, and its lease is renewed. The 120 s cutoff and its four attempts are main's.
+export const PAIR_RENDER_CUTOFF_ATTEMPTS = 4;
 
 /** A failed child process says nothing about the frozen input only when it was
  * killed (the sandbox reports 128 plus the signal) or the host had no capacity. */
-export function pairRenderFailure(code: number | null, failed = false): "render-interrupted" | "render-failed" {
+export function pairRenderFailure(code: number | null, failed = false, cutoff?: { attempts: number }): "render-interrupted" | "render-failed" {
+  // Our own cutoff is main's: a render that meets it at four attempts has failed.
+  if (cutoff) return cutoff.attempts >= PAIR_RENDER_CUTOFF_ATTEMPTS ? "render-failed" : "render-interrupted";
   return failed || code === null || code > 128 || code === PAIR_RENDER_RETRY_EXIT ? "render-interrupted" : "render-failed";
 }
 

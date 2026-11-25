@@ -113,19 +113,23 @@ export async function publishContent({ targets, call, journal, record = () => {}
 const settled = publication => publication?.status === 'success' && !publication.missingConsumers?.length;
 export async function publishSettings({ targets, call, wait, report = () => {}, now = Date.now }) {
   for (const { id, values } of targets) {
-    let read = await call('cmsGetSettings', { id });
+    const read = await call('cmsGetSettings', { id });
     if (read.status !== 200) throw refused(id, read);
-    const stored = read.body.found === false ? null : read.body.settings;
-    if (!stored || canonical(stored.values) !== canonical(values)) {
-      const saved = await call('cmsSaveSettings', stored ? { id, baseVersion: stored.version, values } : { id, createOnly: true, values });
+    let current = read.body.found === false ? null : read.body.settings;
+    let publication = read.body.publication;
+    if (!current || canonical(current.values) !== canonical(values)) {
+      const saved = await call('cmsSaveSettings', current ? { id, baseVersion: current.version, values } : { id, createOnly: true, values });
       if (saved.status !== 200) throw refused(id, saved);
-      read = await call('cmsGetSettings', { id });
-      if (read.status !== 200 || read.body.found === false) throw refused(id, read);
+      // Publish this saved version only. A later draft belongs to another editor.
+      current = saved.body.settings;
+      if (canonical(current?.values) !== canonical(values) || !Number.isSafeInteger(current.version)) throw authored(`${id} save returned other values`);
+      publication = null;
     }
-    const current = read.body.settings;
-    if (!current.published || canonical(current.published.values) !== canonical(values) || !settled(read.body.publication)) {
+    if (!current.published || canonical(current.published.values) !== canonical(values) || !settled(publication)) {
       const published = await call('cmsPublishSettings', { id, baseVersion: current.version, publicationTransport: SETTINGS_TRANSPORT });
       if (published.status !== 200) throw refused(id, published);
+      // The endpoint can answer with an earlier accepted publication of the same version.
+      if (published.body?.settings && canonical(published.body.settings.published?.values) !== canonical(values)) throw authored(`${id} publish returned other values`);
     }
     report({ setting: id, published: true });
   }

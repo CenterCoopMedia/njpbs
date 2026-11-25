@@ -148,15 +148,15 @@ export async function enableOldPublicReleaseIngress({ firestore, packet: raw, re
   await guard();
   const version = await workerStep("enable-upload", () => provider.upload(name, privateWorkerMetadata(config, id.tag), source, signal), uploaded);
   await guard();
-  const deployed = async expectedDeploymentId => {
-    const row = await provider.deployment(name, signal);
-    const deployment = checkPrivateWorkerDeployment(row, version.versionId, id.tag, expectedDeploymentId);
+  const deployed = async ours => {
+    const row = await provider.deployment(name, signal, ours);
+    const deployment = checkPrivateWorkerDeployment(row, version.versionId, id.tag, ours?.id);
     requireWorkerReadback(same(row.versions, [{ version_id: version.versionId, percentage: 100 }]), "Ingress deployment traffic");
     requireWorkerReadback(await provider.sourceDigest(name, signal) === packet.installPlan.ingressBundleDigest, "Ingress deployment source digest");
     return deployment;
   };
   const deployment = await workerStep("enable-deploy", () => provider.deploy(name, version.versionId, id.tag, signal),
-    response => deployed(response?.id));
+    response => deployed(response));
   await guard();
   const beforeRoute = await routeRead(), routeKey = hash({ worker: id.worker });
   const routeClaim = (await firestore.doc(`${base}/attempts/${packet.operationId}/steps/${routeKey}-enable-route`).get()).exists;
@@ -166,7 +166,7 @@ export async function enableOldPublicReleaseIngress({ firestore, packet: raw, re
     method: "PUT", body: { pattern: packet.route.pattern, script: name } }), observe: async () => {
     const row = await routeRead(); if (row.script !== name) refuse(); return row;
   } });
-  await guard(); await oldSlot(); await deployed(deployment.deploymentId);
+  await guard(); await oldSlot(); await deployed({ id: deployment.deploymentId });
   return { operationId: packet.operationId, complete: true, oldPairId: attempt.currentPair.pairId, ...deployment, route: selected, authority: first,
     admissionResumed: false, terminalPublicationProof: false };
 }

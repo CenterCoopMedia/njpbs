@@ -39,6 +39,10 @@ test("the release path includes every adapter the component runner loads by name
   for (const module of adapters) assert.ok(files.includes(`scripts/${module}`), `scripts/${module} is on the release path`);
 });
 
+test("the release path includes the shell scripts that code runs by name", () => {
+  for (const path of ["scripts/resolve-media-purge.sh", "scripts/resolve-cost-ledger-pulls.sh"]) assert.ok(files.includes(path), `${path} is on the release path`);
+});
+
 test("the release path includes a child process script named by a URL", () => {
   assert.ok(files.includes("scripts/lib/rehearsal-qualification-child.mjs"));
 });

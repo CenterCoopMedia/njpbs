@@ -10,7 +10,7 @@ export type PairTaskInput = Readonly<{
   inputManifestDigest: string;
 }>;
 export type PairTaskIdentity = PairTaskInput & Readonly<{ schemaVersion: 2; pair: PublicReleasePairReference }>;
-export type PairClaim = Readonly<{ taskId: string; token: string; leaseUntil: number; identity: PairTaskIdentity; outputPrefix: string }>;
+export type PairClaim = Readonly<{ taskId: string; token: string; leaseUntil: number; attempts: number; identity: PairTaskIdentity; outputPrefix: string }>;
 export const PAIRS: "system/publicReleasePairs";
 export const LEASE_MS: 60000;
 import type { PairFailureCode } from "./public-release-pair-execution";

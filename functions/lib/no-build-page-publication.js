@@ -224,6 +224,8 @@ async function capturePageScheduleForPublication({ firestore, collection, docume
   try {
     return await schedules.capturePageSchedule({ firestore, target,
       rendererSha: capability.rendererSha, request: currentCodeRequest,
+      // The scheduler reads its rows in turn, so an unanswered read defers its own row.
+      once: scheduledCandidate,
       ...(releaseSelector !== undefined ? { releaseSelector } : {}) });
   } catch (error) {
     if (scheduledCandidate && schedules.isPageScheduleAvailabilityError(error)) defer(error.message);

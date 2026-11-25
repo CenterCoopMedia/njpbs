@@ -4,7 +4,7 @@ import { getFirestore, type Firestore } from "firebase-admin/firestore";
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { installPrivatePublicRelease, compilePrivateWorker } from "../../scripts/install-private-public-release.mjs";
-import { PrivateProviderNotSent } from "../../scripts/lib/public-release-private-provider.mjs";
+import { cloudflarePrivatePairProvider, PrivateProviderNotSent, workerReadbackAfterWrite } from "../../scripts/lib/public-release-private-provider.mjs";
 import { privateInstallLedger } from "../../scripts/lib/public-release-private-install-ledger.mjs";
 import { releasePair } from "../helpers/private-public-release-pair.js";
 import { sealedPair } from "../helpers/sealed-public-release-pair";
@@ -50,6 +50,22 @@ beforeEach(async () => {
 });
 const run = (dryRun = false, signal?: AbortSignal) => installPrivatePublicRelease({ plan, provider, ledger: privateInstallLedger(db), compile,
   dryRun, signal });
+it("ends the readback of a deployment that a newer one replaced", async () => {
+  const rows = [{ id: "99999999-9999-4999-8999-999999999999", created_on: "2026-11-25T10:01:00Z" }, { id: "88888888-8888-4888-8888-888888888888", created_on: "2026-11-25T10:00:00Z" }];
+  const real = cloudflarePrivatePairProvider({ accountId: "a".repeat(32), credential: async () => "fixture-token",
+    fetcher: (async () => Response.json({ success: true, result: { deployments: rows } })) as typeof fetch });
+  const ours = { id: rows[1].id, created_on: rows[1].created_on };
+  const callbacks = workerReadbackAfterWrite(async () => ours, async (response: typeof ours) => real.deployment("njpbs-private-reader-fixture", undefined, response), undefined);
+  await callbacks.effect();
+  await expect(callbacks.observe()).rejects.toThrow("was superseded");
+  // Still below ours in age, so the read can be late: no final answer.
+  rows.splice(0, 1, { id: "77777777-7777-4777-8777-777777777777", created_on: "2026-11-25T09:59:00Z" }); rows.splice(1, 1);
+  await expect(real.deployment("njpbs-private-reader-fixture", undefined, ours)).resolves.toMatchObject({ id: rows[0].id });
+  // The installer hands its own confirmed deployment to the provider.
+  await run();
+  const deployed = await provider.deploy.mock.results[0].value;
+  expect(provider.deployment.mock.calls.some((call: unknown[]) => (call[2] as { id?: string } | undefined)?.id === deployed.id)).toBe(true);
+});
 it("dry-runs both private slots and fixed OLD/NEW ingress without any SDK/provider effect", async () => {
   const result = await run(true); expect(result.readbacks).toHaveLength(3); expect(provider.upload).not.toHaveBeenCalled();
   expect((await db.doc(`system/publicReleasePrivateInstalls/plans/${plan.operationId}`).get()).exists).toBe(false);

@@ -164,8 +164,19 @@ export async function openPublicReleasePairViewMetadata({ store, pair: rawPair, 
   };
 }
 
-/** Private bytes only. This grants no eligibility and writes no public pointer. */
-export async function writePublicReleasePairView({ store, pair: rawPair, identity: rawIdentity, claimDigest,
+/** Private bytes only. This grants no eligibility and writes no public pointer.
+ * An output that violates the view protocol or its size bound violates it at every
+ * attempt, so it is final. No release authority is read while a view is written. */
+export async function writePublicReleasePairView(options: Parameters<typeof writeView>[0]) {
+  try { return await writeView(options); }
+  catch (error) {
+    if ((error as { name?: unknown } | undefined)?.name !== "PublicReleaseProtocolError") throw error;
+    const failure = new work.PairExecutionError("render-failed");
+    Object.defineProperty(failure, "cause", { value: error });
+    throw failure;
+  }
+}
+async function writeView({ store, pair: rawPair, identity: rawIdentity, claimDigest,
   cursor, outputs, signal, deriveNamespaces = false, catalogImages, compositeManifest }: { store: PairViewStore; pair: PublicReleasePair; identity: PairTaskIdentity; claimDigest: string;
     cursor: { baselineDigest: string; sequence: number; lastDigest: string };
     outputs: AsyncIterable<PairViewOutputInput>; signal?: AbortSignal; deriveNamespaces?: boolean; catalogImages?: PairCatalogImagesManifest; compositeManifest?: PairCompositeManifest }) {

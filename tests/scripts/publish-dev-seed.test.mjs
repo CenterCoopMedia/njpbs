@@ -28,7 +28,7 @@ function boardwalk({ documents = {}, settings = {} }) {
     if (endpoint === 'cmsSaveSettings') {
       if (body.createOnly ? row : row?.settings.version !== body.baseVersion) return { status: 409, body: { error: 'stale' } };
       settings[body.id] = { settings: { ...(row?.settings ?? {}), values: body.values, version: (row?.settings.version ?? 0) + 1 }, publication: row?.publication };
-      return { status: 200, body: { success: true } };
+      return { status: 200, body: { success: true, changed: true, settings: structuredClone(settings[body.id].settings) } };
     }
     if (endpoint === 'cmsPublishSettings') {
       if (row.settings.version !== body.baseVersion || body.publicationTransport !== 'public-context-no-build-v1') return { status: 409, body: {} };
@@ -104,6 +104,20 @@ describe('publish-dev-seed', () => {
       ['cmsPublishSettings', { id: 'story-ctas', baseVersion: 1, publicationTransport: 'public-context-no-build-v1' }],
       ['cmsSaveSettings', { id: 'site-navigation', baseVersion: 3, values: { items: [] } }],
       ['cmsPublishSettings', { id: 'site-navigation', baseVersion: 4, publicationTransport: 'public-context-no-build-v1' }]]);
+  });
+
+  it('refuses to publish a draft that another editor saved after this save', async () => {
+    const settings = { 'site-navigation': { settings: { values: { old: true }, version: 3, published: { values: { old: true } } } } };
+    const { call, calls } = boardwalk({ settings });
+    const raced = async (endpoint, body) => {
+      const reply = await call(endpoint, body);
+      if (endpoint === 'cmsSaveSettings') Object.assign(settings['site-navigation'].settings, { values: { theirs: true }, version: 5 });
+      return reply;
+    };
+    await expect(publishSettings({ call: raced, wait: async () => {}, targets: [{ id: 'site-navigation', values: { items: [] } }] }))
+      .rejects.toThrow('site-navigation refused: 409');
+    expect(calls.at(-1)).toEqual(['cmsPublishSettings', { id: 'site-navigation', baseVersion: 4, publicationTransport: 'public-context-no-build-v1' }]);
+    expect(settings['site-navigation'].settings).toMatchObject({ values: { theirs: true }, published: { values: { old: true } } });
   });
 
   it('awaits the newest receipt instead of the earlier receipt of an unchanged chrome', async () => {

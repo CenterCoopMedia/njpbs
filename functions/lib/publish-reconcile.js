@@ -38,13 +38,16 @@ function isLegacyRow(queue, cutoff) {
     triggeredAt !== null && triggeredAt <= cutoff;
 }
 
-// GitHub dispatch exists only for development (cms-publish-dispatch.js). The
-// workflow run owns a row that its accepted dispatch marked publishing, or whose
-// batch it reserved, and writes the terminal status. The transport alone is no
-// owner: a request that ended before its dispatch leaves a row no run will take.
-const ownedByDevelopmentRun = (queue, batch) => queue.transport === "github" &&
+// GitHub dispatch exists only for development (cms-publish-dispatch.js). The run
+// that reserved the batch of a row owns it and writes the terminal status. An
+// accepted dispatch (publishing) whose run has reserved nothing yet can wait for
+// a runner, so it keeps main's 24 hours; a run that died before its reservation
+// wrote nothing. A row whose request ended before its dispatch has no run.
+const STALE_PUBLISH_AFTER_MS = 24 * 60 * 60 * 1_000;
+const ownedByDevelopmentRun = (queue, batch, time) => queue.transport === "github" &&
   process.env.CMS_DEPLOYMENT_ENVIRONMENT === "development" &&
-  (queue.status === "publishing" || batch?.status === "reserved");
+  (batch?.status === "reserved" ||
+    queue.status === "publishing" && time - timestampToMillis(queue.triggeredAt) < STALE_PUBLISH_AFTER_MS);
 
 // A pending serializer row is durable before any journal, batch or candidate,
 // and a paused serializer can still claim it. Only the recorded end of the
@@ -59,14 +62,14 @@ async function serializerCanClaim({ firestore, transaction, queue }) {
 /** Whether the exact records of this row still name an owner: a serializer
  * journal job, a development run, an uploaded candidate, or a batch that is
  * being activated. */
-async function hasPublicationOwner({ firestore, transaction, queueId, queue }) {
+async function hasPublicationOwner({ firestore, transaction, queueId, queue, time }) {
   const batchRef = firestore.doc(`system/publicDeployment/buildBatches/cms-${queueId}`);
   const [batch, candidate, pointer] = await transaction.getAll(batchRef,
     batchRef.collection("candidates").doc("worker"), firestore.doc("system/publicDeployment"));
   const job = await transaction.get(firestore.collection("cmsPublicationSerializerJournals")
     .where("job.queueId", "==", queueId).limit(1));
   const status = batch.data()?.status;
-  return !job.empty || ownedByDevelopmentRun(queue, batch.data()) || OWNED_BATCH_STATUSES.has(status) || status === "reserved" && candidate.exists ||
+  return !job.empty || ownedByDevelopmentRun(queue, batch.data(), time) || OWNED_BATCH_STATUSES.has(status) || status === "reserved" && candidate.exists ||
     pointer.data()?.candidateBuildBatchId === `cms-${queueId}`;
 }
 
@@ -74,8 +77,9 @@ async function hasPublicationOwner({ firestore, transaction, queueId, queue }) {
  * content markers that point at them in the same transaction. */
 async function reconcileStalePublishRows({ firestore, now = () => Date.now() }) {
   // Lifecycle enqueue passes its ISO clock through the publish readiness gate.
-  const time = now();
-  const cutoff = (typeof time === "string" ? Date.parse(time) : time) - requestLimitMillis();
+  const clock = now();
+  const time = typeof clock === "string" ? Date.parse(clock) : clock;
+  const cutoff = time - requestLimitMillis();
   const query = firestore
     .collection(QUEUE_COLLECTION)
     .where("status", "in", NON_TERMINAL_STATUSES)
@@ -95,7 +99,7 @@ async function reconcileStalePublishRows({ firestore, now = () => Date.now() }) 
         const queue = (await transaction.get(candidate.ref)).data();
         if (!isLegacyRow(queue, cutoff) ||
             await serializerCanClaim({ firestore, transaction, queue }) ||
-            await hasPublicationOwner({ firestore, transaction, queueId: candidate.id, queue })) return false;
+            await hasPublicationOwner({ firestore, transaction, queueId: candidate.id, queue, time })) return false;
         return settleBuildQueueInTransaction(firestore, transaction, {
           queueId: candidate.id,
           status: "failed",

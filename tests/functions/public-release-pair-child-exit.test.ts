@@ -41,3 +41,8 @@ it.each([["a render error", 'new Error("Input scope differs")'],
 it.each([[null, false], [137, false], [1, true]] as const)("waits after a killed child (%s, %s)", (code, failed) => {
   expect(pairRenderFailure(code, failed)).toBe("render-interrupted");
 });
+it.each([[1, "render-interrupted", false], [3, "render-interrupted", false], [4, "render-failed", true], [9, "render-failed", true]] as const)(
+  "ends a render that meets our own cutoff at attempt %s as %s", (attempts, failure, final) => {
+    for (const code of [null, 137]) expect(pairRenderFailure(code, false, { attempts })).toBe(failure);
+    expect(work.isPairFinalFailure(failure)).toBe(final);
+  });

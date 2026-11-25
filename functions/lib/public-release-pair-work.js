@@ -292,7 +292,7 @@ async function claimPublicReleasePairWork({ firestore, pair: rawPair, taskId, no
     const leaseUntil = now + LEASE_MS;
     transaction.set(workRef, { ...task, status: "running", attempts: task.attempts + 1, claimDigest, leaseUntil, nextAttemptAt: null, acceptedDueAt: null });
     transaction.set(journalRef, { ...journal, job: { taskId, claimDigest, leaseUntil } });
-    return { taskId, token, leaseUntil, identity: task.identity, outputPrefix: `release-pairs/${pair.pairId}/${taskId}/claims/${claimDigest}/` };
+    return { taskId, token, leaseUntil, attempts: task.attempts + 1, identity: task.identity, outputPrefix: `release-pairs/${pair.pairId}/${taskId}/claims/${claimDigest}/` };
   });
 }
 

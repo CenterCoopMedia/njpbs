@@ -29,12 +29,12 @@ export function qualifyHistoricalCodeContext(qualified: { reference: CurrentCode
  * This Node boundary applies the existing full context/publication validator.
  * The caller must repeat this read after packet IO and pin its local authority;
  * neither the packet operation nor a stored family supplies current CODE. */
-export function createCurrentCodeContextReader({ target, rendererSha, firestore, request, readSecret }: {
+export function createCurrentCodeContextReader({ target, rendererSha, firestore, request, readSecret, once = false }: {
   target: PublicationTarget; rendererSha: string; firestore: { projectId: string };
-  request?: typeof fetch; readSecret?: () => string;
+  request?: typeof fetch; readSecret?: () => string; once?: boolean;
 }) {
   target = assertPublicationTarget(target); assertPublicationDatabase(firestore, target);
-  const transport = createCurrentCodeTransport({ target, rendererSha, request, readSecret });
+  const transport = createCurrentCodeTransport({ target, rendererSha, request, readSecret, once });
   return { readCurrentCodeReference: () => transport.readCurrentCodeReference(),
     async readHistoricalCodeContext() { return qualifyHistoricalCodeContext(await transport.readCurrentCode()); }, async readCurrentCodeContext() {
     const qualified = await transport.readCurrentCode();

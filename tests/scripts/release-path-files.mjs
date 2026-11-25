@@ -76,7 +76,7 @@ function codeImports(file, text) {
 // path counts only as the script of a child process: other root paths are data.
 function namedCode(file, text) {
   const found = [];
-  for (const [, name] of text.matchAll(/["'`]((?:\.{1,2}\/)?[\w@.-]+(?:\/[\w@.-]+)*\.(?:c|m)?[jt]s)["'`]/g)) {
+  for (const [, name] of text.matchAll(/["'`]((?:\.{1,2}\/)?[\w@.-]+(?:\/[\w@.-]+)*\.(?:(?:c|m)?[jt]s|sh))["'`]/g)) {
     if (name.startsWith(".")) found.push(relative(ROOT, resolve(dirname(join(ROOT, file)), name)));
     else if (!name.includes("/")) for (let directory = dirname(file); directory !== "."; directory = dirname(directory)) {
       found.push(join(directory, name));

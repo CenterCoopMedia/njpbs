@@ -123,19 +123,41 @@ async function readPostSettingsReceipt({ entry, target, headers, fetchPublic, si
 }
 
 /** Every read must finish with its own answer; one refused detail cannot
- * acknowledge a subset. Eight reads run at once, and a route that reports its
- * refresh gives its place to the next one while it waits. */
+ * acknowledge a subset. Every request holds one of eight places. A route that
+ * reports its refresh gives its place back and takes one again for its next poll. */
 async function readSettingsProofs(values, read, { onFailure = undefined, onDone = undefined } = {}) {
-  const results = [], waiting = new Set(values.keys()), running = [];
+  const results = [], waiting = new Set(values.keys());
   const stop = new AbortController();
   let failed = null;
   const stopped = new Promise((resolve, reject) => {
     stop.signal.addEventListener("abort", () => { if (failed) reject(failed.error); else resolve(); }, { once: true });
   });
   stopped.catch(() => {});
-  const attempt = async (value, index, onPending) => {
+  let free = PROOF_BATCH_SIZE;
+  const line = [];
+  const newSlot = () => {
+    let held = false;
+    return {
+      async take() {
+        if (held) return;
+        if (free > 0) free--;
+        else await new Promise(resolve => line.push(resolve));
+        held = true;
+      },
+      give() {
+        if (!held) return;
+        held = false;
+        const next = line.shift();
+        if (next) next(); else free++;
+      },
+    };
+  };
+  const attempt = async (value, index) => {
+    const slot = newSlot();
     try {
-      results[index] = await readPublicAnswer("settings proof read", signal => read(value, signal), { onPending, stop: stop.signal });
+      await slot.take();
+      if (stop.signal.aborted) return;
+      results[index] = await readPublicAnswer("settings proof read", signal => read(value, signal), { slot, stop: stop.signal });
     } catch (error) {
       if (stop.signal.aborted) return;
       if (!onFailure) { failed ??= { error }; stop.abort(); return; }
@@ -143,23 +165,12 @@ async function readSettingsProofs(values, read, { onFailure = undefined, onDone 
       catch (thrown) { failed ??= { error: thrown }; stop.abort(); return; }
       onDone?.([...waiting]);
       return;
-    }
+    } finally { slot.give(); }
     waiting.delete(index);
     onDone?.([...waiting]);
   };
-  const next = values.entries();
-  const worker = async () => {
-    for (const [index, value] of next) {
-      if (stop.signal.aborted) return;
-      await new Promise(resolve => {
-        const read = attempt(value, index, resolve);
-        read.then(resolve, resolve);
-        running.push(read);
-      });
-    }
-  };
   try {
-    await Promise.race([stopped, Promise.all(Array.from({ length: PROOF_BATCH_SIZE }, worker)).then(() => Promise.all(running))]);
+    await Promise.race([stopped, Promise.all(values.map(attempt))]);
     return results;
   } finally { stop.abort(); }
 }

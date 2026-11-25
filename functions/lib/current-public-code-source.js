@@ -9,7 +9,7 @@ function refuse(rpcStatus) { throw Object.assign(new Error("Private current CODE
 
 // The caller supplies the secret reader. A default here would pull Functions
 // modules into the preview renderer Worker bundle, which shares this file.
-function privateCodeTransport({ target, rendererSha, request = fetch, readSecret }) {
+function privateCodeTransport({ target, rendererSha, request = fetch, readSecret, once = false }) {
   if ((process.env.FUNCTIONS_EMULATOR === "true" || process.env.FIRESTORE_EMULATOR_HOST) && request === fetch) {
     throw Object.assign(new Error("Emulated record code reads require an explicit local fixture transport"), { status: 409 });
   }
@@ -21,9 +21,10 @@ function privateCodeTransport({ target, rendererSha, request = fetch, readSecret
       const query = { mode, rendererSha };
       const maxReplyBytes = mode === "current-code-reference" ? 8192 : CURRENT_CODE_REPLY_BYTES;
       const secret = readSecret?.(); if (typeof secret !== "string" || !secret.trim()) refuse();
-      // Development waits for the API. In production an unanswered read ends here,
-      // so its caller defers only the work that needs current CODE.
-      const ask = target.environment === "development" ? work => callOutside(`record-code ${mode}`, work) : work => work();
+      // Development waits for the API. In production, and for a caller that asks
+      // once, an unanswered read ends here: that caller defers only the work that
+      // needs current CODE.
+      const ask = target.environment === "development" && !once ? work => callOutside(`record-code ${mode}`, work) : work => work();
       return ask(async () => {
         const response = await request(`${origin}/_internal/record-code`, { method: "POST", redirect: "manual",
           headers: { "content-type": "application/json", "x-njpbs-cms-edge": secret }, body: JSON.stringify(query) });

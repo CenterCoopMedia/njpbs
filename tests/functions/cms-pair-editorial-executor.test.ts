@@ -17,14 +17,16 @@ import type { PairPreviewContextOutput } from "../../site/scripts/public-release
 
 // This tests the real executor/input/output/settlement path. Only the child
 // renderer transport is a fixture; native SSR parity has its existing suite.
-const child = vi.hoisted(() => ({ directory: "", body: new Uint8Array(), verifyRenderer: async () => {} }));
+const child = vi.hoisted(() => ({ directory: "", body: new Uint8Array(), verifyRenderer: async () => {}, cutoff: false }));
 vi.mock("../../site/scripts/public-release-pair-renderer-release.mjs", () => ({ verifyPublicReleasePairRenderer: () => child.verifyRenderer() }));
 vi.mock("../../site/scripts/process-cms-preview", () => ({ privatePreviewSandbox: async (_env: unknown, directory: string) => {
   child.directory = directory; return { args: ["fixture"] };
 } }));
 vi.mock("node:child_process", async importOriginal => ({ ...await importOriginal<typeof import("node:child_process")>(),
   spawn: () => {
-    const process = new EventEmitter();
+    const process = Object.assign(new EventEmitter(), { killed: child.cutoff });
+    // Node kills a child at its timeout and reports no exit code.
+    if (child.cutoff) { setImmediate(() => process.emit("close", null)); return process; }
     void mkdir(child.directory, { recursive: true }).then(() => writeFile(path.join(child.directory, "0.body"), child.body))
       .then(() => process.emit("close", 0), error => { process.emit("error", error); process.emit("close", 1); });
     return process;
@@ -32,7 +34,7 @@ vi.mock("node:child_process", async importOriginal => ({ ...await importOriginal
 const encode = (value: unknown) => new TextEncoder().encode(JSON.stringify(value));
 const sha = (value: Uint8Array) => createHash("sha256").update(value).digest("hex");
 let sequence = 0;
-it.each(["reject", "pending", "missing-census", "pending after a renderer read without a free handle"])("real executor completes and stages while optional output is %s", async outcome => {
+it.each(["reject", "pending", "missing-census", "pending after a renderer read without a free handle", "pending after a render that our cutoff ended"])("real executor completes and stages while optional output is %s", async outcome => {
   const firestore = isolatedFirestore(`editorial-executor-${++sequence}`), pair = releasePair("b"), base = work.publicReleasePairPath(pair.pairId);
   await firestore.doc("system/publicDeployment").set(deployment.initialPublicDeploymentPointer());
   await work.registerPublicReleasePair({ firestore, pair });
@@ -75,6 +77,20 @@ it.each(["reject", "pending", "missing-census", "pending after a renderer read w
       const waiting = (await firestore.doc(`${base}/work/${taskId}`).get()).data()!;
       expect(waiting.nextAttemptAt).toEqual(expect.any(Number));
       clock = () => Math.max(Date.now(), waiting.nextAttemptAt);
+    }
+    if (outcome.includes("our cutoff ended")) {
+      child.cutoff = true;
+      const workRef = firestore.doc(`${base}/work/${taskId}`);
+      expect(await runPublicReleasePairWorkOnce({ firestore, pair, ...operations })).toBe("retry-recorded");
+      const waiting = (await workRef.get()).data()!;
+      expect(waiting).toMatchObject({ attempts: 1, lastFailure: "render-interrupted" });
+      clock = () => Math.max(Date.now(), waiting.nextAttemptAt);
+      // The fourth attempt that meets the cutoff is final; the row is then put back to check a later render.
+      await workRef.update({ attempts: 3 });
+      expect(await runPublicReleasePairWorkOnce({ firestore, pair, ...operations, clock })).toBe("retry-recorded");
+      expect((await workRef.get()).data()).toMatchObject({ attempts: 4, lastFailure: "render-failed", nextAttemptAt: null });
+      child.cutoff = false;
+      await workRef.set(waiting);
     }
     expect(await runPublicReleasePairWorkOnce({ firestore, pair, ...operations, clock })).toBe("complete");
     const receipt = (await firestore.doc(`${base}/receipts/${taskId}`).get()).data()!;
