@@ -1,4 +1,3 @@
-import { createRequire } from "node:module";
 import { execFileSync } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -9,10 +8,6 @@ import { runNoBuildCloudRelease } from "../../site/scripts/no-build-cloud-releas
 import { openCmsPublicationCloudTokenJournal } from "../../site/scripts/cms-publication-cloud-token-journal";
 import * as sourceGuard from "../../site/scripts/cms-publication-runtime-guard";
 
-const load = createRequire(import.meta.url);
-const { assertPublicDeploymentRetiredCloudReleaseBatch } = load("../../functions/lib/public-deployment.js");
-const { assertMediaLifecycleDeploymentFence } = load("../../functions/lib/public-deployment-pointer.js");
-const { reservePublicBuildBatch } = load("../../functions/lib/public-deployment-coordinator.js");
 const queueId = "3440aaaaaaaaaaaaaaaa", buildBatchId = `cms-${queueId}`;
 const newSha = "a".repeat(40);
 const requestPath = `cmsPublicationSerializerJournals/cloudflare-publisher/releases/${queueId}`;
@@ -101,112 +96,19 @@ it("clears the previous failure reason when the retained batch is already deploy
   } finally { logged.mockRestore(); }
 });
 
-const nextQueueId = "3440bbbbbbbbbbbbbbbb";
-const pointerPath = "system/publicDeployment";
-const nextRequestPath = `cmsPublicationSerializerJournals/cloudflare-publisher/releases/${nextQueueId}`;
-const nextBatchPath = `system/publicDeployment/buildBatches/cms-${nextQueueId}`;
-const oldSha = "b".repeat(40);
-const at = (millis: number) => firebaseAdminRuntime.Timestamp.fromMillis(millis);
-paths.push(pointerPath, nextRequestPath, nextBatchPath, `${batchPath}/candidates/worker`);
-function reservation(id: string, generation: number) {
-  return { schemaVersion: 1, buildBatchId: `cms-${id}`, status: "reserved", runtime: { owner: "cloudflare", release: newSha }, commitSha: newSha,
-    generation, reservedAgainstGeneration: 318, reservedAgainstCommitSha: oldSha, reservedAgainstDeploymentId: "deployment-318",
-    cutoffAt: at(1_700_000_000_000), reservedAt: at(1_700_000_000_000) };
-}
-async function seedReserved(request: object = {}) {
-  await seed({ [requestPath]: { ...documents()[requestPath], attempts: 1, nextAttemptAt: 0, failureReason: null, ...request },
-    [batchPath]: reservation(queueId, 320),
-    [pointerPath]: { state: "idle", activeCommitSha: oldSha, activeGeneration: 318, activeDeploymentId: "deployment-318", lastReservedGeneration: 321 } });
+it("runs a request the removed attempt limit parked while it holds the journal", async () => {
+  await seed({ ...documents(), [requestPath]: { ...documents()[requestPath], nextAttemptAt: null } });
   const journal = await openCmsPublicationCloudTokenJournal({ firestore, serializerId: "cloudflare-publisher", runtime: { owner: "cloudflare", release: newSha } });
   await journal.reserve({ queueId, buildBatchId, commitSha: newSha });
-  return journal;
-}
-const runRelease = (readInput: () => Promise<Buffer | null>) => runNoBuildCloudRelease({ firestore, serializerId: "cloudflare-publisher",
-  commitSha: newSha, stateDirectory: scratch, cloudflareApiToken: "fixture-token", previewStorageCredential: {} as never, storage: { readInput } as never });
-async function quietly<T>(work: () => Promise<T>): Promise<T> {
   const guarded = vi.spyOn(sourceGuard, "assertCmsPublicationSourceCheckout").mockResolvedValue(undefined as never);
   const logged = vi.spyOn(console, "error").mockImplementation(() => {});
-  try { return await work(); } finally { logged.mockRestore(); guarded.mockRestore(); }
-}
-
-it.each([["a due request", {}], ["a request the removed attempt limit parked", { attempts: 4, nextAttemptAt: null }]])(
-  "settles refused sealed bytes for %s and lets the next release start", async (_label, request) => quietly(async () => {
-    const journal = await seedReserved(request);
-    await runRelease(async () => Buffer.from("other bytes"));
-    expect((await firestore.doc(requestPath).get()).data()).toMatchObject({ status: "failed", nextAttemptAt: null,
-      failureReason: expect.stringMatching(/^input read:/), refusalReceipt: { reason: "cloud_release_input_refused" } });
-    const retired = (await firestore.doc(batchPath).get()).data();
-    expect(assertPublicDeploymentRetiredCloudReleaseBatch(retired, buildBatchId)).toEqual(retired);
-    expect(await journal.read()).toBeNull();
-    await seed({ [nextRequestPath]: { ...documents()[requestPath], queueId: nextQueueId, buildBatchId: `cms-${nextQueueId}`, attempts: 0,
-      status: "pending", failureReason: null }, [nextBatchPath]: reservation(nextQueueId, 321) });
-    const read = vi.fn(async () => { throw Object.assign(new Error("unavailable"), { status: 503 }); });
-    await runRelease(read);
-    expect(read).toHaveBeenCalledWith(nextQueueId);
-    expect((await journal.read())?.queueId).toBe(nextQueueId);
-  }));
-
-it.each([["has no sealed proof", {}], ["carries a malformed proof", { proof: { schemaVersion: 1, preparationId: "other" } }]])(
-  "settles a prepared release that %s and lets the next release take the journal", async (_label, documents: { proof?: object }) => quietly(async () => {
-    const journal = await seedReserved({ preparationId: queueId, preparedArtifact: {} });
-    const entry = `system/publicReleasePreparations/entries/${queueId}`;
-    if (documents.proof) await seed({ [`${entry}/proofs/complete`]: documents.proof });
-    await runRelease(async () => { throw new Error("A prepared release must not read its input"); });
-    await firestore.doc(`${entry}/proofs/complete`).delete();
-    expect((await firestore.doc(requestPath).get()).data()).toMatchObject({ status: "failed", nextAttemptAt: null,
-      failureReason: expect.stringMatching(/^release verification:/), refusalReceipt: { reason: "cloud_release_input_refused" } });
-    expect((await firestore.doc(batchPath).get()).data()).toMatchObject({ status: "retired" });
-    const { job } = await journal.reserve({ queueId: nextQueueId, buildBatchId: `cms-${nextQueueId}`, commitSha: newSha });
-    expect(job.queueId).toBe(nextQueueId);
-  }));
-
-it.each([["a provider failure", { status: "reserved" }, async () => { throw Object.assign(new Error("unavailable"), { status: 503 }); }],
-  ["an uncertain activation", { status: "reconciling" }, async () => Buffer.from("other bytes")]])(
-  "keeps the journal and the request retryable after %s", async (_label, batch, readInput) => quietly(async () => {
-    const journal = await seedReserved();
-    await firestore.doc(batchPath).update(batch);
-    await runRelease(readInput as () => Promise<Buffer | null>);
-    const request = (await firestore.doc(requestPath).get()).data()!;
-    expect(request.nextAttemptAt).toBeGreaterThan(Date.now());
-    expect(request.refusalReceipt).toBeUndefined();
+  try {
+    await runNoBuildCloudRelease({ firestore, serializerId: "cloudflare-publisher", commitSha: newSha, stateDirectory: scratch,
+      cloudflareApiToken: "fixture-token", previewStorageCredential: {} as never,
+      storage: { readInput: async () => { throw Object.assign(new Error("unavailable"), { status: 503 }); } } as never });
+    const failed = (await firestore.doc(requestPath).get()).data()!;
+    expect(failed).toMatchObject({ status: "failed", attempts: 5, failureReason: expect.stringMatching(/^input read:.*HTTP 503/) });
+    expect(failed.nextAttemptAt).toBeGreaterThan(Date.now());
     expect((await journal.read())?.queueId).toBe(queueId);
-    expect((await firestore.doc(batchPath).get()).data()).toMatchObject(batch);
-  }));
-
-const activeBatchPath = "system/publicDeployment/buildBatches/cms-active";
-paths.push(activeBatchPath);
-async function seedCandidate() {
-  const journal = await seedReserved();
-  await seed({ [activeBatchPath]: { status: "deployed", generation: 318, commitSha: oldSha, deploymentId: "deployment-318" } });
-  await firestore.doc(batchPath).update({ status: "ready", readyAt: at(1_700_000_000_001) });
-  await firestore.doc(`${batchPath}/candidates/worker`).set({ schemaVersion: 1 });
-  await firestore.doc(pointerPath).set({ schemaVersion: 1, mediaLifecycleReady: true, state: "idle", activeCommitSha: oldSha, activeGeneration: 318,
-    activeDeploymentId: "deployment-318", lastReservedGeneration: 320, newestEligibleGeneration: 320, newestEligibleBuildBatchId: buildBatchId });
-  return journal;
-}
-
-it("returns eligibility to the active release, keeps the counter, and admits a real reservation of the pinned source", async () => quietly(async () => {
-  const journal = await seedCandidate();
-  await runRelease(async () => Buffer.from("other bytes"));
-  expect(await journal.read()).toBeNull();
-  expect((await firestore.doc(requestPath).get()).data()).toMatchObject({ status: "failed", nextAttemptAt: null });
-  const settled = (await firestore.doc(pointerPath).get()).data()!;
-  expect(settled).toMatchObject({ activeGeneration: 318, newestEligibleGeneration: 318, newestEligibleBuildBatchId: "cms-active", lastReservedGeneration: 320 });
-  // The counter is ahead, so a prepared release is not admitted yet; an ordinary reservation is.
-  expect(() => assertMediaLifecycleDeploymentFence(settled)).toThrow();
-  const { batch } = await reservePublicBuildBatch({ firestore, buildBatchId: `cms-${nextQueueId}`, commitSha: newSha,
-    runtime: { owner: "cloudflare", release: newSha } });
-  expect(batch).toMatchObject({ generation: 321, reservedAgainstGeneration: 318 });
-  expect((await firestore.doc(nextBatchPath).get()).data()).toMatchObject({ status: "reserved", generation: 321 });
-  await firestore.doc(pointerPath).update({ activeGeneration: 321, activeCommitSha: newSha, activeDeploymentId: "deployment-321",
-    newestEligibleGeneration: 321, newestEligibleBuildBatchId: `cms-${nextQueueId}` });
-  expect(assertMediaLifecycleDeploymentFence((await firestore.doc(pointerPath).get()).data())).toMatchObject({ generation: 321, commitSha: newSha });
-}));
-
-it("keeps a refused candidate's journal when the active release cannot be identified", async () => quietly(async () => {
-  const journal = await seedCandidate();
-  await firestore.doc(activeBatchPath).update({ deploymentId: "another" });
-  await runRelease(async () => Buffer.from("other bytes"));
-  expect((await journal.read())?.queueId).toBe(queueId);
-  expect((await firestore.doc(pointerPath).get()).data()).toMatchObject({ newestEligibleBuildBatchId: buildBatchId });
-}));
+  } finally { logged.mockRestore(); guarded.mockRestore(); }
+});

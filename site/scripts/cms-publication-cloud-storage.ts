@@ -43,10 +43,6 @@ const TOP_FILES = [
 const digest = (bytes: Buffer) =>
   createHash("sha256").update(bytes).digest("hex");
 
-/** The stored bytes were read in full and are not the sealed bytes. Reading
- * the same object again cannot change that. */
-export class CloudPublicationBytesRefused extends Error {}
-
 export interface CloudPublicationIdentity {
   queueId: string;
   commitSha: string;
@@ -160,11 +156,6 @@ function parseManifest(
   }
   return manifest;
 }
-/** Stored manifest bytes that do not parse are refused bytes. */
-const parseRetainedManifest = (...input: Parameters<typeof parseManifest>) => {
-  try { return parseManifest(...input); }
-  catch (cause) { throw new CloudPublicationBytesRefused((cause as Error).message, { cause }); }
-};
 async function privateDirectory(directory: string) {
   const stat = await lstat(directory);
   if (
@@ -271,7 +262,7 @@ export function createCmsPublicationCloudStorage({
       object.CacheControl !== CACHE_CONTROL
     ) {
       await object.Body?.transformToWebStream().cancel();
-      throw new CloudPublicationBytesRefused("Invalid cloud publication storage object");
+      throw new Error("Invalid cloud publication storage object");
     }
     const chunks: Buffer[] = [];
     let size = 0;
@@ -285,12 +276,12 @@ export function createCmsPublicationCloudStorage({
     }
     const bytes = Buffer.concat(chunks, size);
     const metadata = normalizeMetadata(object.Metadata);
-    if (size !== object.ContentLength) throw new Error("Cloud publication storage read was incomplete");
     if (
+      size !== object.ContentLength ||
       metadata.schema !== "njpbs-publication-v1" ||
       metadata.sha256 !== digest(bytes)
     ) {
-      throw new CloudPublicationBytesRefused("Cloud publication storage bytes differ");
+      throw new Error("Cloud publication storage bytes differ");
     }
     return bytes;
   }
@@ -328,8 +319,8 @@ export function createCmsPublicationCloudStorage({
     await privateDirectory(directory);
     const bytes = await read(`${prefix(identity.queueId)}/manifest.json`, signal);
     if (!bytes) return false;
-    if (expectedDigest !== undefined && (!DIGEST.test(expectedDigest) || digest(bytes) !== expectedDigest)) throw new CloudPublicationBytesRefused("Cloud release manifest digest differs");
-    const manifest = parseRetainedManifest(bytes, identity, includeRenderer);
+    if (expectedDigest !== undefined && (!DIGEST.test(expectedDigest) || digest(bytes) !== expectedDigest)) throw new Error("Cloud release manifest digest differs");
+    const manifest = parseManifest(bytes, identity, includeRenderer);
     const staging = await mkdtemp(path.join(directory, ".restore-"));
     try {
       await transferFiles(manifest.files, async (file) => {
@@ -342,7 +333,7 @@ export function createCmsPublicationCloudStorage({
           payload.length !== file.byteLength ||
           digest(payload) !== file.sha256
         ) {
-          throw new CloudPublicationBytesRefused("Cloud publication artifact bytes differ");
+          throw new Error("Cloud publication artifact bytes differ");
         }
         const target = path.join(staging, file.path);
         await mkdir(path.dirname(target), { recursive: true, mode: 0o700 });
