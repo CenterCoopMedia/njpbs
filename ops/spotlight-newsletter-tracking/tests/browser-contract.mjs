@@ -129,6 +129,14 @@ try {
     await page.keyboard.press("Tab");
     assert.equal(await page.locator("#article-link").evaluate(node => node === document.activeElement), true);
     assert.equal(await page.locator("#spotlight-newsletter-choice").isVisible(), false, "The panel cannot obscure ordinary page focus");
+    const bar = page.getByRole("region", { name: "Privacy choices", exact: true });
+    assert.equal(await bar.isVisible(), true, "Keyboard focus keeps the first-visit bar");
+    const [link, barBox] = [await page.locator("#article-link").boundingBox(), await bar.boundingBox()];
+    assert.ok(link.y + link.height <= barBox.y, "The bar does not cover focused page content");
+    for (let step = 0; step < 6 && !(await page.getByRole("button", { name: "Allow all", exact: true }).evaluate(node => node === document.activeElement)); step += 1) {
+      await page.keyboard.press("Tab");
+    }
+    assert.equal(await page.getByRole("button", { name: "Allow all", exact: true }).evaluate(node => node === document.activeElement), true, "Forward Tab reaches the bar");
     const opener = page.getByRole("button", { name: "Privacy settings", exact: true });
     await opener.focus();
     await page.keyboard.press("Enter");

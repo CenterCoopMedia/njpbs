@@ -2,7 +2,8 @@
 const GRANT = "v1:granted";
 const DENY = "v1:denied";
 const MEDIA_PARAMETER = "spotlight_newsletter_media";
-const CHANNEL = "spotlight-privacy-choices";
+// Tabs running the earlier newsletter-only version listen on this name.
+const CHANNEL = "spotlight-newsletter-consent";
 const COOKIES = { analytics: "spotlight-analytics-consent", newsletter: "spotlight-newsletter-consent" };
 const UNAVAILABLE = { analytics: "Analytics is unavailable.", newsletter: "Newsletter tools are unavailable." };
 
@@ -27,6 +28,11 @@ export function mountNewsletterConsent(win) {
 
   const gpc = () => win.navigator.globalPrivacyControl === true;
   const anyLoaded = () => categories.some(category => category.loaded);
+  // Keep keyboard focus above the fixed bar while it shows.
+  function setBarHidden(value) {
+    bar.hidden = value;
+    doc.documentElement.style.scrollPaddingBottom = value ? "" : `${bar.offsetHeight}px`;
+  }
   const undecided = () => categories.some(category => ![GRANT, DENY].includes(decision(category.cookie)));
 
   function decision(cookie) {
@@ -150,7 +156,7 @@ export function mountNewsletterConsent(win) {
       // An unchanged write would wake the mutation observer again.
       if (current.textContent !== text) current.textContent = text;
     }
-    if (off) bar.hidden = true;
+    if (off) setBarHidden(true);
     root.querySelector("[data-newsletter-gpc]").hidden = !gpc();
     root.querySelector("[data-newsletter-media]").hidden = !mediaBlocked;
     if (!root.hidden && moveFocus) root.querySelector("[data-newsletter-close]").focus();
@@ -184,7 +190,7 @@ export function mountNewsletterConsent(win) {
   }
 
   function openPanel() {
-    bar.hidden = true;
+    setBarHidden(true);
     display();
     root.hidden = false;
     root.querySelector(gpc() || mediaBlocked ? "[data-newsletter-close]" : "[data-deny]").focus();
@@ -196,7 +202,7 @@ export function mountNewsletterConsent(win) {
     channel?.postMessage("changed");
     if (!saved) openPanel();
     else if (!undecided()) {
-      bar.hidden = true;
+      setBarHidden(true);
       root.hidden = true;
       opener.focus();
     }
@@ -225,12 +231,11 @@ export function mountNewsletterConsent(win) {
   });
   doc.addEventListener("focusin", event => {
     if (!root.hidden && !root.contains(event.target)) root.hidden = true;
-    if (!bar.hidden && !bar.contains(event.target)) bar.hidden = true;
   });
   display();
   opener.hidden = false;
   root.hidden = true;
-  bar.hidden = mediaBlocked || gpc() || !undecided();
+  setBarHidden(mediaBlocked || gpc() || !undecided());
   reconcile();
 }
 
