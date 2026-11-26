@@ -25,18 +25,23 @@ export function smokeFixture(target) {
 export async function restorePreviewSmokeFixture({ firestore, fixture, now = () => new Date().toISOString() }) {
   // Load the audit owner after the app exists; it reuses that app.
   const { default: audit } = await import("../functions/lib/audit.js");
+  const { retiredRecordKindError } = (await import("../functions/lib/content-library.js")).default;
   const ref = firestore.collection(fixture.collection).doc(fixture.id);
   return firestore.runTransaction(async tx => {
     const snapshot = await tx.get(ref);
     if (!snapshot.exists) return "missing";
     const current = snapshot.data();
     if (current.status !== "archived") return current.status;
+    // Boardwalk's restore refuses a retired record type (lifecycle-transition.js); so does this.
+    if (retiredRecordKindError(current.type)) return "archived with a retired type";
     const changed = { ...current, status: "draft", publiclyVisible: false, updatedAt: now(), updatedBy: SYSTEM_ACTOR,
       // A restore keeps the editorial version (functions/lib/content-version.js).
       version: current.version + 1, contentVersion: Number.isSafeInteger(current.contentVersion) && current.contentVersion >= 1 ? current.contentVersion : current.version };
     tx.set(ref, changed);
     tx.set(firestore.collection(audit.AUDIT_COLLECTIONS.versionHistory).doc(), audit.versionHistoryEntry({
-      collection: fixture.collection, documentId: fixture.id, action: "restore", before: current, after: changed, actorUid: SYSTEM_ACTOR }));
+      collection: fixture.collection, documentId: fixture.id, action: "restore", after: changed, actorUid: SYSTEM_ACTOR,
+      // Only the status changes, so the row keeps the receipt form of `before`, as an oversized lifecycle row does.
+      before: { status: current.status, version: current.version, beforeTruncated: true } }));
     tx.set(firestore.collection(audit.AUDIT_COLLECTIONS.adminLogs).doc(), audit.adminLogEntry({
       actorUid: SYSTEM_ACTOR, action: "cms.restore", target: `${fixture.collection}/${fixture.id}`,
       before: { status: current.status, version: current.version }, after: { status: changed.status, version: changed.version } }));
