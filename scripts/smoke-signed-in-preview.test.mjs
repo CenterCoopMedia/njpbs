@@ -51,7 +51,7 @@ test("adds Access headers on one origin and refuses to forward them on redirects
 
 function fixtureBrowser(settings, { sessionStatus = 204, documentStatus = 200, headingVisible = true,
   sessionFailure, noDocument = false, progress = "building", later, job, reader = false, jobStatus = 200, hasProgress = true,
-  noPopup = false, editorAlert = false, signInStatus, editorError, documentFailure, stalled = false, disabledReason, archived = false, locked = false } = {}) {
+  noPopup = false, editorAlert = false, signInStatus, editorError, documentFailure, stalled = false, disabledReason, archived = false, locked = false, lockedAfterPreview = false } = {}) {
   const context = new EventEmitter();
   const page = new EventEmitter();
   const frame = {};
@@ -104,7 +104,8 @@ function fixtureBrowser(settings, { sessionStatus = 204, documentStatus = 200, h
     // The lock message class from the dev editor, Nov. 26, 2026.
     locator: selector => selector === "body"
       ? { async ariaSnapshot() { assert.equal(password, ""); } }
-      : selector.includes(".editor-lock-message-readonly") ? { first: () => ({ waitFor: () => locked ? Promise.resolve() : new Promise(() => {}) }) }
+      : selector.includes(".editor-lock-message-readonly") ? { first: () => ({ waitFor: () => locked ? Promise.resolve()
+        : lockedAfterPreview ? new Promise(resolve => setTimeout(resolve, 5)) : new Promise(() => {}) }) }
       : { getByRole: () => ({ async click() {
         assert.equal(password, credential.password);
         if (signInStatus) page.emit("response", response("https://identity.example.test/v1/accounts:signInWithPassword", signInStatus, "POST", false));
@@ -196,6 +197,10 @@ test("ends at once on a loaded editor with no Preview control", async () => {
     { ok: false, code: "no_preview_control", reason: "archived" });
   assert.deepEqual(await checkSignedInPreview(fixtureBrowser(settings, { locked: true }), settings, limits),
     { ok: false, code: "editor_locked" });
+  // Taken after Preview appeared: the click never opens a tab, and the lock still ends the wait.
+  assert.deepEqual(await checkSignedInPreview(fixtureBrowser(settings, { lockedAfterPreview: true, noPopup: true }), settings,
+    { ...limits, previewMs: 1_000 }), { ok: false, code: "editor_locked", missing: ["popup", "session", "document"],
+    session: null, job: null, document: null, popup: null });
 });
 
 test("names a disabled Preview control at once", async () => {

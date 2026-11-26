@@ -151,7 +151,8 @@ export async function checkSignedInPreview(browser, { admin, preview, credential
     page.getByRole("alert").filter({ hasText: editorStop }).first().waitFor({ state: "visible" })
       .then(() => stop("preview_admin_stopped"), () => {});
     hang.limit(previewMs);
-    const [, , document] = await hang.over(Promise.race([stopped, Promise.all([
+    // Another session can still take the editor before the click lands; its lock ends the wait.
+    const [, , document] = await hang.over(Promise.race([stopped, locked, Promise.all([
       opened.then(value => {
         popup = value; saw.popup = true;
         value.on("close", () => stop("preview_tab_closed"));
