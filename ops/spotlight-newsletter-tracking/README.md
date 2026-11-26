@@ -6,6 +6,12 @@ separate choices with separate cookies: a grant for one never loads the other.
 It adds a footer Privacy settings button, a consent panel, and analytics and
 newsletter privacy sections on the configured native privacy page.
 
+A first visit with any undecided choice shows a short bottom bar: "We use
+analytics and newsletter tools only if you allow them." Allow all grants both
+choices, Allow none denies both, and Choices opens the two-section panel.
+Allow all and Allow none have equal visual weight. GPC and excluded pages hide
+the bar. A grant never overrides GPC.
+
 ## Analytics
 
 The analytics choice uses the `spotlight-analytics-consent` cookie with the

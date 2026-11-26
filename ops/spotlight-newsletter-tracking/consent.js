@@ -10,7 +10,8 @@ export function mountNewsletterConsent(win) {
   const doc = win.document;
   const root = doc.getElementById("spotlight-newsletter-choice");
   const opener = doc.querySelector("[data-newsletter-open]");
-  if (!root || !opener || doc.querySelectorAll("#spotlight-newsletter-choice").length !== 1 || root.dataset.mounted) return;
+  const bar = doc.querySelector("[data-privacy-bar]");
+  if (!root || !opener || !bar || doc.querySelectorAll("#spotlight-newsletter-choice").length !== 1 || root.dataset.mounted) return;
   const categories = [...root.querySelectorAll("[data-category]")].map(node => ({
     name: node.dataset.category, node, cookie: COOKIES[node.dataset.category],
     status: node.querySelector("[data-status]"), loaded: false, existing: false,
@@ -26,6 +27,7 @@ export function mountNewsletterConsent(win) {
 
   const gpc = () => win.navigator.globalPrivacyControl === true;
   const anyLoaded = () => categories.some(category => category.loaded);
+  const undecided = () => categories.some(category => ![GRANT, DENY].includes(decision(category.cookie)));
 
   function decision(cookie) {
     try {
@@ -148,6 +150,7 @@ export function mountNewsletterConsent(win) {
       // An unchanged write would wake the mutation observer again.
       if (current.textContent !== text) current.textContent = text;
     }
+    if (off) bar.hidden = true;
     root.querySelector("[data-newsletter-gpc]").hidden = !gpc();
     root.querySelector("[data-newsletter-media]").hidden = !mediaBlocked;
     if (!root.hidden && moveFocus) root.querySelector("[data-newsletter-close]").focus();
@@ -166,7 +169,7 @@ export function mountNewsletterConsent(win) {
     categories.forEach(load);
   }
 
-  function choose(category, value) {
+  function save(category, value) {
     try {
       doc.cookie = `${category.cookie}=${encodeURIComponent(value)}; Path=/; Max-Age=15552000; SameSite=Lax; Secure`;
       if (decision(category.cookie) !== value) throw new Error("Choice was not saved");
@@ -174,25 +177,39 @@ export function mountNewsletterConsent(win) {
       category.status.textContent = category.loaded
         ? "Your browser prevented saving this change. Your earlier permission is still active. Clear this site's cookies or block these tools in your browser to withdraw it."
         : "We could not save your choice. These tools remain off.";
-      return;
+      return false;
     }
     category.status.textContent = "";
+    return true;
+  }
+
+  function openPanel() {
+    bar.hidden = true;
+    display();
+    root.hidden = false;
+    root.querySelector(gpc() || mediaBlocked ? "[data-newsletter-close]" : "[data-deny]").focus();
+  }
+
+  function choose(choices) {
+    // Save every choice before reconciling so a withdrawal reload sees them all.
+    const saved = choices.map(([category, value]) => save(category, value)).every(Boolean);
     channel?.postMessage("changed");
-    if (categories.every(item => [GRANT, DENY].includes(decision(item.cookie)))) {
+    if (!saved) openPanel();
+    else if (!undecided()) {
+      bar.hidden = true;
       root.hidden = true;
       opener.focus();
     }
     reconcile();
   }
 
-  opener.addEventListener("click", () => {
-    display();
-    root.hidden = false;
-    root.querySelector(gpc() || mediaBlocked ? "[data-newsletter-close]" : "[data-deny]").focus();
-  });
+  opener.addEventListener("click", openPanel);
+  bar.querySelector("[data-choices]").addEventListener("click", openPanel);
+  bar.querySelector("[data-allow-all]").addEventListener("click", () => choose(categories.map(category => [category, GRANT])));
+  bar.querySelector("[data-allow-none]").addEventListener("click", () => choose(categories.map(category => [category, DENY])));
   for (const category of categories) {
-    category.node.querySelector("[data-allow]").addEventListener("click", () => choose(category, GRANT));
-    category.node.querySelector("[data-deny]").addEventListener("click", () => choose(category, DENY));
+    category.node.querySelector("[data-allow]").addEventListener("click", () => choose([[category, GRANT]]));
+    category.node.querySelector("[data-deny]").addEventListener("click", () => choose([[category, DENY]]));
   }
   root.querySelector("[data-newsletter-close]").addEventListener("click", () => {
     root.hidden = true;
@@ -208,11 +225,12 @@ export function mountNewsletterConsent(win) {
   });
   doc.addEventListener("focusin", event => {
     if (!root.hidden && !root.contains(event.target)) root.hidden = true;
+    if (!bar.hidden && !bar.contains(event.target)) bar.hidden = true;
   });
   display();
   opener.hidden = false;
-  root.hidden = mediaBlocked || gpc()
-    || categories.every(category => [GRANT, DENY].includes(decision(category.cookie)));
+  root.hidden = true;
+  bar.hidden = mediaBlocked || gpc() || !undecided();
   reconcile();
 }
 

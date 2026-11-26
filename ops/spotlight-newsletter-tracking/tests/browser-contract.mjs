@@ -65,26 +65,61 @@ try {
     await page.goto("https://news.example.org/baseline/");
     await page.screenshot({ path: join(evidence, `before-${width}.png`), fullPage: true });
     await page.goto("https://news.example.org/article/");
-    const deny = page.getByRole("button", { name: "Do not allow newsletter tools", exact: true });
-    const allow = page.getByRole("button", { name: "Allow newsletter tools", exact: true });
-    const denyAnalytics = page.getByRole("button", { name: "Do not allow analytics", exact: true });
-    await deny.waitFor({ state: "visible" });
+    const bar = page.getByRole("region", { name: "Privacy choices", exact: true });
+    const all = bar.getByRole("button", { name: "Allow all", exact: true });
+    const none = bar.getByRole("button", { name: "Allow none", exact: true });
+    const choices = bar.getByRole("button", { name: "Choices", exact: true });
+    await all.waitFor({ state: "visible" });
+    await bar.getByText("We use analytics and newsletter tools only if you allow them.", { exact: true }).waitFor();
+    assert.equal(await page.locator("#spotlight-newsletter-choice").isVisible(), false, "First visit shows the bar, not the panel");
     assert.equal(vendors.length, 0, "Unknown consent never requests vendors");
-    for (const button of [deny, allow]) assert.ok((await button.boundingBox()).height >= 44);
-    const overflow = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth);
-    assert.equal(overflow, false, `No horizontal overflow at ${width}`);
-    await deny.focus();
+    const weight = node => { const style = getComputedStyle(node); return [style.color, style.backgroundColor, style.borderColor, style.fontWeight, style.fontSize]; };
+    assert.deepEqual(await all.evaluate(weight), await none.evaluate(weight), "Allow all and Allow none have equal visual weight");
+    const [allBox, noneBox] = [await all.boundingBox(), await none.boundingBox()];
+    assert.ok(allBox.height >= 44 && Math.abs(allBox.width - noneBox.width) < 1 && Math.abs(allBox.height - noneBox.height) < 1);
+    assert.ok((await bar.boundingBox()).height < 900 / 3, `The bar stays short at ${width}`);
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `No horizontal overflow at ${width}`);
+    await all.focus();
     await page.keyboard.press("Tab");
-    assert.equal(await allow.evaluate(node => node === document.activeElement), true);
-    assert.notEqual(await allow.evaluate(node => getComputedStyle(node).outlineStyle), "none");
+    assert.equal(await none.evaluate(node => node === document.activeElement), true);
+    assert.notEqual(await none.evaluate(node => getComputedStyle(node).outlineStyle), "none");
+    await page.screenshot({ path: join(evidence, `bar-${width}.png`), fullPage: false });
+    await choices.click();
+    assert.equal(await bar.isVisible(), false);
+    const denyAnalytics = page.getByRole("button", { name: "Do not allow analytics", exact: true });
+    assert.equal(await denyAnalytics.evaluate(node => node === document.activeElement), true, "Choices focuses the first choice");
+    for (const name of ["Do not allow analytics", "Allow analytics", "Do not allow newsletter tools", "Allow newsletter tools"]) {
+      assert.ok((await page.getByRole("button", { name, exact: true }).boundingBox()).height >= 44);
+    }
     await page.screenshot({ path: join(evidence, `consent-${width}.png`), fullPage: true });
     await denyAnalytics.click();
     assert.equal(await page.locator("#spotlight-newsletter-choice").isVisible(), true, "One choice leaves the other open");
-    await deny.click();
+    await page.getByRole("button", { name: "Do not allow newsletter tools", exact: true }).click();
     assert.equal(await page.locator("#spotlight-newsletter-choice").isVisible(), false);
     assert.equal(await page.getByRole("button", { name: "Privacy settings", exact: true }).evaluate(node => node === document.activeElement), true);
     await page.reload();
+    assert.equal(await bar.isVisible(), false, "A complete choice hides the bar");
     assert.equal(vendors.length, 0, "A saved denial stays off");
+    await ctx.close();
+  }
+  {
+    const { ctx, page, vendors } = await context();
+    await page.goto("https://news.example.org/article/");
+    await page.getByRole("button", { name: "Allow none", exact: true }).click();
+    assert.equal(await page.getByRole("region", { name: "Privacy choices", exact: true }).isVisible(), false);
+    const cookies = Object.fromEntries((await ctx.cookies()).map(cookie => [cookie.name, cookie.value]));
+    assert.deepEqual([cookies["spotlight-analytics-consent"], cookies["spotlight-newsletter-consent"]], ["v1%3Adenied", "v1%3Adenied"]);
+    await page.reload();
+    assert.equal(vendors.length, 0, "Allow none keeps every tool off");
+    await ctx.close();
+  }
+  {
+    const { ctx, page, vendors } = await context();
+    await page.goto("https://news.example.org/article/");
+    await page.getByRole("button", { name: "Allow all", exact: true }).click();
+    await page.waitForFunction(() => window.gaCommands && window.acCommands?.some(args => args[0] === "process") && window.wpCommands?.length === 2);
+    assert.deepEqual(vendors.map(href => new URL(href).hostname).sort(), ["diffuser-cdn.app-us1.com", "wisepops.net", "www.googletagmanager.com"], "Allow all grants both choices");
+    assert.equal(await page.getByRole("region", { name: "Privacy choices", exact: true }).isVisible(), false);
     await ctx.close();
   }
 
@@ -111,6 +146,9 @@ try {
     await page.goto("https://news.example.org/article/");
     await page.evaluate(percent => { document.documentElement.style.fontSize = `${percent}%`; }, percent);
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+    for (const name of ["Allow all", "Allow none", "Choices"]) assert.equal(await page.getByRole("button", { name, exact: true }).isVisible(), true);
+    await page.screenshot({ path: join(evidence, `bar-text-${percent}.png`) });
+    await page.getByRole("button", { name: "Choices", exact: true }).click();
     for (const name of ["Do not allow analytics", "Allow analytics", "Do not allow newsletter tools", "Allow newsletter tools"]) {
       const button = page.getByRole("button", { name, exact: true });
       await button.scrollIntoViewIfNeeded();
@@ -123,6 +161,7 @@ try {
   {
     const { ctx, page, vendors } = await context({ analytics: "v1:denied" });
     await page.goto("https://news.example.org/article/");
+    await page.getByRole("button", { name: "Choices", exact: true }).click();
     await page.getByRole("button", { name: "Allow newsletter tools", exact: true }).click();
     await page.waitForFunction(() => window.acCommands?.some(args => args[0] === "process") && window.wpCommands?.length === 2);
     assert.equal(vendors.length, 2);
@@ -156,7 +195,7 @@ try {
   for (const saved of ["v0:granted", "%bad"]) {
     const { ctx, page, vendors } = await context({ saved });
     await page.goto("https://news.example.org/article/");
-    await page.getByRole("button", { name: "Do not allow newsletter tools", exact: true }).waitFor();
+    await page.getByRole("button", { name: "Allow all", exact: true }).waitFor();
     assert.equal(vendors.length, 0, "Obsolete or malformed saved choices do not allow tracking");
     await ctx.close();
   }
@@ -235,6 +274,7 @@ try {
   {
     const { ctx, page, vendors } = await context({ blockedCookies: true });
     await page.goto("https://news.example.org/article/");
+    await page.getByRole("button", { name: "Choices", exact: true }).click();
     await page.getByRole("button", { name: "Allow newsletter tools", exact: true }).click();
     await page.getByRole("status").filter({ hasText: "We could not save your choice." }).waitFor();
     assert.equal(vendors.length, 0);
@@ -257,6 +297,7 @@ try {
   {
     const { ctx, page, vendors } = await context();
     await page.goto("https://news.example.org/article/");
+    await page.getByRole("button", { name: "Choices", exact: true }).click();
     await page.getByRole("button", { name: "Allow analytics", exact: true }).click();
     await page.waitForFunction(() => window.gaCommands);
     assert.deepEqual(vendors, ["https://www.googletagmanager.com/gtag/js?id=G-TEST123456"], "Analytics grant loads only the Google tag");
@@ -274,7 +315,7 @@ try {
     await page.waitForFunction(() => window.gaCommands);
     assert.equal(vendors.length, 2, "One tag load per document");
     assert.equal((await page.evaluate(() => window.gaCommands)).filter(args => args[0] === "config").length, 1);
-    assert.equal(await page.locator("#spotlight-newsletter-choice").isVisible(), true, "The undecided newsletter choice keeps the panel open");
+    await page.getByRole("button", { name: "Choices", exact: true }).click();
     await Promise.all([page.waitForEvent("load"), page.getByRole("button", { name: "Do not allow analytics", exact: true }).click()]);
     assert.equal(vendors.length, 2, "Withdrawal reloads without the tag");
     assert.equal(await page.evaluate(() => window.gtag), undefined);
@@ -283,6 +324,7 @@ try {
   {
     const { ctx, page, vendors } = await context({ analytics: "v1:denied" });
     await page.goto("https://news.example.org/article/");
+    await page.getByRole("button", { name: "Choices", exact: true }).click();
     await page.getByRole("button", { name: "Allow newsletter tools", exact: true }).click();
     await page.waitForFunction(() => window.wpCommands?.length === 2);
     assert.equal(google(vendors).length, 0, "A newsletter grant never loads analytics");

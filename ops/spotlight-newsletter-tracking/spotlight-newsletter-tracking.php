@@ -114,7 +114,7 @@ function eligible_document($html) {
 }
 
 function privacy_text() {
-    // Joe approves this analytics wording before installation.
+    // Joe approved this analytics wording on Nov. 26, 2026.
     return '<section id="analytics-privacy"><h2>Analytics and your choice</h2>'
         . '<p>With your permission, NJ Spotlight News uses Google Analytics to count visits and see which stories '
         . 'readers use; its advertising features stay off. It loads only after you allow analytics, and a denial '
@@ -151,6 +151,10 @@ function footer_markup($config) {
     return '<link rel="stylesheet" href="' . esc_url($assets . 'consent.css') . '">'
         . '<p class="spotlight-newsletter-information"><a href="' . esc_url($config['policyUrl']) . '">Privacy information</a></p>'
         . '<button type="button" class="spotlight-newsletter-settings" data-newsletter-open hidden>Privacy settings</button>'
+        . '<div class="spotlight-privacy-bar" data-privacy-bar role="region" aria-label="Privacy choices" hidden>'
+        . '<p>We use analytics and newsletter tools only if you allow them.</p><div class="spotlight-privacy-bar-actions">'
+        . '<button type="button" data-allow-all>Allow all</button><button type="button" data-allow-none>Allow none</button>'
+        . '<button type="button" data-choices>Choices</button></div></div>'
         . '<aside id="spotlight-newsletter-choice" class="spotlight-newsletter-choice" aria-labelledby="spotlight-newsletter-title" hidden>'
         . '<h2 id="spotlight-newsletter-title">Your privacy choices</h2>'
         . '<p data-newsletter-gpc hidden>Your browser sent a Global Privacy Control signal. Analytics and newsletter tools stay off.</p>'
