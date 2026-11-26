@@ -15,9 +15,10 @@
 //   whose description starts "failed=<n> seconds=<s> refused=<s>" and may name
 //   its production CMS run, " cms=<run id>". A record with no
 //   end status (a failed record write, a stopped host) does not count.
-// - release-drift.yml names its runs "Release drift production [<id>]" (the check
-//   before the first write) and "Release drift production after [<id>]" (after
-//   the last), each maybe followed by " <dispatch nonce>"; id = payload.release_id.
+// - release-drift.yml names its runs "Release drift production [<id>] <source>"
+//   (the check before the first write) and "Release drift production after
+//   [<id>] <source>" (after the last), each maybe followed by " <dispatch
+//   nonce>"; id = payload.release_id, source = the full commit.
 //
 // A release counts when all nine conditions of the release reliability plan hold
 // (9 as changed Nov. 26: any night, no days-behind limit):
@@ -137,8 +138,9 @@ async function judge(get, release, ctx) {
   // 2 and 4
   const id = record.payload.release_id;
   // release-drift.yml may add " <dispatch nonce>" after the ID.
+  // The name carries the release ID and the source the check read.
   const drift = (name) => {
-    const title = `${name} [${id}]`;
+    const title = `${name} [${id}] ${record.sha}`;
     return id ? ctx.drift.filter((d) => d.display_title === title || d.display_title?.startsWith(`${title} `)) : [];
   };
   const green = async (runs, ok) => {

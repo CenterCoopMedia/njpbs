@@ -58,8 +58,8 @@ function counted(change = {}) {
   a[deployments("production")] = [{ id: 9002, sha: SOURCE, created_at: "2026-12-01T03:05:02Z" }, ...a[deployments("production")]];
   a["repos/CenterCoopMedia/njpbs/deployments/9002/statuses?per_page=100"] = [{ state: "success", created_at: "2026-12-01T03:15:00Z", target_url: "https://github.com/CenterCoopMedia/njpbs/actions/runs/50001/job/1" }];
   a[driftRuns] = { workflow_runs: change.drift ?? [
-    { id: 60002, display_title: "Release drift production after [r1] 7f3a", created_at: "2026-12-01T03:20:00Z", updated_at: "2026-12-01T03:22:00Z", conclusion: "success" },
-    { id: 60001, display_title: "Release drift production [r1]", created_at: "2026-12-01T03:00:05Z", updated_at: "2026-12-01T03:02:00Z", conclusion: "success" },
+    { id: 60002, display_title: `Release drift production after [r1] ${SOURCE} 7f3a`, created_at: "2026-12-01T03:20:00Z", updated_at: "2026-12-01T03:22:00Z", conclusion: "success" },
+    { id: 60001, display_title: `Release drift production [r1] ${SOURCE}`, created_at: "2026-12-01T03:00:05Z", updated_at: "2026-12-01T03:02:00Z", conclusion: "success" },
   ] };
   a[`repos/jamditis/jawn-ops/compare/master...${TOOL}`] = { status: change.tool ?? "behind" };
   a[`repos/CenterCoopMedia/njpbs/compare/${PREVIOUS}...${SOURCE}`] = change.compare ?? { status: "ahead", ahead_by: 1, behind_by: 0 };
@@ -84,13 +84,17 @@ test("each broken condition stops the count and is named", async () => {
     [{ end: "failure", failed: 2 }, /record ended failure, failed=2/],
     [{ attempt: 2 }, /CMS run 50001 success, attempt 2/],
     [{ drift: [] }, /no green drift check before the CMS run/],
-    [{ drift: [{ id: 60001, display_title: "Release drift production [r1]", created_at: "2026-12-01T03:00:05Z", updated_at: "2026-12-01T03:02:00Z", conclusion: "success" }] }, /^no green drift check after the release/],
+    [{ drift: [{ id: 60001, display_title: `Release drift production [r1] ${SOURCE}`, created_at: "2026-12-01T03:00:05Z", updated_at: "2026-12-01T03:02:00Z", conclusion: "success" }] }, /^no green drift check after the release/],
     [{ tool: "diverged" }, /tool 11111111 is not on jawn-ops master/],
     [{ dev: "failure" }, /first release-development record did not succeed/],
     [{ compare: { status: "identical", ahead_by: 0, behind_by: 0 } }, /the commit is not ahead of the live commit/],
     [{ compare: { status: "diverged", ahead_by: 2, behind_by: 1 } }, /the commit is not ahead of the live commit/],
     [{ driftJob: "skipped" }, /no green drift check before the CMS run/],
     [{ cms: 49999 }, /the record names CMS run 49999, not 50001/],
+    [{ drift: [
+      { id: 60002, display_title: `Release drift production after [r1] ${"5".repeat(40)}`, created_at: "2026-12-01T03:20:00Z", updated_at: "2026-12-01T03:22:00Z", conclusion: "success" },
+      { id: 60001, display_title: `Release drift production [r1] ${SOURCE}`, created_at: "2026-12-01T03:00:05Z", updated_at: "2026-12-01T03:02:00Z", conclusion: "success" },
+    ] }, /^no green drift check after the release/],
     [{ earlier: true }, /2 release-production records for the commit/],
     [{ devEnd: "2026-12-01T03:00:00Z" }, /the development release ended after the production release started/],
   ];
@@ -127,8 +131,8 @@ test("an unfinished CMS run with no production deployment yet keeps the goal unm
 
 test("a drift run with the release ID outside the record does not count", async () => {
   // The after check, dispatched again with the same ID after the record ended.
-  const late = { id: 60002, display_title: "Release drift production after [r1]", created_at: "2026-12-01T04:00:00Z", updated_at: "2026-12-01T04:02:00Z", conclusion: "success" };
-  const before = { id: 60001, display_title: "Release drift production [r1]", created_at: "2026-12-01T03:00:05Z", updated_at: "2026-12-01T03:02:00Z", conclusion: "success" };
+  const late = { id: 60002, display_title: `Release drift production after [r1] ${SOURCE}`, created_at: "2026-12-01T04:00:00Z", updated_at: "2026-12-01T04:02:00Z", conclusion: "success" };
+  const before = { id: 60001, display_title: `Release drift production [r1] ${SOURCE}`, created_at: "2026-12-01T03:00:05Z", updated_at: "2026-12-01T03:02:00Z", conclusion: "success" };
   const result = await releaseStreak(fake(counted({ drift: [late, before] })), { need: 1, since, repo: "CenterCoopMedia/njpbs", toolRepo: "jamditis/jawn-ops" });
   assert.deepEqual(result.releases[0].why, ["no green drift check after the release (conditions 4 and 5)"]);
 });
