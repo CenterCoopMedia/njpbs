@@ -26,6 +26,7 @@ export async function restorePreviewSmokeFixture({ firestore, fixture, now = () 
   // Load the audit owner after the app exists; it reuses that app.
   const { default: audit } = await import("../functions/lib/audit.js");
   const { retiredRecordKindError } = (await import("../functions/lib/content-library.js")).default;
+  const { MAX_DOCUMENT_BYTES, firestoreDocumentBytes } = (await import("../functions/lib/document-size.js")).default;
   const ref = firestore.collection(fixture.collection).doc(fixture.id);
   return firestore.runTransaction(async tx => {
     const snapshot = await tx.get(ref);
@@ -38,10 +39,13 @@ export async function restorePreviewSmokeFixture({ firestore, fixture, now = () 
       // A restore keeps the editorial version (functions/lib/content-version.js).
       version: current.version + 1, contentVersion: Number.isSafeInteger(current.contentVersion) && current.contentVersion >= 1 ? current.contentVersion : current.version };
     tx.set(ref, changed);
-    tx.set(firestore.collection(audit.AUDIT_COLLECTIONS.versionHistory).doc(), audit.versionHistoryEntry({
-      collection: fixture.collection, documentId: fixture.id, action: "restore", after: changed, actorUid: SYSTEM_ACTOR,
-      // Only the status changes, so the row keeps the receipt form of `before`, as an oversized lifecycle row does.
-      before: { status: current.status, version: current.version, beforeTruncated: true } }));
+    // The full `before` when the row fits; otherwise its receipt form, as lifecycle-transition.js does.
+    const historyRef = firestore.collection(audit.AUDIT_COLLECTIONS.versionHistory).doc();
+    const entry = before => audit.versionHistoryEntry({ collection: fixture.collection, documentId: fixture.id, action: "restore",
+      before, after: changed, actorUid: SYSTEM_ACTOR });
+    const full = entry(current);
+    tx.set(historyRef, firestoreDocumentBytes(full, historyRef.path) <= MAX_DOCUMENT_BYTES ? full
+      : { ...entry({ status: current.status, version: current.version, beforeTruncated: true }), beforeTruncated: true });
     tx.set(firestore.collection(audit.AUDIT_COLLECTIONS.adminLogs).doc(), audit.adminLogEntry({
       actorUid: SYSTEM_ACTOR, action: "cms.restore", target: `${fixture.collection}/${fixture.id}`,
       before: { status: current.status, version: current.version }, after: { status: changed.status, version: changed.version } }));
