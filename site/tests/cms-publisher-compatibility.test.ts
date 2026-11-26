@@ -24,6 +24,7 @@ let runtime: string;
 let server: Server;
 let receipt: unknown;
 let receiptStatus: number;
+let receiptBody: string | undefined;
 let rendererHeader: string | undefined;
 let receiptUrl: string;
 let withoutVideoSha: string;
@@ -156,7 +157,7 @@ beforeAll(async () => {
     // a pooled socket's idle timeout; a later case must not inherit that race.
     response.writeHead(receiptStatus, { "content-type": "application/json", connection: "close",
       ...(rendererHeader === undefined ? {} : { "x-njpbs-renderer-sha": rendererHeader }) });
-    response.end(JSON.stringify(receipt));
+    response.end(receiptBody ?? JSON.stringify(receipt));
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address() as { port: number };
@@ -166,6 +167,7 @@ beforeAll(async () => {
 beforeEach(() => {
   receipt = { commitSha: currentSha };
   receiptStatus = 200;
+  receiptBody = undefined;
   rendererHeader = currentSha;
 });
 
@@ -188,6 +190,22 @@ describe("CMS deploy versus the live publisher catalog", () => {
     const result = await workflowGate();
     expect(result.code).toBe(1);
     expect(result.output).toContain("503");
+  });
+
+  it("names the class, not the text, of a receipt that does not parse", async () => {
+    receiptBody = "unpublished receipt text";
+    const result = await workflowGate();
+    expect(result.code).toBe(1);
+    expect(result.output).toContain("SyntaxError");
+    expect(result.output).not.toContain("unpublished");
+  });
+
+  it("names the Git failure when the receipt's commit is not in the history", async () => {
+    receipt = { commitSha: "f".repeat(40) };
+    rendererHeader = "f".repeat(40);
+    const result = await deployGate();
+    expect(result.code).toBe(1);
+    expect(result.output).toMatch(/at f{40} from Git history \(fatal: .*f{40}/);
   });
 
   it("refuses the video block that the receipt's old publisher cannot build", async () => {
