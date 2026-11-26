@@ -44,7 +44,10 @@ complete.
 
 ## Report lines
 
-- Each `live` row with a `read`: `equal` or `differs` against the source. With
+- Each `live` row with a `read`: `equal` or `differs` against the source. A
+  missing exported Function differs, except the cloud wake Functions, which the
+  deploy leaves out when `cloudWakeEnabled` is off. The edge snippet's rule must
+  match the public host. With
   `--after`, every `differs` or `not read` line fails: the release must leave
   every listed part equal to its source.
 - Rows without a `read` print which step deploys them and why they are not read.
@@ -69,7 +72,8 @@ A dispatch runs only from main and only for the deploy owner, as
 - Functions carry `CMS_ADMIN_BUILD_REVISION`, the last commit that changed the
   paths in `scripts/lib/cms-release-paths.mjs`; the preview renderer carries the
   same for its paths.
-- The CMS API Worker carries `CMS_API_SOURCE_SHA`; the public Worker, the
+- The CMS API Worker carries `CMS_API_SOURCE_SHA` from this check's first
+  commit on (no release goes back before it); the public Worker, the
   publisher Worker, the runtime pin and `_publication.json` carry the source.
 - Firestore and Storage rules equal the source files byte for byte.
 - The edge snippet equals the bundle that the snippet README builds from the

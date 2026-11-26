@@ -3,6 +3,7 @@
 // except with `after`, where a part that differs from the source fails too.
 // All provider calls go through `http` (fetch); nothing here writes.
 import { createHash, createHmac, createSign } from "node:crypto";
+import { CLOUD_WAKE_FUNCTIONS } from "./cms-release-plan.mjs";
 
 const CF = "https://api.cloudflare.com/client/v4";
 
@@ -252,7 +253,11 @@ export async function checkReleaseDrift({ target, registry, source, env, http, a
   const expected = { source: source.sha, functions: source.functionsSha, renderer: source.rendererSha };
   for (const row of rows.filter(row => row.read)) {
     const name = partName(row, target.environment, env);
-    if (row.name && !name) continue; // a part that this target does not have
+    if (row.name && !name) {
+      // A row without a development name is production's alone; a missing variable is a read that failed.
+      if (row.dev) report(row.part, `not read: ${row.dev} is not set`, true);
+      continue;
+    }
     try {
       const { live, want } = await readPart(row, name);
       if (live === want) report(row.part, `equal ${short(want)}`);
@@ -265,14 +270,15 @@ export async function checkReleaseDrift({ target, registry, source, env, http, a
     switch (row.read) {
       case "functions-revision": {
         if (!functions.length) unread("the Functions list was not read");
-        // An export that is not live is not a difference: the deploy leaves out flag-gated Functions (the cloud wake
-        // Functions when cloudWakeEnabled is off). Check 1 and this revision test still catch drift (review decision, #680).
+        // Only the cloud wake exports are left out by design (cloudWakeEnabled off); any other export must be live.
         const live = new Set(functions.map(fn => fn.name));
         const missing = [...exported].filter(name => !live.has(name)).sort();
-        if (missing.length) report("Exported Functions not live", missing.join(", "));
+        const optional = missing.filter(name => CLOUD_WAKE_FUNCTIONS.includes(name)), required = missing.filter(name => !CLOUD_WAKE_FUNCTIONS.includes(name));
+        if (optional.length) report("Cloud wake Functions not live", optional.join(", "));
         const stale = functions.filter(fn => exported.has(fn.name) && fn.revision !== expected.functions);
-        return { live: stale.length ? `${stale.length} Functions at ${[...new Set(stale.map(fn => short(fn.revision)))].join(", ")}` : expected.functions,
-          want: expected.functions };
+        const faults = [...(required.length ? [`not live: ${required.join(", ")}`] : []),
+          ...(stale.length ? [`${stale.length} Functions at ${[...new Set(stale.map(fn => short(fn.revision)))].join(", ")}`] : [])];
+        return { live: faults.length ? faults.join("; ") : expected.functions, want: expected.functions };
       }
       case "firestore-rules":
       case "storage-rules": {
@@ -289,6 +295,8 @@ export async function checkReleaseDrift({ target, registry, source, env, http, a
         return { live: hash(live), want: hash(want) };
       }
       case "worker-variable": {
+        // CMS_API_SOURCE_SHA exists from the drift check's own commit on. A release of an older source leaves that row
+        // "differs"; no release goes back before it (review decision, #680).
         const settings = await r.cloudflare(`${name} settings`, `/accounts/${ACCOUNT}/workers/scripts/${name}/settings`, cfToken);
         const binding = (settings?.bindings ?? []).find(b => b.type === "plain_text" && b.name === row.variable);
         return { live: binding ? binding.text : `no ${row.variable}`, want: expected[row.expect] };
@@ -322,6 +330,8 @@ export async function checkReleaseDrift({ target, registry, source, env, http, a
         const rules = await r.cloudflare("snippet rules", `/zones/${ZONE}/snippets/snippet_rules`, token);
         const active = (rules ?? []).filter(rule => rule.enabled && (row.prefixes ?? []).some(p => rule.snippet_name?.startsWith(p)));
         if (active.length !== 1) unread(`${active.length} enabled rules run this snippet`);
+        const host = new URL(target.publicOrigin).host;
+        if (active[0].expression !== `http.host eq "${host}"`) return { live: `rule ${active[0].expression}`, want: `rule http.host eq "${host}"` };
         return { live: await snippetContentSha256(r, token, ZONE, active[0].snippet_name), want: source.snippetSha256 };
       }
       default: unread(`unknown read ${row.read}`);

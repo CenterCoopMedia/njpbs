@@ -85,10 +85,11 @@ test("the Nov. 25-26 production states stop the release and name each cause", as
     "the check makes no write");
 });
 
-test("an exported Function that is not live is reported, not failed", async () => {
+test("a missing export fails after a release, except the cloud wake Functions", async () => {
   const { lines } = await run(provider(), { after: true });
-  assert.match(line(lines, "Exported Functions not live"), /^info Exported Functions not live: /);
-  assert.equal(line(lines, " Functions: equal"), "info Functions: equal a83aed8924b6");
+  assert.match(line(lines, "FAIL Functions: "), /^FAIL Functions: differs: live not live: .*cmsGetContent/);
+  assert.doesNotMatch(line(lines, "FAIL Functions: "), /onNoBuildCloudState/);
+  assert.match(line(lines, "Cloud wake Functions not live"), /^info Cloud wake Functions not live: onNoBuildCloudCandidate, onNoBuildCloudRelease, onNoBuildCloudState$/);
 });
 
 test("after a release every part that differs fails", async () => {
