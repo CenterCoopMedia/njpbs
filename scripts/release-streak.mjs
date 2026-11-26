@@ -12,7 +12,8 @@
 //   payload { schema: 1, source, release_id, tool, target, live }; live is the
 //   commit njpbs.org served when the production command started.
 // - Status in_progress at the start. At the end one status success or failure
-//   whose description is "failed=<n> seconds=<s> refused=<s>". A record with no
+//   whose description starts "failed=<n> seconds=<s> refused=<s>" and may name
+//   its production CMS run, " cms=<run id>". A record with no
 //   end status (a failed record write, a stopped host) does not count.
 // - release-drift.yml names its runs "Release drift production [<id>]" (the check
 //   before the first write) and "Release drift production after [<id>]" (after
@@ -35,7 +36,8 @@ const DAY = 86400e3;
 
 export function parseEnd(description) {
   const m = /^failed=(\d+) seconds=(\d+(?:\.\d+)?) refused=(\d+(?:\.\d+)?)/.exec(description ?? "");
-  return m ? { failed: Number(m[1]), seconds: Number(m[2]), refused: Number(m[3]) } : null;
+  const cms = /(?:^| )cms=(\d+)(?: |$)/.exec(description ?? "");
+  return m ? { failed: Number(m[1]), seconds: Number(m[2]), refused: Number(m[3]), cms: cms ? Number(cms[1]) : null } : null;
 }
 
 const ended = (s) => s.state === "success" || s.state === "failure" || s.state === "error";
@@ -125,8 +127,11 @@ async function judge(get, release, ctx) {
   if (same.length > 1) why.push(`${same.length} release-production records for the commit`);
   if (!record.end) why.push("record has no end status");
   else if (record.end.state !== "success" || record.end.failed !== 0) why.push(`record ended ${record.end.state}${record.end.failed == null ? "" : `, failed=${record.end.failed}`}`);
-  // 3
+  // 3. A record whose end names its CMS run ("cms=<id>") needs that run.
+  // Records without it use the window rule alone (coordinator ruling, Nov. 26,
+  // 2026, ~9:37 AM ET): delete this fallback once every counted record carries cms=.
   if (cms.length !== 1) why.push(`${cms.length} production CMS runs inside the record, not 1`);
+  else if (record.end?.cms && cms[0].id !== record.end.cms) why.push(`the record names CMS run ${record.end.cms}, not ${cms[0].id}`);
   const run = cms[0];
   if (run && (run.conclusion !== "success" || run.attempt !== 1)) why.push(`CMS run ${run.id} ${run.conclusion}, attempt ${run.attempt}`);
   // 2 and 4

@@ -42,7 +42,7 @@ function counted(change = {}) {
   const record = { id: 9001, sha: SOURCE, environment: "release-production", created_at: "2026-12-01T03:00:00Z", payload: { schema: 1, source: SOURCE, release_id: "r1", tool: TOOL, target: "production", live: change.live ?? PREVIOUS } };
   a[deployments("release-production")] = [record];
   a["repos/CenterCoopMedia/njpbs/deployments/9001/statuses?per_page=100"] = [
-    { state: change.end ?? "success", description: `failed=${change.failed ?? 0} seconds=1484 refused=701`, created_at: "2026-12-01T03:30:00Z" },
+    { state: change.end ?? "success", description: `failed=${change.failed ?? 0} seconds=1484 refused=701${change.cms ? ` cms=${change.cms}` : ""}`, created_at: "2026-12-01T03:30:00Z" },
     { state: "in_progress", description: "", created_at: "2026-12-01T03:00:01Z" },
   ];
   a[deployments(`release-production&sha=${SOURCE}`)] = [record];
@@ -68,6 +68,8 @@ function counted(change = {}) {
 }
 
 test("a release that meets every condition counts; the stretch without a record before it ends the streak", async () => {
+  const named = await releaseStreak(fake(counted({ cms: 50001 })), { need: 1, since, repo: "CenterCoopMedia/njpbs", toolRepo: "jamditis/jawn-ops" });
+  assert.equal(named.met, true);
   const result = await releaseStreak(fake(counted()), { need: 1, since, repo: "CenterCoopMedia/njpbs", toolRepo: "jamditis/jawn-ops" });
   assert.equal(result.met, true);
   assert.deepEqual(result.releases.map((r) => r.counted), [true]);
@@ -88,6 +90,7 @@ test("each broken condition stops the count and is named", async () => {
     [{ compare: { status: "identical", ahead_by: 0, behind_by: 0 } }, /the commit is not ahead of the live commit/],
     [{ compare: { status: "diverged", ahead_by: 2, behind_by: 1 } }, /the commit is not ahead of the live commit/],
     [{ driftJob: "skipped" }, /no green drift check before the CMS run/],
+    [{ cms: 49999 }, /the record names CMS run 49999, not 50001/],
     [{ earlier: true }, /2 release-production records for the commit/],
     [{ devEnd: "2026-12-01T03:00:00Z" }, /the development release ended after the production release started/],
   ];
