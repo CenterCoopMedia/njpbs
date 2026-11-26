@@ -6,7 +6,7 @@
 
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { deleteApp, getApps, initializeApp } from "firebase-admin/app";
+import { deleteApp, initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { editorPath } from "./lib/cms-development-settings.mjs";
 import { cmsTarget } from "./lib/cms-target.mjs";
@@ -58,7 +58,7 @@ async function main() {
   if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) throw new Error("GOOGLE_APPLICATION_CREDENTIALS is required");
   const fixture = smokeFixture(process.env.CMS_PREVIEW_SMOKE_TARGET);
   if (!fixture) return console.log("No preview smoke fixture is set");
-  const app = getApps()[0] || initializeApp({ projectId: cmsTarget().projectId });
+  const app = initializeApp({ projectId: cmsTarget().projectId });
   try {
     const state = await restorePreviewSmokeFixture({ firestore: getFirestore(app), fixture });
     console.log(state === "restored" ? "Preview smoke fixture restored from archived to draft" : `Preview smoke fixture is ${state}`);
