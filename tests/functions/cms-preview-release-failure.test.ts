@@ -127,7 +127,7 @@ describe("Wrangler failure summaries", () => {
   });
 });
 
-describe("cloud preview target startup deadline", () => {
+describe("cloud preview target startup wait", () => {
   const sha = "a".repeat(40);
   const starting = { schemaVersion: 1, rendererSha: sha, serializerId: "cloudflare-preview", phase: "starting" };
   const rollout = { id: "current-rollout", created_at: "2026-10-28T09:54:30Z", status: "progressing",
@@ -136,32 +136,60 @@ describe("cloud preview target startup deadline", () => {
 
   function fixture(rows: unknown = [rollout]) {
     let elapsed = 0;
-    return { now: () => elapsed,
+    return { now: () => elapsed, log: vi.fn<(line: string) => void>(),
       sleep: vi.fn(async (ms: number) => { elapsed += ms; }),
       readControl: vi.fn(async () => starting), readRollouts: vi.fn(async () => rows),
       readApplication: vi.fn(async () => ({ id: "application", active_rollout_id: null as string | null,
         health: { instances: { healthy: 0 } } })) };
   }
 
-  it("stops a zero-healthy rollout at 180 seconds, without waiting 20 minutes", async () => {
+  // Rollout 147480fa (run 45583430289, Nov. 25, 2026): created 09:28:31, its
+  // step completed 09:33:36 with health errors [].
+  it("waits for a rollout that takes 305 seconds and reports each read", async () => {
     const deps = fixture();
-    await expect(waitForCloudPreviewStartup(sha, deps)).rejects.toMatchObject({ name: "CloudPreviewZeroHealthyError" });
-    expect(deps.now()).toBe(180_000);
-    expect(deps.sleep).toHaveBeenCalledTimes(18);
+    const done = () => deps.now() >= 305_000;
+    deps.readRollouts.mockImplementation(async () => [{ ...rollout, status: done() ? "completed" : "progressing",
+      steps: [{ status: done() ? "completed" : "progressing" }],
+      progress: { version_distribution: { target_version_instances: done() ? 1 : 0, current_version_instances: 0 } } }]);
+    deps.readApplication.mockImplementation(async () => ({ id: "application", active_rollout_id: null,
+      health: { instances: { healthy: done() ? 1 : 0 } } }));
+    deps.readControl.mockImplementation(async () => deps.now() >= 320_000 ? { ...starting, phase: "ready" } : starting);
+    await expect(waitForCloudPreviewStartup(sha, deps)).resolves.toBeUndefined();
+    expect(deps.now()).toBe(320_000);
+    expect(deps.log).toHaveBeenCalledTimes(32);
+    expect(deps.log).toHaveBeenCalledWith(
+      "Preview startup, 180 s: rollout progressing, step progressing, target instances 0, previous instances 0, healthy 0");
+    expect(deps.log).toHaveBeenLastCalledWith(
+      "Preview startup, 310 s: rollout completed, step completed, target instances 1, previous instances 0, healthy 1");
   });
 
+  // Old instances stay: the application's healthy count is theirs, so a target
+  // fault still ends the wait.
   it.each([0, 1])("does not count application health as target health while old instances remain (target=%s)", async targetCount => {
-    const deps = fixture([{ ...rollout, health: { instances: { healthy: 1 } },
+    const deps = fixture([{ ...rollout, health: { errors: [{ event: { name: "VMFailed" } }] },
       progress: { version_distribution: { target_version_instances: targetCount, current_version_instances: 1 } } }]);
     deps.readApplication.mockResolvedValue({ id: "application", active_rollout_id: null, health: { instances: { healthy: 1 } } });
-    await expect(waitForCloudPreviewStartup(sha, deps)).rejects.toMatchObject({ name: "CloudPreviewZeroHealthyError" });
+    await expect(waitForCloudPreviewStartup(sha, deps)).rejects.toMatchObject({ name: "CloudPreviewHealthError" });
   });
 
-  it("does not extend startup for a target that is assigned but has zero healthy instances", async () => {
-    const deps = fixture([{ ...rollout, health: { instances: { healthy: 0, assigned: 1 } },
-      progress: { version_distribution: { target_version_instances: 1, current_version_instances: 0 } } }]);
-    await expect(waitForCloudPreviewStartup(sha, deps)).rejects.toMatchObject({ name: "CloudPreviewZeroHealthyError" });
-    expect(deps.now()).toBe(180_000);
+  it.each(["reverted", "replaced"])("ends on the first read of a rollout %s", async status => {
+    const deps = fixture([{ ...rollout, status }]);
+    await expect(waitForCloudPreviewStartup(sha, deps)).rejects.toThrow(`rollout did not finish: ${status}`);
+    expect(deps.sleep).not.toHaveBeenCalled();
+  });
+
+  it.each(["ImagePullFailed", "VMFailed"])("ends on the first read of health error %s", async name => {
+    const deps = fixture([{ ...rollout, health: { errors: [{ event: { name } }] } }]);
+    await expect(waitForCloudPreviewStartup(sha, deps)).rejects.toMatchObject({ name: "CloudPreviewHealthError",
+      message: expect.stringContaining(`Container health reported ${name}. Keep previews paused`) });
+    expect(deps.sleep).not.toHaveBeenCalled();
+  });
+
+  it("does not print an event name that is not an identifier", async () => {
+    const deps = fixture([{ ...rollout, health: { errors: [{ event: { name: "https://private.example.test" } }] } }]);
+    const failure = await waitForCloudPreviewStartup(sha, deps).catch(error => error);
+    expect(failure.message).toContain("an unnamed error");
+    expect(failure.message).not.toContain("private.example.test");
   });
 
   it("reads more than 100 historical rollouts using the provider's limit/last cursor", async () => {
@@ -182,7 +210,7 @@ describe("cloud preview target startup deadline", () => {
     "fails immediately on the target's %s event without printing its message", async name => {
       const deps = fixture([{ ...rollout, health: { errors: [{ event: { name, message: "private provider details" } }] } }]);
       const failure = await waitForCloudPreviewStartup(sha, deps).catch(error => error);
-      expect(failure.name).toBe("CloudPreviewPlacementError");
+      expect(failure).toMatchObject({ name: "CloudPreviewHealthError", message: expect.stringContaining(`reported ${name}.`) });
       expect(failure.message).not.toContain("private provider details");
       expect(deps.sleep).not.toHaveBeenCalled();
     },
@@ -211,12 +239,6 @@ describe("cloud preview target startup deadline", () => {
     expect(deps.now()).toBe(240_000);
   });
 
-  it("does not extend the deadline using a stale healthy rollout when fresh application health is zero", async () => {
-    const deps = fixture([{ ...rollout, health: { instances: { healthy: 1 } },
-      progress: { version_distribution: { target_version_instances: 1, current_version_instances: 0 } } }]);
-    await expect(waitForCloudPreviewStartup(sha, deps)).rejects.toMatchObject({ name: "CloudPreviewZeroHealthyError" });
-  });
-
   it("allows a previously healthy target to recover from a brief zero count while attesting ready", async () => {
     const deps = fixture([{ ...rollout, progress: { version_distribution: { target_version_instances: 1, current_version_instances: 0 } } }]);
     deps.readApplication.mockImplementation(async () => ({ id: "application", active_rollout_id: null,
@@ -236,24 +258,10 @@ describe("cloud preview target startup deadline", () => {
     expect(deps.now()).toBe(240_000);
   });
 
-  it("still bounds persistent zero health after an initially healthy target", async () => {
-    const deps = fixture([{ ...rollout, progress: { version_distribution: { target_version_instances: 1, current_version_instances: 0 } } }]);
-    deps.readApplication.mockImplementation(async () => ({ id: "application", active_rollout_id: null,
-      health: { instances: { healthy: deps.now() < 170_000 ? 1 : 0 } } }));
-    await expect(waitForCloudPreviewStartup(sha, deps)).rejects.toMatchObject({ name: "CloudPreviewZeroHealthyError" });
-    expect(deps.now()).toBe(340_000);
-  });
-
-  it("rechecks exact ready at the health failure boundary", async () => {
+  it("ends a hang at main's 20 minutes when no state is named", async () => {
     const deps = fixture();
-    let attested = false;
-    deps.readApplication.mockImplementation(async () => {
-      if (deps.now() >= 180_000) attested = true;
-      return { id: "application", active_rollout_id: null, health: { instances: { healthy: 0 } } };
-    });
-    deps.readControl.mockImplementation(async () => attested ? { ...starting, phase: "ready" } : starting);
-    await expect(waitForCloudPreviewStartup(sha, deps)).resolves.toBeUndefined();
-    expect(deps.now()).toBe(180_000);
+    await expect(waitForCloudPreviewStartup(sha, deps)).rejects.toThrow("Cloud preview startup timed out");
+    expect(deps.now()).toBe(20 * 60_000);
   });
 
   it("allows a healthy same-image retry with no new rollout to attest exact ready", async () => {
@@ -262,14 +270,6 @@ describe("cloud preview target startup deadline", () => {
     deps.readControl.mockImplementation(async () => deps.now() >= 240_000 ? { ...starting, phase: "ready" } : starting);
     await expect(waitForCloudPreviewStartup(sha, { ...deps, previousRolloutIds: [rollout.id] })).resolves.toBeUndefined();
     expect(deps.now()).toBe(240_000);
-  });
-
-  it("still stops a same-image retry's active zero-healthy rollout after 180 seconds", async () => {
-    const deps = fixture();
-    deps.readApplication.mockResolvedValue({ id: "application", active_rollout_id: rollout.id, health: { instances: { healthy: 0 } } });
-    await expect(waitForCloudPreviewStartup(sha, { ...deps, previousRolloutIds: [rollout.id] }))
-      .rejects.toMatchObject({ name: "CloudPreviewZeroHealthyError" });
-    expect(deps.now()).toBe(180_000);
   });
 
   it("lets a same-image retry recover despite an undated retained error on its active rollout", async () => {
@@ -292,17 +292,14 @@ describe("cloud preview target startup deadline", () => {
     const deps = fixture([{ ...rollout, health: { errors: [{ event: { name: "VMFailed", time: "1970-01-01T00:00:01Z" } }] } }]);
     deps.readApplication.mockResolvedValue({ id: "application", active_rollout_id: rollout.id, health: { instances: { healthy: 0 } } });
     await expect(waitForCloudPreviewStartup(sha, { ...deps, previousRolloutIds: [rollout.id] }))
-      .rejects.toMatchObject({ name: "CloudPreviewPlacementError" });
+      .rejects.toMatchObject({ name: "CloudPreviewHealthError" });
   });
 
-  it("preserves first-application cron propagation only when there is no rollout", async () => {
+  it("waits for first-application cron propagation", async () => {
     const deps = fixture([]);
     deps.readControl.mockImplementation(async () => deps.now() >= 15 * 60_000 ? { ...starting, phase: "ready" } : starting);
-    await expect(waitForCloudPreviewStartup(sha, { ...deps, firstApplication: true })).resolves.toBeUndefined();
+    await expect(waitForCloudPreviewStartup(sha, deps)).resolves.toBeUndefined();
     expect(deps.now()).toBe(15 * 60_000);
-    const stalled = fixture();
-    await expect(waitForCloudPreviewStartup(sha, { ...stalled, firstApplication: true }))
-      .rejects.toMatchObject({ name: "CloudPreviewZeroHealthyError" });
   });
 
   it("fails closed on missing, unreadable or incomplete rollout metadata", async () => {
@@ -331,12 +328,13 @@ describe("cloud preview target startup deadline", () => {
     expect(deps.now()).toBe(120_000);
   });
 
-  it("bounds persistently unavailable health without claiming a known zero-healthy count", async () => {
+  it("bounds persistently unavailable health at 20 minutes without claiming a count", async () => {
     const deps = fixture();
     deps.readRollouts.mockRejectedValue(new CloudPreviewProviderReadError());
     await expect(waitForCloudPreviewStartup(sha, deps)).rejects.toMatchObject({ name: "CloudPreviewProviderReadError",
       message: expect.stringContaining("Keep previews paused") });
-    expect(deps.now()).toBe(180_000);
+    expect(deps.now()).toBe(20 * 60_000);
+    expect(deps.log).toHaveBeenLastCalledWith("Preview startup, 1200 s: container state not read");
   });
 
   it("keeps preflight read errors free of a startup pause/recovery claim", () => {
@@ -351,7 +349,7 @@ describe("cloud preview target startup deadline", () => {
       return [];
     });
     deps.readControl.mockImplementation(async () => deps.now() >= 900_000 ? { ...starting, phase: "ready" } : starting);
-    await expect(waitForCloudPreviewStartup(sha, { ...deps, firstApplication: true })).resolves.toBeUndefined();
+    await expect(waitForCloudPreviewStartup(sha, deps)).resolves.toBeUndefined();
     expect(failed).toBe(true);
     expect(deps.now()).toBe(900_000);
   });

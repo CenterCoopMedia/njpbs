@@ -49,7 +49,6 @@ export function releaseCredentials(env: NodeJS.ProcessEnv = process.env) {
   return { rawAccount, rawStorage, token, publicationAccess };
 }
 const releaseSecretValues: string[] = [];
-const STARTUP_HEALTH_DEADLINE_MS = 180_000;
 const PLACEMENT_ERROR = /no container instance(?: that can be provided)?|(?:placement|scheduling) (?:failed|error)|unable to (?:place|schedule)|insufficient (?:placement )?capacity/i;
 const STARTUP_RECOVERY = "Keep previews paused; inspect Cloudflare placement and rollout health, then start a new full CMS staging deploy for this commit.";
 
@@ -60,10 +59,10 @@ export class CloudPreviewPlacementError extends Error {
   }
 }
 
-export class CloudPreviewZeroHealthyError extends Error {
-  constructor() {
-    super(`No verified healthy target instance after 180 seconds. ${STARTUP_RECOVERY}`);
-    this.name = "CloudPreviewZeroHealthyError";
+export class CloudPreviewHealthError extends Error {
+  constructor(name: string) {
+    super(`Container health reported ${name}. ${STARTUP_RECOVERY}`);
+    this.name = "CloudPreviewHealthError";
   }
 }
 
@@ -78,6 +77,7 @@ type PreviewRollout = {
   id: string;
   created_at: string;
   status: string;
+  steps?: { status?: string }[];
   health?: { errors?: { event?: { name?: string; message?: string; time?: string } }[] };
   progress?: { version_distribution?: { target_version_instances?: number; current_version_instances?: number } };
 };
@@ -109,18 +109,21 @@ export async function readCloudPreviewRollouts(readPage: (query: string) => Prom
   }
 }
 
-/** Health is an early failure signal; only the exact renderer can attest ready. */
+/** Ends when the exact renderer attests ready, or at once when the platform names
+ * a failure. Rollout 147480fa completed after 305 s with no health errors; the
+ * five before it took 106 to 169 s. The 20-minute bound ends a hang. */
 export async function waitForCloudPreviewStartup(rendererSha: string, {
-  readControl, readRollouts, readApplication, previousRolloutIds = [], firstApplication = false,
+  readControl, readRollouts, readApplication, previousRolloutIds = [],
   now = Date.now, sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms)),
+  log = line => process.stdout.write(`${line}\n`),
 }: {
   readControl: () => Promise<unknown>; readRollouts: () => Promise<unknown>; readApplication: () => Promise<unknown>;
-  previousRolloutIds?: readonly string[]; firstApplication?: boolean;
-  now?: () => number; sleep?: (ms: number) => Promise<void>;
+  previousRolloutIds?: readonly string[];
+  now?: () => number; sleep?: (ms: number) => Promise<void>; log?: (line: string) => void;
 }) {
   const started = now();
   let lastHealthyAt: number | null = null;
-  let healthDeadlineRequired = !firstApplication;
+  const report = (state: string) => log(`Preview startup, ${Math.round((now() - started) / 1_000)} s: ${state}`);
   const ready = async () => {
     const current = parsePreviewRuntimeControl(await readControl());
     if (current.rendererSha !== rendererSha || current.serializerId !== SERIALIZER || current.phase === "paused") {
@@ -136,8 +139,8 @@ export async function waitForCloudPreviewStartup(rendererSha: string, {
       [rawRollouts, application] = await Promise.all([readRollouts(), readApplication()]);
     } catch (error) {
       if (!(error instanceof CloudPreviewProviderReadError)) throw error;
-      const elapsed = now() - started;
-      if ((healthDeadlineRequired && now() - (lastHealthyAt ?? started) >= STARTUP_HEALTH_DEADLINE_MS) || elapsed >= 20 * 60_000) {
+      report("container state not read");
+      if (now() - started >= 20 * 60_000) {
         if (await ready()) return;
         throw new CloudPreviewProviderReadError(true);
       }
@@ -156,35 +159,36 @@ export async function waitForCloudPreviewStartup(rendererSha: string, {
     const latest = rollouts.filter(row => !previousRolloutIds.includes(row.id))
       .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))[0];
     const target = latest ?? active;
+    const distribution = target?.progress?.version_distribution;
+    const step = target?.steps?.at(-1)?.status ?? "";
+    const shown = (value: unknown) => Number.isSafeInteger(value) ? value : "unknown";
+    report(`rollout ${target?.status ?? "none"}, step ${/^[a-z_]{1,30}$/.test(step) ? step : "unknown"}, ` +
+      `target instances ${shown(distribution?.target_version_instances)}, previous instances ${shown(distribution?.current_version_instances)}, ` +
+      `healthy ${shown(app.health?.instances?.healthy)}`);
     if (target && ["reverted", "replaced"].includes(target.status)) {
-      throw new Error(`Cloud preview rollout did not finish. ${STARTUP_RECOVERY}`);
+      throw new Error(`Cloud preview rollout did not finish: ${target.status}. ${STARTUP_RECOVERY}`);
     }
-    // An unchanged image creates no new rollout. Fresh application health is
-    // still required before extending that retry's exact-ready wait.
+    // An unchanged image creates no new rollout; application health alone then
+    // separates a recovery from a retained error.
     const count = app.health?.instances?.healthy;
     const healthy = typeof count === "number" && Number.isSafeInteger(count) && count > 0;
-    const distribution = target?.progress?.version_distribution;
     const targetCount = distribution?.target_version_instances;
     const targetHealthy = healthy && (!target || (typeof targetCount === "number" && Number.isSafeInteger(targetCount)
       && targetCount > 0 && distribution?.current_version_instances === 0));
-    if (!targetHealthy && target?.health?.errors?.some(({ event }) => {
+    const fault = targetHealthy ? undefined : target?.health?.errors?.find(({ event }) => {
       // Same-image retries reuse the old rollout and may retain its errors.
       // Fresh live health or event time must distinguish recovery from history.
       if (lastHealthyAt !== null && !(typeof event?.time === "string" && Date.parse(event.time) > lastHealthyAt)) return false;
       if (!latest && !(typeof event?.time === "string" && Date.parse(event.time) >= started)) return false;
-      return PLACEMENT_ERROR.test(event?.message ?? "") ||
-        ["VMFailed", "VMFailedToStart", "RuntimeStartFailed", "NetworkingIPAssignmentFailed"].includes(event?.name ?? "");
-    })) throw new CloudPreviewPlacementError();
-    if (targetHealthy) lastHealthyAt = now();
-    healthDeadlineRequired = Boolean(target) || !firstApplication;
-    const elapsed = now() - started;
-    // A first application has no rollout, and its new cron can take 15 minutes
-    // to propagate. Existing applications must prove target health in 3 minutes.
-    if (now() - (lastHealthyAt ?? started) >= STARTUP_HEALTH_DEADLINE_MS && !targetHealthy && healthDeadlineRequired) {
-      if (await ready()) return;
-      throw new CloudPreviewZeroHealthyError();
+      return true;
+    });
+    if (fault) {
+      const { name = "", message = "" } = fault.event ?? {};
+      if (PLACEMENT_ERROR.test(message)) throw new CloudPreviewPlacementError();
+      throw new CloudPreviewHealthError(/^[A-Za-z][A-Za-z0-9_]{0,60}$/.test(name) ? name : "an unnamed error");
     }
-    if (elapsed >= 20 * 60_000) {
+    if (targetHealthy) lastHealthyAt = now();
+    if (now() - started >= 20 * 60_000) {
       if (await ready()) return;
       throw new Error(`Cloud preview startup timed out. ${STARTUP_RECOVERY}`);
     }
@@ -418,8 +422,6 @@ export async function deployPreviewRuntime({ firestore, rendererSha, token, rawA
     if (!id) throw new Error("Cloud preview application is missing after deployment");
     return id;
   }).catch(error => { startupId = null; throw error; });
-  // Allow 180s for target health, independently of the image deployment's
-  // 15-minute deadline.
   await waitForCloudPreviewStartup(rendererSha, {
     readControl: async () => (await ref.get()).data(),
     readRollouts: async () => {
@@ -427,7 +429,7 @@ export async function deployPreviewRuntime({ firestore, rendererSha, token, rawA
       return readCloudPreviewRollouts(query => cloudflare(token, `/${id}/rollouts${query}`));
     },
     readApplication: async () => cloudflare(token, `/${await resolveStartupId()}`),
-    previousRolloutIds, firstApplication: !existingId,
+    previousRolloutIds,
   });
   process.stdout.write(`Cloud preview renderer verified at ${rendererSha}\n`);
 }
