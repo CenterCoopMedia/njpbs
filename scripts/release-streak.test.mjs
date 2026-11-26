@@ -196,7 +196,7 @@ test("the check before must end before the CMS run started; a run waiting for de
 
 test("a queued development promotion is not pending", async () => {
   const a = counted();
-  a["repos/CenterCoopMedia/njpbs/actions/workflows/promote.yml/runs?status=queued&per_page=100&page=1"] = { workflow_runs: [{ id: 50060, display_title: "Promote development" }] };
+  a["repos/CenterCoopMedia/njpbs/actions/workflows/promote.yml/runs?status=queued&per_page=100&page=1"] = { workflow_runs: [{ id: 50060, display_title: "Promote development 0123456789abcdef0123456789abcdef01234567" }] };
   const result = await releaseStreak(fake(a), { need: 1, since, repo: "CenterCoopMedia/njpbs", toolRepo: "jamditis/jawn-ops" });
   assert.equal(result.met, true);
 });

@@ -101,8 +101,9 @@ async function productionDeploys(get, repo, since) {
   const forProduction = await Promise.all(waiting.map(async (r) =>
     (await get(`repos/${repo}/actions/runs/${r.id}/pending_deployments`)).some((p) => p.environment?.name === "production") ? r.id : null));
   const queued = (await Promise.all(PRODUCTION_WRITERS.map((workflow) => list(get, `repos/${repo}/actions/workflows/${workflow}/runs?status=queued`, "workflow_runs")))).flat();
-  // promote.yml names a development target in its run title.
-  const queuedProduction = queued.filter((r) => !/\bdevelopment\b/i.test(r.display_title ?? ""));
+  // promote.yml names its target in its run title ("Promote development <sha>").
+  // A queued CMS run does not show its target, so it stays pending.
+  const queuedProduction = queued.filter((r) => !/^Promote development /.test(r.display_title ?? ""));
   const pending = [...new Set([...writes.filter((w) => !w.updated).map((w) => w.id), ...forProduction.filter(Boolean), ...queuedProduction.map((r) => r.id)])];
   return [writes.sort((a, b) => a.created.localeCompare(b.created)), pending];
 }
