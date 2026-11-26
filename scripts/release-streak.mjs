@@ -76,9 +76,11 @@ async function productionCMSRuns(get, repo, since) {
     const id = runId(statuses.at(-1)?.target_url);
     if (id) production.set(id, d.sha);
   }
-  return runs.filter((r) => production.has(r.id))
+  // A run GitHub has not finished may still get a production deployment.
+  const pending = runs.filter((r) => !production.has(r.id) && !r.conclusion).map((r) => r.id);
+  return [runs.filter((r) => production.has(r.id))
     .map((r) => ({ id: r.id, created: r.created_at, updated: r.updated_at, conclusion: r.conclusion, attempt: r.run_attempt, sha: production.get(r.id) }))
-    .sort((a, b) => a.created.localeCompare(b.created));
+    .sort((a, b) => a.created.localeCompare(b.created)), pending];
 }
 
 async function driftRuns(get, repo, since) {
@@ -96,10 +98,19 @@ async function onMaster(get, toolRepo, tool) {
   return compare.status === "behind" || compare.status === "identical";
 }
 
-// How many commits a release brings after the commit live at its start.
-async function brings(get, repo, live, source) {
+// The source contains the live commit and more: GitHub says "ahead", not
+// "diverged", "behind" or "identical".
+async function ahead(get, repo, live, source) {
   const compare = await get(`repos/${repo}/compare/${live}...${source}`);
-  return compare.ahead_by ?? 0;
+  return compare.status === "ahead" && compare.ahead_by > 0;
+}
+
+// A drift run counts only when one of its jobs ran and succeeded; a run whose
+// jobs were all skipped can still end "success".
+async function ranGreen(get, repo, run) {
+  if (run.conclusion !== "success") return false;
+  const { jobs = [] } = await get(`repos/${repo}/actions/runs/${run.id}/jobs?per_page=100`);
+  return jobs.some((j) => j.conclusion === "success");
 }
 
 async function judge(get, release, ctx) {
@@ -125,9 +136,12 @@ async function judge(get, release, ctx) {
     const title = `${name} [${id}]`;
     return id ? ctx.drift.filter((d) => d.display_title === title || d.display_title?.startsWith(`${title} `)) : [];
   };
-  const green = (runs, ok) => runs.some((d) => d.conclusion === "success" && run && ok(d));
-  if (!green(drift("Release drift production"), (d) => d.updated_at <= run.created)) why.push("no green drift check before the CMS run");
-  if (!green(drift("Release drift production after"), (d) => d.created_at >= run.updated)) why.push("no green drift check after the release (conditions 4 and 5)");
+  const green = async (runs, ok) => {
+    for (const d of runs) if (run && ok(d) && (await ranGreen(get, ctx.repo, d))) return true;
+    return false;
+  };
+  if (!(await green(drift("Release drift production"), (d) => d.updated_at <= run.created))) why.push("no green drift check before the CMS run");
+  if (!(await green(drift("Release drift production after"), (d) => d.created_at >= run.updated))) why.push("no green drift check after the release (conditions 4 and 5)");
   // 6
   if (!(await onMaster(get, ctx.toolRepo, record.payload.tool))) why.push(`tool ${short(record.payload.tool) || "unnamed"} is not on jawn-ops master`);
   // 7: every development record of the commit, whatever its age.
@@ -139,12 +153,12 @@ async function judge(get, release, ctx) {
   // 9
   const live = record.payload.live;
   if (!/^[0-9a-f]{40}$/.test(live ?? "")) why.push("the record does not name the commit live at its start");
-  else if ((await brings(get, ctx.repo, live, record.sha)) === 0) why.push("the commit was already live");
+  else if (!(await ahead(get, ctx.repo, live, record.sha))) why.push("the commit is not ahead of the live commit");
   return why;
 }
 
 export async function releaseStreak(get, { need, since, repo, toolRepo }) {
-  const [production, cmsRuns, drift] = await Promise.all([
+  const [production, [cmsRuns, pending], drift] = await Promise.all([
     records(get, repo, "release-production", since), productionCMSRuns(get, repo, since), driftRuns(get, repo, since),
   ]);
   // Each record is one release; production CMS runs outside every ended record
@@ -167,13 +181,14 @@ export async function releaseStreak(get, { need, since, repo, toolRepo }) {
   let count = 0;
   for (const e of events) {
     const why = await judge(get, e, ctx);
-    const sha = e.record?.sha ?? e.cms.at(-1)?.sha;
-    releases.push({ at: e.at, sha, counted: why.length === 0, why });
+    // A run with no record shows only main at its dispatch, not the ref it deployed.
+    releases.push({ at: e.at, sha: e.record?.sha ?? null, mainAtDispatch: e.record ? null : e.cms.at(-1)?.sha, counted: why.length === 0, why });
     if (why.length) break;
     count++;
     if (count >= need) break;
   }
-  return { need, count, met: count >= need, releases };
+  // An unfinished CMS run may be a production release with no record.
+  return { need, count, met: count >= need && pending.length === 0, pending, releases };
 }
 
 function githubGet(token) {
@@ -204,7 +219,11 @@ async function main(argv) {
   if (argv.includes("--json")) console.log(JSON.stringify(result, null, 1));
   else {
     console.log(`count ${result.count} of ${need}`);
-    for (const r of result.releases) console.log(`${r.counted ? "counted" : "not counted"}: ${easternDate(r.at)} ET ${short(r.sha)}${r.why.length ? ": " + r.why.join("; ") : ""}`);
+    for (const r of result.releases) {
+      const commit = r.sha ? short(r.sha) : `(main ${short(r.mainAtDispatch)} at dispatch)`;
+      console.log(`${r.counted ? "counted" : "not counted"}: ${easternDate(r.at)} ET ${commit}${r.why.length ? ": " + r.why.join("; ") : ""}`);
+    }
+    if (result.pending.length) console.log(`not met while these CMS runs are unfinished: ${result.pending.join(", ")}`);
   }
   return result.met ? 0 : 1;
 }

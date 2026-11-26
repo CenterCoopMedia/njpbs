@@ -23,7 +23,8 @@ test("Nov. 26: no release counts; the release without a record is named with its
   assert.equal(result.releases.length, 1);
   const [release] = result.releases;
   assert.equal(release.counted, false);
-  assert.equal(release.sha, "ec7f48a199b53b42e7aa66d43f83c7fdf7963561");
+  assert.equal(release.sha, null);
+  assert.equal(release.mainAtDispatch, "ec7f48a199b53b42e7aa66d43f83c7fdf7963561");
   assert.deepEqual(release.why, ["no release-production record (3 production CMS runs: 45739394936 failure, 45757428529 failure, 45762652112 success)"]);
 });
 
@@ -61,7 +62,8 @@ function counted(change = {}) {
     { id: 60001, display_title: "Release drift production [r1]", created_at: "2026-12-01T03:00:05Z", updated_at: "2026-12-01T03:02:00Z", conclusion: "success" },
   ] };
   a[`repos/jamditis/jawn-ops/compare/master...${TOOL}`] = { status: change.tool ?? "behind" };
-  a[`repos/CenterCoopMedia/njpbs/compare/${PREVIOUS}...${SOURCE}`] = { ahead_by: change.ahead ?? 1 };
+  a[`repos/CenterCoopMedia/njpbs/compare/${PREVIOUS}...${SOURCE}`] = change.compare ?? { status: "ahead", ahead_by: 1, behind_by: 0 };
+  for (const id of [60001, 60002]) a[`repos/CenterCoopMedia/njpbs/actions/runs/${id}/jobs?per_page=100`] = { jobs: [{ name: "check", conclusion: change.driftJob ?? "success" }] };
   return a;
 }
 
@@ -83,7 +85,9 @@ test("each broken condition stops the count and is named", async () => {
     [{ drift: [{ id: 60001, display_title: "Release drift production [r1]", created_at: "2026-12-01T03:00:05Z", updated_at: "2026-12-01T03:02:00Z", conclusion: "success" }] }, /^no green drift check after the release/],
     [{ tool: "diverged" }, /tool 11111111 is not on jawn-ops master/],
     [{ dev: "failure" }, /first release-development record did not succeed/],
-    [{ ahead: 0 }, /the commit was already live/],
+    [{ compare: { status: "identical", ahead_by: 0, behind_by: 0 } }, /the commit is not ahead of the live commit/],
+    [{ compare: { status: "diverged", ahead_by: 2, behind_by: 1 } }, /the commit is not ahead of the live commit/],
+    [{ driftJob: "skipped" }, /no green drift check before the CMS run/],
     [{ earlier: true }, /2 release-production records for the commit/],
     [{ devEnd: "2026-12-01T03:00:00Z" }, /the development release ended after the production release started/],
   ];
@@ -107,4 +111,13 @@ test("a record that does not name the live commit does not count", async () => {
   const result = await releaseStreak(fake(counted({ live: "" })), { need: 1, since, repo: "CenterCoopMedia/njpbs", toolRepo: "jamditis/jawn-ops" });
   assert.equal(result.count, 0);
   assert.deepEqual(result.releases[0].why, ["the record does not name the commit live at its start"]);
+});
+
+test("an unfinished CMS run with no production deployment yet keeps the goal unmet", async () => {
+  const a = counted();
+  a[cmsRuns].workflow_runs.unshift({ id: 50010, display_title: "CMS deploy [q]", created_at: "2026-12-02T03:00:00Z", updated_at: "2026-12-02T03:00:00Z", conclusion: null, run_attempt: 1 });
+  const result = await releaseStreak(fake(a), { need: 1, since, repo: "CenterCoopMedia/njpbs", toolRepo: "jamditis/jawn-ops" });
+  assert.equal(result.count, 1);
+  assert.equal(result.met, false);
+  assert.deepEqual(result.pending, [50010]);
 });
