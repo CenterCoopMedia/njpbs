@@ -13,8 +13,9 @@
 // - Status in_progress at the start. At the end one status success or failure
 //   whose description is "failed=<n> seconds=<s> refused=<s>". A record with no
 //   end status (a failed record write, a stopped host) does not count.
-// - release-drift.yml runs carry release_id in their run name ("[<id>]"). The
-//   first one is the check before the first write, the last the check after.
+// - release-drift.yml names its runs "Release drift production [<id>]" (the check
+//   before the first write) and "Release drift production after [<id>]" (after
+//   the last), with id = payload.release_id.
 //
 // A release counts when all nine conditions of the release reliability plan hold
 // (9 as changed Nov. 26: any night, no days-behind limit):
@@ -27,8 +28,6 @@
 //  7. The commit's first release-development record ended success, failed=0.
 //  8. Consecutive: a release that does not count ends the streak, and production
 //     CMS runs with no record count as one release that does not count.
-//  (2 and 4 need release-drift.yml and the release's drift step, plan items R3
-//  and R5; until they land, no release counts.)
 //  9. The release brings new commits: its source is not the live one.
 
 const DAY = 86400e3;
@@ -120,11 +119,10 @@ async function judge(get, release, ctx) {
   if (run && (run.conclusion !== "success" || run.attempt !== 1)) why.push(`CMS run ${run.id} ${run.conclusion}, attempt ${run.attempt}`);
   // 2 and 4
   const id = record.payload.release_id;
-  const drift = id ? ctx.drift.filter((d) => (d.display_title ?? d.name ?? "").includes(`[${id}]`)).sort((a, b) => a.created_at.localeCompare(b.created_at)) : [];
-  const before = drift[0];
-  if (!before || before.conclusion !== "success" || !run || before.updated_at > run.created) why.push("no green drift check before the CMS run");
-  const after = drift.length > 1 ? drift.at(-1) : null;
-  if (!after || after.conclusion !== "success" || !run || after.created_at < run.updated) why.push("no green drift check after the release (conditions 4 and 5)");
+  const drift = (name) => id ? ctx.drift.filter((d) => d.display_title === `${name} [${id}]`) : [];
+  const green = (runs, ok) => runs.some((d) => d.conclusion === "success" && run && ok(d));
+  if (!green(drift("Release drift production"), (d) => d.updated_at <= run.created)) why.push("no green drift check before the CMS run");
+  if (!green(drift("Release drift production after"), (d) => d.created_at >= run.updated)) why.push("no green drift check after the release (conditions 4 and 5)");
   // 6
   if (!(await onMaster(get, ctx.toolRepo, record.payload.tool))) why.push(`tool ${short(record.payload.tool) || "unnamed"} is not on jawn-ops master`);
   // 7: every development record of the commit, whatever its age.
