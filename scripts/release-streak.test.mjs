@@ -85,7 +85,7 @@ test("each broken condition stops the count and is named", async () => {
     [{ dev: "failure" }, /first release-development record did not succeed/],
     [{ ahead: 0 }, /the commit was already live/],
     [{ earlier: true }, /2 release-production records for the commit/],
-    [{ devEnd: "2026-12-01T03:10:00Z" }, /the development release ended after the production release started/],
+    [{ devEnd: "2026-12-01T03:00:00Z" }, /the development release ended after the production release started/],
   ];
   for (const [change, why] of cases) {
     const result = await releaseStreak(fake(counted(change)), { need: 1, since, repo: "CenterCoopMedia/njpbs", toolRepo: "jamditis/jawn-ops" });

@@ -131,7 +131,7 @@ async function judge(get, release, ctx) {
   const dev = development.sort((a, b) => a.start.localeCompare(b.start))[0];
   if (!dev || dev.start > record.start) why.push("no earlier release-development record");
   else if (dev.end?.state !== "success" || dev.end.failed !== 0) why.push("first release-development record did not succeed");
-  else if (dev.end.at > record.start) why.push("the development release ended after the production release started");
+  else if (dev.end.at >= record.start) why.push("the development release ended after the production release started");
   // 9
   const live = record.payload.live;
   if (!/^[0-9a-f]{40}$/.test(live ?? "")) why.push("the record does not name the commit live at its start");
