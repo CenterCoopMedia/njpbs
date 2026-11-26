@@ -1,6 +1,7 @@
 name: Release drift
 # The release CLI finds its run by the dispatch ID and, after a lost answer, by the nonce of that one dispatch.
-run-name: Release drift ${{ inputs.target || 'production' }}${{ inputs.after && ' after' || '' }} [${{ inputs.release_dispatch_id }}]${{ inputs.dispatch_nonce && format(' {0}', inputs.dispatch_nonce) || '' }}
+# The streak reader binds the run to its source by the full SHA (main when the input is empty).
+run-name: Release drift ${{ inputs.target || 'production' }}${{ inputs.after && ' after' || '' }} [${{ inputs.release_dispatch_id }}] ${{ inputs.source || 'main' }}${{ inputs.dispatch_nonce && format(' {0}', inputs.dispatch_nonce) || '' }}
 
 # Read-only check of a CMS target against one commit: docs/release/drift-check.md.
 on:
