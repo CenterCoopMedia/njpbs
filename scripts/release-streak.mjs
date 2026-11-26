@@ -9,7 +9,8 @@
 // The record that `jawn-ops njpbs release run` writes, one per command:
 // - A GitHub deployment on CenterCoopMedia/njpbs. environment release-production
 //   or release-development, ref = the full source commit, task "release",
-//   payload { schema: 1, source, release_id, tool, target }.
+//   payload { schema: 1, source, release_id, tool, target, live }; live is the
+//   commit njpbs.org served when the production command started.
 // - Status in_progress at the start. At the end one status success or failure
 //   whose description is "failed=<n> seconds=<s> refused=<s>". A record with no
 //   end status (a failed record write, a stopped host) does not count.
@@ -28,7 +29,7 @@
 //  7. The commit's first release-development record ended success, failed=0.
 //  8. Consecutive: a release that does not count ends the streak, and production
 //     CMS runs with no record count as one release that does not count.
-//  9. The release brings new commits: its source is not the live one.
+//  9. The release brings new commits: its source is ahead of payload.live.
 
 const DAY = 86400e3;
 
@@ -95,15 +96,15 @@ async function onMaster(get, toolRepo, tool) {
   return compare.status === "behind" || compare.status === "identical";
 }
 
-// How many commits a release brings after the previous production source.
-async function brings(get, repo, previous, source) {
-  const compare = await get(`repos/${repo}/compare/${previous}...${source}`);
+// How many commits a release brings after the commit live at its start.
+async function brings(get, repo, live, source) {
+  const compare = await get(`repos/${repo}/compare/${live}...${source}`);
   return compare.ahead_by ?? 0;
 }
 
 async function judge(get, release, ctx) {
   const why = [];
-  const { record, cms, previous } = release;
+  const { record, cms } = release;
   if (!record) {
     why.push(`no release-production record (${cms.length} production CMS run${cms.length === 1 ? "" : "s"}: ${cms.map((r) => `${r.id} ${r.conclusion}`).join(", ")})`);
     return why;
@@ -132,8 +133,9 @@ async function judge(get, release, ctx) {
   else if (dev.end?.state !== "success" || dev.end.failed !== 0) why.push("first release-development record did not succeed");
   else if (dev.end.at > record.start) why.push("the development release ended after the production release started");
   // 9
-  if (!previous) why.push("the previous production source is unknown; pass an earlier --since");
-  else if ((await brings(get, ctx.repo, previous, record.sha)) === 0) why.push("the commit was already live");
+  const live = record.payload.live;
+  if (!/^[0-9a-f]{40}$/.test(live ?? "")) why.push("the record does not name the commit live at its start");
+  else if ((await brings(get, ctx.repo, live, record.sha)) === 0) why.push("the commit was already live");
   return why;
 }
 
@@ -156,14 +158,6 @@ export async function releaseStreak(get, { need, since, repo, toolRepo }) {
     loose.cms.push(run);
   }
   events.sort((a, b) => b.at.localeCompare(a.at));
-  // The previous source is the one before. For production CMS runs with no
-  // record it is their environment deployment's commit: main at dispatch, at or
-  // after the deployed ref (GitHub does not show a run's inputs). A failed record
-  // names a source that may not be live. Both can only make a new release read
-  // as "already live", never the other way, and a failure before it already
-  // ended the streak.
-  events.forEach((e, i) => { const o = events[i + 1]; e.previous = o ? o.record?.sha ?? o.cms.at(-1)?.sha : null; });
-
   const ctx = { production, drift, repo, toolRepo };
   const releases = [];
   let count = 0;

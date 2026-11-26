@@ -30,7 +30,7 @@ test("Nov. 26: no release counts; the release without a record is named with its
 // A release built to the record contract on top of the recorded data, one
 // field per condition, so a case can break one condition.
 const SOURCE = "2".repeat(40);
-const PREVIOUS = "ec7f48a199b53b42e7aa66d43f83c7fdf7963561"; // live after Nov. 26
+const PREVIOUS = "ec7f48a199b53b42e7aa66d43f83c7fdf7963561"; // njpbs.org/_publication.json on Nov. 26
 const TOOL = "1".repeat(40);
 const deployments = (env) => `repos/CenterCoopMedia/njpbs/deployments?environment=${env}&per_page=100&page=1`;
 const cmsRuns = "repos/CenterCoopMedia/njpbs/actions/workflows/cms-deploy.yml/runs?created=%3E%3D2026-11-01&per_page=100&page=1";
@@ -38,7 +38,7 @@ const driftRuns = "repos/CenterCoopMedia/njpbs/actions/workflows/release-drift.y
 
 function counted(change = {}) {
   const a = structuredClone(recorded);
-  const record = { id: 9001, sha: SOURCE, environment: "release-production", created_at: "2026-12-01T03:00:00Z", payload: { schema: 1, source: SOURCE, release_id: "r1", tool: TOOL, target: "production" } };
+  const record = { id: 9001, sha: SOURCE, environment: "release-production", created_at: "2026-12-01T03:00:00Z", payload: { schema: 1, source: SOURCE, release_id: "r1", tool: TOOL, target: "production", live: change.live ?? PREVIOUS } };
   a[deployments("release-production")] = [record];
   a["repos/CenterCoopMedia/njpbs/deployments/9001/statuses?per_page=100"] = [
     { state: change.end ?? "success", description: `failed=${change.failed ?? 0} seconds=1484 refused=701`, created_at: "2026-12-01T03:30:00Z" },
@@ -103,10 +103,8 @@ test("a record that never ended takes no production CMS run", async () => {
   assert.deepEqual(result.releases[0].why, ["no release-production record (1 production CMS run: 50001 success)"]);
 });
 
-test("a release with no earlier production event in the window does not count", async () => {
-  const a = counted();
-  a[cmsRuns].workflow_runs = a[cmsRuns].workflow_runs.filter((r) => r.id === 50001);
-  const result = await releaseStreak(fake(a), { need: 1, since, repo: "CenterCoopMedia/njpbs", toolRepo: "jamditis/jawn-ops" });
+test("a record that does not name the live commit does not count", async () => {
+  const result = await releaseStreak(fake(counted({ live: "" })), { need: 1, since, repo: "CenterCoopMedia/njpbs", toolRepo: "jamditis/jawn-ops" });
   assert.equal(result.count, 0);
-  assert.deepEqual(result.releases[0].why, ["the previous production source is unknown; pass an earlier --since"]);
+  assert.deepEqual(result.releases[0].why, ["the record does not name the commit live at its start"]);
 });
