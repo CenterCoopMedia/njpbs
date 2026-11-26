@@ -74,26 +74,29 @@ async function records(get, repo, environment, since) {
 // of cms-deploy.yml. The other production-environment workflows only read.
 const PRODUCTION_WRITERS = ["cms-deploy.yml", "cms-staging-deploy.yml", "promote.yml"];
 
-// Production deploy runs: writer runs whose job used the production
-// environment. GitHub links each environment deployment to its job.
-async function productionCMSRuns(get, repo, since) {
-  const runs = (await Promise.all(PRODUCTION_WRITERS.map(async (workflow) =>
-    (await list(get, `repos/${repo}/actions/workflows/${workflow}/runs?created=%3E%3D${since.slice(0, 10)}`, "workflow_runs"))
-      .map((r) => ({ ...r, workflow }))))).flat();
+// Production deploys: each production environment deployment of a writer
+// workflow is one write, from its start to its last status. A rerun makes a
+// new deployment, so every attempt is one entry. GitHub links each
+// deployment to its job, and the run names the workflow.
+async function productionDeploys(get, repo, since) {
   const deployments = await list(get, `repos/${repo}/deployments?environment=production`, null, since);
-  const production = new Map();
+  const writes = [];
   for (const d of deployments) {
     const statuses = await get(`repos/${repo}/deployments/${d.id}/statuses?per_page=100`);
     const id = runId(statuses.at(-1)?.target_url);
-    if (id) production.set(id, { sha: d.sha, at: d.created_at });
+    if (!id) continue;
+    const run = await get(`repos/${repo}/actions/runs/${id}`);
+    const workflow = (run.path ?? "").split("/").pop();
+    if (!PRODUCTION_WRITERS.includes(workflow)) continue;
+    const end = statuses.find(ended);
+    writes.push({ id, workflow, created: d.created_at, updated: end?.created_at ?? null, conclusion: end?.state ?? null, attempt: run.run_attempt, sha: d.sha });
   }
-  // A run GitHub has not finished may still get a production deployment.
-  const pending = runs.filter((r) => !production.has(r.id) && !r.conclusion).map((r) => r.id);
-  return [runs.filter((r) => production.has(r.id))
-    // A run is placed when its production deployment began, not when it was
-    // dispatched: an approval wait or a rerun can move that later.
-    .map((r) => ({ id: r.id, workflow: r.workflow, created: production.get(r.id).at, updated: r.updated_at, conclusion: r.conclusion, attempt: r.run_attempt, sha: production.get(r.id).sha }))
-    .sort((a, b) => a.created.localeCompare(b.created)), pending];
+  // A writer run that GitHub has not finished may still deploy production,
+  // whenever it was dispatched.
+  const unfinished = await Promise.all(PRODUCTION_WRITERS.flatMap((workflow) => ["queued", "waiting", "in_progress"].map((status) =>
+    list(get, `repos/${repo}/actions/workflows/${workflow}/runs?status=${status}`, "workflow_runs"))));
+  const pending = [...new Set([...unfinished.flat().map((r) => r.id), ...writes.filter((w) => !w.updated).map((w) => w.id)])];
+  return [writes.sort((a, b) => a.created.localeCompare(b.created)), pending];
 }
 
 async function driftRuns(get, repo, since) {
@@ -180,12 +183,13 @@ async function judge(get, release, ctx) {
 
 export async function releaseStreak(get, { need, since, repo, toolRepo }) {
   const [production, [cmsRuns, pending], drift] = await Promise.all([
-    records(get, repo, "release-production", since), productionCMSRuns(get, repo, since), driftRuns(get, repo, since),
+    records(get, repo, "release-production", since), productionDeploys(get, repo, since), driftRuns(get, repo, since),
   ]);
   // Each record is one release; production CMS runs outside every ended record
   // form releases without a record, one per stretch between records. A record
   // that never ended takes no run: nothing ties a later run to it.
-  const inside = (run, r) => Boolean(r.end) && run.created >= r.start && run.created <= r.end.at;
+  // A deploy whose interval touches an ended record is inside it.
+  const inside = (run, r) => Boolean(r.end) && run.created <= r.end.at && (run.updated ?? "9999") >= r.start;
   const events = [
     ...production.map((r) => ({ at: r.start, record: r, cms: cmsRuns.filter((run) => inside(run, r)) })),
   ];
@@ -240,6 +244,7 @@ async function main(argv) {
     throw new Error("usage: release-streak.mjs --need <n> --repo <owner/name> --tool-repo <owner/name> --since YYYY-MM-DD [--json]");
   }
   const since = new Date(`${day}T00:00:00Z`).toISOString();
+  if (since.slice(0, 10) !== day) throw new Error(`--since ${day} is not a calendar date`);
   const result = await releaseStreak(githubGet(process.env.GH_TOKEN || process.env.GITHUB_TOKEN), { need, since, repo, toolRepo });
   if (argv.includes("--json")) console.log(JSON.stringify(result, null, 1));
   else {
@@ -248,7 +253,7 @@ async function main(argv) {
       const commit = r.sha ? short(r.sha) : `(main ${short(r.mainAtDispatch)} at dispatch)`;
       console.log(`${r.counted ? "counted" : "not counted"}: ${easternDate(r.at)} ET ${commit}${r.why.length ? ": " + r.why.join("; ") : ""}`);
     }
-    if (result.pending.length) console.log(`not met while these CMS runs are unfinished: ${result.pending.join(", ")}`);
+    if (result.pending.length) console.log(`not met while these production writer runs are unfinished: ${result.pending.join(", ")}`);
   }
   return result.met ? 0 : 1;
 }

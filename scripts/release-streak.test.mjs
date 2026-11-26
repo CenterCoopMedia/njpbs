@@ -35,6 +35,14 @@ const PREVIOUS = "ec7f48a199b53b42e7aa66d43f83c7fdf7963561"; // njpbs.org/_publi
 const TOOL = "1".repeat(40);
 const deployments = (env) => `repos/CenterCoopMedia/njpbs/deployments?environment=${env}&per_page=100&page=1`;
 const cmsRuns = "repos/CenterCoopMedia/njpbs/actions/workflows/cms-deploy.yml/runs?created=%3E%3D2026-11-01&per_page=100&page=1";
+const run = (id) => `repos/CenterCoopMedia/njpbs/actions/runs/${id}`;
+const queued = "repos/CenterCoopMedia/njpbs/actions/workflows/cms-deploy.yml/runs?status=queued&per_page=100&page=1";
+// One production write: its run, its environment deployment and that deployment's statuses.
+function write(a, { runId, deployment, workflow = "cms-deploy.yml", sha, start, end, state = "success", attempt = 1 }) {
+  a[run(runId)] = { id: runId, path: `.github/workflows/${workflow}`, run_attempt: attempt, conclusion: state };
+  a[deployments("production")].unshift({ id: deployment, sha, created_at: start });
+  a[`repos/CenterCoopMedia/njpbs/deployments/${deployment}/statuses?per_page=100`] = [{ state, created_at: end, target_url: `https://github.com/CenterCoopMedia/njpbs/actions/runs/${runId}/job/1` }];
+}
 const driftRuns = "repos/CenterCoopMedia/njpbs/actions/workflows/release-drift.yml/runs?created=%3E%3D2026-11-01&per_page=100&page=1";
 
 function counted(change = {}) {
@@ -54,9 +62,7 @@ function counted(change = {}) {
     a["repos/CenterCoopMedia/njpbs/deployments/8999/statuses?per_page=100"] = [{ state: "failure", description: "failed=1 seconds=9 refused=0", created_at: "2026-09-01T03:10:00Z" }];
   }
   // The production CMS run of the release, linked by its environment deployment.
-  a[cmsRuns] = { workflow_runs: [{ id: 50001, display_title: "CMS deploy [c1]", created_at: "2026-12-01T03:05:00Z", updated_at: "2026-12-01T03:15:00Z", conclusion: "success", run_attempt: change.attempt ?? 1 }, ...a[cmsRuns].workflow_runs] };
-  a[deployments("production")] = [{ id: 9002, sha: SOURCE, created_at: "2026-12-01T03:05:02Z" }, ...a[deployments("production")]];
-  a["repos/CenterCoopMedia/njpbs/deployments/9002/statuses?per_page=100"] = [{ state: "success", created_at: "2026-12-01T03:15:00Z", target_url: "https://github.com/CenterCoopMedia/njpbs/actions/runs/50001/job/1" }];
+  write(a, { runId: 50001, deployment: 9002, sha: SOURCE, start: "2026-12-01T03:05:02Z", end: "2026-12-01T03:15:00Z", attempt: change.attempt ?? 1 });
   a[driftRuns] = { workflow_runs: change.drift ?? [
     { id: 60002, display_title: `Release drift production after [r1] ${SOURCE} 7f3a`, created_at: "2026-12-01T03:20:00Z", updated_at: "2026-12-01T03:22:00Z", conclusion: "success" },
     { id: 60001, display_title: `Release drift production [r1] ${SOURCE}`, created_at: "2026-12-01T03:00:05Z", updated_at: "2026-12-01T03:02:00Z", conclusion: "success" },
@@ -122,7 +128,7 @@ test("a record that does not name the live commit does not count", async () => {
 
 test("an unfinished CMS run with no production deployment yet keeps the goal unmet", async () => {
   const a = counted();
-  a[cmsRuns].workflow_runs.unshift({ id: 50010, display_title: "CMS deploy [q]", created_at: "2026-12-02T03:00:00Z", updated_at: "2026-12-02T03:00:00Z", conclusion: null, run_attempt: 1 });
+  a[queued] = { workflow_runs: [{ id: 50010, display_title: "CMS deploy [q]", created_at: "2026-12-02T03:00:00Z", conclusion: null }] };
   const result = await releaseStreak(fake(a), { need: 1, since, repo: "CenterCoopMedia/njpbs", toolRepo: "jamditis/jawn-ops" });
   assert.equal(result.count, 1);
   assert.equal(result.met, false);
@@ -140,9 +146,7 @@ test("a drift run with the release ID outside the record does not count", async 
 test("a hand CMS run inside the record, or a run left by an earlier command, stops the count", async () => {
   // A second production CMS run inside the record window.
   const a = counted();
-  a[cmsRuns].workflow_runs.unshift({ id: 50002, display_title: "CMS deploy [hand]", created_at: "2026-12-01T03:16:00Z", updated_at: "2026-12-01T03:18:00Z", conclusion: "success", run_attempt: 1 });
-  a[deployments("production")].unshift({ id: 9005, sha: SOURCE, created_at: "2026-12-01T03:16:02Z" });
-  a["repos/CenterCoopMedia/njpbs/deployments/9005/statuses?per_page=100"] = [{ state: "success", created_at: "2026-12-01T03:18:00Z", target_url: "https://github.com/CenterCoopMedia/njpbs/actions/runs/50002/job/1" }];
+  write(a, { runId: 50002, deployment: 9005, sha: SOURCE, start: "2026-12-01T03:16:02Z", end: "2026-12-01T03:18:00Z" });
   const hand = await releaseStreak(fake(a), { need: 1, since, repo: "CenterCoopMedia/njpbs", toolRepo: "jamditis/jawn-ops" });
   assert.match(hand.releases[0].why.join("; "), /2 production deploy runs inside the record, not 1/);
   // An earlier command of the same commit made its own record, so the later one is not a first try.
@@ -152,23 +156,25 @@ test("a hand CMS run inside the record, or a run left by an earlier command, sto
 
 test("a cms-staging-deploy.yml production run after the last release ends the streak", async () => {
   const a = counted();
-  const staging = "repos/CenterCoopMedia/njpbs/actions/workflows/cms-staging-deploy.yml/runs?created=%3E%3D2026-11-01&per_page=100&page=1";
-  a[staging] = { workflow_runs: [{ id: 50020, display_title: "CMS staging deploy", created_at: "2026-12-02T15:00:00Z", updated_at: "2026-12-02T15:20:00Z", conclusion: "success", run_attempt: 1 }, ...a[staging].workflow_runs] };
-  a[deployments("production")].unshift({ id: 9020, sha: SOURCE, created_at: "2026-12-02T15:00:02Z" });
-  a["repos/CenterCoopMedia/njpbs/deployments/9020/statuses?per_page=100"] = [{ state: "success", created_at: "2026-12-02T15:20:00Z", target_url: "https://github.com/CenterCoopMedia/njpbs/actions/runs/50020/job/1" }];
+  write(a, { runId: 50020, deployment: 9020, workflow: "cms-staging-deploy.yml", sha: SOURCE, start: "2026-12-02T15:00:02Z", end: "2026-12-02T15:20:00Z" });
   const result = await releaseStreak(fake(a), { need: 1, since, repo: "CenterCoopMedia/njpbs", toolRepo: "jamditis/jawn-ops" });
   assert.equal(result.count, 0);
   assert.deepEqual(result.releases[0].why, ["no release-production record (1 production deploy run: cms-staging-deploy.yml 50020 success)"]);
 });
 
-test("a run dispatched before a release that deploys production after it ends the streak", async () => {
-  const a = counted();
-  const staging = "repos/CenterCoopMedia/njpbs/actions/workflows/cms-staging-deploy.yml/runs?created=%3E%3D2026-11-01&per_page=100&page=1";
-  // Dispatched before the record, waited for approval, deployed the next day.
-  a[staging] = { workflow_runs: [{ id: 50021, display_title: "CMS staging deploy", created_at: "2026-12-01T02:00:00Z", updated_at: "2026-12-02T15:20:00Z", conclusion: "success", run_attempt: 1 }, ...a[staging].workflow_runs] };
-  a[deployments("production")].unshift({ id: 9021, sha: SOURCE, created_at: "2026-12-02T15:00:02Z" });
-  a["repos/CenterCoopMedia/njpbs/deployments/9021/statuses?per_page=100"] = [{ state: "success", created_at: "2026-12-02T15:20:00Z", target_url: "https://github.com/CenterCoopMedia/njpbs/actions/runs/50021/job/1" }];
-  const result = await releaseStreak(fake(a), { need: 1, since, repo: "CenterCoopMedia/njpbs", toolRepo: "jamditis/jawn-ops" });
-  assert.equal(result.count, 0);
-  assert.match(result.releases[0].why[0], /cms-staging-deploy\.yml 50021 success/);
+test("a rerun after the release, or a promote deploy that overlaps it, stops the count", async () => {
+  const opts = { need: 1, since, repo: "CenterCoopMedia/njpbs", toolRepo: "jamditis/jawn-ops" };
+  // A staging run deployed before the release and was rerun after it: two deployments, one run.
+  const rerun = counted();
+  write(rerun, { runId: 50030, deployment: 9030, workflow: "cms-staging-deploy.yml", sha: SOURCE, start: "2026-11-30T15:00:02Z", end: "2026-11-30T15:20:00Z" });
+  write(rerun, { runId: 50030, deployment: 9031, workflow: "cms-staging-deploy.yml", sha: SOURCE, start: "2026-12-02T15:00:02Z", end: "2026-12-02T15:20:00Z", attempt: 2 });
+  const a = await releaseStreak(fake(rerun), opts);
+  assert.equal(a.count, 0);
+  assert.match(a.releases[0].why[0], /cms-staging-deploy\.yml 50030 success/);
+  // A promote deploy that started before the record and ended inside it.
+  const overlap = counted();
+  write(overlap, { runId: 50040, deployment: 9040, workflow: "promote.yml", sha: SOURCE, start: "2026-12-01T02:50:00Z", end: "2026-12-01T03:10:00Z" });
+  const b = await releaseStreak(fake(overlap), opts);
+  assert.equal(b.count, 0);
+  assert.match(b.releases[0].why.join("; "), /^2 production deploy runs inside the record, not 1/);
 });
