@@ -78,6 +78,14 @@
     },
     {
       "suppliers": ["github-variable", "process-environment"],
+      "names": ["RELEASE_DRIFT_OTHER_PARTS"]
+    },
+    {
+      "suppliers": ["process-environment"],
+      "names": ["CLOUDFLARE_SNIPPETS_READ_TOKEN", "NJPBS_PUBLICATION_R2_CREDENTIAL", "NJPBS_PUBLISHER_CLOUDFLARE_TOKEN", "RELEASE_DRIFT_SHOW_UNLISTED"]
+    },
+    {
+      "suppliers": ["github-variable", "process-environment"],
       "names": ["PUBLISHER_DEVELOPMENT_PUBLIC_VARS_JSON", "PUBLISHER_PUBLIC_VARS_JSON"]
     },
     {
