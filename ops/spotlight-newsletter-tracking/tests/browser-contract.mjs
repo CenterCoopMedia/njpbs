@@ -133,6 +133,14 @@ try {
     assert.equal(await bar.isVisible(), true, "Keyboard focus keeps the first-visit bar");
     const [link, barBox] = [await page.locator("#article-link").boundingBox(), await bar.boundingBox()];
     assert.ok(link.y + link.height <= barBox.y, "The bar does not cover focused page content");
+    await page.evaluate(() => { document.querySelector("main").style.minHeight = "3000px"; });
+    const footerButton = page.getByRole("button", { name: "Privacy settings", exact: true });
+    await footerButton.focus();
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    const [footerBox, barAtEnd] = [await footerButton.boundingBox(), await bar.boundingBox()];
+    assert.ok(footerBox.y + footerBox.height <= barAtEnd.y, "At maximum scroll the bar does not cover the footer button");
+    await page.locator("#article-link").focus();
+    await page.evaluate(() => window.scrollTo(0, 0));
     for (let step = 0; step < 6 && !(await page.getByRole("button", { name: "Allow all", exact: true }).evaluate(node => node === document.activeElement)); step += 1) {
       await page.keyboard.press("Tab");
     }

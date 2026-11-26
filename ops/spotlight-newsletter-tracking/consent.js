@@ -28,10 +28,12 @@ export function mountNewsletterConsent(win) {
 
   const gpc = () => win.navigator.globalPrivacyControl === true;
   const anyLoaded = () => categories.some(category => category.loaded);
-  // Keep keyboard focus above the fixed bar while it shows.
+  // Reserve space under the fixed bar so it cannot cover focused page content, even at maximum scroll.
   function setBarHidden(value) {
     bar.hidden = value;
-    doc.documentElement.style.scrollPaddingBottom = value ? "" : `${bar.offsetHeight}px`;
+    const space = value ? "" : `${bar.offsetHeight}px`;
+    doc.documentElement.style.paddingBottom = space;
+    doc.documentElement.style.scrollPaddingBottom = space;
   }
   const undecided = () => categories.some(category => ![GRANT, DENY].includes(decision(category.cookie)));
 
