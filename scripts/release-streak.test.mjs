@@ -121,3 +121,24 @@ test("an unfinished CMS run with no production deployment yet keeps the goal unm
   assert.equal(result.met, false);
   assert.deepEqual(result.pending, [50010]);
 });
+
+test("a drift run with the release ID outside the record does not count", async () => {
+  // The after check, dispatched again with the same ID after the record ended.
+  const late = { id: 60002, display_title: "Release drift production after [r1]", created_at: "2026-12-01T04:00:00Z", updated_at: "2026-12-01T04:02:00Z", conclusion: "success" };
+  const before = { id: 60001, display_title: "Release drift production [r1]", created_at: "2026-12-01T03:00:05Z", updated_at: "2026-12-01T03:02:00Z", conclusion: "success" };
+  const result = await releaseStreak(fake(counted({ drift: [late, before] })), { need: 1, since, repo: "CenterCoopMedia/njpbs", toolRepo: "jamditis/jawn-ops" });
+  assert.deepEqual(result.releases[0].why, ["no green drift check after the release (conditions 4 and 5)"]);
+});
+
+test("a hand CMS run inside the record, or a run left by an earlier command, stops the count", async () => {
+  // A second production CMS run inside the record window.
+  const a = counted();
+  a[cmsRuns].workflow_runs.unshift({ id: 50002, display_title: "CMS deploy [hand]", created_at: "2026-12-01T03:16:00Z", updated_at: "2026-12-01T03:18:00Z", conclusion: "success", run_attempt: 1 });
+  a[deployments("production")].unshift({ id: 9005, sha: SOURCE, created_at: "2026-12-01T03:16:02Z" });
+  a["repos/CenterCoopMedia/njpbs/deployments/9005/statuses?per_page=100"] = [{ state: "success", created_at: "2026-12-01T03:18:00Z", target_url: "https://github.com/CenterCoopMedia/njpbs/actions/runs/50002/job/1" }];
+  const hand = await releaseStreak(fake(a), { need: 1, since, repo: "CenterCoopMedia/njpbs", toolRepo: "jamditis/jawn-ops" });
+  assert.match(hand.releases[0].why.join("; "), /2 production CMS runs inside the record, not 1/);
+  // An earlier command of the same commit made its own record, so the later one is not a first try.
+  const resumed = await releaseStreak(fake(counted({ earlier: true })), { need: 1, since, repo: "CenterCoopMedia/njpbs", toolRepo: "jamditis/jawn-ops" });
+  assert.match(resumed.releases[0].why.join("; "), /2 release-production records for the commit/);
+});

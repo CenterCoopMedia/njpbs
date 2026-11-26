@@ -140,8 +140,11 @@ async function judge(get, release, ctx) {
     for (const d of runs) if (run && ok(d) && (await ranGreen(get, ctx.repo, d))) return true;
     return false;
   };
-  if (!(await green(drift("Release drift production"), (d) => d.updated_at <= run.created))) why.push("no green drift check before the CMS run");
-  if (!(await green(drift("Release drift production after"), (d) => d.created_at >= run.updated))) why.push("no green drift check after the release (conditions 4 and 5)");
+  // Both runs fall inside the record: only that command dispatches with its
+  // random ID while the record is open.
+  const within = (d) => record.end && d.created_at >= record.start && d.updated_at <= record.end.at;
+  if (!(await green(drift("Release drift production"), (d) => within(d) && d.updated_at <= run.created))) why.push("no green drift check before the CMS run");
+  if (!(await green(drift("Release drift production after"), (d) => within(d) && d.created_at >= run.updated))) why.push("no green drift check after the release (conditions 4 and 5)");
   // 6
   if (!(await onMaster(get, ctx.toolRepo, record.payload.tool))) why.push(`tool ${short(record.payload.tool) || "unnamed"} is not on jawn-ops master`);
   // 7: every development record of the commit, whatever its age.
