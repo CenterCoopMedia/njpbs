@@ -16,7 +16,7 @@
 //   end status (a failed record write, a stopped host) does not count.
 // - release-drift.yml names its runs "Release drift production [<id>]" (the check
 //   before the first write) and "Release drift production after [<id>]" (after
-//   the last), with id = payload.release_id.
+//   the last), each maybe followed by " <dispatch nonce>"; id = payload.release_id.
 //
 // A release counts when all nine conditions of the release reliability plan hold
 // (9 as changed Nov. 26: any night, no days-behind limit):
@@ -120,7 +120,11 @@ async function judge(get, release, ctx) {
   if (run && (run.conclusion !== "success" || run.attempt !== 1)) why.push(`CMS run ${run.id} ${run.conclusion}, attempt ${run.attempt}`);
   // 2 and 4
   const id = record.payload.release_id;
-  const drift = (name) => id ? ctx.drift.filter((d) => d.display_title === `${name} [${id}]`) : [];
+  // release-drift.yml may add " <dispatch nonce>" after the ID.
+  const drift = (name) => {
+    const title = `${name} [${id}]`;
+    return id ? ctx.drift.filter((d) => d.display_title === title || d.display_title?.startsWith(`${title} `)) : [];
+  };
   const green = (runs, ok) => runs.some((d) => d.conclusion === "success" && run && ok(d));
   if (!green(drift("Release drift production"), (d) => d.updated_at <= run.created)) why.push("no green drift check before the CMS run");
   if (!green(drift("Release drift production after"), (d) => d.created_at >= run.updated)) why.push("no green drift check after the release (conditions 4 and 5)");

@@ -57,7 +57,7 @@ function counted(change = {}) {
   a[deployments("production")] = [{ id: 9002, sha: SOURCE, created_at: "2026-12-01T03:05:02Z" }, ...a[deployments("production")]];
   a["repos/CenterCoopMedia/njpbs/deployments/9002/statuses?per_page=100"] = [{ state: "success", created_at: "2026-12-01T03:15:00Z", target_url: "https://github.com/CenterCoopMedia/njpbs/actions/runs/50001/job/1" }];
   a[driftRuns] = { workflow_runs: change.drift ?? [
-    { id: 60002, display_title: "Release drift production after [r1]", created_at: "2026-12-01T03:20:00Z", updated_at: "2026-12-01T03:22:00Z", conclusion: "success" },
+    { id: 60002, display_title: "Release drift production after [r1] 7f3a", created_at: "2026-12-01T03:20:00Z", updated_at: "2026-12-01T03:22:00Z", conclusion: "success" },
     { id: 60001, display_title: "Release drift production [r1]", created_at: "2026-12-01T03:00:05Z", updated_at: "2026-12-01T03:02:00Z", conclusion: "success" },
   ] };
   a[`repos/jamditis/jawn-ops/compare/master...${TOOL}`] = { status: change.tool ?? "behind" };
