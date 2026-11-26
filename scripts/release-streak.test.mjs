@@ -160,3 +160,15 @@ test("a cms-staging-deploy.yml production run after the last release ends the st
   assert.equal(result.count, 0);
   assert.deepEqual(result.releases[0].why, ["no release-production record (1 production deploy run: cms-staging-deploy.yml 50020 success)"]);
 });
+
+test("a run dispatched before a release that deploys production after it ends the streak", async () => {
+  const a = counted();
+  const staging = "repos/CenterCoopMedia/njpbs/actions/workflows/cms-staging-deploy.yml/runs?created=%3E%3D2026-11-01&per_page=100&page=1";
+  // Dispatched before the record, waited for approval, deployed the next day.
+  a[staging] = { workflow_runs: [{ id: 50021, display_title: "CMS staging deploy", created_at: "2026-12-01T02:00:00Z", updated_at: "2026-12-02T15:20:00Z", conclusion: "success", run_attempt: 1 }, ...a[staging].workflow_runs] };
+  a[deployments("production")].unshift({ id: 9021, sha: SOURCE, created_at: "2026-12-02T15:00:02Z" });
+  a["repos/CenterCoopMedia/njpbs/deployments/9021/statuses?per_page=100"] = [{ state: "success", created_at: "2026-12-02T15:20:00Z", target_url: "https://github.com/CenterCoopMedia/njpbs/actions/runs/50021/job/1" }];
+  const result = await releaseStreak(fake(a), { need: 1, since, repo: "CenterCoopMedia/njpbs", toolRepo: "jamditis/jawn-ops" });
+  assert.equal(result.count, 0);
+  assert.match(result.releases[0].why[0], /cms-staging-deploy\.yml 50021 success/);
+});

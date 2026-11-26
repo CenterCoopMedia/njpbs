@@ -2,7 +2,10 @@
 // Counts the production releases in a row that meet the release goal, read
 // only from GitHub. Exit 0 when the count reaches --need.
 //
-//   node scripts/release-streak.mjs --need 4 --repo CenterCoopMedia/njpbs --tool-repo jamditis/jawn-ops [--since 2026-11-01] [--json]
+//   node scripts/release-streak.mjs --need 4 --repo CenterCoopMedia/njpbs --tool-repo jamditis/jawn-ops --since 2026-11-01 [--json]
+//
+// --since is where reading starts; give a date before the first release you
+// mean to count.
 //
 // Auth: GH_TOKEN or GITHUB_TOKEN; it must read jamditis/jawn-ops (condition 6).
 //
@@ -32,8 +35,6 @@
 //  8. Consecutive: a release that does not count ends the streak, and production
 //     CMS runs with no record count as one release that does not count.
 //  9. The release brings new commits: its source is ahead of payload.live.
-
-const DAY = 86400e3;
 
 export function parseEnd(description) {
   const m = /^failed=(\d+) seconds=(\d+(?:\.\d+)?) refused=(\d+(?:\.\d+)?)/.exec(description ?? "");
@@ -84,12 +85,14 @@ async function productionCMSRuns(get, repo, since) {
   for (const d of deployments) {
     const statuses = await get(`repos/${repo}/deployments/${d.id}/statuses?per_page=100`);
     const id = runId(statuses.at(-1)?.target_url);
-    if (id) production.set(id, d.sha);
+    if (id) production.set(id, { sha: d.sha, at: d.created_at });
   }
   // A run GitHub has not finished may still get a production deployment.
   const pending = runs.filter((r) => !production.has(r.id) && !r.conclusion).map((r) => r.id);
   return [runs.filter((r) => production.has(r.id))
-    .map((r) => ({ id: r.id, workflow: r.workflow, created: r.created_at, updated: r.updated_at, conclusion: r.conclusion, attempt: r.run_attempt, sha: production.get(r.id) }))
+    // A run is placed when its production deployment began, not when it was
+    // dispatched: an approval wait or a rerun can move that later.
+    .map((r) => ({ id: r.id, workflow: r.workflow, created: production.get(r.id).at, updated: r.updated_at, conclusion: r.conclusion, attempt: r.run_attempt, sha: production.get(r.id).sha }))
     .sort((a, b) => a.created.localeCompare(b.created)), pending];
 }
 
@@ -232,10 +235,11 @@ async function main(argv) {
   const repo = arg("--repo");
   const toolRepo = arg("--tool-repo");
   const name = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
-  if (!Number.isInteger(need) || need < 1 || !name.test(repo ?? "") || !name.test(toolRepo ?? "")) {
-    throw new Error("usage: release-streak.mjs --need <n> --repo <owner/name> --tool-repo <owner/name> [--since YYYY-MM-DD] [--json]");
+  const day = arg("--since");
+  if (!Number.isInteger(need) || need < 1 || !name.test(repo ?? "") || !name.test(toolRepo ?? "") || !/^\d{4}-\d{2}-\d{2}$/.test(day ?? "")) {
+    throw new Error("usage: release-streak.mjs --need <n> --repo <owner/name> --tool-repo <owner/name> --since YYYY-MM-DD [--json]");
   }
-  const since = new Date(arg("--since") ?? Date.now() - 60 * DAY).toISOString();
+  const since = new Date(`${day}T00:00:00Z`).toISOString();
   const result = await releaseStreak(githubGet(process.env.GH_TOKEN || process.env.GITHUB_TOKEN), { need, since, repo, toolRepo });
   if (argv.includes("--json")) console.log(JSON.stringify(result, null, 1));
   else {
