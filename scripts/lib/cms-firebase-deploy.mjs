@@ -1,3 +1,4 @@
+import { stripVTControlCharacters } from "node:util";
 import { repeatAfterProviderLimit } from "./firebase-provider-limit.mjs";
 
 /**
@@ -36,7 +37,7 @@ export async function deployFirebase({ project, config, dev, codebase, exported,
     for (let only = first; ;) {
       const { ok, log = "", error } = await deploy(firebaseDeployArgs({ project, config, only }));
       if (ok) return [];
-      const kept = [...(log.replace(/\x1b\[[0-9;]*m/g, "").match(askedToDelete)?.[1] ?? "").matchAll(/(\S+)\([\w-]+\)/g)].map(match => match[1]);
+      const kept = [...(stripVTControlCharacters(log).match(askedToDelete)?.[1] ?? "").matchAll(/(\S+)\([\w-]+\)/g)].map(match => match[1]);
       // Firebase asks after a whole deploy planned its changes and before it makes any.
       if (whole && only === first && kept.length) return kept;
       const repeat = repeatAfterProviderLimit(log, only);
