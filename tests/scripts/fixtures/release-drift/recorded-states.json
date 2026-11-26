@@ -1,0 +1,163 @@
+{
+ "_source": "Recorded read-only on Nov. 26, 2026 from production (njpbs-site, njpbs.org zone). Functions: a subset of the live list, with the two leftovers of the Nov. 25 release. Fixture: the cmsVersionHistory after-state of Nov. 23, 2026 16:49 UTC (archive). Snippet rules: the zone list read before the Nov. 26 snippet deploy (Oct. 8 snippet). Pointer, runtime and Worker variables: read Nov. 26 after release ec7f48a1.",
+ "functions": {
+  "functions": [
+   {
+    "name": "projects/njpbs-site/locations/us-central1/functions/cmsGetPublishedSettings",
+    "environment": "GEN_2",
+    "serviceConfig": {
+     "environmentVariables": {}
+    }
+   },
+   {
+    "name": "projects/njpbs-site/locations/us-central1/functions/cmsGetSettings",
+    "environment": "GEN_2",
+    "serviceConfig": {
+     "environmentVariables": {
+      "CMS_ADMIN_BUILD_REVISION": "a83aed8924b63d2e4d078e62cf5b7eaac1f0141f"
+     }
+    }
+   },
+   {
+    "name": "projects/njpbs-site/locations/us-central1/functions/cmsPublish",
+    "environment": "GEN_2",
+    "serviceConfig": {
+     "environmentVariables": {
+      "CMS_ADMIN_BUILD_REVISION": "a83aed8924b63d2e4d078e62cf5b7eaac1f0141f"
+     }
+    }
+   },
+   {
+    "name": "projects/njpbs-site/locations/us-central1/functions/cmsGetBroadcastSchedule",
+    "environment": "GEN_2",
+    "serviceConfig": {
+     "environmentVariables": {
+      "CMS_ADMIN_BUILD_REVISION": "a45b53681f5ddb1f30a157ef04c05bb278220a4e"
+     }
+    }
+   },
+   {
+    "name": "projects/njpbs-site/locations/us-central1/functions/billingKillSwitch",
+    "environment": "GEN_2",
+    "serviceConfig": {
+     "environmentVariables": {}
+    }
+   },
+   {
+    "name": "projects/njpbs-site/locations/us-central1/functions/cmsPreview",
+    "environment": "GEN_2",
+    "serviceConfig": {
+     "environmentVariables": {
+      "CMS_ADMIN_BUILD_REVISION": "a83aed8924b63d2e4d078e62cf5b7eaac1f0141f"
+     }
+    }
+   }
+  ]
+ },
+ "fixtureArchived": {
+  "fields": {
+   "type": {
+    "stringValue": "post"
+   },
+   "status": {
+    "stringValue": "archived"
+   },
+   "version": {
+    "integerValue": "2"
+   }
+  }
+ },
+ "pointer": {
+  "fields": {
+   "activeCommitSha": {
+    "stringValue": "ec7f48a199b53b42e7aa66d43f83c7fdf7963561"
+   },
+   "state": {
+    "stringValue": "idle"
+   },
+   "lastReservedGeneration": {
+    "integerValue": "345"
+   },
+   "schemaVersion": {
+    "integerValue": "1"
+   },
+   "activeGeneration": {
+    "integerValue": "345"
+   },
+   "newestEligibleGeneration": {
+    "integerValue": "345"
+   }
+  }
+ },
+ "runtime": {
+  "fields": {
+   "phase": {
+    "stringValue": "ready"
+   },
+   "commitSha": {
+    "stringValue": "ec7f48a199b53b42e7aa66d43f83c7fdf7963561"
+   },
+   "cloud": {
+    "mapValue": {
+     "fields": {
+      "commitSha": {
+       "stringValue": "ec7f48a199b53b42e7aa66d43f83c7fdf7963561"
+      },
+      "phase": {
+       "stringValue": "ready"
+      },
+      "serializerId": {
+       "stringValue": "cloudflare-publisher"
+      }
+     }
+    }
+   }
+  }
+ },
+ "previewRuntime": {
+  "fields": {
+   "phase": {
+    "stringValue": "ready"
+   },
+   "rendererSha": {
+    "stringValue": "a83aed8924b63d2e4d078e62cf5b7eaac1f0141f"
+   }
+  }
+ },
+ "snippetRulesBefore": {
+  "success": true,
+  "result": [
+   {
+    "id": "8cc1ac732d7e4edd89c552a62369b8cf",
+    "description": "NJ PBS legacy URL map (#260)",
+    "enabled": true,
+    "last_updated": "2026-10-08T09:05:08.38761Z",
+    "expression": "http.host eq \"njpbs.org\"",
+    "snippet_name": "legacy_redirects_260_1064cbe738e5"
+   }
+  ]
+ },
+ "snippetSourceSha256": "bc9ede7fcefee27c12f4d6d06943ad8465256869780df530c64cb8552ce9dd6d",
+ "workerVariables": {
+  "njpbs-cms-publisher": [
+   [
+    "PUBLICATION_COMMIT_SHA",
+    "ec7f48a199b53b42e7aa66d43f83c7fdf7963561"
+   ]
+  ],
+  "njpbs-production": [
+   [
+    "NO_BUILD_POST_RENDERER_SHA",
+    "ec7f48a199b53b42e7aa66d43f83c7fdf7963561"
+   ]
+  ],
+  "njpbs-cms-preview-renderer": [
+   [
+    "PREVIEW_RENDERER_SHA",
+    "a83aed8924b63d2e4d078e62cf5b7eaac1f0141f"
+   ]
+  ],
+  "njpbs-cms-api": []
+ },
+ "publicationCommit": "ec7f48a199b53b42e7aa66d43f83c7fdf7963561"
+}

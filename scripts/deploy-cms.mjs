@@ -9,6 +9,7 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { deployFirebase } from "./lib/cms-firebase-deploy.mjs";
 import { after, blockedBy } from "./lib/cms-deploy-order.mjs";
+import { functionsPaths, rendererPaths } from "./lib/cms-release-paths.mjs";
 import { faultText, repeatNetworkFault } from "./lib/network-fault.mjs";
 
 const root = resolve(fileURLToPath(new URL("../", import.meta.url)));
@@ -64,10 +65,8 @@ const npx = (args, options) => run("npx", ["--no-install", ...args], options);
 const sha = await run("git", ["rev-parse", "HEAD"], { capture: true });
 // Functions and the renderer carry the commit that last changed them, so an unchanged one is not deployed again.
 const lastChange = paths => run("git", ["log", "-1", "--format=%H", "--", ...paths], { capture: true });
-const contract = ["scripts/functions-contract-sources.json", "scripts/lib/functions-contracts.mjs", "scripts/compile-functions-contracts.mjs", "packages", "package.json", "package-lock.json"];
-const functionsSha = await lastChange(["functions"]); // a label; Firebase compares the content itself
-const rendererSha = await lastChange(["preview-renderer", "site", "functions", "config/development-inputs.json",
-  "scripts/render-development-config.mjs", "scripts/prepare-preview-renderer.mjs", ...contract]);
+const functionsSha = await lastChange(functionsPaths); // a label; Firebase compares the content itself
+const rendererSha = await lastChange(rendererPaths);
 const secret = async name => {
   const value = await npx(["firebase", "--non-interactive", "functions:secrets:access", name, "--project", project], { capture: true });
   if (!value) throw new Error(`Secret ${name} is empty`);
@@ -168,7 +167,8 @@ const steps = {
       config = ["--config", privateFile("cms-api-wrangler.json", JSON.stringify({ ...rendered, $schema: undefined, routes: undefined, main: join(root, "cms-api", rendered.main) }))];
     }
     const secrets = privateFile("cms-api.json", JSON.stringify({ CMS_EDGE_ORIGIN_SECRET: env.CMS_EDGE_ORIGIN_SECRET, FIREBASE_WEB_API_KEY: env.VITE_FIREBASE_API_KEY?.trim() }));
-    await npx(["wrangler", "deploy", ...(dev ? config : ["--cwd", "cms-api"]), "--secrets-file", secrets],
+    // The drift check reads this variable to compare the live CMS API with the source.
+    await npx(["wrangler", "deploy", ...(dev ? config : ["--cwd", "cms-api"]), "--secrets-file", secrets, "--var", `CMS_API_SOURCE_SHA:${sha}`],
       { env: { CLOUDFLARE_API_TOKEN: dev && env.CLOUDFLARE_DEV_WORKER_TOKEN || env.CLOUDFLARE_API_TOKEN } });
   },
   async renderer() {

@@ -18,6 +18,7 @@
     ".github/workflows/promote.yml",
     ".github/workflows/publisher-image.yml",
     ".github/workflows/recovered-service-source.yml",
+    ".github/workflows/release-drift.yml",
     ".github/workflows/recovered-services-deploy.yml.disabled",
     ".github/workflows/report-relay-check.yml",
     ".github/workflows/schedule-bake.yml"
@@ -1411,5 +1412,31 @@
     {"id":"cms-function-retirement","kind":"deploy","sources":["scripts/retire-cms-functions.mjs"],"states":["planned","started","complete"]},
     {"id":"cms-secret-provisioning","kind":"deploy","sources":["scripts/lib/functions-secret-versions.mjs"],"states":["empty","matching","different","provisioned","uncertain"]},
     {"id":"workflow-production-promotion","kind":"deploy","sources":[".github/workflows/promote.yml"],"states":["selected","admitted","qualified","promoted"]}
+  ],
+  "live": [
+    {"part":"Firestore rules","release":"cms-deploy.yml step firebase","read":"firestore-rules","file":"firestore.rules"},
+    {"part":"Firestore indexes","release":"cms-deploy.yml step firebase","why":"the index API keeps no source text to compare; Firebase deploys the whole firestore.indexes.json"},
+    {"part":"Storage rules","only":"production","release":"cms-deploy.yml step firebase","read":"storage-rules","file":"storage.rules"},
+    {"part":"Functions","release":"cms-deploy.yml step firebase","read":"functions-revision"},
+    {"part":"Billing kill switch Function","provider":"function","names":["billingKillSwitch"],"outside":"deployed from infrastructure/billing-kill-switch by its own procedure, not by a release"},
+    {"part":"CMS API Worker","provider":"worker","name":"njpbs-cms-api","dev":"CMS_DEV_API_WORKER","names":["njpbs-cms-api"],"release":"cms-deploy.yml step cms-api","read":"worker-variable","variable":"CMS_API_SOURCE_SHA","expect":"source"},
+    {"part":"Preview renderer Worker","provider":"worker","name":"njpbs-cms-preview-renderer","dev":"CMS_DEV_PREVIEW_RENDERER","names":["njpbs-cms-preview-renderer"],"release":"cms-deploy.yml step renderer","read":"worker-variable","variable":"PREVIEW_RENDERER_SHA","expect":"renderer"},
+    {"part":"Preview renderer runtime record","release":"cms-deploy.yml step renderer","read":"preview-runtime"},
+    {"part":"Preview renderer container","provider":"container","names":["njpbs-cms-preview-renderer"],"release":"cms-deploy.yml step renderer","why":"the container image carries no source name; the renderer Worker and runtime record rows read the source"},
+    {"part":"Studio connector package","release":"cms-deploy.yml step studio","why":"its manifest sits in the media master bucket, and the drift job holds no key for it"},
+    {"part":"Admin Pages","provider":"pages","name":"njpbs-admin","dev":"CMS_DEV_ADMIN_PAGES","names":["njpbs-admin"],"release":"cms-deploy.yml step admin-deploy","read":"pages-commit"},
+    {"part":"Admin shell (Access)","release":"cms-deploy.yml step admin-shell","why":"Access settings carry no source name"},
+    {"part":"Public Worker","provider":"worker","name":"njpbs-production","dev":"CLOUDFLARE_DEV_PUBLIC_WORKER","names":["njpbs-production"],"release":"release tool step live (the publisher switches it)","read":"worker-variable","variable":"NO_BUILD_POST_RENDERER_SHA","expect":"source"},
+    {"part":"Public site","release":"release tool step live","read":"publication-commit"},
+    {"part":"Publisher Worker","provider":"worker","name":"njpbs-cms-publisher","dev":"njpbs-dev-cms-publisher","names":["njpbs-cms-publisher"],"release":"release tool step publisher","read":"worker-variable","variable":"PUBLICATION_COMMIT_SHA","expect":"source"},
+    {"part":"Publisher container","provider":"container","names":["njpbs-cms-publisher"],"release":"release tool step publisher","why":"the image is named by digest; the Publisher Worker row reads the source"},
+    {"part":"Runtime pin","release":"release tool step pin","read":"runtime-pin"},
+    {"part":"Edge snippet","only":"production","provider":"snippet","prefixes":["legacy_redirects_260_"],"read":"edge-snippet","drift":"no release step deploys it yet (jawn-ops #1315); this row proves it equal. Earlier versions stay stored for rollback"},
+    {"part":"Development target","provider":"worker","names":["njpbs-dev-cms-api","njpbs-dev-cms-preview","njpbs-dev-cms-preview-renderer","njpbs-dev-cms-publisher","njpbs-dev-preview-staff-sites","njpbs-dev-public","njpbs-dev-staff-sites"],"outside":"the development target, released by the same tool with target development"},
+    {"part":"Development containers","provider":"container","names":["njpbs-dev-cms-publisher","njpbs-dev-cms-preview-renderer"],"outside":"the development target"},
+    {"part":"Staff preview and staff sites Workers","provider":"worker","names":["njpbs-cms-preview","njpbs-staff-sites"],"outside":"deployed from workers/ by their own procedure (workers/README.md), not by a release"},
+    {"part":"Publisher alerts Worker","provider":"worker","names":["njpbs-publisher-alerts"],"outside":"deployed by hand (docs/cms/publisher-alerts-deploy.md)"},
+    {"part":"Small gateway Workers","provider":"worker","names":["njpbs-fanout","njpbs-report"],"outside":"deployed by hand (docs/cms/small-worker-gateways.md)"},
+    {"part":"Recovered service Workers","provider":"worker","names":["njpbs-media-fanout","njpbs-subdomain-redirects","newnjpbs-redirect"],"outside":"recovered services with pinned hashes (docs/config/recovered-services.md)"}
   ]
 }

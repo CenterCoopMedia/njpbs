@@ -20,6 +20,14 @@ still need their own readbacks before a release switch.
 The [runtime switch inventory](../config/runtime-switches.md) records owners,
 defaults, supplier evidence, and removal conditions.
 
+## Live parts
+
+The `live` array lists every live production part with the step that deploys it
+and how the [drift check](drift-check.md) reads it. A row is deployed by a
+release step (`release`), proved equal by the drift check only (`drift`), or not
+part of a release (`outside`, with its reason). Provider names in `names` and
+`prefixes` let the drift check find a live part with no row.
+
 ## Update a surface
 
 When adding or removing a workflow, Wrangler config or Functions export, update

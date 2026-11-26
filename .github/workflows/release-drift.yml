@@ -1,0 +1,163 @@
+name: Release drift
+# The release CLI finds its run by the dispatch ID and, after a lost answer, by the nonce of that one dispatch.
+# The streak reader binds the run to its source by the full SHA (main when the input is empty).
+run-name: Release drift ${{ inputs.target || 'production' }}${{ inputs.after && ' after' || '' }} [${{ inputs.release_dispatch_id }}] ${{ inputs.source || 'main' }}${{ inputs.dispatch_nonce && format(' {0}', inputs.dispatch_nonce) || '' }}
+
+# Read-only check of a CMS target against one commit: docs/release/drift-check.md.
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "CMS to check"
+        required: true
+        type: choice
+        options:
+          - production
+          - development
+      source:
+        description: "Full commit SHA on main, Nov. 14, 2026 or later, to compare with (empty: main)"
+        required: false
+        default: ""
+        type: string
+      after:
+        description: "After a release: every part that differs fails"
+        required: false
+        default: false
+        type: boolean
+      release_dispatch_id:
+        description: "Release CLI correlation ID"
+        required: false
+        default: ""
+        type: string
+      dispatch_nonce:
+        description: "Release CLI nonce of this dispatch (a resumed release keeps its ID)"
+        required: false
+        default: ""
+        type: string
+  schedule:
+    # Nightly, production against main: 2:23 AM ET in winter.
+    - cron: "23 7 * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  # Development facts for the report lines of a production run. Its failure does not stop the production check.
+  development:
+    # Main's own checker runs with the credentials; a dispatch must come from the deploy owner, as in cms-deploy.yml.
+    if: >-
+      vars.CANONICAL_GITHUB_REPOSITORY != '' && github.repository == vars.CANONICAL_GITHUB_REPOSITORY && github.ref == 'refs/heads/main' &&
+      (github.event_name == 'schedule' || (github.triggering_actor == vars.CMS_DEPLOY_OWNER && inputs.target == 'production'))
+    environment: development
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      facts: ${{ steps.facts.outputs.facts }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22.23.5"
+          package-manager-cache: false
+      - name: Read development facts
+        id: facts
+        env:
+          CMS_DEPLOYMENT_VARIABLES_JSON: ${{ toJSON(vars) }}
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_DEV_WORKER_TOKEN: ${{ secrets.CLOUDFLARE_DEV_WORKER_TOKEN }}
+          CLOUDFLARE_DEV_PAGES_TOKEN: ${{ secrets.CLOUDFLARE_DEV_PAGES_TOKEN }}
+          CMS_DEV_ACCESS_CLIENT_ID: ${{ secrets.CMS_DEV_ACCESS_CLIENT_ID }}
+          CMS_DEV_ACCESS_CLIENT_SECRET: ${{ secrets.CMS_DEV_ACCESS_CLIENT_SECRET }}
+        run: |
+          node scripts/check-release-drift.mjs development --facts "$RUNNER_TEMP/facts.json" || true
+          echo "facts=$(cat "$RUNNER_TEMP/facts.json" 2>/dev/null || echo '{}')" >> "$GITHUB_OUTPUT"
+
+  check:
+    needs: development
+    if: >-
+      always() && vars.CANONICAL_GITHUB_REPOSITORY != '' && github.repository == vars.CANONICAL_GITHUB_REPOSITORY && github.ref == 'refs/heads/main' &&
+      (github.event_name == 'schedule' || github.triggering_actor == vars.CMS_DEPLOY_OWNER)
+    environment: ${{ inputs.target == 'development' && 'development' || 'production' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      # The checker runs from this main checkout; the source commit is only read through git.
+      - name: Require a source commit on main
+        id: source
+        env:
+          SOURCE: ${{ inputs.source }}
+        run: |
+          set -euo pipefail
+          source="${SOURCE:-$(git rev-parse HEAD)}"
+          [[ "$source" =~ ^[a-f0-9]{40}$ ]]
+          git merge-base --is-ancestor "$source" HEAD
+          # Supported sources carry the Functions registry (main since Nov. 14, 2026); no release goes back before it.
+          git cat-file -e "$source:config/release-surfaces.json"
+          echo "sha=$source" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22.23.5"
+          package-manager-cache: false
+      # The edge snippet is built with the site's locked esbuild, as its README builds it.
+      - name: Install the site packages
+        if: inputs.target != 'development'
+        run: npm --prefix site ci --ignore-scripts --prefer-offline --no-audit --no-fund
+      - name: Check drift
+        id: drift
+        env:
+          TARGET: ${{ inputs.target || 'production' }}
+          SOURCE: ${{ steps.source.outputs.sha }}
+          AFTER: ${{ inputs.after && '--after' || '' }}
+          DEVELOPMENT_FACTS: ${{ needs.development.outputs.facts }}
+          CMS_DEPLOYMENT_VARIABLES_JSON: ${{ toJSON(vars) }}
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CMS_ADMIN_ACCESS_API_TOKEN: ${{ secrets.CMS_ADMIN_ACCESS_API_TOKEN }}
+          CLOUDFLARE_DEV_WORKER_TOKEN: ${{ inputs.target == 'development' && secrets.CLOUDFLARE_DEV_WORKER_TOKEN || '' }}
+          CLOUDFLARE_DEV_PAGES_TOKEN: ${{ inputs.target == 'development' && secrets.CLOUDFLARE_DEV_PAGES_TOKEN || '' }}
+          CMS_DEV_ACCESS_CLIENT_ID: ${{ inputs.target == 'development' && secrets.CMS_DEV_ACCESS_CLIENT_ID || '' }}
+          CMS_DEV_ACCESS_CLIENT_SECRET: ${{ inputs.target == 'development' && secrets.CMS_DEV_ACCESS_CLIENT_SECRET || '' }}
+        run: |
+          set -o pipefail
+          compare=()
+          if [ -n "$DEVELOPMENT_FACTS" ] && [ "$DEVELOPMENT_FACTS" != "{}" ]; then
+            printf '%s' "$DEVELOPMENT_FACTS" > "$RUNNER_TEMP/development.json"
+            compare=(--compare "$RUNNER_TEMP/development.json")
+          fi
+          node scripts/check-release-drift.mjs "$TARGET" --source "$SOURCE" $AFTER "${compare[@]}" | tee "$RUNNER_TEMP/drift.txt"
+      - name: Summary
+        if: always()
+        run: |
+          { echo '```'; cat "$RUNNER_TEMP/drift.txt" 2>/dev/null; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      # A red nightly run opens or updates one issue; the next green run closes it. No message to anyone.
+      - name: Nightly issue
+        # A step that failed before the check leaves it skipped: that is a failed nightly run too.
+        if: always() && github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OUTCOME: ${{ steps.drift.outcome }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          title="Release drift check failed"
+          number=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "\"$title\" in:title" --json number,title \
+            --jq "map(select(.title == \"$title\"))[0].number // empty")
+          { echo "Nightly run: $RUN_URL"; echo; echo '```'; cat "$RUNNER_TEMP/drift.txt" 2>/dev/null || echo "The drift check did not run; see the run log."; echo '```'; } > "$RUNNER_TEMP/body.md"
+          if [ "$OUTCOME" = "success" ]; then
+            if [ -n "$number" ]; then gh issue close "$number" --repo "$GITHUB_REPOSITORY" --comment "The nightly drift check passed: $RUN_URL"; fi
+          elif [ -n "$number" ]; then
+            gh issue comment "$number" --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/body.md"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body-file "$RUNNER_TEMP/body.md"
+          fi
