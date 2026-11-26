@@ -128,6 +128,7 @@ jobs:
           scripts/cms-debug-browser.test.mjs
           scripts/smoke-signed-in-preview.test.mjs
           scripts/firebase-provider-limit.test.mjs
+          scripts/release-streak.test.mjs
           scripts/network-fault.test.mjs
           .github/scripts/ensure-panel-browser-deps.test.mjs
           tests/scripts/check-dev-machine-receipt.test.mjs
