@@ -34,7 +34,6 @@ const SOURCE = "2".repeat(40);
 const PREVIOUS = "ec7f48a199b53b42e7aa66d43f83c7fdf7963561"; // njpbs.org/_publication.json on Nov. 26
 const TOOL = "1".repeat(40);
 const deployments = (env) => `repos/CenterCoopMedia/njpbs/deployments?environment=${env}&per_page=100&page=1`;
-const cmsRuns = "repos/CenterCoopMedia/njpbs/actions/workflows/cms-deploy.yml/runs?created=%3E%3D2026-11-01&per_page=100&page=1";
 const run = (id) => `repos/CenterCoopMedia/njpbs/actions/runs/${id}`;
 const queued = "repos/CenterCoopMedia/njpbs/actions/workflows/cms-deploy.yml/runs?status=queued&per_page=100&page=1";
 // One production write: its run, its environment deployment and that deployment's statuses.
