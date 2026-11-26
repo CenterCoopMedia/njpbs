@@ -38,8 +38,8 @@ const cmsRuns = "repos/CenterCoopMedia/njpbs/actions/workflows/cms-deploy.yml/ru
 const run = (id) => `repos/CenterCoopMedia/njpbs/actions/runs/${id}`;
 const queued = "repos/CenterCoopMedia/njpbs/actions/workflows/cms-deploy.yml/runs?status=queued&per_page=100&page=1";
 // One production write: its run, its environment deployment and that deployment's statuses.
-function write(a, { runId, deployment, workflow = "cms-deploy.yml", sha, start, end, state = "success", attempt = 1 }) {
-  a[run(runId)] = { id: runId, path: `.github/workflows/${workflow}`, run_attempt: attempt, conclusion: state };
+function write(a, { runId, deployment, workflow = "cms-deploy.yml", sha, started, start, end, state = "success", attempt = 1 }) {
+  a[run(runId)] = { id: runId, path: `.github/workflows/${workflow}`, run_attempt: attempt, conclusion: state, run_started_at: started ?? start };
   a[deployments("production")].unshift({ id: deployment, sha, created_at: start });
   a[`repos/CenterCoopMedia/njpbs/deployments/${deployment}/statuses?per_page=100`] = [{ state, created_at: end, target_url: `https://github.com/CenterCoopMedia/njpbs/actions/runs/${runId}/job/1` }];
 }
@@ -177,4 +177,19 @@ test("a rerun after the release, or a promote deploy that overlaps it, stops the
   const b = await releaseStreak(fake(overlap), opts);
   assert.equal(b.count, 0);
   assert.match(b.releases[0].why.join("; "), /^2 production deploy runs inside the record, not 1/);
+});
+
+test("the check before must end before the CMS run started; a run waiting for development is not pending", async () => {
+  const opts = { need: 1, since, repo: "CenterCoopMedia/njpbs", toolRepo: "jamditis/jawn-ops" };
+  // The CMS run started at 03:01:30, before the drift check ended at 03:02.
+  const early = counted();
+  early[run(50001)].run_started_at = "2026-12-01T03:01:30Z";
+  assert.deepEqual((await releaseStreak(fake(early), opts)).releases[0].why, ["no green drift check before the CMS run"]);
+  // A promote.yml run waiting on the development environment's approval.
+  const dev = counted();
+  dev["repos/CenterCoopMedia/njpbs/actions/workflows/promote.yml/runs?status=waiting&per_page=100&page=1"] = { workflow_runs: [{ id: 50050 }] };
+  dev["repos/CenterCoopMedia/njpbs/actions/runs/50050/pending_deployments"] = [{ environment: { name: "development" } }];
+  const result = await releaseStreak(fake(dev), opts);
+  assert.equal(result.met, true);
+  assert.deepEqual(result.pending, []);
 });

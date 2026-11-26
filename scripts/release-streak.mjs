@@ -79,23 +79,32 @@ const PRODUCTION_WRITERS = ["cms-deploy.yml", "cms-staging-deploy.yml", "promote
 // new deployment, so every attempt is one entry. GitHub links each
 // deployment to its job, and the run names the workflow.
 async function productionDeploys(get, repo, since) {
-  const deployments = await list(get, `repos/${repo}/deployments?environment=production`, null, since);
+  // Newest first. Reading goes on past --since while a deployment still ended
+  // at or after it, so a write that crosses the window start is kept.
+  const deployments = await list(get, `repos/${repo}/deployments?environment=production`);
   const writes = [];
   for (const d of deployments) {
     const statuses = await get(`repos/${repo}/deployments/${d.id}/statuses?per_page=100`);
+    const last = statuses.find(ended)?.created_at;
+    if (d.created_at < since && last && last < since) break;
     const id = runId(statuses.at(-1)?.target_url);
     if (!id) continue;
     const run = await get(`repos/${repo}/actions/runs/${id}`);
     const workflow = (run.path ?? "").split("/").pop();
     if (!PRODUCTION_WRITERS.includes(workflow)) continue;
     const end = statuses.find(ended);
-    writes.push({ id, workflow, created: d.created_at, updated: end?.created_at ?? null, conclusion: end?.state ?? null, attempt: run.run_attempt, sha: d.sha });
+    // started: when the run (this attempt) began, before GitHub made its
+    // environment deployment.
+    writes.push({ id, workflow, started: run.run_started_at ?? d.created_at, created: d.created_at, updated: end?.created_at ?? null, conclusion: end?.state ?? null, attempt: run.run_attempt, sha: d.sha });
   }
-  // A writer run that GitHub has not finished may still deploy production,
-  // whenever it was dispatched.
-  const unfinished = await Promise.all(PRODUCTION_WRITERS.flatMap((workflow) => ["queued", "waiting", "in_progress"].map((status) =>
-    list(get, `repos/${repo}/actions/workflows/${workflow}/runs?status=${status}`, "workflow_runs"))));
-  const pending = [...new Set([...unfinished.flat().map((r) => r.id), ...writes.filter((w) => !w.updated).map((w) => w.id)])];
+  // Writes not finished yet: a production deployment with no end, a run
+  // waiting for the production environment's approval, or a queued run whose
+  // target GitHub does not show yet.
+  const waiting = (await Promise.all(PRODUCTION_WRITERS.map((workflow) => list(get, `repos/${repo}/actions/workflows/${workflow}/runs?status=waiting`, "workflow_runs")))).flat();
+  const forProduction = await Promise.all(waiting.map(async (r) =>
+    (await get(`repos/${repo}/actions/runs/${r.id}/pending_deployments`)).some((p) => p.environment?.name === "production") ? r.id : null));
+  const queued = (await Promise.all(PRODUCTION_WRITERS.map((workflow) => list(get, `repos/${repo}/actions/workflows/${workflow}/runs?status=queued`, "workflow_runs")))).flat();
+  const pending = [...new Set([...writes.filter((w) => !w.updated).map((w) => w.id), ...forProduction.filter(Boolean), ...queued.map((r) => r.id)])];
   return [writes.sort((a, b) => a.created.localeCompare(b.created)), pending];
 }
 
@@ -164,7 +173,7 @@ async function judge(get, release, ctx) {
   // Both runs fall inside the record: only that command dispatches with its
   // random ID while the record is open.
   const within = (d) => record.end && d.created_at >= record.start && d.updated_at <= record.end.at;
-  if (!(await green(drift("Release drift production"), (d) => within(d) && d.updated_at <= run.created))) why.push("no green drift check before the CMS run");
+  if (!(await green(drift("Release drift production"), (d) => within(d) && d.updated_at <= run.started))) why.push("no green drift check before the CMS run");
   if (!(await green(drift("Release drift production after"), (d) => within(d) && d.created_at >= run.updated))) why.push("no green drift check after the release (conditions 4 and 5)");
   // 6
   if (!(await onMaster(get, ctx.toolRepo, record.payload.tool))) why.push(`tool ${short(record.payload.tool) || "unnamed"} is not on jawn-ops master`);
