@@ -68,10 +68,17 @@ async function records(get, repo, environment, since) {
   }));
 }
 
-// Production CMS runs: the cms-deploy.yml runs whose job used the production
+// The workflows that write production. A run of any of them that used the
+// production environment is a production deploy; a release makes exactly one,
+// of cms-deploy.yml. The other production-environment workflows only read.
+const PRODUCTION_WRITERS = ["cms-deploy.yml", "cms-staging-deploy.yml", "promote.yml"];
+
+// Production deploy runs: writer runs whose job used the production
 // environment. GitHub links each environment deployment to its job.
 async function productionCMSRuns(get, repo, since) {
-  const runs = await list(get, `repos/${repo}/actions/workflows/cms-deploy.yml/runs?created=%3E%3D${since.slice(0, 10)}`, "workflow_runs");
+  const runs = (await Promise.all(PRODUCTION_WRITERS.map(async (workflow) =>
+    (await list(get, `repos/${repo}/actions/workflows/${workflow}/runs?created=%3E%3D${since.slice(0, 10)}`, "workflow_runs"))
+      .map((r) => ({ ...r, workflow }))))).flat();
   const deployments = await list(get, `repos/${repo}/deployments?environment=production`, null, since);
   const production = new Map();
   for (const d of deployments) {
@@ -82,7 +89,7 @@ async function productionCMSRuns(get, repo, since) {
   // A run GitHub has not finished may still get a production deployment.
   const pending = runs.filter((r) => !production.has(r.id) && !r.conclusion).map((r) => r.id);
   return [runs.filter((r) => production.has(r.id))
-    .map((r) => ({ id: r.id, created: r.created_at, updated: r.updated_at, conclusion: r.conclusion, attempt: r.run_attempt, sha: production.get(r.id) }))
+    .map((r) => ({ id: r.id, workflow: r.workflow, created: r.created_at, updated: r.updated_at, conclusion: r.conclusion, attempt: r.run_attempt, sha: production.get(r.id) }))
     .sort((a, b) => a.created.localeCompare(b.created)), pending];
 }
 
@@ -120,7 +127,7 @@ async function judge(get, release, ctx) {
   const why = [];
   const { record, cms } = release;
   if (!record) {
-    why.push(`no release-production record (${cms.length} production CMS run${cms.length === 1 ? "" : "s"}: ${cms.map((r) => `${r.id} ${r.conclusion}`).join(", ")})`);
+    why.push(`no release-production record (${cms.length} production deploy run${cms.length === 1 ? "" : "s"}: ${cms.map((r) => `${r.workflow === "cms-deploy.yml" ? "" : r.workflow + " "}${r.id} ${r.conclusion}`).join(", ")})`);
     return why;
   }
   // 1: every production record of the commit, whatever its age.
@@ -131,7 +138,8 @@ async function judge(get, release, ctx) {
   // 3. A record whose end names its CMS run ("cms=<id>") needs that run.
   // Records without it use the window rule alone (coordinator ruling, Nov. 26,
   // 2026, ~9:37 AM ET): delete this fallback once every counted record carries cms=.
-  if (cms.length !== 1) why.push(`${cms.length} production CMS runs inside the record, not 1`);
+  if (cms.length !== 1) why.push(`${cms.length} production deploy runs inside the record, not 1`);
+  else if (cms[0].workflow !== "cms-deploy.yml") why.push(`the production deploy inside the record is ${cms[0].workflow} run ${cms[0].id}`);
   else if (record.end?.cms && cms[0].id !== record.end.cms) why.push(`the record names CMS run ${record.end.cms}, not ${cms[0].id}`);
   const run = cms[0];
   if (run && (run.conclusion !== "success" || run.attempt !== 1)) why.push(`CMS run ${run.id} ${run.conclusion}, attempt ${run.attempt}`);
@@ -182,7 +190,10 @@ export async function releaseStreak(get, { need, since, repo, toolRepo }) {
   for (const run of cmsRuns) {
     if (production.some((r) => inside(run, r))) { loose = null; continue; }
     const recordBetween = loose && production.some((r) => r.start > loose.cms.at(-1).created && r.start < run.created);
-    if (!loose || recordBetween) events.push(loose = { at: run.created, record: null, cms: [] });
+    // Runs 12 hours apart are separate attempts. This only names them: any
+    // stretch without a record already ends the streak.
+    const apart = loose && Date.parse(run.created) - Date.parse(loose.cms.at(-1).created) > 12 * 3600e3;
+    if (!loose || recordBetween || apart) events.push(loose = { at: run.created, record: null, cms: [] });
     loose.cms.push(run);
   }
   events.sort((a, b) => b.at.localeCompare(a.at));

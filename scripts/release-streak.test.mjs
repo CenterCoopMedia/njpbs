@@ -25,7 +25,7 @@ test("Nov. 26: no release counts; the release without a record is named with its
   assert.equal(release.counted, false);
   assert.equal(release.sha, null);
   assert.equal(release.mainAtDispatch, "ec7f48a199b53b42e7aa66d43f83c7fdf7963561");
-  assert.deepEqual(release.why, ["no release-production record (3 production CMS runs: 45739394936 failure, 45757428529 failure, 45762652112 success)"]);
+  assert.deepEqual(release.why, ["no release-production record (3 production deploy runs: 45739394936 failure, 45757428529 failure, 45762652112 success)"]);
 });
 
 // A release built to the record contract on top of the recorded data, one
@@ -111,7 +111,7 @@ test("a record that never ended takes no production CMS run", async () => {
   a["repos/CenterCoopMedia/njpbs/deployments/9001/statuses?per_page=100"] = [{ state: "in_progress", description: "started", created_at: "2026-12-01T03:00:01Z" }];
   const result = await releaseStreak(fake(a), { need: 1, since, repo: "CenterCoopMedia/njpbs", toolRepo: "jamditis/jawn-ops" });
   assert.equal(result.count, 0);
-  assert.deepEqual(result.releases[0].why, ["no release-production record (1 production CMS run: 50001 success)"]);
+  assert.deepEqual(result.releases[0].why, ["no release-production record (1 production deploy run: 50001 success)"]);
 });
 
 test("a record that does not name the live commit does not count", async () => {
@@ -144,8 +144,19 @@ test("a hand CMS run inside the record, or a run left by an earlier command, sto
   a[deployments("production")].unshift({ id: 9005, sha: SOURCE, created_at: "2026-12-01T03:16:02Z" });
   a["repos/CenterCoopMedia/njpbs/deployments/9005/statuses?per_page=100"] = [{ state: "success", created_at: "2026-12-01T03:18:00Z", target_url: "https://github.com/CenterCoopMedia/njpbs/actions/runs/50002/job/1" }];
   const hand = await releaseStreak(fake(a), { need: 1, since, repo: "CenterCoopMedia/njpbs", toolRepo: "jamditis/jawn-ops" });
-  assert.match(hand.releases[0].why.join("; "), /2 production CMS runs inside the record, not 1/);
+  assert.match(hand.releases[0].why.join("; "), /2 production deploy runs inside the record, not 1/);
   // An earlier command of the same commit made its own record, so the later one is not a first try.
   const resumed = await releaseStreak(fake(counted({ earlier: true })), { need: 1, since, repo: "CenterCoopMedia/njpbs", toolRepo: "jamditis/jawn-ops" });
   assert.match(resumed.releases[0].why.join("; "), /2 release-production records for the commit/);
+});
+
+test("a cms-staging-deploy.yml production run after the last release ends the streak", async () => {
+  const a = counted();
+  const staging = "repos/CenterCoopMedia/njpbs/actions/workflows/cms-staging-deploy.yml/runs?created=%3E%3D2026-11-01&per_page=100&page=1";
+  a[staging] = { workflow_runs: [{ id: 50020, display_title: "CMS staging deploy", created_at: "2026-12-02T15:00:00Z", updated_at: "2026-12-02T15:20:00Z", conclusion: "success", run_attempt: 1 }, ...a[staging].workflow_runs] };
+  a[deployments("production")].unshift({ id: 9020, sha: SOURCE, created_at: "2026-12-02T15:00:02Z" });
+  a["repos/CenterCoopMedia/njpbs/deployments/9020/statuses?per_page=100"] = [{ state: "success", created_at: "2026-12-02T15:20:00Z", target_url: "https://github.com/CenterCoopMedia/njpbs/actions/runs/50020/job/1" }];
+  const result = await releaseStreak(fake(a), { need: 1, since, repo: "CenterCoopMedia/njpbs", toolRepo: "jamditis/jawn-ops" });
+  assert.equal(result.count, 0);
+  assert.deepEqual(result.releases[0].why, ["no release-production record (1 production deploy run: cms-staging-deploy.yml 50020 success)"]);
 });
