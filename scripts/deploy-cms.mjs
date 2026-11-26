@@ -8,6 +8,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { deployFirebase } from "./lib/cms-firebase-deploy.mjs";
+import { after, blockedBy } from "./lib/cms-deploy-order.mjs";
 import { faultText, repeatNetworkFault } from "./lib/network-fault.mjs";
 
 const root = resolve(fileURLToPath(new URL("../", import.meta.url)));
@@ -273,12 +274,6 @@ const steps = {
   },
 };
 
-// A step whose failure can follow from an earlier one. On development it still runs, so one run shows every fault.
-// Production skips it: a new Admin or API must not go live over handlers that failed to deploy.
-const after = { render: ["install"], "functions-build": ["install", "render"], seed: ["install"], firebase: ["install", "functions-build", "seed"],
-  "event-grants": ["firebase"], "cms-api": ["render", "install", "firebase"], renderer: ["install", "render"],
-  studio: ["install"], "admin-build": ["install", "render"], "admin-deploy": ["admin-build", "firebase", "cms-api"], "admin-shell": ["install", "admin-deploy"],
-  smoke: ["firebase", "cms-api", "renderer", "admin-deploy", "seed"] };
 const unknown = only.filter(name => !Object.hasOwn(steps, name));
 if (unknown.length) throw new Error(`Unknown step ${unknown.join(", ")}; steps: ${Object.keys(steps).join(", ")}`);
 console.log(`Deploy the ${environment} CMS at ${sha}`);
@@ -288,7 +283,7 @@ for (const name of Object.keys(steps).filter(step => !only.length || only.includ
   tail = log = "";
   console.log(`\n>>> START ${name}`);
   let error;
-  const blocked = dev || name === "smoke" ? [] : (after[name] ?? []).filter(step => report.some(row => row.name === step && row.error));
+  const blocked = blockedBy(name, report.filter(row => row.error).map(row => row.name), dev);
   try {
     if (blocked.length) throw new Error(`Not run: ${blocked.join(", ")} failed`);
     // Each step ends in the same state when it runs again, so a lost connection repeats it. The smoke reports what it meets.
