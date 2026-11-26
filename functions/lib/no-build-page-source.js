@@ -4,7 +4,7 @@ const { readNoBuildFamilyAdmission, admitsNoBuildPage } = require("./no-build-fa
 const { validateNoBuildPageSnapshot } = require("./no-build-page-contract");
 const { projectPublicPageDocument, publicAssetRequirementsForDocument, PublicContentProjectionError, legacyBlockOnlySnapshot } = require("./public-content-projection");
 const { assertPublishedAssetProjection } = require("./published-media-safety");
-const { assertMediaLifecycleDeploymentFence } = require("./public-deployment");
+const { assertMediaLifecycleFenceInTransaction } = require("./public-deployment-pointer");
 const { mediaReplacementRef } = require("./media-replacement");
 const { pagePublicationTarget } = require("./no-build-page-target");
 
@@ -42,7 +42,7 @@ async function readNoBuildPageProjectionInTransaction({ firestore, transaction, 
       else {
         const root = (await transaction.get(firestore.doc("system/publicDeployment"))).data();
         if (root?.schemaVersion === 2) await require("./public-release-media-fence").assertPairMediaFenceInTransaction({ firestore, transaction, selector: root });
-        else assertMediaLifecycleDeploymentFence(root);
+        else await assertMediaLifecycleFenceInTransaction({ firestore, transaction, pointer: root });
       }
       uploadedMediaReady = true;
     }
