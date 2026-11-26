@@ -44,8 +44,14 @@ function counted(change = {}) {
     { state: change.end ?? "success", description: `failed=${change.failed ?? 0} seconds=1484 refused=701`, created_at: "2026-12-01T03:30:00Z" },
     { state: "in_progress", description: "", created_at: "2026-12-01T03:00:01Z" },
   ];
+  a[deployments(`release-production&sha=${SOURCE}`)] = [record];
   a[deployments(`release-development&sha=${SOURCE}`)] = [{ id: 9000, sha: SOURCE, environment: "release-development", created_at: "2026-11-30T03:00:00Z", payload: { release_id: "d1", tool: TOOL } }];
-  a["repos/CenterCoopMedia/njpbs/deployments/9000/statuses?per_page=100"] = [{ state: change.dev ?? "success", description: "failed=0 seconds=1300 refused=0", created_at: "2026-11-30T03:25:00Z" }];
+  a["repos/CenterCoopMedia/njpbs/deployments/9000/statuses?per_page=100"] = [{ state: change.dev ?? "success", description: "failed=0 seconds=1300 refused=0", created_at: change.devEnd ?? "2026-11-30T03:25:00Z" }];
+  if (change.earlier) {
+    // A failed attempt of the same commit, older than the window.
+    a[deployments(`release-production&sha=${SOURCE}`)].push({ ...record, id: 8999, created_at: "2026-09-01T03:00:00Z" });
+    a["repos/CenterCoopMedia/njpbs/deployments/8999/statuses?per_page=100"] = [{ state: "failure", description: "failed=1 seconds=9 refused=0", created_at: "2026-09-01T03:10:00Z" }];
+  }
   // The production CMS run of the release, linked by its environment deployment.
   a[cmsRuns] = { workflow_runs: [{ id: 50001, display_title: "CMS deploy [c1]", created_at: "2026-12-01T03:05:00Z", updated_at: "2026-12-01T03:15:00Z", conclusion: "success", run_attempt: change.attempt ?? 1 }, ...a[cmsRuns].workflow_runs] };
   a[deployments("production")] = [{ id: 9002, sha: SOURCE, created_at: "2026-12-01T03:05:02Z" }, ...a[deployments("production")]];
@@ -78,6 +84,8 @@ test("each broken condition stops the count and is named", async () => {
     [{ tool: "diverged" }, /tool 11111111 is not on jawn-ops master/],
     [{ dev: "failure" }, /first release-development record did not succeed/],
     [{ ahead: 0 }, /the commit was already live/],
+    [{ earlier: true }, /2 release-production records for the commit/],
+    [{ devEnd: "2026-12-01T03:10:00Z" }, /the development release ended after the production release started/],
   ];
   for (const [change, why] of cases) {
     const result = await releaseStreak(fake(counted(change)), { need: 1, since, repo: "CenterCoopMedia/njpbs", toolRepo: "jamditis/jawn-ops" });

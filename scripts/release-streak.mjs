@@ -108,8 +108,8 @@ async function judge(get, release, ctx) {
     why.push(`no release-production record (${cms.length} production CMS run${cms.length === 1 ? "" : "s"}: ${cms.map((r) => `${r.id} ${r.conclusion}`).join(", ")})`);
     return why;
   }
-  // 1
-  const same = ctx.production.filter((r) => r.sha === record.sha);
+  // 1: every production record of the commit, whatever its age.
+  const same = await records(get, ctx.repo, `release-production&sha=${record.sha}`, null);
   if (same.length > 1) why.push(`${same.length} release-production records for the commit`);
   if (!record.end) why.push("record has no end status");
   else if (record.end.state !== "success" || record.end.failed !== 0) why.push(`record ended ${record.end.state}${record.end.failed == null ? "" : `, failed=${record.end.failed}`}`);
@@ -127,9 +127,10 @@ async function judge(get, release, ctx) {
   if (!(await onMaster(get, ctx.toolRepo, record.payload.tool))) why.push(`tool ${short(record.payload.tool) || "unnamed"} is not on jawn-ops master`);
   // 7: every development record of the commit, whatever its age.
   const development = await records(get, ctx.repo, `release-development&sha=${record.sha}`, null);
-  const dev = development.filter((r) => r.start < record.start).sort((a, b) => a.start.localeCompare(b.start))[0];
-  if (!dev) why.push("no earlier release-development record");
+  const dev = development.sort((a, b) => a.start.localeCompare(b.start))[0];
+  if (!dev || dev.start > record.start) why.push("no earlier release-development record");
   else if (dev.end?.state !== "success" || dev.end.failed !== 0) why.push("first release-development record did not succeed");
+  else if (dev.end.at > record.start) why.push("the development release ended after the production release started");
   // 9
   if (!previous) why.push("the previous production source is unknown; pass an earlier --since");
   else if ((await brings(get, ctx.repo, previous, record.sha)) === 0) why.push("the commit was already live");
