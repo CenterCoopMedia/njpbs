@@ -105,12 +105,12 @@ async function ahead(get, repo, live, source) {
   return compare.status === "ahead" && compare.ahead_by > 0;
 }
 
-// A drift run counts only when one of its jobs ran and succeeded; a run whose
-// jobs were all skipped can still end "success".
+// A drift run counts only when its production job, "check", ran and
+// succeeded; a run whose check job was skipped can still end "success".
 async function ranGreen(get, repo, run) {
   if (run.conclusion !== "success") return false;
   const { jobs = [] } = await get(`repos/${repo}/actions/runs/${run.id}/jobs?per_page=100`);
-  return jobs.some((j) => j.conclusion === "success");
+  return jobs.some((j) => j.name === "check" && j.conclusion === "success");
 }
 
 async function judge(get, release, ctx) {

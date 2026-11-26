@@ -63,7 +63,7 @@ function counted(change = {}) {
   ] };
   a[`repos/jamditis/jawn-ops/compare/master...${TOOL}`] = { status: change.tool ?? "behind" };
   a[`repos/CenterCoopMedia/njpbs/compare/${PREVIOUS}...${SOURCE}`] = change.compare ?? { status: "ahead", ahead_by: 1, behind_by: 0 };
-  for (const id of [60001, 60002]) a[`repos/CenterCoopMedia/njpbs/actions/runs/${id}/jobs?per_page=100`] = { jobs: [{ name: "check", conclusion: change.driftJob ?? "success" }] };
+  for (const id of [60001, 60002]) a[`repos/CenterCoopMedia/njpbs/actions/runs/${id}/jobs?per_page=100`] = { jobs: [{ name: "development", conclusion: "success" }, { name: "check", conclusion: change.driftJob ?? "success" }] };
   return a;
 }
 
