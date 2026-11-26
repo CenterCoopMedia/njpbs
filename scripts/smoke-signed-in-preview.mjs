@@ -104,9 +104,10 @@ export async function checkSignedInPreview(browser, { admin, preview, credential
     await hang.over(Promise.race([unavailable, noPreview, locked, button.waitFor({ state: "visible" })]));
     // The editor shows the button only after its load, with the saved receipt already recorded
     // (EditorWorkspace.tsx), so a button that is disabled when it appears stays disabled.
-    if (await hang.over(button.isDisabled())) {
-      const label = await hang.over(page.getByRole("group", { name: /^Preview unavailable: / })
-        .evaluateAll(nodes => nodes[0]?.getAttribute("aria-label") ?? null).catch(() => null));
+    // The lock watcher stays in every wait until the click lands.
+    if (await hang.over(Promise.race([locked, button.isDisabled()]))) {
+      const label = await hang.over(Promise.race([locked, page.getByRole("group", { name: /^Preview unavailable: / })
+        .evaluateAll(nodes => nodes[0]?.getAttribute("aria-label") ?? null).catch(() => null)]));
       saw.reason = disabledReasons.get(label?.replace(/^Preview unavailable: /, "")) ?? "unlisted";
       throw new PreviewSmokeFailure("preview_control_disabled");
     }
@@ -151,7 +152,6 @@ export async function checkSignedInPreview(browser, { admin, preview, credential
     page.getByRole("alert").filter({ hasText: editorStop }).first().waitFor({ state: "visible" })
       .then(() => stop("preview_admin_stopped"), () => {});
     hang.limit(previewMs);
-    // Another session can still take the editor before the click lands; its lock ends the wait.
     const [, , document] = await hang.over(Promise.race([stopped, locked, Promise.all([
       opened.then(value => {
         popup = value; saw.popup = true;
