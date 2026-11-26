@@ -55,7 +55,7 @@ function counted(change = {}) {
     { id: 60001, display_title: "Release drift [r1]", created_at: "2026-12-01T03:00:05Z", updated_at: "2026-12-01T03:02:00Z", conclusion: "success" },
   ] };
   a[`repos/jamditis/jawn-ops/compare/master...${TOOL}`] = { status: change.tool ?? "behind" };
-  a[`repos/CenterCoopMedia/njpbs/compare/${PREVIOUS}...${SOURCE}`] = { ahead_by: 1, commits: [{ commit: { committer: { date: change.oldest ?? "2026-11-26T04:30:00Z" } } }] };
+  a[`repos/CenterCoopMedia/njpbs/compare/${PREVIOUS}...${SOURCE}`] = { ahead_by: change.ahead ?? 1 };
   return a;
 }
 
@@ -76,7 +76,7 @@ test("each broken condition stops the count and is named", async () => {
     [{ drift: [] }, /no green drift check before the CMS run/],
     [{ tool: "diverged" }, /tool 11111111 is not on jawn-ops master/],
     [{ dev: "failure" }, /first release-development record did not succeed/],
-    [{ oldest: "2026-11-24T00:00:00Z" }, /production was 7 days behind main/],
+    [{ ahead: 0 }, /the commit was already live/],
   ];
   for (const [change, why] of cases) {
     const result = await releaseStreak(fake(counted(change)), { need: 1, since, repo: "CenterCoopMedia/njpbs", toolRepo: "jamditis/jawn-ops" });

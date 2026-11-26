@@ -16,7 +16,8 @@
 // - release-drift.yml runs carry release_id in their run name ("[<id>]"). The
 //   first one is the check before the first write, the last the check after.
 //
-// A release counts when all nine conditions of the release reliability plan hold:
+// A release counts when all nine conditions of the release reliability plan hold
+// (9 as changed Nov. 26: any night, no days-behind limit):
 //  1. One release-production record for the commit; it ended success, failed=0.
 //  2. A drift run with its ID ended green before the production CMS run started.
 //  3. One production cms-deploy.yml run inside the record: attempt 1, success.
@@ -28,9 +29,8 @@
 //     CMS runs with no record count as one release that does not count.
 //  (2 and 4 need release-drift.yml and the release's drift step, plan items R3
 //  and R5; until they land, no release counts.)
-//  9. At its start, the oldest commit the release brought was at most 5 days old (Tue and Thu releases, Joe, Nov. 26).
+//  9. The release brings new commits: its source is not the live one.
 
-const MAX_BEHIND_DAYS = 5;
 const DAY = 86400e3;
 
 export function parseEnd(description) {
@@ -96,11 +96,10 @@ async function onMaster(get, toolRepo, tool) {
   return compare.status === "behind" || compare.status === "identical";
 }
 
-// The commits a release brings: those after the previous production source.
-async function oldestBrought(get, repo, previous, source) {
+// How many commits a release brings after the previous production source.
+async function brings(get, repo, previous, source) {
   const compare = await get(`repos/${repo}/compare/${previous}...${source}`);
-  const dates = (compare.commits ?? []).map((c) => c.commit.committer.date).sort();
-  return { count: compare.ahead_by ?? dates.length, oldest: dates[0] ?? null };
+  return compare.ahead_by ?? 0;
 }
 
 async function judge(get, release, ctx) {
@@ -132,13 +131,9 @@ async function judge(get, release, ctx) {
   const dev = ctx.development.filter((r) => r.sha === record.sha && r.start < record.start).sort((a, b) => a.start.localeCompare(b.start))[0];
   if (!dev) why.push("no earlier release-development record");
   else if (dev.end?.state !== "success" || dev.end.failed !== 0) why.push("first release-development record did not succeed");
-  // 9 and "already live"
-  const brought = previous ? await oldestBrought(get, ctx.repo, previous, record.sha) : null;
-  if (!brought) why.push("the previous production source is unknown; pass an earlier --since");
-  else if (brought.count === 0) why.push("the commit was already live");
-  else if (brought.oldest && (Date.parse(record.start) - Date.parse(brought.oldest)) / DAY > MAX_BEHIND_DAYS) {
-    why.push(`production was ${Math.floor((Date.parse(record.start) - Date.parse(brought.oldest)) / DAY)} days behind main`);
-  }
+  // 9
+  if (!previous) why.push("the previous production source is unknown; pass an earlier --since");
+  else if ((await brings(get, ctx.repo, previous, record.sha)) === 0) why.push("the commit was already live");
   return why;
 }
 
