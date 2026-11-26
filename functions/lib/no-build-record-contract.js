@@ -1,4 +1,5 @@
 "use strict";
+const { operatorRefusal } = require("./operator-refusal");
 
 const { createHash } = require("node:crypto");
 const { assertInputTree } = require("./no-build-page-contract");
@@ -10,7 +11,7 @@ const { isServerMintableSlugShape } = require("./post-slug-contract");
 const RECORD_FAMILIES = new Map([["programs", "program"], ["events", "event"]]);
 const validRecordId = value => typeof value === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(value);
 function refuse(message) {
-  throw Object.assign(new Error(`Build-free record: ${message}`), { status: 409 });
+  throw operatorRefusal(Object.assign(new Error(`Build-free record: ${message}`), { status: 409 }));
 }
 function assertFields(value, allowed) {
   if (!value || Array.isArray(value) || typeof value !== "object" ||

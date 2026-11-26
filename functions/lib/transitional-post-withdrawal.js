@@ -1,4 +1,5 @@
 "use strict";
+const { operatorRefusal } = require("./operator-refusal");
 
 const { FieldValue } = require("firebase-admin/firestore");
 const { createPublicationReservation, reservePublicationRetry } = require("./publication-recovery");
@@ -18,7 +19,7 @@ async function assertPostWithdrawalBuildReady({ firestore }, deps = {}) {
   await (deps.assertPublishedMediaSafeFn ?? require("./published-media-safety").assertPublishedMediaSafe)({ firestore });
   if (readiness.transport !== "serializer" &&
       !(process.env.CMS_DEPLOYMENT_ENVIRONMENT === "development" && readiness.transport === "github")) {
-    throw Object.assign(new Error("The Post removal requires the configured serializer transport."), { status: 409 });
+    throw operatorRefusal(Object.assign(new Error("The Post removal requires the configured serializer transport."), { status: 409 }));
   }
   return readiness;
 }
@@ -30,7 +31,7 @@ async function preparePostWithdrawalBuild({ firestore, actor, change, operationI
   if (!(await readSerializerPublicationControlInTransaction({ firestore, transaction })).enabled) {
     // Only reached when the build-free removal could not prepare its background
     // work; the retired full build was the repair. Name that, not a generic wait.
-    throw Object.assign(new Error(WITHDRAWAL_REPAIR_MESSAGE), { status: 409, code: "serializer_publication_unavailable" });
+    throw operatorRefusal(Object.assign(new Error(WITHDRAWAL_REPAIR_MESSAGE), { status: 409, code: "serializer_publication_unavailable" }));
   }
   await assertSerializerPublicationAdmissionInTransaction({ firestore, transaction });
   const readiness = await assertPostWithdrawalBuildReady({ firestore });
@@ -52,9 +53,9 @@ async function checkedWithdrawalReceipt(firestore, receipt) {
   if (receipt?.transport === "github" && receipt.status === "queued") {
     const queue = (await firestore.doc(`cmsPublishQueue/${receipt.queueId}`).get()).data();
     if (queue?.status === "failed") {
-      throw Object.assign(new Error("Post removal could not start. Retry removal."), {
+      throw operatorRefusal(Object.assign(new Error("Post removal could not start. Retry removal."), {
         status: 502, queueId: receipt.queueId,
-      });
+      }));
     }
   }
   return receipt;
@@ -133,18 +134,18 @@ async function retryPostWithdrawalBuild({ firestore, operationId, actor, changes
           state.postId !== changes[0].id || state.sourceVersion !== changes[0].sourceVersion ||
           !samePublicationOwner(state, receipt.runtime) || stored.publiclyVisible !== false ||
           (stored.publishBuildQueueId && stored.publishBuildQueueId !== receipt.queueId)) {
-        throw Object.assign(new Error("The Post removal changed. Reload its status before retrying."), { status: 409 });
+        throw operatorRefusal(Object.assign(new Error("The Post removal changed. Reload its status before retrying."), { status: 409 }));
       }
       const previous = (await transaction.get(firestore.doc(`cmsPublishQueue/${receipt.queueId}`))).data();
       if (!["serializer", "github"].includes(previous?.transport) || previous.homeFullBuild?.sourceOperationId !== operationId ||
           !["reserved", "pending", "publishing", "failed", "cancelled", "superseded", "public_unconfirmed"].includes(previous.status) || previous.changes?.length !== 1 ||
           previous.changes[0].id !== state.postId || previous.changes[0].sourceVersion !== state.sourceVersion ||
           previous.changes[0].collection !== "cmsPosts" || previous.changes[0].operation !== "withdraw") {
-        throw Object.assign(new Error("The Post removal no longer needs this retry. Reload its status."), { status: 409 });
+        throw operatorRefusal(Object.assign(new Error("The Post removal no longer needs this retry. Reload its status."), { status: 409 }));
       }
       const detailRetry = original.status === "failed" ? { status: "pending", attempts: 0, claim: null, nextAttemptAt: 0, error: null } : {};
       if (["reserved", "pending", "publishing"].includes(previous.status)) {
-        if (stored.publishBuildQueueId !== receipt.queueId) throw Object.assign(new Error("The active Post removal needs recovery."), { status: 409 });
+        if (stored.publishBuildQueueId !== receipt.queueId) throw operatorRefusal(Object.assign(new Error("The active Post removal needs recovery."), { status: 409 }));
         return original.status === "failed" ? () => transaction.update(originalRef, detailRetry) : null;
       }
       const nextReceipt = { ...receipt, transport: readiness.transport, queueId: reservation.queueRef.id, status: "reserved", reservedAt: FieldValue.serverTimestamp() };
@@ -154,7 +155,7 @@ async function retryPostWithdrawalBuild({ firestore, operationId, actor, changes
     } });
   const receipt = await enqueuePostWithdrawalBuild({ firestore, operationId }, deps);
   if (!receipt?.queueId || ["cancelled", "superseded"].includes(receipt.status)) {
-    throw Object.assign(new Error("The Post removal changed. Reload its status."), { status: 409 });
+    throw operatorRefusal(Object.assign(new Error("The Post removal changed. Reload its status."), { status: 409 }));
   }
   return { success: true, queueId: receipt?.queueId, dispatched: false, status: "pending", transport: receipt.transport ?? "serializer",
     existingBuild: true, message: "Post removal is queued." };

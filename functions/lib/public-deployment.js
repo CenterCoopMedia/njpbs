@@ -1,4 +1,5 @@
 "use strict";
+const { operatorRefusal } = require("./operator-refusal");
 
 const { isDeepStrictEqual } = require("node:util");
 const { runtimeFields, assertRuntimeSource } = require("./publication-runtime-owner");
@@ -114,14 +115,14 @@ function projectPublicDeploymentRestoreReceipt(value) {
       !Number.isSafeInteger(value.generation) || value.generation < 1 || !isCommitSha(value.commitSha) ||
       !CLOUDFLARE_UUID.test(value.deploymentId ?? "") || !CLOUDFLARE_UUID.test(value.versionId ?? "") ||
       !["artifactDigest", "artifactReceiptDigest", "publicationReceiptDigest", "mediaManifestDigest"].every(field => DIGEST.test(value[field] ?? ""))) {
-    throw new PublicDeploymentStateError("The restored predecessor receipt is invalid");
+    throw operatorRefusal(new PublicDeploymentStateError("The restored predecessor receipt is invalid"));
   }
   return Object.freeze(Object.fromEntries([...RESTORED_PREDECESSOR_FIELDS].map(field => [field, value[field]])));
 }
 
 function projectPublicBuildReservation(value, expectedBuildBatchId = null) {
   if (value?.status === "retired") {
-    throw new PublicDeploymentStateError("The historical public reservation is retired");
+    throw operatorRefusal(new PublicDeploymentStateError("The historical public reservation is retired"));
   }
   if (
     !plainObject(value) ||
@@ -144,9 +145,9 @@ function projectPublicBuildReservation(value, expectedBuildBatchId = null) {
     timestampMillis(value.cutoffAt) === null ||
     timestampMillis(value.reservedAt) === null
   ) {
-    throw new PublicDeploymentStateError(
+    throw operatorRefusal(new PublicDeploymentStateError(
       "The public deployment build batch is invalid",
-    );
+    ));
   }
   if (value.runtime !== undefined) assertRuntimeSource(value.runtime, value.commitSha);
   if (value.noBuildStaticInput !== undefined) require("./no-build-post-static-return").projectStaticInput(value.noBuildStaticInput);
@@ -176,9 +177,9 @@ function assertPublicDeploymentReservedBatch(
     !hasOnlyFields(value, PUBLIC_BUILD_RESERVED_FIELDS) ||
     reservedAt < cutoffAt
   ) {
-    throw new PublicDeploymentStateError(
+    throw operatorRefusal(new PublicDeploymentStateError(
       "The public deployment build batch is invalid",
-    );
+    ));
   }
   return value;
 }
@@ -228,9 +229,9 @@ function assertPublicDeploymentCancelledBatch(
     !sameTimestamp(receipt.cancelledAt, value.cancelledAt) ||
     !inclusionBindingValid
   ) {
-    throw new PublicDeploymentStateError(
+    throw operatorRefusal(new PublicDeploymentStateError(
       "The cancelled public deployment build batch is invalid",
-    );
+    ));
   }
   return value;
 }
@@ -251,7 +252,7 @@ function assertPublicDeploymentRetiredBatch(value, expectedBuildBatchId = null) 
       !Number.isSafeInteger(receipt.activeGeneration) || receipt.activeGeneration <= value.generation ||
       !isCommitSha(receipt.activeCommitSha) || !isPublicDeploymentIdentifier(receipt.activeDeploymentId) ||
       !isCommitSha(receipt.operatorCommitSha) || !DIGEST.test(receipt.planDigest ?? "")) {
-    throw new PublicDeploymentStateError("The retired public deployment reservation is invalid");
+    throw operatorRefusal(new PublicDeploymentStateError("The retired public deployment reservation is invalid"));
   }
   return value;
 }
@@ -272,7 +273,7 @@ function assertPublicDeploymentRetiredCloudReleaseBatch(value, expectedBuildBatc
       receipt.originalOwner !== "cloudflare" ||
       !Number.isSafeInteger(receipt.activeGeneration) || receipt.activeGeneration < 0 ||
       !validDeploymentReceipt(receipt.activeGeneration, receipt.activeDeploymentId, receipt.activeCommitSha)) {
-    throw new PublicDeploymentStateError("The retired cloud release reservation is invalid");
+    throw operatorRefusal(new PublicDeploymentStateError("The retired cloud release reservation is invalid"));
   }
   return value;
 }
@@ -290,7 +291,7 @@ function assertPublicDeploymentFailedPublishRetiredBatch(value, expectedBuildBat
       !plainObject(receipt) || Object.keys(receipt).length !== receiptFields.size || !hasOnlyFields(receipt, receiptFields) ||
       receipt.schemaVersion !== 1 || receipt.reason !== FAILED_PUBLISH_RETIRED_REASON ||
       `cms-${receipt.queueId}` !== value.buildBatchId || !["failed", "cancelled"].includes(receipt.queueStatus)) {
-    throw new PublicDeploymentStateError("The retired failed-publish reservation is invalid");
+    throw operatorRefusal(new PublicDeploymentStateError("The retired failed-publish reservation is invalid"));
   }
   return value;
 }
@@ -359,9 +360,9 @@ function assertPublicDeploymentLeaseBatch(value, expectedBuildBatchId = null) {
   }
 
   if (!validState) {
-    throw new PublicDeploymentStateError(
+    throw operatorRefusal(new PublicDeploymentStateError(
       "The public deployment build batch is invalid",
-    );
+    ));
   }
   return value;
 }
@@ -385,16 +386,16 @@ function assertPublicDeploymentTerminalBatchStructure(
     !hasOnlyFields(batch, fields) ||
     Object.keys(batch).length !== fields.size
   ) {
-    throw new PublicDeploymentStateError(
+    throw operatorRefusal(new PublicDeploymentStateError(
       "The public deployment terminal receipt is invalid",
-    );
+    ));
   }
   projectPublicBuildReservation(batch, expectedBuildBatchId);
   if (batch.restoredPredecessor !== undefined) {
     const restored = projectPublicDeploymentRestoreReceipt(batch.restoredPredecessor);
     if (batch.terminalOutcome !== "cancelled" || restored.generation !== batch.predecessorGeneration ||
         restored.commitSha !== batch.predecessorCommitSha) {
-      throw new PublicDeploymentStateError("The restored predecessor receipt is invalid");
+      throw operatorRefusal(new PublicDeploymentStateError("The restored predecessor receipt is invalid"));
     }
   }
   assertPublicDeploymentLeaseReceipt({
@@ -416,9 +417,9 @@ function assertPublicDeploymentTerminalBatchStructure(
     !DIGEST.test(batch.mediaManifestDigest) ||
     !DIGEST.test(batch.cloudflareEvidenceDigest)
   ) {
-    throw new PublicDeploymentStateError(
+    throw operatorRefusal(new PublicDeploymentStateError(
       "The public deployment terminal receipt is invalid",
-    );
+    ));
   }
 
   const terminalAt = batch.status === "deployed"
@@ -433,9 +434,9 @@ function assertPublicDeploymentTerminalBatchStructure(
     timestampMillis(terminalAt) === null ||
     timestampMillis(terminalAt) < timestampMillis(batch.leaseAcquiredAt)
   ) {
-    throw new PublicDeploymentStateError(
+    throw operatorRefusal(new PublicDeploymentStateError(
       "The public deployment terminal receipt is invalid",
-    );
+    ));
   }
   return batch;
 }
@@ -468,9 +469,9 @@ function planPublicDeploymentLeaseAcquisition(pointerValue, batchValue) {
           batch.supersededByBuildBatchId !==
             pointer.newestEligibleBuildBatchId)))
   ) {
-    throw new PublicDeploymentStateError(
+    throw operatorRefusal(new PublicDeploymentStateError(
       "The public deployment generation counter regressed",
-    );
+    ));
   }
 
   const pointerHasLease =
@@ -484,9 +485,9 @@ function planPublicDeploymentLeaseAcquisition(pointerValue, batchValue) {
     batch.status !== "deploying" &&
     batch.status !== "reconciling"
   ) {
-    throw new PublicDeploymentStateError(
+    throw operatorRefusal(new PublicDeploymentStateError(
       "The public deployment lease receipt is invalid",
-    );
+    ));
   }
 
   if (batch.status === "deploying") {
@@ -502,9 +503,9 @@ function planPublicDeploymentLeaseAcquisition(pointerValue, batchValue) {
       pointer.predecessorDeploymentId !== batch.predecessorDeploymentId ||
       pointer.predecessorCommitSha !== batch.predecessorCommitSha
     ) {
-      throw new PublicDeploymentStateError(
+      throw operatorRefusal(new PublicDeploymentStateError(
         "The public deployment lease receipt is invalid",
-      );
+      ));
     }
     return Object.freeze({ action: "retry" });
   }
@@ -524,9 +525,9 @@ function planPublicDeploymentLeaseAcquisition(pointerValue, batchValue) {
       !sameTimestamp(pointer.reconcilingAt, batch.reconcilingAt) ||
       pointer.cloudflareEvidenceDigest !== batch.cloudflareEvidenceDigest
     ) {
-      throw new PublicDeploymentStateError(
+      throw operatorRefusal(new PublicDeploymentStateError(
         "The public deployment lease receipt is invalid",
-      );
+      ));
     }
     return Object.freeze({ action: "retry" });
   }
@@ -547,18 +548,18 @@ function planPublicDeploymentLeaseAcquisition(pointerValue, batchValue) {
     batch.generation > pointer.newestEligibleGeneration ||
     batch.buildBatchId !== pointer.newestEligibleBuildBatchId
   ) {
-    throw new PublicDeploymentStateError(
+    throw operatorRefusal(new PublicDeploymentStateError(
       "The public deployment eligible generation is invalid",
-    );
+    ));
   }
   if (pointerHasLease) {
     if (
       pointer.candidateGeneration === batch.generation &&
       pointer.candidateBuildBatchId === batch.buildBatchId
     ) {
-      throw new PublicDeploymentStateError(
+      throw operatorRefusal(new PublicDeploymentStateError(
         "The public deployment lease receipt is invalid",
-      );
+      ));
     }
     return Object.freeze({ action: "busy" });
   }
@@ -586,9 +587,9 @@ function assertPublicDeploymentLeaseReceipt(value) {
       value.predecessorCommitSha,
     )
   ) {
-    throw new PublicDeploymentStateError(
+    throw operatorRefusal(new PublicDeploymentStateError(
       "The public deployment lease receipt is invalid",
-    );
+    ));
   }
   return Object.freeze({
     ...runtimeFields(value.runtime),
@@ -607,9 +608,9 @@ function assertPublicDeploymentLeaseReceipt(value) {
 function projectPublicDeploymentLease(value, expectedBuildBatchId = null) {
   const batch = assertPublicDeploymentLeaseBatch(value, expectedBuildBatchId);
   if (batch.status !== "deploying" && batch.status !== "reconciling") {
-    throw new PublicDeploymentStateError(
+    throw operatorRefusal(new PublicDeploymentStateError(
       "The public deployment lease receipt is invalid",
-    );
+    ));
   }
   return assertPublicDeploymentLeaseReceipt({
     ...runtimeFields(batch.runtime),
@@ -640,9 +641,9 @@ function projectPublicBuildReadiness(value, expectedBuildBatchId = null) {
 function projectPublicBuildSupersession(value, expectedBuildBatchId = null) {
   const batch = assertPublicDeploymentLeaseBatch(value, expectedBuildBatchId);
   if (batch.status !== "superseded") {
-    throw new PublicDeploymentStateError(
+    throw operatorRefusal(new PublicDeploymentStateError(
       "The public deployment supersession receipt is invalid",
-    );
+    ));
   }
   return Object.freeze({
     ...runtimeFields(batch.runtime),

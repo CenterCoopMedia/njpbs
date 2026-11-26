@@ -1,4 +1,5 @@
 "use strict";
+const { operatorRefusal } = require("./operator-refusal");
 
 const { createHash } = require("node:crypto");
 const { recordFamilyForPath, recordIndexPaths, validRecordId, validateNoBuildRecordSnapshot,
@@ -14,7 +15,7 @@ const validSha = value => typeof value === "string" && /^[a-f0-9]{40}$/.test(val
 const validDigest = value => typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
 const validOperation = value => typeof value === "string" && /^[A-Za-z0-9]{20}$/.test(value);
 function refuse(message = "Record route ownership is unavailable.") {
-  throw Object.assign(new Error(message), { status: 409 });
+  throw operatorRefusal(Object.assign(new Error(message), { status: 409 }));
 }
 function validDetailPath(family, path) {
   return recordFamilyForPath(path) === family && !recordIndexPaths(family).includes(path);

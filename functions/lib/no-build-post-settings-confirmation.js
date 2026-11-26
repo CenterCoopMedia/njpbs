@@ -1,4 +1,5 @@
 "use strict";
+const { operatorRefusal } = require("./operator-refusal");
 
 const { postRoutePath } = require("./post-slug-contract");
 const { createHash } = require("node:crypto");
@@ -17,7 +18,7 @@ const PROOF_BATCH_SIZE = 8;
 const PROOF_READ_TIMEOUT_MS = 10_000;
 const digest = value => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 function refuse(postId, reason) {
-  throw Object.assign(new Error(`The settings Post proof for ${postId} ${reason}.`), { status: 409 });
+  throw operatorRefusal(Object.assign(new Error(`The settings Post proof for ${postId} ${reason}.`), { status: 409 }));
 }
 
 /** The published roster, not the admitted catalog or sitemap, defines coverage.

@@ -1,4 +1,5 @@
 "use strict";
+const { operatorRefusal } = require("./operator-refusal");
 
 const { createHash } = require("node:crypto");
 const { isDeepStrictEqual } = require("node:util");
@@ -83,7 +84,7 @@ const DEPLOYED_USAGE_FIELDS = new Set([
 const DIGEST = /^[a-f0-9]{64}$/;
 
 function invalid(message = "The public media manifest is invalid") {
-  throw new PublicDeploymentStateError(message);
+  throw operatorRefusal(new PublicDeploymentStateError(message));
 }
 
 function plainObject(value) {

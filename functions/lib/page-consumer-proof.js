@@ -1,4 +1,5 @@
 "use strict";
+const { operatorRefusal } = require("./operator-refusal");
 
 const { randomUUID } = require("node:crypto");
 const { digest } = require("./no-build-page-ownership");
@@ -66,7 +67,7 @@ async function claimPageConsumerProof({ firestore, operationId, identity, now, d
     async assertCurrent(transaction, queue) {
       const prior = (await transaction.get(ref)).data();
       if (prior?.claim !== claim || prior.key !== acquired.key || proofKey(queue) !== acquired.key || now() >= prior.leaseUntil) {
-        throw Object.assign(new Error("Page consumer confirmation lease expired"), { status: 409 });
+        throw operatorRefusal(Object.assign(new Error("Page consumer confirmation lease expired"), { status: 409 }));
       }
   }, async finish(confirmed, { waitingForInputs = false, continuingPosts = false,
     failureReason = { code: "confirmation_incomplete" } } = {}) {

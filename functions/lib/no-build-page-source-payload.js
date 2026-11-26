@@ -1,6 +1,7 @@
 "use strict";
+const { operatorRefusal } = require("./operator-refusal");
 
-function refuse() { throw Object.assign(new Error("Rendered record source binding is unavailable"), { status: 409 }); }
+function refuse() { throw operatorRefusal(Object.assign(new Error("Rendered record source binding is unavailable"), { status: 409 })); }
 function canonical(value) {
   return Array.isArray(value) ? value.map(canonical) : value && typeof value === "object"
     ? Object.fromEntries(Object.keys(value).sort().map(key => [key, canonical(value[key])])) : value;

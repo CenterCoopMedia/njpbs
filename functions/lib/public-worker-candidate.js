@@ -1,4 +1,5 @@
 "use strict";
+const { operatorRefusal } = require("./operator-refusal");
 
 const { candidateNoBuildPageContract } = require("./no-build-page-ownership");
 
@@ -44,7 +45,7 @@ const INPUT_FIELDS = new Set([
 const STORED_FIELDS = new Set([...INPUT_FIELDS, "recordedAt"]);
 
 function stateError(message) {
-  throw new PublicDeploymentStateError(message);
+  throw operatorRefusal(new PublicDeploymentStateError(message));
 }
 
 function plainObject(value) {

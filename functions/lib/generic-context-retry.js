@@ -1,4 +1,5 @@
 "use strict";
+const { operatorRefusal } = require("./operator-refusal");
 
 const { can } = require("./rbac");
 const { adminLogEntry, AUDIT_COLLECTIONS } = require("./audit");
@@ -10,7 +11,7 @@ const { assertCmsPublicationCloudAdmission } = require("./cms-publication-runtim
 const { currentContextCheck } = require("./context-publication-check-state");
 
 function refuse(message = "This site update changed. Refresh Publish activity before retrying.", status = 409) {
-  throw Object.assign(new Error(message), { status });
+  throw operatorRefusal(Object.assign(new Error(message), { status }));
 }
 function genericJob(job, operationId) {
   return job?.schemaVersion === 1 && job.transport === TRANSPORT && job.runtime?.owner === "cloudflare" &&

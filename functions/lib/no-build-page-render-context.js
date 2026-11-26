@@ -1,4 +1,5 @@
 "use strict";
+const { operatorRefusal } = require("./operator-refusal");
 
 const { Filter } = require("firebase-admin/firestore");
 
@@ -16,7 +17,7 @@ const { PublishedMediaSafetyError } = require("./published-media-safety");
 const { publiclyVisible } = require("./public-video-references");
 const { parsePublishInstant } = require("./publish-instant");
 
-function refuse(message) { throw Object.assign(new Error(`Build-free Page context: ${message}`), { status: 409 }); }
+function refuse(message) { throw operatorRefusal(Object.assign(new Error(`Build-free Page context: ${message}`), { status: 409 })); }
 const pick = (value, fields) => Object.fromEntries(fields.filter(field => value?.[field] !== undefined)
   .map(field => [field, structuredClone(value[field])]));
 function publicJoinedRecord(record) {

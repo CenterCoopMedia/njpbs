@@ -1,4 +1,5 @@
 "use strict";
+const { operatorRefusal } = require("./operator-refusal");
 
 const { createHash } = require("node:crypto");
 const { isDeepStrictEqual } = require("node:util");
@@ -13,7 +14,7 @@ const { PUBLIC_CONTEXT_PATH, publicContextDigest } = require("./public-context-r
 const { pagePublicationTarget } = require("./no-build-page-target");
 const { assertReadbackTarget, publicReadbackHeaders, withinDeadline, readPublicPostAfterRefresh } = require("./no-build-post-recovery");
 const { readSettingsProofs } = require("./no-build-post-settings-confirmation");
-function refuse() { throw Object.assign(new Error("The public record receipt is unavailable."), { status: 409 }); }
+function refuse() { throw operatorRefusal(Object.assign(new Error("The public record receipt is unavailable."), { status: 409 })); }
 
 async function familyAuthority({ firestore, transaction, accepted }) {
   const { queue, state } = accepted, identity = queue.recordPublication;

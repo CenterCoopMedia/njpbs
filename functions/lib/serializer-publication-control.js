@@ -1,11 +1,12 @@
 "use strict";
+const { operatorRefusal } = require("./operator-refusal");
 
 const SERIALIZER_CONTROL_PATH = "system/publicDeployment/controls/serializer";
 const DISABLED_MESSAGE = "The full-site build was retired on October 13, 2026. This change has no build-free publication path yet. Ask an administrator.";
 function refuse(message, invalid = false) {
-  throw Object.assign(new Error(message), { status: 409,
+  throw operatorRefusal(Object.assign(new Error(message), { status: 409,
     code: invalid ? "serializer_publication_control_invalid" : "serializer_publication_unavailable",
-    ...(invalid ? { scheduleDeferred: true } : {}) });
+    ...(invalid ? { scheduleDeferred: true } : {}) }));
 }
 function parseSerializerPublicationControl(value) {
   if (!value || typeof value !== "object" || Array.isArray(value) ||

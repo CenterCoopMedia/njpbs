@@ -1,4 +1,5 @@
 "use strict";
+const { operatorRefusal } = require("./operator-refusal");
 
 const { isDeepStrictEqual } = require("node:util");
 const { publicationRuntime } = require("./publication-runtime-owner");
@@ -14,7 +15,7 @@ const validOperationId = value => typeof value === "string" && /^[A-Za-z0-9]{20}
 const validSha = value => typeof value === "string" && /^[a-f0-9]{40}$/.test(value);
 
 function refuse(message = "Home publication ownership is unavailable.") {
-  throw Object.assign(new Error(message), { status: 409 });
+  throw operatorRefusal(Object.assign(new Error(message), { status: 409 }));
 }
 
 // Paused serving and unfinished publication do not release the root or catalog.

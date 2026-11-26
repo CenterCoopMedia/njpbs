@@ -1,4 +1,5 @@
 "use strict";
+const { operatorRefusal } = require("./operator-refusal");
 
 const NAMESPACE_PATH = "system/publicDeployment/noBuildRecordFamilies/current";
 const CONTEXT_OUTPUTS = ["listings", "authors", "feed", "contentApi", "sitemap", "search"];
@@ -7,7 +8,7 @@ const VIDEO_CATALOG_OUTPUT = "videoCatalog";
 const CHECKPOINT_FAMILIES = [...RECORD_FAMILIES, VIDEO_CATALOG_OUTPUT];
 // Search generations and their reference manifests share this bound.
 const SEARCH_FILES_MAX = 4096;
-function refuse() { throw Object.assign(new Error("Record namespace ownership is unavailable."), { status: 409 }); }
+function refuse() { throw operatorRefusal(Object.assign(new Error("Record namespace ownership is unavailable."), { status: 409 })); }
 function recordFamilies(value = []) {
   if (!Array.isArray(value) || value.length > 2 || new Set(value).size !== value.length ||
       value.some(family => !RECORD_FAMILIES.includes(family))) refuse();

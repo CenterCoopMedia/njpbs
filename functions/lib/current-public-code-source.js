@@ -1,16 +1,17 @@
 "use strict";
+const { operatorRefusal } = require("./operator-refusal");
 
 const { assertPublicationTarget } = require("./publication-target");
 const { CURRENT_CODE_BYTES, validateCurrentCodeReference } = require("./current-public-code-reference");
 const CURRENT_CODE_REPLY_BYTES = Math.ceil(CURRENT_CODE_BYTES / 3) * 4 + 8192;
-function refuse(rpcStatus) { throw Object.assign(new Error("Private current CODE source is unavailable"),
-  { status: 409, ...(rpcStatus ? { rpcStatus } : {}) }); }
+function refuse(rpcStatus) { throw operatorRefusal(Object.assign(new Error("Private current CODE source is unavailable"),
+  { status: 409, ...(rpcStatus ? { rpcStatus } : {}) })); }
 
 // The caller supplies the secret reader. A default here would pull Functions
 // modules into the preview renderer Worker bundle, which shares this file.
 function privateCodeTransport({ target, rendererSha, request = fetch, readSecret }) {
   if ((process.env.FUNCTIONS_EMULATOR === "true" || process.env.FIRESTORE_EMULATOR_HOST) && request === fetch) {
-    throw Object.assign(new Error("Emulated record code reads require an explicit local fixture transport"), { status: 409 });
+    throw operatorRefusal(Object.assign(new Error("Emulated record code reads require an explicit local fixture transport"), { status: 409 }));
   }
   target = assertPublicationTarget(target);
   if (typeof rendererSha !== "string" || !/^[a-f0-9]{40}$/.test(rendererSha)) refuse();

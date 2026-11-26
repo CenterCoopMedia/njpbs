@@ -1,4 +1,5 @@
 "use strict";
+const { operatorRefusal } = require("./operator-refusal");
 
 const { PUBLIC_PAGE_DEFINITIONS, publicPageDefinition } = require("./public-page-contract");
 const { PUBLICLY_ROUTED_RECORD_KINDS, publicRouteBaseForRecordKind } = require("./public-record-kinds");
@@ -8,7 +9,7 @@ const { authorizeContentRead, authorizeContentWrite, contentResource, mayReachCo
 const UNAVAILABLE_MESSAGE = "This page is unavailable or you do not have permission to edit it.";
 
 function unavailable(denialReason) {
-  return Object.assign(new Error(UNAVAILABLE_MESSAGE), { status: 403, denialReason });
+  return operatorRefusal(Object.assign(new Error(UNAVAILABLE_MESSAGE), { status: 403, denialReason }));
 }
 
 // Accept local public paths only. Never turn an input into an external redirect.

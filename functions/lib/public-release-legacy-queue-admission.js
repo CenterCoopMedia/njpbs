@@ -1,4 +1,5 @@
 "use strict";
+const { operatorRefusal } = require("./operator-refusal");
 const bootstrap = require("./public-release-bootstrap-admission");
 class LegacyPublicQueueAdmissionError extends Error {
   constructor() {
@@ -6,6 +7,7 @@ class LegacyPublicQueueAdmissionError extends Error {
     this.name = "LegacyPublicQueueAdmissionError";
     this.code = "public_release_legacy_queue_unavailable";
     this.status = 409;
+    operatorRefusal(this);
     this.scheduleDeferred = true;
   }
 }

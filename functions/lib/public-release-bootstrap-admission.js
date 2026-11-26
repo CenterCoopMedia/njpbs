@@ -1,4 +1,5 @@
 "use strict";
+const { operatorRefusal } = require("./operator-refusal");
 
 const p = require("./public-release-pair");
 const { isPublicDeploymentIdentifier } = require("./public-deployment-pointer");
@@ -10,6 +11,7 @@ class PublicReleaseBootstrapAdmissionPausedError extends Error {
     this.name = "PublicReleaseBootstrapAdmissionPausedError";
     this.code = "public_release_bootstrap_admission_paused";
     this.status = 409;
+    operatorRefusal(this);
     this.retryable = true;
     this.scheduleDeferred = true;
   }

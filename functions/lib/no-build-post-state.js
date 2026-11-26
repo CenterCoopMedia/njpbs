@@ -1,4 +1,5 @@
 "use strict";
+const { operatorRefusal } = require("./operator-refusal");
 
 const { isPostRouteSlug, isSpanishPostSlug } = require("./post-slug-contract");
 const { publicationRuntime } = require("./publication-runtime-owner");
@@ -6,7 +7,7 @@ const validId = value => typeof value === "string" && /^[A-Za-z0-9_-]{1,128}$/.t
 const validSha = value => typeof value === "string" && /^[a-f0-9]{40}$/.test(value);
 const validDigest = value => typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
 function refuse(message = "Instant Post ownership is unavailable.") {
-  throw Object.assign(new Error(message), { status: 409 });
+  throw operatorRefusal(Object.assign(new Error(message), { status: 409 }));
 }
 
 function validateState(state) {

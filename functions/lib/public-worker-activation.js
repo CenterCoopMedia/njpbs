@@ -1,4 +1,5 @@
 "use strict";
+const { operatorRefusal } = require("./operator-refusal");
 
 // Pure evidence projection for an already-active Cloudflare deployment. This
 // module does not authorize or perform a deployment and does not call
@@ -84,9 +85,9 @@ function alignedCandidate(leaseValue, candidateValue, target) {
     candidate.generation !== lease.generation ||
     candidate.commitSha !== lease.commitSha
   ) {
-    throw new PublicDeploymentStateError(
+    throw operatorRefusal(new PublicDeploymentStateError(
       "The public Worker candidate does not match its deployment lease",
-    );
+    ));
   }
   return { lease, candidate };
 }

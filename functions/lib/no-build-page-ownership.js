@@ -1,4 +1,5 @@
 "use strict";
+const { operatorRefusal } = require("./operator-refusal");
 
 const { createHash } = require("node:crypto");
 const { PUBLIC_PAGE_DEFINITIONS, publicPageDefinition, publicPagePath, isAvailablePageSlug } = require("./public-page-contract");
@@ -19,7 +20,7 @@ function digest(value) {
   return createHash("sha256").update(JSON.stringify(canonical(value))).digest("hex");
 }
 function refuse(message = "Build-free Page ownership is unavailable.") {
-  throw Object.assign(new Error(message), { status: 409 });
+  throw operatorRefusal(Object.assign(new Error(message), { status: 409 }));
 }
 function validPagePath(pageId, path) {
   if (pageId === "home") return ["/", "/_home-sources.json"].includes(path);

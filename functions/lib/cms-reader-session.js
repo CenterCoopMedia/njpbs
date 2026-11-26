@@ -1,4 +1,5 @@
 "use strict";
+const { operatorRefusal } = require("./operator-refusal");
 
 // Inert versioned-reader boundary. An authenticated gateway issues these leases
 // and checks them on every versioned request; a lease never replaces staff auth.
@@ -162,9 +163,9 @@ async function issueSessions(firestore, rawInputs, now) {
     const availableAt = Math.max(...retainedIssuances.map(entry => entry.releaseAt),
       sessionBudgetReadyAt(active.sessions, MAX_PRINCIPAL_SESSIONS, needed, "expiresAt", now),
       sessionBudgetReadyAt(active.issuances, MAX_SESSION_ISSUANCES, needed, "releaseAt", now));
-    if (availableAt > now) throw Object.assign(new Error("CMS staff session limit reached"), {
+    if (availableAt > now) throw operatorRefusal(Object.assign(new Error("CMS staff session limit reached"), {
       status: 429, retryAfterSeconds: Math.max(1, Math.ceil((availableAt - now) / 1000)),
-    });
+    }));
     // Read and validate both components before any write. A refused component
     // leaves the other lease and the principal's issuance quota unchanged.
     const pending = [];

@@ -1,4 +1,5 @@
 "use strict";
+const { operatorRefusal } = require("./operator-refusal");
 
 const { publicationTarget } = require("./publication-target");
 const { assertPublicWorkerCandidateDatabase } = require("./public-worker-candidate");
@@ -19,11 +20,11 @@ async function newDevGithubQueueFields({ firestore, transaction, control, transp
   const pointer = pointerRow.exists ? assertPublicDeploymentPointer(pointerRow.data()) : null;
   if (!control?.cloud || capability?.schemaVersion !== 2 || !pointer ||
       pointer.activeCommitSha !== capability.rendererSha) {
-    throw Object.assign(new Error("Development publication requires its ready cloud renderer."), { status: 409 });
+    throw operatorRefusal(Object.assign(new Error("Development publication requires its ready cloud renderer."), { status: 409 }));
   }
   const cloud = assertCmsPublicationCloudAdmission(control, { commitSha: capability.rendererSha });
   if (cloud.serializerId !== target.serializerId) {
-    throw Object.assign(new Error("Development publication has a different cloud owner."), { status: 409 });
+    throw operatorRefusal(Object.assign(new Error("Development publication has a different cloud owner."), { status: 409 }));
   }
   return { environment: target.environment, projectId: target.projectId,
     runtime: { owner: "cloudflare", release: cloud.commitSha } };

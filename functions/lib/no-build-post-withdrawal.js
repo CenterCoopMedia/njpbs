@@ -1,4 +1,5 @@
 "use strict";
+const { operatorRefusal } = require("./operator-refusal");
 
 const { can } = require("./rbac");
 const { contentResourceSection } = require("./content-authorization");
@@ -14,7 +15,7 @@ const { readPageHomeWithdrawal, preparePageHomeWithdrawalRetry } = require("./no
 
 const HOME_OUTPUT_WITHDRAWAL_WARNING = "Home removal is not confirmed. The previous card can remain visible until the Home update succeeds.";
 
-function refuse(message, status = 409) { throw Object.assign(new Error(message), { status }); }
+function refuse(message, status = 409) { throw operatorRefusal(Object.assign(new Error(message), { status })); }
 
 async function assertWithdrawalReady({ firestore, transaction }) {
   const billing = (await transaction.get(firestore.doc("system/billing"))).data();

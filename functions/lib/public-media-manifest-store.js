@@ -1,4 +1,5 @@
 "use strict";
+const { operatorRefusal } = require("./operator-refusal");
 
 const { isDeepStrictEqual } = require("node:util");
 const { FieldValue } = require("firebase-admin/firestore");
@@ -66,7 +67,7 @@ const VERIFICATION_FIELDS = new Set([
 ]);
 
 function stateError(message) {
-  throw new PublicDeploymentStateError(message);
+  throw operatorRefusal(new PublicDeploymentStateError(message));
 }
 
 function plainObject(value) {

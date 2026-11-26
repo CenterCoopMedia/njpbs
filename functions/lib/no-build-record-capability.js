@@ -1,9 +1,10 @@
 "use strict";
+const { operatorRefusal } = require("./operator-refusal");
 
 const { RECORD_FAMILIES, readRecordNamespace } = require("./no-build-record-namespace");
 const { listNoBuildRecordOwners, recordRouteRef, assertRecordOwnerSnapshot } = require("./no-build-record-ownership");
 const CAPABILITY_PATH = "system/publicDeployment/noBuildRecords/capability";
-function refuse(message = "The record renderer capability is unavailable.") { throw Object.assign(new Error(message), { status: 409 }); }
+function refuse(message = "The record renderer capability is unavailable.") { throw operatorRefusal(Object.assign(new Error(message), { status: 409 })); }
 function candidateNoBuildRecordContract(value) {
   if (value === undefined) return null;
   const keys = ["schemaVersion", "rendererSha", "enabled", "authoritative", "families"];

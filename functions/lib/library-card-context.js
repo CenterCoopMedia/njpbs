@@ -1,4 +1,5 @@
 "use strict";
+const { operatorRefusal } = require("./operator-refusal");
 
 const { createHash } = require("node:crypto");
 const { shapeJoinedRecord, joinedAssetIds } = require("./joined-records");
@@ -7,7 +8,7 @@ const { assertMediaLifecycleFenceInTransaction } = require("./public-deployment-
 const { selectedAssets } = require("./public-content-projection");
 const { mediaReplacementRef } = require("./media-replacement");
 
-function refuse(message) { throw Object.assign(new Error(message), { status: 409 }); }
+function refuse(message) { throw operatorRefusal(Object.assign(new Error(message), { status: 409 })); }
 
 async function assertLibraryCardMedia({ firestore, transaction, record }) {
   const assetIds = joinedAssetIds(record ? [record] : []);

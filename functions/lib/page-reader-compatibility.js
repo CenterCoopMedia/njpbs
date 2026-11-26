@@ -1,4 +1,5 @@
 "use strict";
+const { operatorRefusal } = require("./operator-refusal");
 
 const p = require("./public-release-pair");
 const contract = require("./page-reader-contract");
@@ -6,8 +7,8 @@ const ROOT = "system/pageReaderContracts";
 const SHA = /^[a-f0-9]{40}$/;
 const knownVersion = contract.isPageReaderVersion;
 function refuse() {
-  throw Object.assign(new Error("These Page planks are temporarily unavailable. Keep your draft and try again after the site update."),
-    { status: 409, code: "page_reader_contract_unavailable", scheduleDeferred: true });
+  throw operatorRefusal(Object.assign(new Error("These Page planks are temporarily unavailable. Keep your draft and try again after the site update."),
+    { status: 409, code: "page_reader_contract_unavailable", scheduleDeferred: true }));
 }
 function markerPath(role, rendererSha) {
   if (!["public", "preview"].includes(role) || !SHA.test(rendererSha ?? "")) refuse();

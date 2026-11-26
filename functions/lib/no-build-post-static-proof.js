@@ -1,4 +1,5 @@
 "use strict";
+const { operatorRefusal } = require("./operator-refusal");
 // Pure static-proof parsing, shared by live admission and immutable replay.
 const { isDeepStrictEqual } = require("node:util");
 const { outputForPath } = require("./post-background-paths");
@@ -10,7 +11,7 @@ const MAX_FILES = 1024;
 const MAX_FILE_BYTES = 16 * 1024 * 1024;
 const MAX_TOTAL_BYTES = 64 * 1024 * 1024;
 function refuse(message = "The static Post return no longer matches its admitted publication.") {
-  throw Object.assign(new Error(message), { status: 409 });
+  throw operatorRefusal(Object.assign(new Error(message), { status: 409 }));
 }
 function exactFields(value, fields) {
   return value && typeof value === "object" && !Array.isArray(value) &&

@@ -1,4 +1,5 @@
 "use strict";
+const { operatorRefusal } = require("./operator-refusal");
 
 const { createHash } = require("node:crypto");
 const { FieldValue } = require("firebase-admin/firestore");
@@ -9,7 +10,7 @@ const { publicContextDigest, bumpPublicContextRevision } = require("./public-con
 const { contextOutputs } = require("./no-build-record-namespace");
 const { ownsPublication } = require("./publication-runtime-owner");
 const successorId = identity => createHash("sha256").update(JSON.stringify([identity.originalOperationId, identity.contextRevision, identity.rendererSha])).digest("hex").slice(0, 20);
-function refuse(message) { throw Object.assign(new Error(message), { status: 409 }); }
+function refuse(message) { throw operatorRefusal(Object.assign(new Error(message), { status: 409 })); }
 
 /** A retry keeps the accepted record/snapshot. Context and code can advance
  * without approving a later private draft or rewriting a completed receipt. */

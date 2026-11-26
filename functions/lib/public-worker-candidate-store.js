@@ -1,4 +1,5 @@
 "use strict";
+const { operatorRefusal } = require("./operator-refusal");
 
 const { assertPublicationOwner, assertRuntimeSource } = require("./publication-runtime-owner");
 const { isDeepStrictEqual } = require("node:util");
@@ -24,7 +25,7 @@ const {
 } = require("./public-worker-candidate");
 
 function stateError(message) {
-  throw new PublicDeploymentStateError(message);
+  throw operatorRefusal(new PublicDeploymentStateError(message));
 }
 
 function assertFirestore(firestore) {

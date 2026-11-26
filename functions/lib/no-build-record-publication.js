@@ -1,4 +1,5 @@
 "use strict";
+const { operatorRefusal } = require("./operator-refusal");
 
 const { preparePublicReleaseProducerInTransaction, publicContentChange } = require("./public-release-producer");
 
@@ -20,7 +21,7 @@ const { contextOutputs, readRecordNamespace } = require("./no-build-record-names
 
 const recordFamily = document => ({ program: "programs", event: "events" })[document?.type] ?? null;
 function refuse(message, scheduleDeferred = false) {
-  throw Object.assign(new Error(message), { status: 409, code: "record_publication_unavailable", ...(scheduleDeferred ? { scheduleDeferred: true } : {}) });
+  throw operatorRefusal(Object.assign(new Error(message), { status: 409, code: "record_publication_unavailable", ...(scheduleDeferred ? { scheduleDeferred: true } : {}) }));
 }
 function prerequisiteFailure(error) {
   if (error.status === 409 || error.code === "failed-precondition") error.scheduleDeferred = true;
@@ -184,7 +185,7 @@ async function readRecordPublication({ firestore, transaction, operationId, docu
       state.family !== identity.family || state.canonicalPath !== identity.canonicalPath || !isDeepStrictEqual(state.ownedPaths, identity.ownedPaths) ||
       state.sourceVersion !== identity.sourceVersion || state.snapshotDigest !== identity.snapshotDigest || state.generation !== identity.generation ||
       state.visible !== identity.visible || publiclyVisible(stored) !== state.visible || recordSnapshotDigest(stored?.published) !== state.snapshotDigest) {
-    throw Object.assign(new Error("This record publication was replaced. Reload before publishing."), { status: 409, code: "record_publication_replaced" });
+    throw operatorRefusal(Object.assign(new Error("This record publication was replaced. Reload before publishing."), { status: 409, code: "record_publication_replaced" }));
   }
   return { ref, queue, state, publication: receipt };
 }

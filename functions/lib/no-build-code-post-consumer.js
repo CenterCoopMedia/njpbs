@@ -1,4 +1,5 @@
 "use strict";
+const { operatorRefusal } = require("./operator-refusal");
 const { postSlugForPath } = require("./post-slug-contract");
 const { alternatePostId } = require("./spanish-edition");
 
@@ -14,7 +15,7 @@ const { readPublishedPost } = require("../published-post-reader");
 const { readCachedCodePostContext } = require("./code-post-immutable-cache");
 
 const captures = new WeakMap();
-function refuse() { throw Object.assign(new Error("The current code Post context is unavailable."), { status: 409 }); }
+function refuse() { throw operatorRefusal(Object.assign(new Error("The current code Post context is unavailable."), { status: 409 })); }
 function targetFor(firestore) {
   return pagePublicationTarget({ firestore });
 }
