@@ -2,7 +2,7 @@
 // Counts the production releases in a row that meet the release goal, read
 // only from GitHub. Exit 0 when the count reaches --need.
 //
-//   node scripts/release-streak.mjs --need 4 [--since 2026-11-01] [--json]
+//   node scripts/release-streak.mjs --need 4 --repo CenterCoopMedia/njpbs --tool-repo jamditis/jawn-ops [--since 2026-11-01] [--json]
 //
 // Auth: GH_TOKEN or GITHUB_TOKEN; it must read jamditis/jawn-ops (condition 6).
 //
@@ -26,10 +26,10 @@
 //  7. The commit's first release-development record ended success, failed=0.
 //  8. Consecutive: a release that does not count ends the streak, and production
 //     CMS runs with no record count as one release that does not count.
+//  (2 and 4 need release-drift.yml and the release's drift step, plan items R3
+//  and R5; until they land, no release counts.)
 //  9. At its start, the oldest commit the release brought was at most 5 days old (Tue and Thu releases, Joe, Nov. 26).
 
-const REPO = "CenterCoopMedia/njpbs";
-const TOOL_REPO = "jamditis/jawn-ops";
 const MAX_BEHIND_DAYS = 5;
 const DAY = 86400e3;
 
@@ -43,22 +43,23 @@ const runId = (url) => Number(/\/actions\/runs\/(\d+)/.exec(url ?? "")?.[1] ?? 0
 const short = (sha) => (sha ?? "").slice(0, 8);
 const easternDate = (iso) => new Date(iso).toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 
-async function list(get, path, key) {
+// GitHub lists newest first; with since, paging stops at the first older item.
+async function list(get, path, key, since) {
   const all = [];
   for (let page = 1; page <= 10; page++) {
     const sep = path.includes("?") ? "&" : "?";
     const body = await get(`${path}${sep}per_page=100&page=${page}`);
     const items = key ? body?.[key] ?? [] : body ?? [];
     all.push(...items);
-    if (items.length < 100) return all;
+    if (items.length < 100 || (since && items.at(-1).created_at < since)) return since ? all.filter((i) => i.created_at >= since) : all;
   }
   throw new Error(`more than 1000 items at ${path}; pass a later --since`);
 }
 
-async function records(get, environment, since) {
-  const deployments = (await list(get, `repos/${REPO}/deployments?environment=${environment}`)).filter((d) => d.created_at >= since);
+async function records(get, repo, environment, since) {
+  const deployments = await list(get, `repos/${repo}/deployments?environment=${environment}`, null, since);
   return Promise.all(deployments.map(async (d) => {
-    const statuses = await get(`repos/${REPO}/deployments/${d.id}/statuses?per_page=100`);
+    const statuses = await get(`repos/${repo}/deployments/${d.id}/statuses?per_page=100`);
     const end = statuses.find(ended);
     return { id: d.id, sha: d.sha, start: d.created_at, payload: d.payload ?? {}, end: end ? { state: end.state, at: end.created_at, ...parseEnd(end.description) } : null };
   }));
@@ -66,12 +67,12 @@ async function records(get, environment, since) {
 
 // Production CMS runs: the cms-deploy.yml runs whose job used the production
 // environment. GitHub links each environment deployment to its job.
-async function productionCMSRuns(get, since) {
-  const runs = (await list(get, `repos/${REPO}/actions/workflows/cms-deploy.yml/runs?created=%3E%3D${since.slice(0, 10)}`, "workflow_runs"));
-  const deployments = (await list(get, `repos/${REPO}/deployments?environment=production`)).filter((d) => d.created_at >= since);
+async function productionCMSRuns(get, repo, since) {
+  const runs = await list(get, `repos/${repo}/actions/workflows/cms-deploy.yml/runs?created=%3E%3D${since.slice(0, 10)}`, "workflow_runs");
+  const deployments = await list(get, `repos/${repo}/deployments?environment=production`, null, since);
   const production = new Map();
   for (const d of deployments) {
-    const statuses = await get(`repos/${REPO}/deployments/${d.id}/statuses?per_page=100`);
+    const statuses = await get(`repos/${repo}/deployments/${d.id}/statuses?per_page=100`);
     const id = runId(statuses.at(-1)?.target_url);
     if (id) production.set(id, d.sha);
   }
@@ -80,25 +81,24 @@ async function productionCMSRuns(get, since) {
     .sort((a, b) => a.created.localeCompare(b.created));
 }
 
-async function driftRuns(get, since) {
+async function driftRuns(get, repo, since) {
   try {
-    return await list(get, `repos/${REPO}/actions/workflows/release-drift.yml/runs?created=%3E%3D${since.slice(0, 10)}`, "workflow_runs");
+    return await list(get, `repos/${repo}/actions/workflows/release-drift.yml/runs?created=%3E%3D${since.slice(0, 10)}`, "workflow_runs");
   } catch (error) {
     if (error.status === 404) return [];
     throw error;
   }
 }
 
-async function onMaster(get, tool) {
+async function onMaster(get, toolRepo, tool) {
   if (!/^[0-9a-f]{40}$/.test(tool ?? "")) return false;
-  const compare = await get(`repos/${TOOL_REPO}/compare/master...${tool}`);
+  const compare = await get(`repos/${toolRepo}/compare/master...${tool}`);
   return compare.status === "behind" || compare.status === "identical";
 }
 
 // The commits a release brings: those after the previous production source.
-async function oldestBrought(get, previous, source) {
-  if (!previous) return null;
-  const compare = await get(`repos/${REPO}/compare/${previous}...${source}`);
+async function oldestBrought(get, repo, previous, source) {
+  const compare = await get(`repos/${repo}/compare/${previous}...${source}`);
   const dates = (compare.commits ?? []).map((c) => c.commit.committer.date).sort();
   return { count: compare.ahead_by ?? dates.length, oldest: dates[0] ?? null };
 }
@@ -127,28 +127,33 @@ async function judge(get, release, ctx) {
   const after = drift.length > 1 ? drift.at(-1) : null;
   if (!after || after.conclusion !== "success" || !run || after.created_at < run.updated) why.push("no green drift check after the release (conditions 4 and 5)");
   // 6
-  if (!(await onMaster(get, record.payload.tool))) why.push(`tool ${short(record.payload.tool) || "unnamed"} is not on jawn-ops master`);
+  if (!(await onMaster(get, ctx.toolRepo, record.payload.tool))) why.push(`tool ${short(record.payload.tool) || "unnamed"} is not on jawn-ops master`);
   // 7
   const dev = ctx.development.filter((r) => r.sha === record.sha && r.start < record.start).sort((a, b) => a.start.localeCompare(b.start))[0];
   if (!dev) why.push("no earlier release-development record");
   else if (dev.end?.state !== "success" || dev.end.failed !== 0) why.push("first release-development record did not succeed");
   // 9 and "already live"
-  const brought = await oldestBrought(get, previous, record.sha);
-  if (brought && brought.count === 0) why.push("the commit was already live");
-  else if (brought?.oldest && (Date.parse(record.start) - Date.parse(brought.oldest)) / DAY > MAX_BEHIND_DAYS) {
+  const brought = previous ? await oldestBrought(get, ctx.repo, previous, record.sha) : null;
+  if (!brought) why.push("the previous production source is unknown; pass an earlier --since");
+  else if (brought.count === 0) why.push("the commit was already live");
+  else if (brought.oldest && (Date.parse(record.start) - Date.parse(brought.oldest)) / DAY > MAX_BEHIND_DAYS) {
     why.push(`production was ${Math.floor((Date.parse(record.start) - Date.parse(brought.oldest)) / DAY)} days behind main`);
   }
   return why;
 }
 
-export async function releaseStreak(get, { need, since }) {
+export async function releaseStreak(get, { need, since, repo, toolRepo }) {
+  // Development records are read whole: the first one for a source may be older
+  // than the window.
   const [production, development, cmsRuns, drift] = await Promise.all([
-    records(get, "release-production", since), records(get, "release-development", since),
-    productionCMSRuns(get, since), driftRuns(get, since),
+    records(get, repo, "release-production", since), records(get, repo, "release-development", null),
+    productionCMSRuns(get, repo, since), driftRuns(get, repo, since),
   ]);
   // Each record is one release; production CMS runs outside every record form
-  // releases without a record, one per stretch between records.
-  const inside = (run, r) => run.created >= r.start && (!r.end || run.created <= r.end.at);
+  // releases without a record, one per stretch between records. A record with
+  // no end status reaches to the next record.
+  const next = (r) => production.filter((o) => o.start > r.start).map((o) => o.start).sort()[0];
+  const inside = (run, r) => run.created >= r.start && run.created <= (r.end?.at ?? next(r) ?? "9999");
   const events = [
     ...production.map((r) => ({ at: r.start, record: r, cms: cmsRuns.filter((run) => inside(run, r)) })),
   ];
@@ -160,9 +165,12 @@ export async function releaseStreak(get, { need, since }) {
     loose.cms.push(run);
   }
   events.sort((a, b) => b.at.localeCompare(a.at));
-  events.forEach((e, i) => { e.previous = events.slice(i + 1).find((o) => o.record?.end?.state === "success")?.record.sha ?? events[i + 1]?.cms.at(-1)?.sha ?? null; });
+  // The previous source is the one before. For production CMS runs with no
+  // record it is their environment deployment's commit: main at dispatch, which
+  // the lean release sets to the source; GitHub does not show the run's inputs.
+  events.forEach((e, i) => { const o = events[i + 1]; e.previous = o ? o.record?.sha ?? o.cms.at(-1)?.sha : null; });
 
-  const ctx = { production, development, drift };
+  const ctx = { production, development, drift, repo, toolRepo };
   const releases = [];
   let count = 0;
   for (const e of events) {
@@ -193,9 +201,14 @@ function githubGet(token) {
 async function main(argv) {
   const arg = (name) => { const i = argv.indexOf(name); return i < 0 ? undefined : argv[i + 1]; };
   const need = Number(arg("--need"));
-  if (!Number.isInteger(need) || need < 1) throw new Error("usage: release-streak.mjs --need <n> [--since YYYY-MM-DD] [--json]");
+  const repo = arg("--repo");
+  const toolRepo = arg("--tool-repo");
+  const name = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
+  if (!Number.isInteger(need) || need < 1 || !name.test(repo ?? "") || !name.test(toolRepo ?? "")) {
+    throw new Error("usage: release-streak.mjs --need <n> --repo <owner/name> --tool-repo <owner/name> [--since YYYY-MM-DD] [--json]");
+  }
   const since = new Date(arg("--since") ?? Date.now() - 60 * DAY).toISOString();
-  const result = await releaseStreak(githubGet(process.env.GH_TOKEN || process.env.GITHUB_TOKEN), { need, since });
+  const result = await releaseStreak(githubGet(process.env.GH_TOKEN || process.env.GITHUB_TOKEN), { need, since, repo, toolRepo });
   if (argv.includes("--json")) console.log(JSON.stringify(result, null, 1));
   else {
     console.log(`count ${result.count} of ${need}`);

@@ -17,7 +17,7 @@ function fake(answers) {
 }
 
 test("Nov. 26: no release counts; the release without a record is named with its three CMS runs", async () => {
-  const result = await releaseStreak(fake(recorded), { need: 4, since });
+  const result = await releaseStreak(fake(recorded), { need: 4, since, repo: "CenterCoopMedia/njpbs", toolRepo: "jamditis/jawn-ops" });
   assert.equal(result.count, 0);
   assert.equal(result.met, false);
   assert.equal(result.releases.length, 1);
@@ -60,10 +60,10 @@ function counted(change = {}) {
 }
 
 test("a release that meets every condition counts; the stretch without a record before it ends the streak", async () => {
-  const result = await releaseStreak(fake(counted()), { need: 1, since });
+  const result = await releaseStreak(fake(counted()), { need: 1, since, repo: "CenterCoopMedia/njpbs", toolRepo: "jamditis/jawn-ops" });
   assert.equal(result.met, true);
   assert.deepEqual(result.releases.map((r) => r.counted), [true]);
-  const two = await releaseStreak(fake(counted()), { need: 2, since });
+  const two = await releaseStreak(fake(counted()), { need: 2, since, repo: "CenterCoopMedia/njpbs", toolRepo: "jamditis/jawn-ops" });
   assert.equal(two.count, 1);
   assert.equal(two.met, false);
   assert.match(two.releases[1].why[0], /^no release-production record/);
@@ -79,8 +79,32 @@ test("each broken condition stops the count and is named", async () => {
     [{ oldest: "2026-11-24T00:00:00Z" }, /production was 7 days behind main/],
   ];
   for (const [change, why] of cases) {
-    const result = await releaseStreak(fake(counted(change)), { need: 1, since });
+    const result = await releaseStreak(fake(counted(change)), { need: 1, since, repo: "CenterCoopMedia/njpbs", toolRepo: "jamditis/jawn-ops" });
     assert.equal(result.count, 0, JSON.stringify(change));
     assert.match(result.releases[0].why.join("; "), why);
   }
+});
+
+test("a record that never ended does not take a later production CMS run", async () => {
+  const a = counted();
+  // A stopped command: the record has only its in_progress status.
+  a["repos/CenterCoopMedia/njpbs/deployments/9001/statuses?per_page=100"] = [{ state: "in_progress", description: "started", created_at: "2026-12-01T03:00:01Z" }];
+  const second = { id: 9003, sha: "3".repeat(40), environment: "release-production", created_at: "2026-12-03T03:00:00Z", payload: {} };
+  a[deployments("release-production")] = [second, ...a[deployments("release-production")]];
+  a["repos/CenterCoopMedia/njpbs/deployments/9003/statuses?per_page=100"] = [{ state: "success", description: "failed=0 seconds=1 refused=0", created_at: "2026-12-03T03:30:00Z" }];
+  // A production CMS run with no record, after both.
+  a[cmsRuns].workflow_runs.unshift({ id: 50009, display_title: "CMS deploy [x]", created_at: "2026-12-04T03:00:00Z", updated_at: "2026-12-04T03:10:00Z", conclusion: "success", run_attempt: 1 });
+  a[deployments("production")].unshift({ id: 9004, sha: "4".repeat(40), created_at: "2026-12-04T03:00:02Z" });
+  a["repos/CenterCoopMedia/njpbs/deployments/9004/statuses?per_page=100"] = [{ state: "success", created_at: "2026-12-04T03:10:00Z", target_url: "https://github.com/CenterCoopMedia/njpbs/actions/runs/50009/job/1" }];
+  const result = await releaseStreak(fake(a), { need: 1, since, repo: "CenterCoopMedia/njpbs", toolRepo: "jamditis/jawn-ops" });
+  assert.equal(result.count, 0);
+  assert.match(result.releases[0].why[0], /^no release-production record \(1 production CMS run: 50009 success\)/);
+});
+
+test("a release with no earlier production event in the window does not count", async () => {
+  const a = counted();
+  a[cmsRuns].workflow_runs = a[cmsRuns].workflow_runs.filter((r) => r.id === 50001);
+  const result = await releaseStreak(fake(a), { need: 1, since, repo: "CenterCoopMedia/njpbs", toolRepo: "jamditis/jawn-ops" });
+  assert.equal(result.count, 0);
+  assert.deepEqual(result.releases[0].why, ["the previous production source is unknown; pass an earlier --since"]);
 });
