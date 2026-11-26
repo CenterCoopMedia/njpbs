@@ -89,12 +89,25 @@ export async function checkSignedInPreview(browser, { admin, preview, credential
     await hang.over(page.goto(editorUrl, { waitUntil: "domcontentloaded" }));
     if (page.url() !== editorUrl) throw new Error();
     const button = page.getByRole("button", { name: "Preview", exact: true });
-    await hang.over(Promise.race([unavailable, button.waitFor({ state: "visible" })]));
+    // A loaded editor shows Save draft; Preview renders in the same pass or not at all (an archived
+    // record shows Restore to draft instead). Another session's lock leaves the editor read-only.
+    // Nov. 25, 2026: an archived fixture held the release smoke for 31 minutes.
+    const noPreview = page.getByRole("button", { name: "Save draft", exact: true }).waitFor({ state: "visible" }).then(async () => {
+      if (await button.count()) return new Promise(() => {});
+      // count() reads the page once; it never waits.
+      saw.reason = await page.getByRole("button", { name: "Restore to draft", exact: true }).count() ? "archived" : "unlisted";
+      throw new PreviewSmokeFailure("no_preview_control");
+    });
+    const locked = page.locator(".editor-lock-message-readonly, .editor-lock-message-displaced, .editor-lock-message-requested")
+      .first().waitFor({ state: "visible" }).then(() => { throw new PreviewSmokeFailure("editor_locked"); });
+    for (const end of [noPreview, locked]) end.catch(() => {});
+    await hang.over(Promise.race([unavailable, noPreview, locked, button.waitFor({ state: "visible" })]));
     // The editor shows the button only after its load, with the saved receipt already recorded
     // (EditorWorkspace.tsx), so a button that is disabled when it appears stays disabled.
-    if (await hang.over(button.isDisabled())) {
-      const label = await hang.over(page.getByRole("group", { name: /^Preview unavailable: / })
-        .evaluateAll(nodes => nodes[0]?.getAttribute("aria-label") ?? null).catch(() => null));
+    // The lock watcher stays in every wait until the click lands.
+    if (await hang.over(Promise.race([locked, button.isDisabled()]))) {
+      const label = await hang.over(Promise.race([locked, page.getByRole("group", { name: /^Preview unavailable: / })
+        .evaluateAll(nodes => nodes[0]?.getAttribute("aria-label") ?? null).catch(() => null)]));
       saw.reason = disabledReasons.get(label?.replace(/^Preview unavailable: /, "")) ?? "unlisted";
       throw new PreviewSmokeFailure("preview_control_disabled");
     }
@@ -139,7 +152,7 @@ export async function checkSignedInPreview(browser, { admin, preview, credential
     page.getByRole("alert").filter({ hasText: editorStop }).first().waitFor({ state: "visible" })
       .then(() => stop("preview_admin_stopped"), () => {});
     hang.limit(previewMs);
-    const [, , document] = await hang.over(Promise.race([stopped, Promise.all([
+    const [, , document] = await hang.over(Promise.race([stopped, locked, Promise.all([
       opened.then(value => {
         popup = value; saw.popup = true;
         value.on("close", () => stop("preview_tab_closed"));
