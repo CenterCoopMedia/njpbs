@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
+import { faultCause, faultLine } from "../../scripts/lib/provider-call.mjs";
 import { restoreDevelopmentTemplates } from "../../scripts/render-development-config.mjs";
 
 // Run only from the trusted current main checkout, before executing selected code.
@@ -18,8 +19,8 @@ export function assertDevPublicationSourceHistory(env, { cwd = process.cwd() } =
   try {
     if (originalRun) git(["merge-base", "--is-ancestor", originalRun, trusted]);
     git(["merge-base", "--is-ancestor", source, originalRun ?? trusted]);
-  } catch {
-    throw new Error("Accepted dev source is outside trusted main history");
+  } catch (error) {
+    throw new Error("Accepted dev source is outside trusted main history", faultCause(error));
   }
   return source;
 }
@@ -37,5 +38,5 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     else if (process.argv[2] === undefined) checkoutDevPublicationSource(process.env);
     else throw new Error("Invalid dev source command");
   }
-  catch { console.error("Dev source checkout refused"); process.exitCode = 1; }
+  catch (error) { console.error(`Dev source checkout refused: ${faultLine(error)}`); process.exitCode = 1; }
 }

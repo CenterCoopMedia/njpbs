@@ -3,7 +3,7 @@ import { request as httpRequest } from "node:http";
 import { fileURLToPath } from "node:url";
 import { inspect } from "node:util";
 import { describe, expect, it, vi } from "vitest";
-import { ABSENT_EXIT, CALLER_REFUSED, failureText, faultCause, faultKind, faultLine, httpFault, main, permanentFailure, providerCall, providerCallSync, providerGcloud, providerJson } from "../../scripts/lib/provider-call.mjs";
+import { ABSENT_EXIT, CALLER_REFUSED, failureText, faultCause, faultKind, faultLine, kindCause, httpFault, main, permanentFailure, providerCall, providerCallSync, providerGcloud, providerJson } from "../../scripts/lib/provider-call.mjs";
 
 const options = () => ({ wait: vi.fn().mockResolvedValue(), log: vi.fn() });
 const http = (status, headers = {}) => httpFault(new Response(null, { status, headers }));
@@ -181,6 +181,14 @@ describe("provider call rule", () => {
     const faults = [http(503), Object.assign(new Error("private"), { code: "ENOENT" }), Object.assign(new Error("private"), { code: 7 }),
       Object.assign(new Error("private"), { status: 2, stderr: "private" }), new TypeError("private"), new (class ReferencedRecordError extends Error {})("private")];
     expect(faults.map(faultKind)).toEqual(["HTTP 503", "ENOENT", "code 7", "exit 2", "TypeError", "Error"]);
+    expect(failureText(new Error("Fixed sentence", kindCause(new Error("private", { cause: new Error("private") }))))).toBe("Fixed sentence; cause: Error");
+  });
+
+  it("names Git's own failure line, and the exit code of a command that named none", () => {
+    const git = Object.assign(new Error("Command failed: git show private"), { status: 128,
+      stderr: "fatal: path 'config/example.json' exists on disk, but not in 'example'\n" });
+    expect(faultLine(git)).toBe("fatal: path 'config/example.json' exists on disk, but not in 'example'");
+    expect(faultLine(Object.assign(new Error("Command failed: private"), { status: 3, stderr: "note" }))).toBe("exit 3");
   });
 
   it("carries a caught error's message, code and cause into the replacing error", () => {

@@ -2,6 +2,7 @@ import { repositoryMatches } from "../../scripts/lib/repository-identity.mjs";
 import dispatch from "../../functions/lib/cms-publish-dispatch.js";
 import { appendFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
+import { kindCause } from "../../scripts/lib/provider-call.mjs";
 import { createHash } from "node:crypto";
 
 const refusalMessages = Object.freeze({
@@ -11,7 +12,7 @@ const refusalMessages = Object.freeze({
   environment_write: "Dev reconciliation provenance check failed: environment write",
 });
 class ReconcileRefusal extends Error {
-  constructor(category) { super(refusalMessages[category]); this.category = category; }
+  constructor(category, options) { super(refusalMessages[category], options); this.category = category; }
 }
 export function devReconcileRefusalMessage(error) {
   return error instanceof ReconcileRefusal && Object.hasOwn(refusalMessages, error.category)
@@ -58,20 +59,20 @@ export async function writeDevReconcileEnvironment(env, { fetchRun = fetch, appe
     });
     if (!response.ok) throw new ReconcileRefusal("api_lookup");
     run = await response.json();
-  } catch {
+  } catch (error) {
     // Neither the API response body nor a network/JSON exception is safe to log.
-    throw new ReconcileRefusal("api_lookup");
+    throw new ReconcileRefusal("api_lookup", kindCause(error));
   }
   const values = devReconcileEnvironment(run, env);
   try {
     appendEnvironment(env.GITHUB_ENV, Object.entries(values).map(([key, value]) => `${key}=${value}\n`).join(""));
-  } catch {
-    throw new ReconcileRefusal("environment_write");
+  } catch (error) {
+    throw new ReconcileRefusal("environment_write", kindCause(error));
   }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   writeDevReconcileEnvironment(process.env).catch(error => {
-    console.error(devReconcileRefusalMessage(error)); process.exitCode = 1;
+    console.error(error?.cause?.name === "FaultCause" ? `${devReconcileRefusalMessage(error)}; cause: ${error.cause.message}` : devReconcileRefusalMessage(error)); process.exitCode = 1;
   });
 }
