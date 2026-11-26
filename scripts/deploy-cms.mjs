@@ -7,7 +7,7 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { repeatAfterProviderLimit } from "./lib/firebase-provider-limit.mjs";
+import { deployFirebase } from "./lib/cms-firebase-deploy.mjs";
 import { faultText, repeatNetworkFault } from "./lib/network-fault.mjs";
 
 const root = resolve(fileURLToPath(new URL("../", import.meta.url)));
@@ -126,20 +126,10 @@ const steps = {
     await requireOneEdgeSecret();
     await npx(["firebase", "functions:artifacts:setpolicy", "--project", project, "--location", "us-central1", "--days", "7", "--force"]);
     // Firebase skips each Function whose source, parameters and secrets did not change.
-    // No --force: it would delete every live index and Function that the source does not name.
-    const rules = dev ? "firestore:rules,firestore:indexes" : "firestore:rules,firestore:indexes,storage";
-    for (let only = `${rules},functions`; ;) {
-      log = "";
-      try {
-        return await npx(["firebase", "deploy", "--project", project, "--config", target.firebaseConfig, "--only", only, "--non-interactive"]);
-      } catch (error) {
-        const repeat = repeatAfterProviderLimit(log, only);
-        if (!repeat) throw error;
-        ({ only } = repeat);
-        console.log(`${repeat.error}\nWaiting 60 s for the provider's minute, then deploying ${repeat.left.length ? repeat.left.join(", ") : "everything again"}`);
-        await new Promise(done => setTimeout(done, 60_000));
-      }
-    }
+    const codebase = JSON.parse(readFileSync(target.firebaseConfig, "utf8")).functions.codebase;
+    await deployFirebase({ project, config: target.firebaseConfig, dev, codebase, exported: Object.keys(await functionSource()),
+      wait: ms => new Promise(done => setTimeout(done, ms)),
+      deploy: async args => { log = ""; try { await npx(args); return { ok: true }; } catch (error) { return { ok: false, log, error }; } } });
   },
   // Firebase does not grant a new event trigger's identity the right to call it; its events would be dropped.
   async "event-grants"() {
