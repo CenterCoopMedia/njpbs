@@ -127,8 +127,9 @@ async function judge(get, release, ctx) {
   if (!after || after.conclusion !== "success" || !run || after.created_at < run.updated) why.push("no green drift check after the release (conditions 4 and 5)");
   // 6
   if (!(await onMaster(get, ctx.toolRepo, record.payload.tool))) why.push(`tool ${short(record.payload.tool) || "unnamed"} is not on jawn-ops master`);
-  // 7
-  const dev = ctx.development.filter((r) => r.sha === record.sha && r.start < record.start).sort((a, b) => a.start.localeCompare(b.start))[0];
+  // 7: every development record of the commit, whatever its age.
+  const development = await records(get, ctx.repo, `release-development&sha=${record.sha}`, null);
+  const dev = development.filter((r) => r.start < record.start).sort((a, b) => a.start.localeCompare(b.start))[0];
   if (!dev) why.push("no earlier release-development record");
   else if (dev.end?.state !== "success" || dev.end.failed !== 0) why.push("first release-development record did not succeed");
   // 9
@@ -138,17 +139,13 @@ async function judge(get, release, ctx) {
 }
 
 export async function releaseStreak(get, { need, since, repo, toolRepo }) {
-  // Development records are read whole: the first one for a source may be older
-  // than the window.
-  const [production, development, cmsRuns, drift] = await Promise.all([
-    records(get, repo, "release-production", since), records(get, repo, "release-development", null),
-    productionCMSRuns(get, repo, since), driftRuns(get, repo, since),
+  const [production, cmsRuns, drift] = await Promise.all([
+    records(get, repo, "release-production", since), productionCMSRuns(get, repo, since), driftRuns(get, repo, since),
   ]);
-  // Each record is one release; production CMS runs outside every record form
-  // releases without a record, one per stretch between records. A record with
-  // no end status reaches to the next record.
-  const next = (r) => production.filter((o) => o.start > r.start).map((o) => o.start).sort()[0];
-  const inside = (run, r) => run.created >= r.start && run.created <= (r.end?.at ?? next(r) ?? "9999");
+  // Each record is one release; production CMS runs outside every ended record
+  // form releases without a record, one per stretch between records. A record
+  // that never ended takes no run: nothing ties a later run to it.
+  const inside = (run, r) => Boolean(r.end) && run.created >= r.start && run.created <= r.end.at;
   const events = [
     ...production.map((r) => ({ at: r.start, record: r, cms: cmsRuns.filter((run) => inside(run, r)) })),
   ];
@@ -161,11 +158,14 @@ export async function releaseStreak(get, { need, since, repo, toolRepo }) {
   }
   events.sort((a, b) => b.at.localeCompare(a.at));
   // The previous source is the one before. For production CMS runs with no
-  // record it is their environment deployment's commit: main at dispatch, which
-  // the lean release sets to the source; GitHub does not show the run's inputs.
+  // record it is their environment deployment's commit: main at dispatch, at or
+  // after the deployed ref (GitHub does not show a run's inputs). A failed record
+  // names a source that may not be live. Both can only make a new release read
+  // as "already live", never the other way, and a failure before it already
+  // ended the streak.
   events.forEach((e, i) => { const o = events[i + 1]; e.previous = o ? o.record?.sha ?? o.cms.at(-1)?.sha : null; });
 
-  const ctx = { production, development, drift, repo, toolRepo };
+  const ctx = { production, drift, repo, toolRepo };
   const releases = [];
   let count = 0;
   for (const e of events) {

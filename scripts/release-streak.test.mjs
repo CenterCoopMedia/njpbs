@@ -44,7 +44,7 @@ function counted(change = {}) {
     { state: change.end ?? "success", description: `failed=${change.failed ?? 0} seconds=1484 refused=701`, created_at: "2026-12-01T03:30:00Z" },
     { state: "in_progress", description: "", created_at: "2026-12-01T03:00:01Z" },
   ];
-  a[deployments("release-development")] = [{ id: 9000, sha: SOURCE, environment: "release-development", created_at: "2026-11-30T03:00:00Z", payload: { release_id: "d1", tool: TOOL } }];
+  a[deployments(`release-development&sha=${SOURCE}`)] = [{ id: 9000, sha: SOURCE, environment: "release-development", created_at: "2026-11-30T03:00:00Z", payload: { release_id: "d1", tool: TOOL } }];
   a["repos/CenterCoopMedia/njpbs/deployments/9000/statuses?per_page=100"] = [{ state: change.dev ?? "success", description: "failed=0 seconds=1300 refused=0", created_at: "2026-11-30T03:25:00Z" }];
   // The production CMS run of the release, linked by its environment deployment.
   a[cmsRuns] = { workflow_runs: [{ id: 50001, display_title: "CMS deploy [c1]", created_at: "2026-12-01T03:05:00Z", updated_at: "2026-12-01T03:15:00Z", conclusion: "success", run_attempt: change.attempt ?? 1 }, ...a[cmsRuns].workflow_runs] };
@@ -85,20 +85,13 @@ test("each broken condition stops the count and is named", async () => {
   }
 });
 
-test("a record that never ended does not take a later production CMS run", async () => {
+test("a record that never ended takes no production CMS run", async () => {
   const a = counted();
   // A stopped command: the record has only its in_progress status.
   a["repos/CenterCoopMedia/njpbs/deployments/9001/statuses?per_page=100"] = [{ state: "in_progress", description: "started", created_at: "2026-12-01T03:00:01Z" }];
-  const second = { id: 9003, sha: "3".repeat(40), environment: "release-production", created_at: "2026-12-03T03:00:00Z", payload: {} };
-  a[deployments("release-production")] = [second, ...a[deployments("release-production")]];
-  a["repos/CenterCoopMedia/njpbs/deployments/9003/statuses?per_page=100"] = [{ state: "success", description: "failed=0 seconds=1 refused=0", created_at: "2026-12-03T03:30:00Z" }];
-  // A production CMS run with no record, after both.
-  a[cmsRuns].workflow_runs.unshift({ id: 50009, display_title: "CMS deploy [x]", created_at: "2026-12-04T03:00:00Z", updated_at: "2026-12-04T03:10:00Z", conclusion: "success", run_attempt: 1 });
-  a[deployments("production")].unshift({ id: 9004, sha: "4".repeat(40), created_at: "2026-12-04T03:00:02Z" });
-  a["repos/CenterCoopMedia/njpbs/deployments/9004/statuses?per_page=100"] = [{ state: "success", created_at: "2026-12-04T03:10:00Z", target_url: "https://github.com/CenterCoopMedia/njpbs/actions/runs/50009/job/1" }];
   const result = await releaseStreak(fake(a), { need: 1, since, repo: "CenterCoopMedia/njpbs", toolRepo: "jamditis/jawn-ops" });
   assert.equal(result.count, 0);
-  assert.match(result.releases[0].why[0], /^no release-production record \(1 production CMS run: 50009 success\)/);
+  assert.deepEqual(result.releases[0].why, ["no release-production record (1 production CMS run: 50001 success)"]);
 });
 
 test("a release with no earlier production event in the window does not count", async () => {
