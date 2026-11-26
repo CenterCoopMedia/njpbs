@@ -42,7 +42,7 @@ export function devOrigin(env, key) {
   // config-input: CMS_DEV_ADMIN_ORIGIN, CMS_DEV_API_ORIGIN, CMS_DEV_PUBLIC_ORIGIN, CMS_DEV_MEDIA_ORIGIN, CMS_DEV_PREVIEW_ORIGIN
   const value = env[key]?.trim() ?? "";
   let url;
-  try { url = new URL(value); } catch { throw new CmsTargetError(`${key} must be a development origin`); }
+  try { url = new URL(value); } catch (error) { throw new CmsTargetError(`${key} must be a development origin (${error.name})`); }
   if (url.protocol !== "https:" || url.origin !== value || !isDevelopmentHostname(url.hostname)) {
     throw new CmsTargetError(`${key} must be a development origin`);
   }

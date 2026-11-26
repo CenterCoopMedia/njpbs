@@ -16,6 +16,7 @@ import { requireWorkerReadback } from "./lib/cloudflare-worker-readback.mjs";
 import { selectMigrations } from "./lib/deployment-components.mjs";
 import { prepareContentSectionRegistry } from "./seed-content-sections.mjs";
 import { prepareMediaCategoryRegistry } from "./seed-media-categories.mjs";
+import { faultKind } from "./lib/provider-call.mjs";
 import deployment from "../functions/lib/dev-reader-deployment.js";
 import mount from "../functions/lib/cms-reader-mount-descriptor.js";
 import cms from "../functions/lib/cms-preview-pair.js";
@@ -218,8 +219,9 @@ async function main() {
     phase = "write-artifact";
     writeFileSync(process.argv[2], `${JSON.stringify(result, null, 2)}\n`, { flag: "wx", mode: 0o600 });
     console.log("Dev reader deployments verified; original install proofs and selectors unchanged");
-  } catch {
-    console.error(`Dev reader deployment refused at ${phase}; preserve original run/candidate evidence for reconciliation`); process.exitCode = 1;
+  } catch (error) {
+    // Registry steps put live record values and paths in their messages.
+    console.error(`Dev reader deployment refused at ${phase} (${faultKind(error)}); preserve original run/candidate evidence for reconciliation`); process.exitCode = 1;
   } finally { if (app) await deleteApp(app); }
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) await main();

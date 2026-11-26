@@ -1,4 +1,5 @@
 import { pathToFileURL } from "node:url";
+import { faultKind } from "./lib/provider-call.mjs";
 import { createHash } from "node:crypto";
 
 const receiptUrl = "https://dev-public.example.org/_publication.json";
@@ -38,8 +39,9 @@ export async function checkDevMachineReceipt({ env = process.env, fetchImpl = fe
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  checkDevMachineReceipt().catch(() => {
-    console.error("Dev machine receipt proof failed");
+  checkDevMachineReceipt().catch(error => {
+    // The request sends a credential in a custom header.
+    console.error(`Dev machine receipt proof failed (${faultKind(error)})`);
     process.exitCode = 1;
   });
 }

@@ -158,6 +158,21 @@ export function faultLine(error) {
   return error?.cause instanceof Error ? `${line}; cause: ${faultLine(error.cause)}` : line;
 }
 
+/**
+ * The category of a fault: its status, code, exit or class. For a site whose
+ * error messages can quote stored records or configured values.
+ * @param {any} error
+ * @returns {string}
+ */
+export function faultKind(error) {
+  const status = httpStatus(error);
+  if (status !== undefined) return `HTTP ${status}`;
+  if (/^[A-Z][A-Z0-9_]{2,40}$/.test(error?.code ?? "")) return error.code;
+  if (Number.isInteger(error?.code)) return `code ${error.code}`;
+  if (isChildFault(error) && Number.isInteger(error.status)) return `exit ${error.status}`;
+  return [error?.name, error?.constructor?.name].find(value => /^[A-Za-z]{1,40}$/.test(value ?? "")) ?? "none";
+}
+
 class FaultCause extends Error { name = "FaultCause"; }
 
 /**
