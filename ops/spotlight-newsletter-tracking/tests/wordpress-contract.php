@@ -40,7 +40,8 @@ function check($condition, $message) {
 function environment() {
     foreach (array('NJSPOTLIGHT_CONTEXT' => 'production', 'NJSPOTLIGHT_BLOG_ID' => '7',
         'NJSPOTLIGHT_PRIVACY_PAGE_ID' => '42', 'NJSPOTLIGHT_TRACKING_ORIGIN' => 'https://news.example.org',
-        'NJSPOTLIGHT_ACTIVE_CAMPAIGN_ACCOUNT' => '123456', 'NJSPOTLIGHT_WISEPOPS_PROPERTY' => 'Example123') as $key => $value) {
+        'NJSPOTLIGHT_ACTIVE_CAMPAIGN_ACCOUNT' => '123456', 'NJSPOTLIGHT_WISEPOPS_PROPERTY' => 'Example123',
+        'NJSPOTLIGHT_GA4_MEASUREMENT_ID' => 'G-TEST123456') as $key => $value) {
         putenv($key . '=' . $value);
     }
     $_SERVER['REQUEST_METHOD'] = 'GET';
@@ -66,16 +67,18 @@ if (($argv[1] ?? '') === 'render') {
 
 check(class_exists('DOMDocument'), 'The HTML eligibility checks need PHP DOM');
 $config = NJSpotlightNewsletter\configuration();
-check($config && $config['account'] === '123456' && $config['property'] === 'Example123', 'Explicit settings activate only the selected installation');
+check($config && $config['account'] === '123456' && $config['property'] === 'Example123'
+    && $config['measurement'] === 'G-TEST123456', 'Explicit settings activate only the selected installation');
 foreach (array('NJSPOTLIGHT_CONTEXT', 'NJSPOTLIGHT_BLOG_ID', 'NJSPOTLIGHT_PRIVACY_PAGE_ID',
-    'NJSPOTLIGHT_TRACKING_ORIGIN', 'NJSPOTLIGHT_ACTIVE_CAMPAIGN_ACCOUNT', 'NJSPOTLIGHT_WISEPOPS_PROPERTY') as $key) {
+    'NJSPOTLIGHT_TRACKING_ORIGIN', 'NJSPOTLIGHT_ACTIVE_CAMPAIGN_ACCOUNT', 'NJSPOTLIGHT_WISEPOPS_PROPERTY',
+    'NJSPOTLIGHT_GA4_MEASUREMENT_ID') as $key) {
     putenv($key);
     check(NJSpotlightNewsletter\configuration() === null, 'Missing configuration must stay inactive: ' . $key);
     environment();
 }
 foreach (array('NJSPOTLIGHT_BLOG_ID' => '8', 'NJSPOTLIGHT_CONTEXT' => 'staging',
     'NJSPOTLIGHT_TRACKING_ORIGIN' => 'https://other.example.org', 'NJSPOTLIGHT_ACTIVE_CAMPAIGN_ACCOUNT' => 'not-an-account',
-    'NJSPOTLIGHT_WISEPOPS_PROPERTY' => 'invalid/property') as $key => $value) {
+    'NJSPOTLIGHT_WISEPOPS_PROPERTY' => 'invalid/property', 'NJSPOTLIGHT_GA4_MEASUREMENT_ID' => 'GTM-W7PS3VH') as $key => $value) {
     putenv($key . '=' . $value);
     check(NJSpotlightNewsletter\configuration() === null, 'Invalid settings must stay inactive: ' . $key);
     environment();
@@ -127,6 +130,7 @@ ob_end_flush();
 $rendered = ob_get_clean();
 check(substr_count($rendered, 'id="spotlight-newsletter-choice"') === 1, 'One footer control is inserted');
 check(strpos($rendered, 'consent.js') < strpos($rendered, '</body>'), 'Initialization stays inside the body footer');
-check(strpos($rendered, 'diffuser-cdn') === false && strpos($rendered, 'wisepops.net/h/') === false, 'The server never emits a vendor script request');
-check(strpos($filters['the_content'][0]('Existing policy'), 'Existing policy<section id="newsletter-privacy">') === 0, 'The privacy addition preserves the existing notice');
+check(strpos($rendered, 'diffuser-cdn') === false && strpos($rendered, 'wisepops.net/h/') === false
+    && strpos($rendered, 'googletagmanager') === false && strpos($rendered, 'gtag(') === false, 'The server never emits a vendor script request');
+check(strpos($filters['the_content'][0]('Existing policy'), 'Existing policy<section id="analytics-privacy">') === 0, 'The privacy addition preserves the existing notice');
 echo "Spotlight newsletter WordPress contracts passed\n";
