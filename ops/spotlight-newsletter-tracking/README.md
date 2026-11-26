@@ -15,8 +15,8 @@ grants `analytics_storage` only, and loads `gtag.js` once with one `config`
 call (`send_page_view: true`, Google signals and ad personalization off). It
 uses no Tag Manager container. The measurement ID comes from the
 `NJSPOTLIGHT_GA4_MEASUREMENT_ID` server setting; an invalid value keeps the
-whole package inactive. The NJ Spotlight News stream is `G-QDQ31Y7117` in the
-NJ PBS GA4 property 552755351. GA counts only readers who allow analytics, so
+whole package inactive. The operator record holds the live stream mapping.
+GA counts only readers who allow analytics, so
 its numbers are not comparable with the earlier all-visitor WNET container.
 Withdrawal, GPC and a player that appears later stop analytics the same way
 they stop newsletter tools.
