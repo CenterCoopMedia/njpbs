@@ -117,10 +117,12 @@ const steps = {
       CMS_ADMIN_BUILD_REVISION: functionsSha, CMS_PREVIEW_RENDERER_SHA: functionsSha, VITE_LIVE_PRODUCTION_ENABLED: dev ? "false" : env.LIVE_PRODUCTION_ENABLED || "false" } });
   },
   // A create names a category, desk or page image that must already be live; a commit can add one.
+  // The smoke needs its fixture in draft.
   async seed() {
     await node(["scripts/backfill-page-seed-media.mjs"]);
     await node(["scripts/seed-media-categories.mjs", "--if-needed"]);
     await node(["scripts/seed-content-sections.mjs", "--if-needed"]);
+    await node(["scripts/seed-preview-smoke-fixture.mjs"]);
   },
   async firebase() {
     await requireSiteTypes();
