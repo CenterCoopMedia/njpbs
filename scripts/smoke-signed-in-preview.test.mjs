@@ -51,7 +51,7 @@ test("adds Access headers on one origin and refuses to forward them on redirects
 
 function fixtureBrowser(settings, { sessionStatus = 204, documentStatus = 200, headingVisible = true,
   sessionFailure, noDocument = false, progress = "building", later, job, reader = false, jobStatus = 200, hasProgress = true,
-  noPopup = false, editorAlert = false, signInStatus, editorError, documentFailure, stalled = false, disabledReason } = {}) {
+  noPopup = false, editorAlert = false, signInStatus, editorError, documentFailure, stalled = false, disabledReason, archived = false, locked = false } = {}) {
   const context = new EventEmitter();
   const page = new EventEmitter();
   const frame = {};
@@ -101,8 +101,10 @@ function fixtureBrowser(settings, { sessionStatus = 204, documentStatus = 200, h
       return { status: () => 200 };
     },
     waitForResponse: predicate => wait(page, "response", predicate),
+    // The lock message class from the dev editor, Nov. 26, 2026.
     locator: selector => selector === "body"
       ? { async ariaSnapshot() { assert.equal(password, ""); } }
+      : selector.includes(".editor-lock-message-readonly") ? { first: () => ({ waitFor: () => locked ? Promise.resolve() : new Promise(() => {}) }) }
       : { getByRole: () => ({ async click() {
         assert.equal(password, credential.password);
         if (signInStatus) page.emit("response", response("https://identity.example.test/v1/accounts:signInWithPassword", signInStatus, "POST", false));
@@ -127,7 +129,10 @@ function fixtureBrowser(settings, { sessionStatus = 204, documentStatus = 200, h
   });
   const pageButton = name => ({
       isDisabled: async () => Boolean(disabledReason),
-      waitFor: () => (signInStatus && name !== "Preview") || (editorError && name === "Preview") ? new Promise(() => {}) : Promise.resolve(),
+      // The dev editor for an archived post shows Save draft and Restore to draft and no Preview; a locked one shows neither.
+      count: async () => name === "Restore to draft" ? Number(archived) : name === "Preview" && (archived || locked) ? 0 : 1,
+      waitFor: () => (signInStatus && name !== "Preview") || (editorError && name === "Preview") ||
+        ((archived || locked) && name === "Preview") || (locked && name === "Save draft") ? new Promise(() => {}) : Promise.resolve(),
       async click() {
         assert.equal(name, "Preview");
         assert.equal(password, "");
@@ -181,6 +186,16 @@ test("ends on a refused sign-in and an editor that cannot load its record", asyn
   for (const editorError of ["You do not have permission to edit this record.", "Deleted records cannot be edited here."]) {
     assert.deepEqual(await checkSignedInPreview(fixtureBrowser(settings, { editorError }), settings), { ok: false, code: "editor_unavailable" });
   }
+});
+
+test("ends at once on a loaded editor with no Preview control", async () => {
+  const settings = previewSmokeSettings("production", env);
+  // The hang backstop would end these at 1 s; the receipt must come from the editor's own state first.
+  const limits = { stageMs: 1_000 };
+  assert.deepEqual(await checkSignedInPreview(fixtureBrowser(settings, { archived: true }), settings, limits),
+    { ok: false, code: "no_preview_control", reason: "archived" });
+  assert.deepEqual(await checkSignedInPreview(fixtureBrowser(settings, { locked: true }), settings, limits),
+    { ok: false, code: "editor_locked" });
 });
 
 test("names a disabled Preview control at once", async () => {
