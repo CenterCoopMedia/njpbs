@@ -4,8 +4,9 @@
 //
 //   node scripts/release-streak.mjs --need 4 --repo CenterCoopMedia/njpbs --tool-repo jamditis/jawn-ops --since 2026-11-01 [--json]
 //
-// --since is where reading starts; give a date before the first release you
-// mean to count.
+// --since is where reading starts: a date before the first release you mean
+// to count, when no production write was running (a write that started
+// before it is not read).
 //
 // Auth: GH_TOKEN or GITHUB_TOKEN; it must read jamditis/jawn-ops (condition 6).
 //
@@ -79,14 +80,10 @@ const PRODUCTION_WRITERS = ["cms-deploy.yml", "cms-staging-deploy.yml", "promote
 // new deployment, so every attempt is one entry. GitHub links each
 // deployment to its job, and the run names the workflow.
 async function productionDeploys(get, repo, since) {
-  // Newest first. Reading goes on past --since while a deployment still ended
-  // at or after it, so a write that crosses the window start is kept.
-  const deployments = await list(get, `repos/${repo}/deployments?environment=production`);
+  const deployments = await list(get, `repos/${repo}/deployments?environment=production`, null, since);
   const writes = [];
   for (const d of deployments) {
     const statuses = await get(`repos/${repo}/deployments/${d.id}/statuses?per_page=100`);
-    const last = statuses.find(ended)?.created_at;
-    if (d.created_at < since && last && last < since) break;
     const id = runId(statuses.at(-1)?.target_url);
     if (!id) continue;
     const run = await get(`repos/${repo}/actions/runs/${id}`);
@@ -104,7 +101,9 @@ async function productionDeploys(get, repo, since) {
   const forProduction = await Promise.all(waiting.map(async (r) =>
     (await get(`repos/${repo}/actions/runs/${r.id}/pending_deployments`)).some((p) => p.environment?.name === "production") ? r.id : null));
   const queued = (await Promise.all(PRODUCTION_WRITERS.map((workflow) => list(get, `repos/${repo}/actions/workflows/${workflow}/runs?status=queued`, "workflow_runs")))).flat();
-  const pending = [...new Set([...writes.filter((w) => !w.updated).map((w) => w.id), ...forProduction.filter(Boolean), ...queued.map((r) => r.id)])];
+  // promote.yml names a development target in its run title.
+  const queuedProduction = queued.filter((r) => !/\bdevelopment\b/i.test(r.display_title ?? ""));
+  const pending = [...new Set([...writes.filter((w) => !w.updated).map((w) => w.id), ...forProduction.filter(Boolean), ...queuedProduction.map((r) => r.id)])];
   return [writes.sort((a, b) => a.created.localeCompare(b.created)), pending];
 }
 
