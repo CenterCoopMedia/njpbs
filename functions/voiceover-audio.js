@@ -25,9 +25,10 @@ const {
 const R2_ACCESS_KEY_ID = defineSecret("CMS_VOICEOVER_R2_ACCESS_KEY_ID");
 const R2_SECRET_ACCESS_KEY = defineSecret("CMS_VOICEOVER_R2_SECRET_ACCESS_KEY");
 const R2_ENDPOINT = defineString("CMS_VOICEOVER_R2_ENDPOINT", { default: "" });
-const R2_BUCKET = defineString("CMS_VOICEOVER_R2_BUCKET", {
-  default: "njpbs-cms-voiceover",
-});
+// Supplied only by the CMS_VOICEOVER_R2_BUCKET repository variable through the Functions table.
+// Production sets it (set and read back Nov. 27, 2026); without it, requests fail closed with
+// "CMS_VOICEOVER_R2_BUCKET is not configured" instead of using a name kept in source.
+const R2_BUCKET = defineString("CMS_VOICEOVER_R2_BUCKET", { default: "" });
 const MAX_AUDIO_REQUEST_BYTES = 2 * 1024;
 
 function configuredStorage() {
