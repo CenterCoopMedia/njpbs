@@ -523,6 +523,11 @@ async function assertNoBuildOwnerPreservedInTransaction({ firestore, transaction
     refuse("The public candidate does not preserve published data figures.");
   }
   const current = (await transaction.get(firestore.doc(`cmsPosts/${state.postId}`))).data();
+  // A Post deleted outside Boardwalk leaves its owner behind. Name it; the
+  // readers and release verification still need that record.
+  if (current === undefined && owner !== staticOwner) {
+    refuse(`Instant Post ${state.postId} has no Post record. Restore the Post or retire its publication owner.`);
+  }
   if (!require("./election-results-compatibility").candidateSupportsOwnedElectionResults(state, current?.published, contract)) {
     refuse("The public candidate does not preserve published election results.");
   }

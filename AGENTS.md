@@ -16,6 +16,9 @@
   withdrew, limited to the paths, documents and receipt hashes bound in the
   dry-run plan stored in the same run record. Records the seed did not write
   stay refused. Production retention controls are unchanged.
+- Remove test Posts and Pages through Boardwalk or the CMS API (unpublish, then
+  Delete to Recycle bin), never by direct Firestore deletes. A direct delete
+  skips the publication owners that every release checks.
 - Run focused checks before you submit a change. List changed or removed tests
   and explain why they changed. Do not weaken assertions to make a check pass.
 - Check keyboard access, visible focus, labels, contrast, and reduced motion for

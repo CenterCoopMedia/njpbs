@@ -343,6 +343,25 @@ describe("multi-Post admission and retained ownership", () => {
         rendererSha: "b".repeat(40), postId: "first", enabled: true, authoritative: true } } }))).rejects.toMatchObject({ status: 409 });
     expect(await snapshot()).toEqual(before);
   });
+  // Dev 2026-11-26: 82 withdrawn test Posts were deleted directly in Firestore,
+  // and every later candidate was refused at the lease with a generic sentence.
+  it("names the owner whose Post record was deleted when it refuses a candidate", async () => {
+    expect((await publish("first")).code).toBe(200);
+    expect((await publish("second")).code).toBe(200);
+    const withdrawn = await invoke(lifecycle.createCmsTransitionContentHandler({ firestore: db, requirePrincipalFn: async () => actor, log: quiet }),
+      { collection: "cmsPosts", id: "first", baseVersion: 2, action: "unpublish" });
+    expect(withdrawn.code, JSON.stringify(withdrawn.body)).toBe(200);
+    expect((await owner("first")).visible).toBe(false);
+    await db.doc("cmsPosts/first").delete();
+    const nextSha = "b".repeat(40);
+    const candidate = { commitSha: nextSha, generation: 2,
+      noBuildPost: { schemaVersion: 2, families: ["posts"], rendererSha: nextSha, enabled: true, authoritative: true } };
+    const before = await snapshot();
+    await expect(db.runTransaction(transaction => publication.assertNoBuildCandidateInTransaction({ firestore: db, transaction, candidate })))
+      .rejects.toMatchObject({ status: 409,
+        message: "Instant Post first has no Post record. Restore the Post or retire its publication owner." });
+    expect(await snapshot()).toEqual(before);
+  });
   it("changes shared renderer capability without rewriting accepted queues, then binds a new operation to active release", async () => {
     expect((await publish("first")).code).toBe(200);
     const retained = await owner("first");
