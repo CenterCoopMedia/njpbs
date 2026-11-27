@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { isRouteErrorResponse, useNavigate, useRouteError } from "react-router";
 import { Button, Panel } from "../components/ui/Primitives";
 import { dashboardPath } from "../lib/routes";
+import { adminPerf } from "../lib/perf-receipts";
 import { markAndReload, staleModuleReloadKey } from "../lib/stale-module-reload";
 
 function sessionStore(): Storage | null {
@@ -41,10 +42,12 @@ export function RouteErrorBoundary() {
   const error = useRouteError();
   const navigate = useNavigate();
   const detail = describe(error);
-  const [reloadKey] = useState(() => staleModuleReloadKey(error, sessionStore()));
+  const [reloadKey, setReloadKey] = useState(() =>
+    staleModuleReloadKey(error, sessionStore(), adminPerf.receipt().build ?? null));
   useEffect(() => {
+    if (!reloadKey) return;
     const storage = sessionStore();
-    if (reloadKey && storage) markAndReload(storage, reloadKey, () => window.location.reload());
+    if (!storage || !markAndReload(storage, reloadKey, () => window.location.reload())) setReloadKey(null);
   }, [reloadKey]);
 
   // The boundary stops the throw from reaching the console on its own, and a swallowed stack is

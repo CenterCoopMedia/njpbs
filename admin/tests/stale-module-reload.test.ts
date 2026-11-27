@@ -18,6 +18,7 @@ describe("stale page file reload", () => {
     expect(isStaleModuleError(firefox)).toBe(true);
     expect(isStaleModuleError(new TypeError("Failed to fetch dynamically imported module: https://x/a.js"))).toBe(true);
     expect(isStaleModuleError(new TypeError("Importing a module script failed."))).toBe(true);
+    expect(isStaleModuleError(new Error("Unable to preload CSS for /assets/WhatsNew-x1.css"))).toBe(true);
     expect(isStaleModuleError(new TypeError("Cannot read properties of undefined"))).toBe(false);
     expect(isStaleModuleError("error loading dynamically imported module")).toBe(false);
   });
@@ -25,22 +26,30 @@ describe("stale page file reload", () => {
   it("reloads once per missing file, then leaves the error panel", () => {
     const storage = memoryStorage();
     const reload = vi.fn();
-    const key = staleModuleReloadKey(firefox, storage);
+    const key = staleModuleReloadKey(firefox, storage, "f6be4ef");
     expect(key).not.toBeNull();
-    markAndReload(storage, key!, reload);
+    expect(markAndReload(storage, key!, reload)).toBe(true);
     expect(reload).toHaveBeenCalledTimes(1);
-    expect(staleModuleReloadKey(firefox, storage)).toBeNull();
+    expect(staleModuleReloadKey(firefox, storage, "f6be4ef")).toBeNull();
 
     const nextRelease = new TypeError(
       "error loading dynamically imported module: https://admin.njpbs.org/assets/profile-chunk-Zz9.js",
     );
-    expect(staleModuleReloadKey(nextRelease, storage)).not.toBeNull();
+    expect(staleModuleReloadKey(nextRelease, storage, "f6be4ef")).not.toBeNull();
+  });
+
+  it("gives each loaded build its own attempt when the browser names no file", () => {
+    const storage = memoryStorage();
+    const safari = new TypeError("Importing a module script failed.");
+    markAndReload(storage, staleModuleReloadKey(safari, storage, "aaa1111")!, vi.fn());
+    expect(staleModuleReloadKey(safari, storage, "aaa1111")).toBeNull();
+    expect(staleModuleReloadKey(safari, storage, "bbb2222")).not.toBeNull();
   });
 
   it("does not reload when the marker cannot be stored", () => {
     const reload = vi.fn();
-    markAndReload({ setItem: () => { throw new Error("quota"); } }, "k", reload);
+    expect(markAndReload({ setItem: () => { throw new Error("quota"); } }, "k", reload)).toBe(false);
     expect(reload).not.toHaveBeenCalled();
-    expect(staleModuleReloadKey(firefox, null)).toBeNull();
+    expect(staleModuleReloadKey(firefox, null, "f6be4ef")).toBeNull();
   });
 });
