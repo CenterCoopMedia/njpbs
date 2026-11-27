@@ -49,19 +49,37 @@ function hasNoLiveCopy(draft: ContentRecordSummary): boolean {
   return !draft.liveSourceVersion && draft.publicUpdatePending !== true;
 }
 
-function archiveFailure(outcome: BulkArchiveOutcome | undefined): string | null {
+interface ArchiveNotice {
+  tone: "error" | "info";
+  message: string;
+}
+
+function withWarnings(message: string, warnings: readonly string[] | undefined): string {
+  return warnings?.length ? `${message} ${warnings.join(" ")}` : message;
+}
+
+// What the person needs to know after an archive request. A plain archive needs no message.
+function archiveNotice(outcome: BulkArchiveOutcome | undefined): ArchiveNotice | null {
   switch (outcome?.status) {
     case "archived":
     case "already_archived":
-      return outcome.publication?.status === "failed"
-        ? "The draft was archived, but its public copy was not withdrawn. Open Posts to retry the withdrawal."
-        : null;
+      if (outcome.publication?.status === "failed") {
+        return { tone: "error", message: withWarnings(
+          "The draft was archived, but its public copy was not withdrawn. Open Posts to retry the withdrawal.",
+          outcome.publication.warnings) };
+      }
+      if (outcome.publication?.status === "queued") {
+        return { tone: "info", message: withWarnings(
+          "The draft was archived. Its public copy stays on the site until the removal finishes.",
+          outcome.publication.warnings) };
+      }
+      return null;
     case "conflict":
-      return "This draft changed since Home loaded. Open it to see the latest version.";
+      return { tone: "error", message: "This draft changed since Home loaded. Open it to see the latest version." };
     case "missing":
-      return "This draft is no longer available.";
+      return { tone: "error", message: "This draft is no longer available." };
     default:
-      return outcome?.message ?? "The draft could not be archived.";
+      return { tone: "error", message: outcome?.message ?? "The draft could not be archived." };
   }
 }
 
@@ -79,7 +97,7 @@ export function HomeDrafts({ loadDrafts, archiveDraft, onArchived, now = Date.no
   const [state, setState] = useState<DraftsState>({ status: "loading" });
   const [attempt, setAttempt] = useState(0);
   const [archiving, setArchiving] = useState<string | null>(null);
-  const [archiveError, setArchiveError] = useState<{ title: string; message: string } | null>(null);
+  const [archiveResult, setArchiveResult] = useState<ArchiveNotice & { title: string } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -104,14 +122,15 @@ export function HomeDrafts({ loadDrafts, archiveDraft, onArchived, now = Date.no
   async function archive(draft: ContentRecordSummary & { version: number }) {
     if (!archiveDraft) return;
     setArchiving(draft.id);
-    setArchiveError(null);
+    setArchiveResult(null);
     let outcome: BulkArchiveOutcome | undefined;
     try {
       outcome = await archiveDraft(draft);
     } catch {
       // The archive may have committed before the response was lost, so read the
       // current state again instead of asserting that nothing changed.
-      setArchiveError({
+      setArchiveResult({
+        tone: "error",
         title: draft.title,
         message: "Boardwalk could not confirm the archive. The list was reloaded; check whether the draft is still here.",
       });
@@ -120,8 +139,8 @@ export function HomeDrafts({ loadDrafts, archiveDraft, onArchived, now = Date.no
       setArchiving(null);
       return;
     }
-    const failure = archiveFailure(outcome);
-    if (failure) setArchiveError({ title: draft.title, message: failure });
+    const notice = archiveNotice(outcome);
+    if (notice) setArchiveResult({ ...notice, title: draft.title });
     if (outcome?.status === "archived" || outcome?.status === "already_archived") {
       setAttempt((value) => value + 1);
       onArchived?.();
@@ -152,9 +171,14 @@ export function HomeDrafts({ loadDrafts, archiveDraft, onArchived, now = Date.no
           <Button onClick={() => setAttempt((value) => value + 1)}>Try loading drafts again</Button>
         </InlineMessage>
       ) : null}
-      {archiveError ? (
-        <InlineMessage tone="error" title={`Archiving "${archiveError.title}" needs attention`}>
-          {archiveError.message}
+      {archiveResult ? (
+        <InlineMessage
+          tone={archiveResult.tone}
+          title={archiveResult.tone === "error"
+            ? `Archiving "${archiveResult.title}" needs attention`
+            : `"${archiveResult.title}" was archived`}
+        >
+          {archiveResult.message}
         </InlineMessage>
       ) : null}
       {selection && drafts.length === 0 ? (

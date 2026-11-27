@@ -85,6 +85,17 @@ describe("My drafts on Home", () => {
     expect(onArchived).toHaveBeenCalledTimes(1);
   });
 
+  it("says when the public copy is still being removed", async () => {
+    const archiveDraft = vi.fn(async () => ({ id: "old", status: "archived" as const, version: 5,
+      publication: { status: "queued" as const, queueId: "queue-1", warnings: ["The homepage updates after the next build."] } }));
+    renderDrafts({ archiveDraft });
+    fireEvent.click(await screen.findByRole("button", { name: "Archive School budget vote" }));
+    const notice = await screen.findByText(/Its public copy stays on the site until the removal finishes\./);
+    expect(notice).toHaveTextContent("The homepage updates after the next build.");
+    expect(screen.getByText('"School budget vote" was archived')).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
   it("reloads when the archive response is lost", async () => {
     const archiveDraft = vi.fn(async () => { throw new Error("network down"); });
     const loadDrafts = vi.fn()
