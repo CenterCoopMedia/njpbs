@@ -6,6 +6,7 @@ const { PREVIEW_JOBS, pendingPreview, renditionState } = require("./lib/video-pr
 
 
 const { randomUUID } = require("node:crypto");
+const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { isDeepStrictEqual } = require("node:util");
 const logger = require("firebase-functions/logger");
 const { cmsOnRequest } = require("./lib/cms-edge");
@@ -31,7 +32,7 @@ const {
   parseSignUploadPartsRequest,
   parseStartUploadRequest,
 } = require("./lib/source-media-upload-contract");
-const { compositeSha256, createS3MediaUploader } = require("./lib/s3-media-upload");
+const { PART_URL_TTL_SECONDS, compositeSha256, createS3MediaUploader } = require("./lib/s3-media-upload");
 const {
   MediaCollectionRejection,
   placeUploadedVideo,
@@ -48,6 +49,12 @@ const { WRITE_SECRETS } = require("./lib/private-video-runtime");
 const KIB = 1024;
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 const COLLECTION = "mediaSourceUploads";
+const ABANDONED_UPLOAD_PAGE = 50;
+// Signing stops at expiry, but a part URL signed just before it stays valid for
+// PART_URL_TTL_SECONDS and a part (64 MiB at most) can still be in flight after
+// that. S3 can keep a part that lands after the abort, so the sweep waits until
+// no signed part request can still be running.
+const ABANDONED_UPLOAD_GRACE_MS = PART_URL_TTL_SECONDS * 1000 + 45 * 60 * 1000;
 const PREVIEW_ADMISSION_LOCKS = "mediaSourcePreviewAdmissionLocks";
 const MAX_ACTIVE_PREVIEWS_PER_ACTOR = 2;
 const MAX_ACTIVE_PREVIEWS_GLOBAL = 20;
@@ -777,21 +784,20 @@ function multipartUploadAlreadyAbsent(error) {
     error?.code === "NoSuchUpload" || error?.Code === "NoSuchUpload";
 }
 
-async function claimCancellation({ actor, firestore, now, nowMs, request, session }) {
+// One cancellation path for both a person's Cancel and the abandoned-upload sweep.
+// `authorize` runs on every read of the session; `admit` runs only before an
+// active session is claimed, so a retry can finish a cancellation already claimed.
+async function claimCancellation({ firestore, now, session, authorize, admit }) {
   const ref = firestore.collection(COLLECTION).doc(session.id);
   return firestore.runTransaction(async (transaction) => {
     const snapshot = await transaction.get(ref);
     const current = snapshot.exists ? validSession(snapshot.id, snapshot.data()) : null;
-    requireOwnedSession(current, actor, request, {
-      checkExpiry: false,
-      checkVersion: false,
-      nowMs,
-    });
+    authorize(current);
     if (current.status === "completed") {
       throw new SourceUploadError(409, "Completed uploads cannot be canceled", { code: "upload_completed" });
     }
     if (current.status === "canceled" || current.status === "canceling") return current;
-    requireOwnedSession(current, actor, request, { checkExpiry: false, nowMs });
+    admit(current);
     requireActiveSession(current);
     const claimed = {
       ...current,
@@ -804,16 +810,12 @@ async function claimCancellation({ actor, firestore, now, nowMs, request, sessio
   });
 }
 
-async function finishCancellation({ actor, firestore, now, nowMs, request, session }) {
+async function finishCancellation({ firestore, now, session, authorize }) {
   const ref = firestore.collection(COLLECTION).doc(session.id);
   await firestore.runTransaction(async (transaction) => {
     const snapshot = await transaction.get(ref);
     const current = snapshot.exists ? validSession(snapshot.id, snapshot.data()) : null;
-    requireOwnedSession(current, actor, request, {
-      checkExpiry: false,
-      checkVersion: false,
-      nowMs,
-    });
+    authorize(current);
     if (current.status === "canceled") return;
     if (current.status !== "canceling") {
       throw new SourceUploadError(409, "Upload session changed during cancellation");
@@ -826,6 +828,24 @@ async function finishCancellation({ actor, firestore, now, nowMs, request, sessi
   });
 }
 
+// Replacement cleanup runs before the session leaves "canceling", so a failure in
+// either step leaves a session that the next cancel or sweep finishes.
+async function abortSession({ authorize, admit, firestore, now, session, source, uploader }) {
+  const canceling = await claimCancellation({ firestore, now, session, authorize, admit });
+  const { cancelReplacement } = require("./lib/source-video-replacement");
+  if (canceling.status === "canceled") {
+    await cancelReplacement({ firestore, session: canceling });
+    return;
+  }
+  try {
+    await uploader.cancel(source, canceling);
+  } catch (error) {
+    if (!multipartUploadAlreadyAbsent(error)) throw error;
+  }
+  await cancelReplacement({ firestore, session: canceling });
+  await finishCancellation({ firestore, now, session: canceling, authorize });
+}
+
 async function cancelUpload({
   actor,
   firestore,
@@ -835,46 +855,92 @@ async function cancelUpload({
   nowFn = () => new Date().toISOString(),
 }) {
   const { now, nowMs } = currentTime(nowFn);
-  const session = await loadSession(firestore, request.sessionId);
-  requireOwnedSession(session, actor, request, {
+  const authorize = (current) => requireOwnedSession(current, actor, request, {
     checkExpiry: false,
     checkVersion: false,
     nowMs,
   });
+  const session = await loadSession(firestore, request.sessionId);
+  authorize(session);
   if (session.status === "completed") {
     throw new SourceUploadError(409, "Completed uploads cannot be canceled", { code: "upload_completed" });
   }
-  if (session.status === "canceled") {
-    await require("./lib/source-video-replacement").cancelReplacement({ firestore, session });
-    return { canceled: true };
-  }
-  const canceling = await claimCancellation({
-    actor,
+  await abortSession({
+    authorize,
+    admit: (current) => requireOwnedSession(current, actor, request, { checkExpiry: false, nowMs }),
     firestore,
     now,
-    nowMs,
-    request,
     session,
+    source,
+    uploader,
   });
-  if (canceling.status === "canceled") {
-    await require("./lib/source-video-replacement").cancelReplacement({ firestore, session: canceling });
-    return { canceled: true };
-  }
-  try {
-    await uploader.cancel(source, canceling);
-  } catch (error) {
-    if (!multipartUploadAlreadyAbsent(error)) throw error;
-  }
-  await finishCancellation({
-    actor,
-    firestore,
-    now,
-    nowMs,
-    request,
-    session: canceling,
-  });
-  await require("./lib/source-video-replacement").cancelReplacement({ firestore, session: canceling });
   return { canceled: true };
+}
+
+// Sessions expire SESSION_TTL_MS after they start, and an expired session can
+// neither sign parts nor complete. The sweep cancels those still open and aborts
+// their multipart uploads so the partial parts stop accruing storage. It pages
+// through every expired open session, and once a source's storage refuses an
+// abort it skips that source's other sessions until the next run, so one failing
+// source neither repeats calls nor holds back sessions from working sources.
+async function sweepAbandonedUploads({
+  firestore,
+  log = logger,
+  nowFn = () => new Date().toISOString(),
+  pageSize = ABANDONED_UPLOAD_PAGE,
+  registry,
+  uploader,
+}) {
+  const { now, nowMs } = currentTime(nowFn);
+  const cutoffMs = nowMs - ABANDONED_UPLOAD_GRACE_MS;
+  const authorize = (current) => {
+    if (!current) throw new SourceUploadError(404, "Upload session not found");
+  };
+  const admit = (current) => {
+    if (Date.parse(current.expiresAt) > cutoffMs) throw new SourceUploadError(409, "Upload session may still have parts in flight");
+  };
+  const failedSources = new Set();
+  const sourceUploader = {
+    async cancel(source, session) {
+      try {
+        await uploader.cancel(source, session);
+      } catch (error) {
+        if (!multipartUploadAlreadyAbsent(error)) failedSources.add(source.id);
+        throw error;
+      }
+    },
+  };
+  const expired = firestore.collection(COLLECTION)
+    .where("status", "in", ["active", "canceling"])
+    .where("expiresAt", "<=", new Date(cutoffMs).toISOString())
+    .orderBy("expiresAt")
+    .limit(pageSize);
+  let found = 0;
+  let canceled = 0;
+  let page = await expired.get();
+  for (;;) {
+    for (const row of page.docs) {
+      found += 1;
+      const session = validSession(row.id, row.data());
+      if (session && failedSources.has(session.sourceId)) continue;
+      try {
+        authorize(session);
+        const source = registry.get(session.sourceId);
+        if (!source) {
+          failedSources.add(session.sourceId);
+          throw new SourceUploadError(503, "Upload source is not configured");
+        }
+        await abortSession({ authorize, admit, firestore, now, session, source, uploader: sourceUploader });
+        canceled += 1;
+      } catch (error) {
+        log.warn("Abandoned upload sweep will retry", { sessionId: row.id, message: error?.message });
+      }
+    }
+    if (page.docs.length < pageSize) break;
+    page = await expired.startAfter(page.docs.at(-1)).get();
+  }
+  if (found) log.info("Abandoned upload sweep finished", { found, canceled, failedSources: [...failedSources] });
+  return { found, canceled };
 }
 
 function sourceMetadataAsset(snapshot, source) {
@@ -1034,6 +1100,23 @@ const cmsUpdateSourceMediaMetadata = cmsOnRequest(commonOptions, makeHandler({
   usesUploader: false,
 }));
 
+const onSourceMediaUploadSweep = onSchedule({
+  region: "us-central1",
+  schedule: "every 60 minutes",
+  timeZone: "UTC",
+  retryCount: 0,
+  maxInstances: 1,
+  concurrency: 1,
+  timeoutSeconds: 300,
+  serviceAccount: FUNCTION_SERVICE_ACCOUNT,
+}, async () => {
+  await sweepAbandonedUploads({
+    firestore: db,
+    registry: runtimeRegistry(),
+    uploader: createS3MediaUploader(runtimeAwsConfig()),
+  });
+});
+
 module.exports = {
   COLLECTION,
   MAX_ACTIVE_PREVIEWS_GLOBAL,
@@ -1060,6 +1143,7 @@ module.exports = {
   createIndexedVideo,
   objectKey,
   loadSession,
+  onSourceMediaUploadSweep,
   makeHandler,
   publicUpload,
   resumeUpload,
@@ -1068,6 +1152,7 @@ module.exports = {
   signedManifestChecksum,
   startUpload,
   storeCompletedAsset,
+  sweepAbandonedUploads,
   updateMetadata,
   verifiedCompletedParts,
   writeSourceMetadata,

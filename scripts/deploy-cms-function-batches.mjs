@@ -92,6 +92,7 @@ export const FUNCTION_SCHEDULES = Object.freeze([
   ...["onVideoPreviewTick", "onPrivateVideoCopyTick", "onVideoClipTick", "onVideoTranscriptTick", "onVideoTranscriptByokTick"]
     .map((name) => ({ name, schedules: ["* * * * *", "every 1 minutes"], timeZone: "UTC" })),
   { name: "onSourceVideoReplacementTick", schedules: ["* * * * *", "every 1 minutes"], timeZone: "UTC", retryCount: 0 },
+  { name: "onSourceMediaUploadSweep", schedules: ["every 60 minutes"], timeZone: "UTC", retryCount: 0 },
   { name: "onPublicVideoWithdrawalRecovery", schedules: ["*/15 * * * *", "every 15 minutes"], timeZone: "UTC" },
   { name: "onCostLedgerRefresh", schedules: ["0 8 * * 1"], timeZone: "America/New_York" },
   { name: "onStaffAccessEmailRetry", schedules: ["every 60 minutes"], timeZone: "UTC", retryCount: 0 },
