@@ -139,6 +139,7 @@
 }
 
 .recent-work-panel,
+.home-drafts-panel,
 .newsroom-next-panel,
 .newsroom-shortcuts-panel {
   display: grid;
@@ -150,12 +151,14 @@
   box-shadow: none;
 }
 
+.home-drafts-panel.panel-soft,
 .newsroom-next-panel.panel-soft,
 .newsroom-shortcuts-panel.panel-soft {
   background: var(--cms-surface);
 }
 
-.recent-work-panel .panel-heading {
+.recent-work-panel .panel-heading,
+.home-drafts-heading {
   display: flex;
   min-width: 0;
   align-items: center;
@@ -163,13 +166,15 @@
   gap: var(--cms-space-3);
 }
 
-.recent-work-panel .panel-heading > div {
+.recent-work-panel .panel-heading > div,
+.home-drafts-heading > div {
   display: grid;
   min-width: 0;
   gap: var(--cms-space-1);
 }
 
 .recent-work-panel .panel-heading h3,
+.home-drafts-panel h3,
 .newsroom-next-panel h3,
 .newsroom-shortcuts-panel h3 {
   color: var(--cms-ink);
@@ -178,12 +183,16 @@
   line-height: var(--cms-line-tight);
 }
 
-.recent-work-panel .panel-heading p {
+.recent-work-panel .panel-heading p,
+.home-drafts-heading p,
+.home-drafts-note,
+.home-drafts-main > span {
   color: var(--cms-ink-muted);
   font-size: var(--cms-font-sm);
 }
 
-.recent-work-panel .panel-heading > a {
+.recent-work-panel .panel-heading > a,
+.home-drafts-heading > a {
   min-height: var(--cms-control-height);
   flex: 0 0 auto;
   align-content: center;
@@ -575,7 +584,8 @@
 }
 
 @media (max-width: 390px) {
-  .recent-work-panel .panel-heading {
+  .recent-work-panel .panel-heading,
+  .home-drafts-heading {
     align-items: start;
     flex-direction: column;
   }
@@ -663,4 +673,44 @@
 
 @media (max-width: 720px) {
   .home-shortcuts { justify-items: stretch; }
+}
+
+.home-drafts-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.home-drafts-list li {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--cms-space-3);
+  border-top: var(--cms-border-width) solid var(--cms-line);
+  padding-block: var(--cms-space-2);
+}
+
+.home-drafts-list li:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.home-drafts-main {
+  display: grid;
+  min-width: 0;
+  flex: 1 1 auto;
+  gap: var(--cms-space-1);
+}
+
+.home-drafts-list .async-action-button {
+  flex: 0 0 auto;
+}
+
+.home-drafts-main > a {
+  overflow-wrap: anywhere;
+  color: var(--cms-ink);
+  font-weight: 700;
+  text-underline-offset: 0.2em;
 }

@@ -7,6 +7,7 @@ import { NewsroomHome } from "../components/NewsroomHome";
 import { useAuth } from "../context/AuthContext";
 import {
   canBrowseContentPages,
+  canManageContentRecords,
   canSaveContent,
   canAccessMediaWorkspace,
   canUseContentStudio,
@@ -15,7 +16,9 @@ import {
 } from "../lib/access";
 import { fetchAdminStatus } from "../lib/admin-status";
 import { DEFAULT_CONTENT_QUERY, encodeContentQuery } from "../lib/content-query";
-import { cmsGetNewsroomBanner, cmsListContent } from "../lib/functions";
+import { MY_DRAFTS_QUERY } from "../components/HomeDrafts";
+import type { ContentRecordSummary } from "../lib/content-records";
+import { cmsBulkArchiveContent, cmsGetNewsroomBanner, cmsListContent } from "../lib/functions";
 import { loadPublishActivitySummary } from "../lib/publish-activity";
 import { useShell } from "./ShellContext";
 
@@ -29,6 +32,15 @@ export function DashboardRoute() {
     // Page one supplies the bounded recent-work rows. The same response carries
     // authoritative status, mine, and assignment counts across every visible record.
     return cmsListContent(idToken, encodeContentQuery(DEFAULT_CONTENT_QUERY));
+  }, [getIdToken]);
+  const loadDrafts = useCallback(async () => {
+    const idToken = await getIdToken();
+    return cmsListContent(idToken, encodeContentQuery(MY_DRAFTS_QUERY));
+  }, [getIdToken]);
+  const archiveDraft = useCallback(async (draft: ContentRecordSummary & { version: number }) => {
+    const idToken = await getIdToken();
+    const response = await cmsBulkArchiveContent(idToken, [{ id: draft.id, baseVersion: draft.version }]);
+    return response.outcomes.find(outcome => outcome.id === draft.id);
   }, [getIdToken]);
   const loadHomeSettings = useCallback(async () => {
     const idToken = await getIdToken();
@@ -61,6 +73,8 @@ export function DashboardRoute() {
       canViewPublishActivity={canViewPublishActivity(principal)}
       currentUserId={user.uid}
       loadRecords={loadRecords}
+      loadDrafts={loadDrafts}
+      archiveDraft={canManageContentRecords(principal) ? archiveDraft : undefined}
       loadPublishActivity={async () => loadPublishActivitySummary(await getIdToken())}
       loadHomeSettings={loadHomeSettings}
       loadAdminStatus={loadAdminStatus}
