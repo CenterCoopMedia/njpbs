@@ -82,7 +82,7 @@
     },
     {
       "suppliers": ["process-environment"],
-      "names": ["CLOUDFLARE_SNIPPETS_READ_TOKEN", "NJPBS_PUBLICATION_R2_CREDENTIAL", "NJPBS_PUBLISHER_CLOUDFLARE_TOKEN", "RELEASE_DRIFT_SHOW_UNLISTED"]
+      "names": ["NJPBS_PUBLICATION_R2_CREDENTIAL", "NJPBS_PUBLISHER_CLOUDFLARE_TOKEN", "RELEASE_DRIFT_SHOW_UNLISTED"]
     },
     {
       "suppliers": ["github-variable", "process-environment"],
@@ -372,6 +372,7 @@
       ],
       "names": [
         "CLOUDFLARE_API_TOKEN",
+        "CLOUDFLARE_SNIPPETS_READ_TOKEN",
         "CMS_DEV_PREVIEW_FIREBASE_ACCOUNT",
         "CMS_DEV_PREVIEW_R2_CREDENTIAL",
         "CMS_PREVIEW_R2_CREDENTIAL",
