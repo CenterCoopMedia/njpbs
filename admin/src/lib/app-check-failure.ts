@@ -9,7 +9,11 @@ export const UNAVAILABLE_SECURITY_CHECK_MESSAGE =
   "Boardwalk's security check is not responding. Try again in a few minutes.";
 
 // The reCAPTCHA script can be blocked without any error: the token request then never settles.
+// A stalled service looks the same from here, so the message covers both.
 export const SECURITY_CHECK_TIMEOUT_MS = 20_000;
+export const STALLED_SECURITY_CHECK_MESSAGE =
+  "Boardwalk's security check did not finish. If your browser's tracking protection or ad blocker " +
+  "is on for admin.njpbs.org, allow the check there and reload Boardwalk. Otherwise try again in a few minutes.";
 
 export function appCheckFailure(error: unknown): unknown {
   const { code, customData } = (error ?? {}) as { code?: unknown; customData?: { httpStatus?: unknown } };
@@ -22,7 +26,7 @@ export function appCheckFailure(error: unknown): unknown {
 export async function withSecurityCheckTimeout<T>(pending: Promise<T>, ms = SECURITY_CHECK_TIMEOUT_MS): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error(BLOCKED_SECURITY_CHECK_MESSAGE)), ms);
+    timer = setTimeout(() => reject(new Error(STALLED_SECURITY_CHECK_MESSAGE)), ms);
   });
   try {
     return await Promise.race([pending, timeout]);
@@ -35,5 +39,6 @@ export async function withSecurityCheckTimeout<T>(pending: Promise<T>, ms = SECU
 // a generic failure. The request wrapper copies the message, so the text identifies the case.
 export function securityCheckMessage(error: unknown): string | null {
   const message = error instanceof Error ? error.message : null;
-  return message === BLOCKED_SECURITY_CHECK_MESSAGE || message === UNAVAILABLE_SECURITY_CHECK_MESSAGE ? message : null;
+  return message === BLOCKED_SECURITY_CHECK_MESSAGE || message === UNAVAILABLE_SECURITY_CHECK_MESSAGE ||
+    message === STALLED_SECURITY_CHECK_MESSAGE ? message : null;
 }

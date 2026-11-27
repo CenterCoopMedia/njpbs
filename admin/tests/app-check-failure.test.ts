@@ -3,6 +3,7 @@ import {
   appCheckFailure,
   BLOCKED_SECURITY_CHECK_MESSAGE,
   securityCheckMessage,
+  STALLED_SECURITY_CHECK_MESSAGE,
   UNAVAILABLE_SECURITY_CHECK_MESSAGE,
   withSecurityCheckTimeout,
 } from "../src/lib/app-check-failure";
@@ -37,11 +38,11 @@ describe("App Check failure message", () => {
     expect(securityCheckMessage(offline)).toBeNull();
   });
 
-  it("treats a check that never finishes as blocked", async () => {
+  it("names both causes when the check never finishes", async () => {
     vi.useFakeTimers();
     try {
       const pending = withSecurityCheckTimeout(new Promise<never>(() => undefined), 1_000);
-      const outcome = expect(pending).rejects.toThrow(BLOCKED_SECURITY_CHECK_MESSAGE);
+      const outcome = expect(pending).rejects.toThrow(STALLED_SECURITY_CHECK_MESSAGE);
       await vi.advanceTimersByTimeAsync(1_000);
       await outcome;
     } finally {

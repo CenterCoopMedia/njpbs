@@ -280,7 +280,9 @@ export function TranscriptEditor({ pane = false, playbackSeconds, commentThreads
       const stale = error instanceof HttpError && error.status === 409;
       setConflict(stale);
       setError(stale ? "This transcript changed. Your edits are still here. Discard them and reload the saved transcript before editing again."
-        : securityCheckMessage(error) ?? "Transcript corrections could not be saved. Your edits are still here.");
+        : securityCheckMessage(error)
+          ? `${securityCheckMessage(error)} Your corrections are not saved yet: copy them before you reload.`
+          : "Transcript corrections could not be saved. Your edits are still here.");
     } finally { if (mounted.current) setSaving(false); }
   }
   async function markReviewed() {
