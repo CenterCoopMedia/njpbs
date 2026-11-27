@@ -469,7 +469,7 @@ export function AuthorPhotoField({
 
             <div className="author-profile-actions">
               <AsyncActionButton
-                disabled={!readyToUse}
+                disabled={disabled || !readyToUse}
                 label={
                   selectedAsset
                     ? onUploaded
