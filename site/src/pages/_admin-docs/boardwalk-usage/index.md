@@ -14,10 +14,23 @@ Usage helps us improve the destinations and tools staff rely on and reconsider
 features with few collected uses. It is not a productivity score.
 
 Usage analytics includes the destination you open, approximate
-time the tab stays visible, your account ID and role, and two named actions:
-a content publish attempt and a saved Preview attempt. An action includes only its
-object type and saved ID. A publish count does not confirm that a public release
-finished, and a Preview request does not prove that someone viewed it.
+time the tab stays visible, your account ID and role, about when each event
+happened, and these named actions:
+
+- Content publish, schedule and saved Preview attempts. These include only the
+  object type and saved ID.
+- Failed content saves, including failed publish and schedule saves.
+- Upload starts, finishes and failures.
+- Transcript and clip requests.
+- Searches. When you start typing in a search box, Boardwalk records that a
+  search happened, never what you typed.
+
+Destinations separate the Posts and Pages lists from their editors, and the
+Media landing from favorites, collections and public submissions. Counts from
+before this split appear on their own combined rows.
+
+A publish count does not confirm that a public release finished, and a Preview
+request does not prove that someone viewed it.
 
 Boardwalk records no keystrokes, field values, draft text, file contents, full
 addresses or search terms. There is no session replay or third-party product
@@ -50,7 +63,7 @@ once in each week.
 
 Visible time can include idle time. Hidden tabs do not add time. Browser closure,
 an interrupted connection or a dropped background delivery can lose events.
-These reports cannot establish that someone stalled, retried or gave up.
+These reports alone cannot establish that someone stalled, retried or gave up.
 
 ## Storage and retention
 

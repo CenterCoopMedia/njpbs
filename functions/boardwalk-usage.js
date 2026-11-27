@@ -40,16 +40,24 @@ function easternMidnight(day) {
   return new Date(`${day}T00:00:00${offset.slice(3) || "Z"}`).toISOString();
 }
 
+// offsetMs: milliseconds between the event and its batch being sent (optional).
+const validOffset = event => !own(event, "offsetMs") ||
+  (Number.isInteger(event.offsetMs) && event.offsetMs >= 0 && event.offsetMs <= 600_000);
+
 function validEvent(event) {
-  if (!only(event, ["name", "screen", "durationMs", "objectType", "objectId"]) ||
+  if (!only(event, ["name", "screen", "durationMs", "objectType", "objectId", "offsetMs"]) ||
       typeof event.name !== "string" || typeof event.screen !== "string" ||
-      !own(config.screens, event.screen)) return false;
-  if (event.name === "screen.view") return Object.keys(event).length === 2;
-  if (event.name === "screen.duration") return Object.keys(event).length === 3 &&
+      !(own(config.screens, event.screen) || own(config.earlierScreens, event.screen))) return false;
+  if (!validOffset(event)) return false;
+  const size = Object.keys(event).length - (own(event, "offsetMs") ? 1 : 0);
+  if (event.name === "screen.view") return size === 2;
+  if (event.name === "screen.duration") return size === 3 &&
     Number.isInteger(event.durationMs) && event.durationMs > 0 && event.durationMs <= 60_000;
-  if (!own(config.actions, event.name) || Object.keys(event).length !== 4 ||
-      typeof event.objectType !== "string" || typeof event.objectId !== "string" || !ID.test(event.objectId)) return false;
-  return ["page", "record"].includes(event.objectType);
+  if (!own(config.actions, event.name) || own(event, "durationMs")) return false;
+  // An action names its object only when it has one; both fields or neither.
+  if (size === 2) return true;
+  return size === 4 && ["page", "record"].includes(event.objectType) &&
+    typeof event.objectId === "string" && ID.test(event.objectId);
 }
 
 async function collectBatch(firestore, actor, body, now) {
@@ -103,7 +111,7 @@ async function readReport(firestore, days, now) {
     readActivityHistory(firestore, easternMidnight(dates[0]), new Date(now).toISOString()),
   ]);
   const easternFromDate = firstEastern.docs[0]?.id.startsWith(EASTERN_PREFIX) ? firstEastern.docs[0].id.slice(EASTERN_PREFIX.length) : null;
-  const screens = Object.entries(config.screens).map(([id, label]) => ({ id, label, views: 0, visibleMs: 0 }));
+  const screens = Object.entries({ ...config.screens, ...config.earlierScreens }).map(([id, label]) => ({ id, label, views: 0, visibleMs: 0 }));
   const actions = Object.entries(config.actions).map(([id, label]) => ({ id, label, count: 0 }));
   // Project known numeric fields explicitly: stored raw or person data cannot enter this response.
   const count = value => Number.isSafeInteger(value) && value >= 0 ? value : 0;
@@ -132,7 +140,8 @@ async function readReport(firestore, days, now) {
     weekly: people(weeklyRows, weeks, value => easternFromDate !== null && value >= mondayOf(easternFromDate))
       .map(({ key, ...row }) => ({ week: key, ...row })),
     history,
-    screens: screens.sort((a, b) => b.views - a.views || a.label.localeCompare(b.label)),
+    // Earlier combined destinations appear only in windows that include their stored counts.
+    screens: screens.filter(row => !own(config.earlierScreens, row.id) || row.views || row.visibleMs).sort((a, b) => b.views - a.views || a.label.localeCompare(b.label)),
     actions: actions.sort((a, b) => b.count - a.count || a.label.localeCompare(b.label)) };
 }
 

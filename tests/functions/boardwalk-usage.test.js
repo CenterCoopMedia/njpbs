@@ -9,7 +9,7 @@ const start = Date.parse("2026-11-02T12:00:00Z"); // Monday
 let time = start;
 const actor = (uid = "staff-1", role = "staff") => ({ uid, approvedActive: true,
   principal: { id: uid, grants: [{ role }] } });
-const view = { name: "screen.view", screen: "posts" };
+const view = { name: "screen.view", screen: "posts-list" };
 const batch = (events = [view], extra = {}) => ({ batchId: randomUUID(), events, ...extra });
 const request = body => ({ method: "POST", headers: {}, body });
 function response() {
@@ -43,8 +43,8 @@ describe("Boardwalk usage privacy and persistence contract (#4495)", () => {
   it("records server identity, roles and time with 180-day raw and presence expiry", async () => {
     const { collect } = handlers();
     expect((await invoke(collect, batch([view,
-      { name: "screen.duration", screen: "posts", durationMs: 12_000 },
-      { name: "content.publish.request", screen: "posts", objectType: "record", objectId: "post-123" },
+      { name: "screen.duration", screen: "posts-list", durationMs: 12_000 },
+      { name: "content.publish.request", screen: "posts-list", objectType: "record", objectId: "post-123" },
     ]))).statusCode).toBe(200);
     const raw = (await firestore.collection("cmsUsageEvents").get()).docs[0].data();
     expect(Object.keys(raw).sort()).toEqual(["collectedAt", "events", "purgeAt", "roles", "uid"]);
@@ -80,7 +80,7 @@ describe("Boardwalk usage privacy and persistence contract (#4495)", () => {
     let result = await invoke(report, { days: 7 });
     expect(result.body.daily.at(-1)).toEqual({ date: "2026-11-02", timezone: "America/New_York", activeUsers: 2 });
     expect(result.body.weekly).toEqual([{ week: "2026-11-02", timezone: "America/New_York", activeUsers: 2 }]);
-    expect(result.body.screens.find(row => row.id === "posts").views).toBe(3);
+    expect(result.body.screens.find(row => row.id === "posts-list").views).toBe(3);
     time += 86_400_000;
     await invoke(collect, batch());
     result = await invoke(report, { days: 7 });
@@ -126,19 +126,21 @@ describe("Boardwalk usage privacy and persistence contract (#4495)", () => {
       { date: "2026-11-03", timezone: "America/New_York", activeUsers: 1 }]);
     expect(result.weekly.slice(-2)).toEqual([{ week: "2026-10-26", timezone: "UTC", activeUsers: 4 },
       { week: "2026-11-02", timezone: "America/New_York", activeUsers: 1 }]);
-    expect(result.screens.find(row => row.id === "posts").views).toBe(2);
+    expect(result.screens.find(row => row.id === "posts-list").views).toBe(1);
+    // The stored combined count keeps its own label instead of joining the list count.
+    expect(result.screens.find(row => row.id === "posts")).toMatchObject({ label: "Posts, list and editor (before the split)", views: 1 });
   });
 
   it("preserves counters across batches and returns aggregate-only numeric projections to staff", async () => {
     const { collect, report } = handlers();
-    const events = [view, { name: "screen.duration", screen: "posts", durationMs: 15_000 },
-      { name: "preview.request", screen: "posts", objectType: "record", objectId: "private-post-id" }];
+    const events = [view, { name: "screen.duration", screen: "posts-list", durationMs: 15_000 },
+      { name: "preview.request", screen: "posts-list", objectType: "record", objectId: "private-post-id" }];
     await invoke(collect, batch(events)); await invoke(collect, batch(events));
     await firestore.collection("cmsUsageDaily").doc("2026-11-02").set({ uid: "private-user", events: events,
       actions: { unexpected: "private text" }, views: { guide: "not a count" } }, { merge: true });
     const res = await invoke(report, { days: 90 });
     expect(res.statusCode).toBe(200);
-    expect(res.body.screens.find(row => row.id === "posts")).toMatchObject({ views: 2, visibleMs: 30_000 });
+    expect(res.body.screens.find(row => row.id === "posts-list")).toMatchObject({ views: 2, visibleMs: 30_000 });
     expect(res.body.screens.find(row => row.id === "guide").views).toBe(0);
     expect(res.body.actions.find(row => row.id === "preview.request").count).toBe(2);
     expect(res.body.firstCollectedDate).toBe("2026-11-02");
@@ -150,12 +152,32 @@ describe("Boardwalk usage privacy and persistence contract (#4495)", () => {
 
   it("preserves view, duration and action counters when separate batches contain only one kind", async () => {
     const { collect, report } = handlers();
-    await invoke(collect, batch([{ name: "screen.duration", screen: "posts", durationMs: 10_000 }]));
-    await invoke(collect, batch([{ name: "content.publish.request", screen: "posts", objectType: "record", objectId: "post-1" }]));
+    await invoke(collect, batch([{ name: "screen.duration", screen: "posts-list", durationMs: 10_000 }]));
+    await invoke(collect, batch([{ name: "content.publish.request", screen: "posts-list", objectType: "record", objectId: "post-1" }]));
     await invoke(collect, batch([view]));
     const res = await invoke(report, { days: 7 });
-    expect(res.body.screens.find(row => row.id === "posts")).toMatchObject({ views: 1, visibleMs: 10_000 });
+    expect(res.body.screens.find(row => row.id === "posts-list")).toMatchObject({ views: 1, visibleMs: 10_000 });
     expect(res.body.actions.find(row => row.id === "content.publish.request").count).toBe(1);
+  });
+
+  it("accepts event offsets, object-free actions and split editor and media screens", async () => {
+    const events = [{ name: "screen.view", screen: "posts-editor", offsetMs: 4_000 },
+      { name: "screen.duration", screen: "media-collections", durationMs: 1_000, offsetMs: 0 },
+      { name: "media.upload.start", screen: "images", offsetMs: 600_000 },
+      { name: "search", screen: "media-submissions" },
+      { name: "content.schedule.request", screen: "pages-editor", objectType: "page", objectId: "page-1", offsetMs: 10 }];
+    expect((await invoke(handlers().collect, batch(events))).statusCode).toBe(200);
+    expect((await firestore.collection("cmsUsageEvents").get()).docs[0].data().events).toEqual(events);
+    const res = (await invoke(handlers().report, { days: 7 })).body;
+    expect(res.screens.find(row => row.id === "posts-editor").views).toBe(1);
+    expect(res.screens.some(row => row.id === "posts")).toBe(false);
+    // Tabs opened before the split still send the combined ids; they count on the combined rows.
+    expect((await invoke(handlers().collect, batch([{ name: "screen.view", screen: "posts" }]))).statusCode).toBe(200);
+    expect((await invoke(handlers({ now: () => time + 120_000 }).report, { days: 7 })).body.screens.find(row => row.id === "posts").views).toBe(1);
+    expect(res.screens.find(row => row.id === "media-collections").visibleMs).toBe(1_000);
+    for (const id of ["media.upload.start", "search", "content.schedule.request"]) {
+      expect(res.actions.find(row => row.id === id).count).toBe(1);
+    }
   });
 
   it.each([
@@ -163,14 +185,21 @@ describe("Boardwalk usage privacy and persistence contract (#4495)", () => {
     batch([{ ...view, title: "private title" }]),
     batch([{ ...view, path: "/content/post/private" }]),
     batch([{ ...view, screen: "private-search" }]),
-    batch([{ ...view, screen: ["posts"] }]),
-    batch([{ name: ["content.publish.request"], screen: "posts", objectType: "record", objectId: "id" }]),
-    batch([{ name: "content.publish.request", screen: "posts", objectType: "record", objectId: ["id"] }]),
-    batch([{ name: "content.publish.request", screen: "posts", objectType: "record", objectId: 123 }]),
-    batch([{ name: "screen.duration", screen: "posts", durationMs: 60_001 }]),
-    batch([{ name: "screen.duration", screen: "posts", durationMs: -1 }]),
-    batch([{ name: "content.publish.request", screen: "posts", objectType: "invalid", objectId: "id" }]),
+    batch([{ ...view, screen: ["posts-list"] }]),
+    batch([{ name: ["content.publish.request"], screen: "posts-list", objectType: "record", objectId: "id" }]),
+    batch([{ name: "content.publish.request", screen: "posts-list", objectType: "record", objectId: ["id"] }]),
+    batch([{ name: "content.publish.request", screen: "posts-list", objectType: "record", objectId: 123 }]),
+    batch([{ name: "screen.duration", screen: "posts-list", durationMs: 60_001 }]),
+    batch([{ name: "screen.duration", screen: "posts-list", durationMs: -1 }]),
+    batch([{ name: "content.publish.request", screen: "posts-list", objectType: "invalid", objectId: "id" }]),
     batch([{ name: "media.upload", screen: "images", objectType: "media", objectId: "private field value" }]),
+    batch([{ ...view, offsetMs: -1 }]),
+    batch([{ ...view, offsetMs: 600_001 }]),
+    batch([{ ...view, offsetMs: "5" }]),
+    batch([{ name: "search", screen: "images", query: "private search text" }]),
+    batch([{ name: "media.upload.start", screen: "images", objectType: "record" }]),
+    batch([{ name: "media.upload.start", screen: "images", objectId: "id" }]),
+    batch([{ name: "media.upload.start", screen: "images", durationMs: 5 }]),
     batch(Array.from({ length: 21 }, () => view)),
     batch([], { batchId: "bad" }),
   ])("rejects content capture, spoofed identity and invalid event schemas (%#)", async body => {
@@ -228,7 +257,7 @@ describe("Boardwalk usage privacy and persistence contract (#4495)", () => {
     const res = await invoke(handlers().report, { days: 7 });
     expect(res.statusCode).toBe(200);
     expect(res.body.history).toMatchObject({ status: "unavailable", actions: [] });
-    expect(res.body.screens.find(row => row.id === "posts").views).toBe(1);
+    expect(res.body.screens.find(row => row.id === "posts-list").views).toBe(1);
   });
 
   it("shares concurrent report snapshots per window for 60 seconds and rechecks authority on cache hits", async () => {

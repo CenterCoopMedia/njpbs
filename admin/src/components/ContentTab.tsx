@@ -841,6 +841,7 @@ export function ContentTab({
       if (collection === "cmsPages" && id === "home") {
         assertHomeV2WriterEnabled(id, storedPageBlocks.current.get("home")?.homeCompositionVersion, baseVersion);
       }
+      usageActionCollector()("content.schedule.request", collection === "cmsPages" ? "page" : "record", id);
       const idToken = await getIdToken();
       return saveContentWithPublicVideos(idToken, {
         collection,

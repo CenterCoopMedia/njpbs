@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-27",
+  "kind": "improved",
+  "order": 1795809250342,
+  "title": "Usage analytics counts more actions",
+  "body": "Boardwalk usage analytics now counts uploads, failed saves, schedule, transcript and clip requests, and searches, and it separates the Posts and Pages lists from their editors. Searches count only that a search box was used, never the words. See What Boardwalk records and why in the guide.",
+  "prs": []
+}

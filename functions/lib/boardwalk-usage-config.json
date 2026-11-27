@@ -2,14 +2,19 @@
   "analyticsEnabled": true,
   "screens": {
     "dashboard": "Home",
-    "pages": "Pages",
-    "posts": "Posts",
+    "pages-list": "Pages list",
+    "pages-editor": "Page editor",
+    "posts-list": "Posts list",
+    "posts-editor": "Post editor",
     "content": "Other content",
     "post-templates": "Post templates",
     "cuez": "StoryDesk",
     "analytics": "Site analytics",
     "activity": "Activity",
-    "media": "Other media",
+    "media-landing": "Media landing",
+    "media-favorites": "Media favorites",
+    "media-collections": "Media collections",
+    "media-submissions": "Public submissions",
     "images": "Images",
     "videos": "Videos",
     "voiceovers": "Audio",
@@ -26,8 +31,21 @@
     "staff-access": "Staff access",
     "premiere-connect": "Connect Premiere"
   },
+  "earlierScreens": {
+    "pages": "Pages, list and editor (before the split)",
+    "posts": "Posts, list and editor (before the split)",
+    "media": "Other media, landing and subpages (before the split)"
+  },
   "actions": {
     "content.publish.request": "Content publish attempts",
-    "preview.request": "Saved Preview attempts"
+    "preview.request": "Saved Preview attempts",
+    "content.schedule.request": "Content schedule attempts",
+    "content.save.failure": "Failed content saves (includes publish and schedule)",
+    "media.upload.start": "Upload starts",
+    "media.upload.finish": "Upload finishes",
+    "media.upload.failure": "Failed uploads",
+    "media.transcript.request": "Transcript requests",
+    "media.clip.request": "Clip requests",
+    "search": "Searches (no search text)"
   }
 }
