@@ -4,7 +4,7 @@ export * from "@playwright/test";
 
 /** Serve proof fonts on a context or a page with its own request guard. */
 export async function installProofFonts(context: BrowserContext | Page): Promise<void> {
-  await context.route(/^https:\/\/media\.njpbs\.org\/cms-media\/fonts\//, route => {
+  await context.route(/\/brand\/fonts\/PBSSans[\w-]*\.woff2$/, route => {
     const face = route.request().url().endsWith("PBSSans-Black.woff2") ? "Black"
       : route.request().url().endsWith("PBSSans-Bold.woff2") ? "Bold" : "Regular";
     return route.fulfill({ contentType: "font/ttf", headers: { "access-control-allow-origin": "*" },

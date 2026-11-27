@@ -1,4 +1,7 @@
 import { expect, test } from "@playwright/test";
+import { readFileSync } from "node:fs";
+
+const fonts: Record<string, string> = JSON.parse(readFileSync(new URL("../../../site/scripts/public-fonts.json", import.meta.url), "utf8"));
 
 test("built Admin renders its signed-out shell without page errors", async ({ page }) => {
   const errors: string[] = [];
@@ -14,5 +17,19 @@ test("built Admin renders its signed-out shell without page errors", async ({ pa
     await expect(page.getByLabel("Password", { exact: true })).toBeVisible();
   } finally {
     expect(errors, "Admin boot must not raise any pageerror").toEqual([]);
+  }
+});
+
+test("every PBS Sans face in the Admin stylesheets loads as a font", async ({ page }) => {
+  await page.goto("/", { waitUntil: "load" });
+  const urls = await page.evaluate(() => [...document.styleSheets].flatMap(sheet => [...sheet.cssRules]
+    .filter((rule): rule is CSSFontFaceRule => rule instanceof CSSFontFaceRule)
+    .flatMap(rule => [...rule.style.getPropertyValue("src").matchAll(/url\("?([^")]+)"?\)/g)]
+      .map(match => new URL(match[1], sheet.href ?? document.baseURI).href))));
+  expect(urls.map(url => new URL(url).pathname).sort()).toEqual(Object.keys(fonts).map(name => `/brand/fonts/${name}`).sort());
+  for (const url of urls) {
+    const response = await page.request.get(url);
+    expect(response.status(), url).toBe(200);
+    expect(response.headers()["content-type"], url).toBe("font/woff2");
   }
 });

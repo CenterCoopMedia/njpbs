@@ -52,7 +52,7 @@ export interface DesignFontAsset {
   format: "WOFF2";
   id: string;
   name: string;
-  path: `https://media.njpbs.org/cms-media/fonts/${string}`;
+  path: `/brand/fonts/${string}`;
   status: "production";
   use: string;
   version: string;
@@ -470,11 +470,11 @@ export function groupDesignAssets(assets: readonly DesignAsset[]) {
 }
 
 const FONT_FILES = [
-  ["regular", "PBS Sans Regular", "https://media.njpbs.org/cms-media/fonts/6d1461f427c030aed42aaa039eb8ce7409a261a7a62e46ff0854d7c79db00123/PBSSans.woff2", 400],
-  ["light", "PBS Sans Light", "https://media.njpbs.org/cms-media/fonts/f5b121c412775fea2088ea19d170364abf29e7db73a541259b517be880784a9b/PBSSans-Light.woff2", 300],
-  ["medium", "PBS Sans Medium", "https://media.njpbs.org/cms-media/fonts/1a6fab5544c4b6b5d57d60e4c2e9a1d82488a4a510a54b6ec652e77261627cc1/PBSSans-Medium.woff2", 500],
-  ["bold", "PBS Sans Bold", "https://media.njpbs.org/cms-media/fonts/d2a1a10beac03a9cf986714d6388978379efaa9d9b4a662ec374b262104851b5/PBSSans-Bold.woff2", 700],
-  ["black", "PBS Sans Black", "https://media.njpbs.org/cms-media/fonts/5b13467ba9da8daed32c4989a1f46bb11ece667e4607b9552c74315368b98cc9/PBSSans-Black.woff2", 900],
+  ["regular", "PBS Sans Regular", "/brand/fonts/PBSSans.woff2", 400],
+  ["light", "PBS Sans Light", "/brand/fonts/PBSSans-Light.woff2", 300],
+  ["medium", "PBS Sans Medium", "/brand/fonts/PBSSans-Medium.woff2", 500],
+  ["bold", "PBS Sans Bold", "/brand/fonts/PBSSans-Bold.woff2", 700],
+  ["black", "PBS Sans Black", "/brand/fonts/PBSSans-Black.woff2", 900],
 ] as const;
 
 export const DESIGN_FONT_ASSETS: readonly DesignFontAsset[] = FONT_FILES.map(

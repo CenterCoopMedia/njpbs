@@ -1,6 +1,7 @@
 import type { PreviewProgress } from "../lib/saved-preview-operation";
 import designTokens from "../design-system/tokens.css?inline";
 import progressStyles from "./SavedPreviewProgress.css?inline";
+import { withAdminFontOrigin } from "../design-system/font-origin";
 
 type ProgressState = PreviewProgress | "preparing" | "opening" | "error" | "updating" | "refresh-failed" | "session-slow";
 
@@ -45,7 +46,7 @@ export function createPreviewProgressDocument(popup: Window) {
   viewport.name = "viewport";
   viewport.content = "width=device-width, initial-scale=1";
   const style = document.createElement("style");
-  style.textContent = `${designTokens}\n${progressStyles}`;
+  style.textContent = `${designTokens}\n${withAdminFontOrigin(progressStyles)}`;
   document.head.replaceChildren(viewport, style);
 
   function element<K extends keyof HTMLElementTagNameMap>(tag: K, className: string, text?: string) {
