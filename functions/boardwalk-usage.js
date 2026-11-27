@@ -116,10 +116,14 @@ async function readReport(firestore, days, now) {
     }
     for (const action of actions) action.count += count(data.actions?.[action.id]);
   }
-  // Distinct people cannot be added across conventions: a row shows its Eastern count from the switch on, UTC before.
-  const people = (rows, keys, eastern) => keys.map((key, index) => {
-    const timezone = eastern(key) ? TIMEZONE : "UTC";
-    return { key, timezone, activeUsers: count(rows[index * 2 + (timezone === "UTC" ? 0 : 1)].data()?.activeUsers) };
+  // Distinct people cannot be added across conventions, so a key can have a UTC row and an Eastern row.
+  // UTC rows appear before the switch and wherever a UTC row is stored; Eastern rows from the switch on.
+  const people = (rows, keys, eastern) => keys.flatMap((key, index) => {
+    const [utc, et] = [rows[index * 2], rows[index * 2 + 1]];
+    return [
+      ...(!eastern(key) || utc.exists ? [{ key, timezone: "UTC", activeUsers: count(utc.data()?.activeUsers) }] : []),
+      ...(eastern(key) ? [{ key, timezone: TIMEZONE, activeUsers: count(et.data()?.activeUsers) }] : []),
+    ];
   });
   const switched = value => easternFromDate !== null && value >= easternFromDate;
   return { days, analyticsEnabled: config.analyticsEnabled, generatedAt: new Date(now).toISOString(),

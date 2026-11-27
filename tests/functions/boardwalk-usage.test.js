@@ -121,8 +121,9 @@ describe("Boardwalk usage privacy and persistence contract (#4495)", () => {
     const result = (await invoke(handlers().report, { days: 30 })).body;
     expect(result.easternFromDate).toBe("2026-11-03");
     expect(result.daily.find(row => row.date === "2026-11-02")).toEqual({ date: "2026-11-02", timezone: "UTC", activeUsers: 0 });
-    // staff-1 is counted again on the Eastern row: the UTC presence marker does not suppress it.
-    expect(result.daily.find(row => row.date === "2026-11-03")).toEqual({ date: "2026-11-03", timezone: "America/New_York", activeUsers: 1 });
+    // The switch date keeps its stored UTC row; staff-1 is counted again on the Eastern row.
+    expect(result.daily.filter(row => row.date === "2026-11-03")).toEqual([{ date: "2026-11-03", timezone: "UTC", activeUsers: 1 },
+      { date: "2026-11-03", timezone: "America/New_York", activeUsers: 1 }]);
     expect(result.weekly.slice(-2)).toEqual([{ week: "2026-10-26", timezone: "UTC", activeUsers: 4 },
       { week: "2026-11-02", timezone: "America/New_York", activeUsers: 1 }]);
     expect(result.screens.find(row => row.id === "posts").views).toBe(2);
@@ -141,7 +142,9 @@ describe("Boardwalk usage privacy and persistence contract (#4495)", () => {
     expect(res.body.screens.find(row => row.id === "guide").views).toBe(0);
     expect(res.body.actions.find(row => row.id === "preview.request").count).toBe(2);
     expect(res.body.firstCollectedDate).toBe("2026-11-02");
-    expect(res.body.daily).toHaveLength(90);
+    // 2026-11-02 has the stored UTC row and the new Eastern row.
+    expect(res.body.daily).toHaveLength(91);
+    expect(new Set(res.body.daily.map(row => row.date)).size).toBe(90);
     expect(JSON.stringify(res.body)).not.toMatch(/private-|unexpected|"(?:objectId|roles|uid)"/);
   });
 

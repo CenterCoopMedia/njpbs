@@ -27,6 +27,13 @@ describe("Boardwalk usage Reports view", () => {
     expect(screen.getByRole("row", { name: "2026-11-04 (UTC) 3" })).toBeInTheDocument();
     expect(screen.getByRole("row", { name: "2026-11-07 4" })).toBeInTheDocument();
     expect(screen.getByText(/Rows marked UTC were collected before Eastern dates began on 2026-11-05/)).toBeInTheDocument();
+  });
+
+  it("explains UTC rows whenever any appear, even when collection began on the switch date", async () => {
+    mount(async () => ({ ...fixture(), firstCollectedDate: "2026-11-05", easternFromDate: "2026-11-05",
+      daily: [{ date: "2026-11-05", timezone: "UTC", activeUsers: 2 }, { date: "2026-11-05", timezone: "America/New_York", activeUsers: 1 }] }));
+    expect(await screen.findByRole("row", { name: "2026-11-05 (UTC) 2" })).toBeInTheDocument();
+    expect(screen.getByText(/A date or week can have both a UTC row and an Eastern row/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Back to problem reports" })).toHaveAttribute("href", "/reports");
     expect(screen.getByRole("link", { name: "What Boardwalk records and why" })).toHaveAttribute("href", "/guide/boardwalk-usage");
   });
