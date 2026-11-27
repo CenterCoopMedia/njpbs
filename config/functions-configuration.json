@@ -99,7 +99,7 @@
     "CMS_VIDEO_REPLACEMENT_CLEANUP_ROLE_ARN": {"variable": "CMS_VIDEO_REPLACEMENT_CLEANUP_ROLE_ARN", "default": "", "type": "string"},
     "CMS_VIDEO_REPLACEMENT_CLEANUP_DRY_RUN": {"variable": "CMS_VIDEO_REPLACEMENT_CLEANUP_DRY_RUN", "default": "true", "type": "boolean"},
     "CMS_VIDEO_REPLACEMENT_REPLICA_BUCKET": {"variable": "CMS_VIDEO_REPLACEMENT_REPLICA_BUCKET", "default": "", "type": "string"},
-    "CMS_MEDIA_ORIGINAL_BUCKETS": {"variable": "CMS_MEDIA_ORIGINAL_BUCKETS", "default": "", "type": "string", "pattern": "^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9](,[a-z0-9][a-z0-9.-]{1,61}[a-z0-9])*$", "requiredWhen": ["CMS_MEDIA_AWS_VIDEO_ENABLED"]}
+    "CMS_MEDIA_ORIGINAL_BUCKETS": {"variable": "CMS_MEDIA_ORIGINAL_BUCKETS", "default": "", "type": "string", "pattern": "^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9](,[a-z0-9][a-z0-9.-]{1,61}[a-z0-9])*$", "requiredWhen": ["CMS_MEDIA_AWS_VIDEO_ENABLED", "CMS_MEDIA_AWS_ARCHIVE_ENABLED"]}
   },
   "parameters": {
     "NO_BUILD_POST_ENABLED": {"input": "NO_BUILD_POST_ENABLED", "binding": "environment", "group": "instant"},

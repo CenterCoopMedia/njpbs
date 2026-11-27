@@ -88,6 +88,14 @@ describe("Functions configuration contract", () => {
       .toThrow("CMS_MEDIA_ORIGINAL_BUCKETS is required when CMS_MEDIA_AWS_VIDEO_ENABLED is true");
     expect(() => runtimeParameters({ ...enabled, CMS_MEDIA_ORIGINAL_BUCKETS: "fixture-other" }, discovery()))
       .toThrow("CMS_MEDIA_ORIGINAL_BUCKETS must include CMS_MEDIA_AWS_VIDEO_BUCKET");
+    const archive = { ...input(), CMS_MEDIA_AWS_ARCHIVE_ENABLED: "true", CMS_MEDIA_AWS_ARCHIVE_ACCOUNT_ID: "123456789012",
+      CMS_MEDIA_AWS_ARCHIVE_ORIGINALS_BUCKET: "fixture-archive", CMS_MEDIA_AWS_ARCHIVE_WORKING_BUCKET: "fixture-working",
+      CMS_MEDIA_AWS_ARCHIVE_ROLE_ARN: "arn:aws:iam::123456789012:role/fixture", CMS_MEDIA_ORIGINAL_BUCKETS: "fixture-archive,fixture-working" };
+    expect(runtimeParameters(archive, discovery()).CMS_MEDIA_ORIGINAL_BUCKETS).toBe("fixture-archive,fixture-working");
+    expect(() => runtimeParameters({ ...archive, CMS_MEDIA_ORIGINAL_BUCKETS: "" }, discovery()))
+      .toThrow("CMS_MEDIA_ORIGINAL_BUCKETS is required when CMS_MEDIA_AWS_ARCHIVE_ENABLED is true");
+    expect(() => runtimeParameters({ ...archive, CMS_MEDIA_ORIGINAL_BUCKETS: "fixture-archive" }, discovery()))
+      .toThrow("CMS_MEDIA_ORIGINAL_BUCKETS must include CMS_MEDIA_AWS_ARCHIVE_WORKING_BUCKET");
     expect(() => runtimeParameters({ ...input(), CMS_MEDIA_TRANSCRIPT_PROCESSING_ENABLED: "true",
       CMS_MEDIA_TRANSCRIPT_CONTROL_ROLE_ARN: "fixture-control", CMS_MEDIA_TRANSCRIPT_DATA_ROLE_ARN: "fixture-data" }, discovery()))
       .toThrow("CMS_MEDIA_AWS_RENDITION_BUCKET is required when CMS_MEDIA_TRANSCRIPT_PROCESSING_ENABLED is true");

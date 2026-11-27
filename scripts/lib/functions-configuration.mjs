@@ -140,9 +140,12 @@ export function runtimeParameters(input, discovery = {}, target = cmsTarget()) {
     if (flag && !values[key]) configurationFailure(`Invalid Functions configuration: ${key} is required when ${flag} is true`);
   }
   // Original status and restore serve only sources whose bucket is in this list (functions/lib/source-originals.js).
-  if (values.CMS_MEDIA_AWS_VIDEO_ENABLED === "true" &&
-      !values.CMS_MEDIA_ORIGINAL_BUCKETS.split(",").includes(values.CMS_MEDIA_AWS_VIDEO_BUCKET)) {
-    configurationFailure("Invalid Functions configuration: CMS_MEDIA_ORIGINAL_BUCKETS must include CMS_MEDIA_AWS_VIDEO_BUCKET");
+  const originalBuckets = values.CMS_MEDIA_ORIGINAL_BUCKETS.split(",");
+  for (const [flag, bucket] of [["CMS_MEDIA_AWS_VIDEO_ENABLED", "CMS_MEDIA_AWS_VIDEO_BUCKET"],
+    ["CMS_MEDIA_AWS_ARCHIVE_ENABLED", "CMS_MEDIA_AWS_ARCHIVE_ORIGINALS_BUCKET"], ["CMS_MEDIA_AWS_ARCHIVE_ENABLED", "CMS_MEDIA_AWS_ARCHIVE_WORKING_BUCKET"]]) {
+    if (values[flag] === "true" && !originalBuckets.includes(values[bucket])) {
+      configurationFailure(`Invalid Functions configuration: CMS_MEDIA_ORIGINAL_BUCKETS must include ${bucket}`);
+    }
   }
   // Production publishes through the serializer only; dev through GitHub only.
   if ((values.CMS_PUBLISH_TRANSPORT === "github") !== (target.environment === "development")) configurationFailure("Invalid Functions configuration: CMS_PUBLISH_TRANSPORT");
