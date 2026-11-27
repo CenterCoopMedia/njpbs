@@ -32,7 +32,7 @@ const {
   parseSignUploadPartsRequest,
   parseStartUploadRequest,
 } = require("./lib/source-media-upload-contract");
-const { compositeSha256, createS3MediaUploader } = require("./lib/s3-media-upload");
+const { PART_URL_TTL_SECONDS, compositeSha256, createS3MediaUploader } = require("./lib/s3-media-upload");
 const {
   MediaCollectionRejection,
   placeUploadedVideo,
@@ -50,6 +50,11 @@ const KIB = 1024;
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 const COLLECTION = "mediaSourceUploads";
 const ABANDONED_UPLOAD_PAGE = 50;
+// Signing stops at expiry, but a part URL signed just before it stays valid for
+// PART_URL_TTL_SECONDS and a part (64 MiB at most) can still be in flight after
+// that. S3 can keep a part that lands after the abort, so the sweep waits until
+// no signed part request can still be running.
+const ABANDONED_UPLOAD_GRACE_MS = PART_URL_TTL_SECONDS * 1000 + 45 * 60 * 1000;
 const PREVIEW_ADMISSION_LOCKS = "mediaSourcePreviewAdmissionLocks";
 const MAX_ACTIVE_PREVIEWS_PER_ACTOR = 2;
 const MAX_ACTIVE_PREVIEWS_GLOBAL = 20;
@@ -887,11 +892,12 @@ async function sweepAbandonedUploads({
   uploader,
 }) {
   const { now, nowMs } = currentTime(nowFn);
+  const cutoffMs = nowMs - ABANDONED_UPLOAD_GRACE_MS;
   const authorize = (current) => {
     if (!current) throw new SourceUploadError(404, "Upload session not found");
   };
   const admit = (current) => {
-    if (Date.parse(current.expiresAt) > nowMs) throw new SourceUploadError(409, "Upload session is still open");
+    if (Date.parse(current.expiresAt) > cutoffMs) throw new SourceUploadError(409, "Upload session may still have parts in flight");
   };
   const failedSources = new Set();
   const sourceUploader = {
@@ -906,7 +912,7 @@ async function sweepAbandonedUploads({
   };
   const expired = firestore.collection(COLLECTION)
     .where("status", "in", ["active", "canceling"])
-    .where("expiresAt", "<=", now)
+    .where("expiresAt", "<=", new Date(cutoffMs).toISOString())
     .orderBy("expiresAt")
     .limit(pageSize);
   let found = 0;

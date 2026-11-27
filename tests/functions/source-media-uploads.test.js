@@ -718,6 +718,8 @@ describe("abandoned upload sweep", () => {
       "mediaSourceUploads/parts-gone": session("parts-gone"),
       "mediaSourceUploads/no-source": session("no-source", { sourceId: "retired-source" }),
       "mediaSourceUploads/open": session("open", { expiresAt: "2026-09-15T16:00:00.000Z" }),
+      // Expired, but a part URL signed just before expiry could still be uploading.
+      "mediaSourceUploads/parts-in-flight": session("parts-in-flight", { expiresAt: "2026-09-14T16:30:00.000Z" }),
       "mediaSourceUploads/completed": session("completed", { status: "completed" }),
     });
     const absent = Object.assign(new Error("already aborted"), { name: "NoSuchUpload" });
@@ -742,6 +744,7 @@ describe("abandoned upload sweep", () => {
     expect(log.warn).toHaveBeenCalledWith("Abandoned upload sweep will retry",
       { sessionId: "no-source", message: "Upload source is not configured" });
     expect(firestore.records.get("mediaSourceUploads/open")).toMatchObject({ status: "active", version: 1 });
+    expect(firestore.records.get("mediaSourceUploads/parts-in-flight")).toMatchObject({ status: "active", version: 1 });
     expect(firestore.records.get("mediaSourceUploads/completed")).toMatchObject({ status: "completed", version: 1 });
   });
 
