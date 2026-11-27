@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
 import { Timestamp } from "firebase-admin/firestore";
 import { isolatedFirestore, clearEmulatorFirestore } from "../helpers/emulator-firestore.js";
@@ -51,9 +51,14 @@ describe("Boardwalk usage privacy and persistence contract (#4495)", () => {
     expect(raw.uid).toBe("staff-1"); expect(raw.roles).toEqual(["staff"]);
     expect(raw.collectedAt.toMillis()).toBe(start);
     expect(raw.purgeAt.toMillis()).toBe(start + 180 * 86_400_000);
+    // Day, week and person markers, screen and action person-days, and one publish repeat marker.
     const markers = await firestore.collection("cmsUsagePresence").get();
-    expect(markers.size).toBe(2);
-    for (const row of markers.docs) expect(row.data()).toEqual({ purgeAt: raw.purgeAt });
+    expect(markers.docs.map(row => row.id.split("_")[0]).sort()).toEqual(["action", "day", "person", "repeat", "screen", "week"]);
+    for (const row of markers.docs) {
+      expect(row.data().purgeAt).toEqual(raw.purgeAt);
+      expect(Object.keys(row.data()).every(key => ["purgeAt", "lastAt", "screens", "lastDay", "group", "role", "repeated", "grouped"].includes(key))).toBe(true);
+      expect(`${row.id} ${JSON.stringify(row.data())}`).not.toMatch(/staff-1|post-123/);
+    }
   });
 
   it("excludes agent and test accounts using the server-only profile field", async () => {
@@ -78,8 +83,8 @@ describe("Boardwalk usage privacy and persistence contract (#4495)", () => {
     await invoke(collect, same); await invoke(collect, same); await invoke(collect, batch());
     await invoke(handlers({ authorize: async () => actor("staff-2", "editor") }).collect, batch());
     let result = await invoke(report, { days: 7 });
-    expect(result.body.daily.at(-1)).toEqual({ date: "2026-11-02", timezone: "America/New_York", activeUsers: 2 });
-    expect(result.body.weekly).toEqual([{ week: "2026-11-02", timezone: "America/New_York", activeUsers: 2 }]);
+    expect(result.body.daily.at(-1)).toEqual({ date: "2026-11-02", timezone: "America/New_York", activeUsers: 2, newsroom: 2, product: 0 });
+    expect(result.body.weekly).toEqual([{ week: "2026-11-02", timezone: "America/New_York", activeUsers: 2, newsroom: 2, product: 0, byRole: [{ role: "none", activeUsers: 2 }] }]);
     expect(result.body.screens.find(row => row.id === "posts-list").views).toBe(3);
     time += 86_400_000;
     await invoke(collect, batch());
@@ -88,7 +93,7 @@ describe("Boardwalk usage privacy and persistence contract (#4495)", () => {
     expect(result.body.weekly[0].activeUsers).toBe(2);
     time += 6 * 86_400_000;
     await invoke(collect, batch());
-    expect((await invoke(report, { days: 7 })).body.weekly).toEqual([{ week: "2026-11-09", timezone: "America/New_York", activeUsers: 1 }]);
+    expect((await invoke(report, { days: 7 })).body.weekly).toEqual([{ week: "2026-11-09", timezone: "America/New_York", activeUsers: 1, newsroom: 1, product: 0, byRole: [{ role: "none", activeUsers: 1 }] }]);
   });
 
   it("keys days and weeks by Eastern date and reports when Eastern keys began", async () => {
@@ -103,7 +108,7 @@ describe("Boardwalk usage privacy and persistence contract (#4495)", () => {
     expect(result.daily.map(row => [row.date, row.activeUsers])).toEqual([["2026-11-02", 1], ["2026-11-03", 0],
       ["2026-11-04", 0], ["2026-11-05", 0], ["2026-11-06", 0], ["2026-11-07", 0], ["2026-11-08", 1]]);
     expect(result.daily.every(row => row.timezone === "America/New_York")).toBe(true);
-    expect(result.weekly).toEqual([{ week: "2026-11-02", timezone: "America/New_York", activeUsers: 2 }]);
+    expect(result.weekly).toEqual([{ week: "2026-11-02", timezone: "America/New_York", activeUsers: 2, newsroom: 2, product: 0, byRole: [{ role: "none", activeUsers: 2 }] }]);
     expect(result.firstCollectedDate).toBe("2026-10-31");
     expect(result.easternFromDate).toBe("2026-11-02");
     // Window starts at Eastern midnight Nov. 2 (EST after the Nov. 1 DST change).
@@ -120,12 +125,12 @@ describe("Boardwalk usage privacy and persistence contract (#4495)", () => {
     await invoke(handlers().collect, batch());
     const result = (await invoke(handlers().report, { days: 30 })).body;
     expect(result.easternFromDate).toBe("2026-11-03");
-    expect(result.daily.find(row => row.date === "2026-11-02")).toEqual({ date: "2026-11-02", timezone: "UTC", activeUsers: 0 });
+    expect(result.daily.find(row => row.date === "2026-11-02")).toEqual({ date: "2026-11-02", timezone: "UTC", activeUsers: 0, newsroom: null, product: null });
     // The switch date keeps its stored UTC row; staff-1 is counted again on the Eastern row.
-    expect(result.daily.filter(row => row.date === "2026-11-03")).toEqual([{ date: "2026-11-03", timezone: "UTC", activeUsers: 1 },
-      { date: "2026-11-03", timezone: "America/New_York", activeUsers: 1 }]);
-    expect(result.weekly.slice(-2)).toEqual([{ week: "2026-10-26", timezone: "UTC", activeUsers: 4 },
-      { week: "2026-11-02", timezone: "America/New_York", activeUsers: 1 }]);
+    expect(result.daily.filter(row => row.date === "2026-11-03")).toEqual([{ date: "2026-11-03", timezone: "UTC", activeUsers: 1, newsroom: null, product: null },
+      { date: "2026-11-03", timezone: "America/New_York", activeUsers: 1, newsroom: 1, product: 0 }]);
+    expect(result.weekly.slice(-2)).toEqual([{ week: "2026-10-26", timezone: "UTC", activeUsers: 4, newsroom: null, product: null, byRole: [] },
+      { week: "2026-11-02", timezone: "America/New_York", activeUsers: 1, newsroom: 1, product: 0, byRole: [{ role: "none", activeUsers: 1 }] }]);
     expect(result.screens.find(row => row.id === "posts-list").views).toBe(1);
     // The stored combined count keeps its own label instead of joining the list count.
     expect(result.screens.find(row => row.id === "posts")).toMatchObject({ label: "Posts, list and editor (before the split)", views: 1 });
@@ -282,6 +287,196 @@ describe("Boardwalk usage privacy and persistence contract (#4495)", () => {
     expect(refreshed.body.generatedAt).not.toBe(results[0].body.generatedAt);
     approvedActive = false;
     expect((await invoke(report, { days: 7 })).statusCode).toBe(403);
+  });
+
+  it("splits newsroom and product team counts by group and role", async () => {
+    await firestore.collection("users").doc("staff-1").set({ accessTier: "editor" });
+    await firestore.collection("users").doc("owner-1").set({ accessTier: "owner" });
+    await firestore.collection("users").doc("idle-1").set({ accessTier: "editor" });
+    await firestore.collection("users").doc("agent-1").set({ accessTier: "editor", usageAnalyticsExcluded: true });
+    const events = [view, { name: "screen.duration", screen: "posts-list", durationMs: 60_000 }];
+    await invoke(handlers().collect, batch(events));
+    await invoke(handlers({ authorize: async () => actor("owner-1") }).collect, batch(events));
+    const result = (await invoke(handlers().report, { days: 7 })).body;
+    expect(result.daily.at(-1)).toMatchObject({ activeUsers: 2, newsroom: 1, product: 1 });
+    expect(result.weekly).toEqual([{ week: "2026-11-02", timezone: "America/New_York", activeUsers: 2, newsroom: 1, product: 1,
+      byRole: [{ role: "editor", activeUsers: 1 }, { role: "owner", activeUsers: 1 }] }]);
+    expect(result.weekCompare).toEqual({ thisWeek: { newsroom: 1, product: 1 }, lastWeek: { newsroom: null, product: null } });
+    expect(result.activePeople).toEqual({ status: "ready", newsroom: 1, product: 1 });
+    expect(result.sessions).toEqual({ newsroom: { sessions: 1, visibleMs: 60_000 }, product: { sessions: 1, visibleMs: 60_000 } });
+    expect(result.roleActivity).toEqual({ status: "ready", rows: [
+      { role: "editor", group: "newsroom", roster: 2, active: 1, sessions: 1, visibleMs: 60_000 },
+      { role: "owner", group: "product", roster: 1, active: 1, sessions: 1, visibleMs: 60_000 }] });
+    expect(result.excludedAccounts).toBe(1);
+    expect(result.screens[0]).toMatchObject({ id: "posts-list", views: 2, visibleMs: 120_000, personDays: 2,
+      newsroom: { views: 1, visibleMs: 60_000, personDays: 1 }, product: { views: 1, visibleMs: 60_000, personDays: 1 } });
+  });
+
+  it("counts a person once per screen and action per Eastern day", async () => {
+    const { collect, report } = handlers();
+    const publish = { name: "content.publish.request", screen: "posts-editor", objectType: "record", objectId: "post-1" };
+    await invoke(collect, batch([view, publish]));
+    await invoke(collect, batch([view, { name: "screen.duration", screen: "posts-list", durationMs: 1_000 }, publish]));
+    await invoke(handlers({ authorize: async () => actor("staff-2") }).collect, batch([view]));
+    time += 86_400_000;
+    await invoke(collect, batch([view]));
+    const result = (await invoke(report, { days: 7 })).body;
+    expect(result.screens.find(row => row.id === "posts-list")).toMatchObject({ views: 4, personDays: 3, newsroom: { personDays: 3 } });
+    expect(result.screens.find(row => row.id === "posts-editor")).toMatchObject({ views: 0, personDays: 0 });
+    expect(result.actions.find(row => row.id === "content.publish.request")).toMatchObject({ count: 2, personDays: 1, lastUsed: "2026-11-02" });
+    expect(result.actions.find(row => row.id === "search")).toMatchObject({ count: 0, personDays: 0, lastUsed: null });
+  });
+
+  it("starts a new session after a 30-minute gap between event times", async () => {
+    const { collect, report } = handlers();
+    await invoke(collect, batch());
+    time = start + 29 * 60_000;
+    await invoke(collect, batch());
+    time = start + 59 * 60_000;
+    await invoke(collect, batch());
+    // Sent at 100 minutes; the first event happened 10 minutes earlier, 31 minutes after the last one.
+    time = start + 100 * 60_000;
+    await invoke(collect, batch([{ ...view, offsetMs: 600_000 }, view]));
+    expect((await invoke(report, { days: 7 })).body.sessions.newsroom.sessions).toBe(3);
+  });
+
+  it("buckets visible time by the Eastern hour of the event, not of collection", async () => {
+    time = Date.parse("2026-11-02T15:00:30Z"); // Monday 10:00:30 AM EST
+    await invoke(handlers().collect, batch([{ name: "screen.duration", screen: "posts-list", durationMs: 5_000, offsetMs: 60_000 },
+      { name: "screen.duration", screen: "posts-list", durationMs: 2_000 }]));
+    const grid = (await invoke(handlers().report, { days: 7 })).body.hourMs.newsroom;
+    expect(grid[0][9]).toBe(5_000);
+    expect(grid[0][10]).toBe(2_000);
+    expect(grid.flat().reduce((sum, value) => sum + value, 0)).toBe(7_000);
+  });
+
+  it("counts screen transitions and back-and-forth pairs across batches", async () => {
+    const at = screen => ({ name: "screen.view", screen });
+    const { collect, report } = handlers();
+    await invoke(collect, batch([at("posts-list"), at("posts-editor"), at("posts-list"), at("posts-list"), at("images"), at("posts-list")]));
+    await invoke(collect, batch([at("images")]));
+    const friction = (await invoke(report, { days: 7 })).body.friction.current.newsroom;
+    expect(friction).toMatchObject({ transitions: 5, backForth: 3 });
+    expect(friction.pairs).toEqual([{ screens: ["Images", "Posts list"], count: 2 }, { screens: ["Post editor", "Posts list"], count: 1 }]);
+  });
+
+  it("counts repeat publish clicks within 10 minutes per item and keeps the prior period", async () => {
+    await firestore.collection("cmsUsageDaily").doc("et-2026-10-26").set({ groups: { newsroom: { repeat: { publish: { items: 4, repeats: 1, repeatedItems: 1 } } } } });
+    const publish = objectId => ({ name: "content.publish.request", screen: "posts-editor", objectType: "record", objectId });
+    const { collect, report } = handlers();
+    for (const [minute, events] of [[0, [publish("post-1")]], [5, [publish("post-1")]], [9, [publish("post-1")]],
+      [25, [publish("post-1")]], [30, [publish("post-2"), { name: "preview.request", screen: "posts-editor", objectType: "record", objectId: "post-1" }]]]) {
+      time = start + minute * 60_000;
+      await invoke(collect, batch(events));
+    }
+    const body = (await invoke(report, { days: 7 })).body;
+    expect(body.friction.current.newsroom.publish).toEqual({ items: 2, repeats: 2, repeatedItems: 1 });
+    expect(body.friction.current.newsroom.preview).toEqual({ items: 1, repeats: 0, repeatedItems: 0 });
+    expect(body.friction.prior.newsroom.publish).toEqual({ items: 4, repeats: 1, repeatedItems: 1 });
+    expect(JSON.stringify(body)).not.toMatch(/staff-1|post-1|post-2|"(?:objectId|uid|lastAt)"/);
+  });
+
+  it("summarizes problem reports and content flow without IDs or text", async () => {
+    await firestore.collection("users").doc("staff-1").set({ accessTier: "editor" });
+    const reports = firestore.collection("bug_reports");
+    await reports.add({ status: "open", createdAt: "2026-10-31T12:00:00.000Z", resolvedAt: null, route: { path: "/content/post/AbC123xyz" }, summary: "private words" });
+    await reports.add({ status: "acknowledged", createdAt: "2026-11-01T12:00:00.000Z", resolvedAt: null, route: { path: "/content/post/abc-def" } });
+    await reports.add({ status: "resolved", createdAt: "2026-10-20T12:00:00.000Z", resolvedAt: "2026-10-28T12:00:00.000Z", route: { path: "/media" } });
+    await reports.add({ status: "resolved", createdAt: "2026-10-29T00:00:00.000Z", resolvedAt: "2026-10-30T00:00:00.000Z", route: { path: "/reports" } });
+    await reports.add({ status: "dismissed", createdAt: "2026-10-30T00:00:00.000Z", resolvedAt: null, route: null });
+    await reports.add({ status: "resolved", createdAt: "2026-09-01T00:00:00.000Z", resolvedAt: "2026-10-01T00:00:00.000Z", route: { path: "/media" } });
+    const posts = firestore.collection("cmsPosts");
+    await posts.add({ type: "post", status: "published", title: "Private title", createdAt: "2026-10-28T10:00:00.000Z", firstPublishedAt: "2026-10-28T13:00:00.000Z", firstPublishedBy: "staff-1" });
+    await posts.add({ type: "post", status: "published", createdAt: "2026-11-01T10:00:00.000Z", firstPublishedAt: "2026-11-02T11:00:00.000Z", firstPublishedBy: "agent-x" });
+    await posts.add({ type: "program", status: "published", createdAt: "2026-10-28T10:00:00.000Z", firstPublishedAt: "2026-10-28T11:00:00.000Z", firstPublishedBy: "staff-1" });
+    await posts.add({ type: "post", status: "draft", createdAt: new Date(start - 2 * 3_600_000).toISOString(), createdBy: "agent-x" });
+    await posts.add({ type: "post", status: "draft", createdAt: "2026-10-20T12:00:00.000Z", createdBy: "staff-1" });
+    await posts.add({ type: "post", status: "draft", createdAt: "2026-10-20T12:00:00.000Z", createdBy: "staff-1", deleted: true });
+    const body = (await invoke(handlers().report, { days: 7 })).body;
+    expect(body.problemReports).toEqual({ status: "ready", open: 2, resolved: 2, medianDaysToResolve: 4.5, filed: 4,
+      topPages: [{ page: "/content/post", count: 2 }, { page: "/reports", count: 1 }, { page: "Not from a Boardwalk page", count: 1 }] });
+    expect(body.contentFlow).toEqual({ status: "ready", teams: "ready", medianHoursToFirstPublish: 14,
+      publishedWeeks: [{ week: "2026-10-26", total: 1, newsroom: 1, product: 0, other: 0 }, { week: "2026-11-02", total: 1, newsroom: 0, product: 0, other: 1 }],
+      openDrafts: [{ bucket: "day", total: 1, newsroom: 0, product: 0, other: 1 }, { bucket: "week", total: 0, newsroom: 0, product: 0, other: 0 },
+        { bucket: "month", total: 1, newsroom: 1, product: 0, other: 0 }, { bucket: "older", total: 0, newsroom: 0, product: 0, other: 0 }] });
+    expect(JSON.stringify(body)).not.toMatch(/AbC123|abc-def|private|Private|staff-1|agent-x/);
+  });
+
+  it("counts people for teams and roles once when their day and week markers predate team counts", async () => {
+    const person = createHash("sha256").update("staff-1").digest("hex");
+    const presence = firestore.collection("cmsUsagePresence");
+    await presence.doc(`day_et-2026-11-02_${person}`).set({ purgeAt: Timestamp.fromMillis(start) });
+    await presence.doc(`week_et-2026-11-02_${person}`).set({ purgeAt: Timestamp.fromMillis(start) });
+    await firestore.collection("cmsUsageDaily").doc("et-2026-11-02").set({ activeUsers: 1 });
+    await firestore.collection("cmsUsageWeekly").doc("et-2026-11-02").set({ activeUsers: 1 });
+    const { collect, report } = handlers();
+    await invoke(collect, batch());
+    await invoke(collect, batch());
+    const body = (await invoke(report, { days: 7 })).body;
+    expect(body.daily.at(-1)).toEqual({ date: "2026-11-02", timezone: "America/New_York", activeUsers: 1, newsroom: 1, product: 0 });
+    expect(body.weekly).toEqual([{ week: "2026-11-02", timezone: "America/New_York", activeUsers: 1, newsroom: 1, product: 0, byRole: [{ role: "none", activeUsers: 1 }] }]);
+    expect(body.activePeople).toEqual({ status: "ready", newsroom: 1, product: 0 });
+    expect((await presence.doc(`week_et-2026-11-02_${person}`).get()).data().grouped).toBe(true);
+  });
+
+  it("puts visible time in the hour and weekday of the event when its batch arrives after midnight", async () => {
+    time = Date.parse("2026-11-03T05:00:30Z"); // Tuesday 12:00:30 AM EST
+    await invoke(handlers().collect, batch([{ name: "screen.duration", screen: "posts-list", durationMs: 4_000, offsetMs: 60_000 },
+      { name: "screen.duration", screen: "posts-list", durationMs: 1_000 }]));
+    const grid = (await invoke(handlers().report, { days: 7 })).body.hourMs.newsroom;
+    expect(grid[0][23]).toBe(4_000); // Monday 11 PM
+    expect(grid[1][0]).toBe(1_000); // Tuesday midnight
+    expect(grid.flat().reduce((sum, value) => sum + value, 0)).toBe(5_000);
+  });
+
+  it("adds visible time on earlier combined screens to session minutes", async () => {
+    await invoke(handlers().collect, batch([{ name: "screen.duration", screen: "posts", durationMs: 10_000 },
+      { name: "screen.duration", screen: "posts-list", durationMs: 5_000 }]));
+    expect((await invoke(handlers().report, { days: 7 })).body.sessions.newsroom).toEqual({ sessions: 1, visibleMs: 15_000 });
+  });
+
+  it("counts only Preview jobs that expired without being built", async () => {
+    await firestore.collection("users").doc("staff-1").set({ accessTier: "editor" });
+    const queue = firestore.collection("cmsPreviewQueue");
+    const requestedAt = Timestamp.fromMillis(start - 86_400_000);
+    await queue.add({ requestedBy: "staff-1", status: "expired", requestedAt });
+    // A built saved Preview later replaced by a newer one keeps the commit of its build.
+    await queue.add({ requestedBy: "staff-1", status: "expired", requestedAt, gitCommitSha: "a".repeat(40) });
+    const jobs = (await invoke(handlers().report, { days: 7 })).body.friction.jobs;
+    expect(jobs.current.newsroom).toEqual({ previews: 2, failed: 0, expired: 1, stuckUploads: 0 });
+  });
+
+  it("counts Preview jobs only within their 30-day retention and reports the coverage", async () => {
+    await firestore.collection("users").doc("staff-1").set({ accessTier: "editor" });
+    const queue = firestore.collection("cmsPreviewQueue");
+    await queue.add({ requestedBy: "staff-1", status: "failed", requestedAt: Timestamp.fromMillis(start - 10 * 86_400_000) });
+    await queue.add({ requestedBy: "staff-1", status: "ready", requestedAt: Timestamp.fromMillis(start - 5 * 86_400_000) });
+    await queue.add({ requestedBy: "staff-1", status: "failed", requestedAt: Timestamp.fromMillis(start - 40 * 86_400_000) });
+    const jobs = async days => (await invoke(handlers().report, { days })).body.friction.jobs;
+    const ninety = await jobs(90);
+    expect(ninety.previewCoverage).toEqual({ current: { status: "partial", from: "2026-10-03" }, prior: { status: "unavailable" } });
+    expect(ninety.current.newsroom).toMatchObject({ previews: 2, failed: 1 });
+    const thirty = await jobs(30);
+    expect(thirty.previewCoverage).toEqual({ current: { status: "full" }, prior: { status: "partial", from: "2026-10-03" } });
+    // The 40-day-old job is in the prior window but outside retention, so it is not counted.
+    expect(thirty.prior.newsroom).toMatchObject({ previews: 0, failed: 0 });
+    expect((await jobs(7)).previewCoverage).toEqual({ current: { status: "full" }, prior: { status: "full" } });
+  });
+
+  it("keeps content totals and the median but no team split when the roster is unavailable", async () => {
+    for (let offset = 0; offset < 501; offset += 250) {
+      const write = firestore.batch();
+      for (let index = offset; index < Math.min(501, offset + 250); index += 1) write.set(firestore.collection("users").doc(`user-${index}`), { accessTier: "editor" });
+      await write.commit();
+    }
+    const posts = firestore.collection("cmsPosts");
+    await posts.add({ type: "post", status: "published", createdAt: "2026-10-28T10:00:00.000Z", firstPublishedAt: "2026-10-28T13:00:00.000Z", firstPublishedBy: "user-1" });
+    await posts.add({ type: "post", status: "draft", createdAt: "2026-10-20T12:00:00.000Z", createdBy: "user-1" });
+    const body = (await invoke(handlers().report, { days: 7 })).body;
+    expect(body.contentFlow).toEqual({ status: "ready", teams: "unavailable", medianHoursToFirstPublish: 3,
+      publishedWeeks: [{ week: "2026-10-26", total: 1, newsroom: null, product: null, other: null }],
+      openDrafts: [{ bucket: "day", total: 0, newsroom: null, product: null, other: null }, { bucket: "week", total: 0, newsroom: null, product: null, other: null },
+        { bucket: "month", total: 1, newsroom: null, product: null, other: null }, { bucket: "older", total: 0, newsroom: null, product: null, other: null }] });
   });
 
   it.each([null, "2026-11-02T12:00:00.000Z", 1793620800000])("refuses null and non-native audit timestamps (%#)", async timestamp => {

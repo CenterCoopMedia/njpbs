@@ -44,3 +44,54 @@ saved page or record.
   before the split and counts them on the combined rows.
 
 The staff explanation is the Boardwalk guide page `boardwalk-usage`.
+
+## Dashboard counters
+
+`collectBatch` writes every counter in the same transaction as the raw event.
+The team is `product` for an actor whose `users/{uid}.accessTier` is `owner`
+and `newsroom` for everyone else. The role key is `accessTier`, or `none`.
+Top-level `activeUsers`, `views`, `visibleMs` and `actions` stay all-staff
+totals.
+
+Eastern daily docs (`cmsUsageDaily/et-YYYY-MM-DD`) add:
+
+- `groups.{team}`: `activeUsers`, `sessions`, `views.{screen}`,
+  `visibleMs.{screen}`, `actions.{action}`, `screenDays.{screen}` and
+  `actionDays.{action}` (distinct person-days), `hourMs.{HH}` (visible time by
+  Eastern hour of the event, collection time minus `offsetMs`, written to the
+  daily doc of the event's Eastern date), `transitions`,
+  `backForth`, `pairs.{a~b}` (sorted screen pair) and
+  `repeat.{publish|preview}.{items,repeats,repeatedItems}`.
+- `roles.{role}`: `activeUsers`, `sessions`, `visibleMs`.
+
+Eastern weekly docs add `groups.{team}.activeUsers` and
+`roles.{role}.activeUsers`. The week marker carries `grouped: true`; a week
+marker without it predates these counts and adds the person to them once.
+
+`cmsUsagePresence` markers hold no account or content IDs; IDs are SHA-256
+hashes. All have `purgeAt` (180 days):
+
+- `day_{day}_{person}`: `lastAt` (ms) and the last two screen ids. A batch
+  whose first event is 30 minutes or more after `lastAt`, or the first batch of
+  the day, starts a session. A day marker without `lastAt` predates team and
+  role counts, so the person is counted once for them and gets a person marker. A view of a different screen counts a transition;
+  a view of the screen before last also counts a back-and-forth for that pair.
+- `screen_{day}_{screen}_{person}` and `action_{day}_{action}_{person}`: one
+  person-day per screen (views or visible time) and per action.
+- `repeat_{day}_{hash(uid:action:objectType:objectId)}`: `lastAt` and
+  `repeated` for publish and Preview attempts. The first attempt on an item
+  counts an item; an attempt within 10 minutes of the last counts a repeat; the
+  first repeat counts a repeated item.
+- `person_{person}`: `lastDay`, `group`, `role`. The report counts distinct
+  active people for any window from markers with `lastDay` in it.
+
+The report also reads, with field projections and limits, and reports a
+section as `unavailable` when a read fails or passes its limit:
+`users` (roster by role and excluded-account count), `bug_reports` (open
+count, median days to resolve, top five pages with non-word path segments
+replaced), `cmsPosts` (first publishes per Eastern week, median hours from
+creation, open draft ages), `cmsPreviewQueue` (failed and expired jobs; queue records expire after 30
+days, so only the last 30 days count and each window reports `full`, `partial`
+with a start date, or `unavailable` coverage) and
+`mediaSourceUploads` (uploads active over a day). Friction compares the prior
+window of the same length, read from Eastern daily docs only.

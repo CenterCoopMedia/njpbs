@@ -49,17 +49,40 @@ Requests and jobs do not prove completion or a view. This history is retained
 under the existing activity-log policy; the 180-day limit below applies to
 new analytics events and temporary distinct-account markers.
 
-Usage analytics adds the same aggregate counts for staff with Reports access: active
-staff per day and calendar week, destination views, visible time and named
-actions. This first version does not display anyone's individual activity.
+Usage analytics adds aggregate counts for staff with Reports access. Each
+count is split between the newsroom and the product team (owner-level
+accounts):
+
+- Active staff this week, last week and today, and average visible minutes per
+  session.
+- Active newsroom staff per day as a chart with a daily table, and distinct
+  people per calendar week by role.
+- Activity by role: roster, active people, sessions and visible minutes.
+- Newsroom visible minutes by Eastern hour and weekday.
+- Destinations and features: views, uses, visible time and person-days. A
+  person-day counts one person once per destination or feature per day.
+- Friction compared with the previous period: repeated publish or Preview
+  attempts on the same item within 10 minutes, failed and expired Preview jobs,
+  moves straight back to the previous screen, and uploads left active over a
+  day.
+- Content flow: posts first published per week, the median time from creating a
+  post to first publishing it, and open post drafts by age.
+- Problem reports: open reports, the median time to resolve and the pages
+  reports come from.
+
+The report shows counts only. It does not display anyone's individual
+activity, names, content titles or report text. To count distinct people,
+Boardwalk keeps a temporary marker for each account with a scrambled account
+ID, its access level and the last day it was active.
 
 The tables include only the instrumented destinations and actions. A zero
 means no collected use in the selected period; time before usage analytics began is
 not evidence that a tool is unused. Dates use Eastern time and today is
 incomplete. Days collected before the switch to Eastern time stay keyed by UTC
 date, so work after 7 or 8 PM on those days appears on the next day. The report
-marks those rows UTC and shows the switch date. Weekly counts cover Monday to Sunday; a person counts
-once in each week.
+marks those rows UTC and shows the switch date. Weekly counts cover Monday to
+Sunday; a person counts once in each week. A date or week that has both a UTC
+row and an Eastern row can count the same person in each, so do not add them.
 
 Visible time can include idle time. Hidden tabs do not add time. Browser closure,
 an interrupted connection or a dropped background delivery can lose events.
