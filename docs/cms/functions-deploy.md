@@ -95,7 +95,9 @@ runtime adoption before old credentials are retired.
 
 [functions-configuration.json](../../config/functions-configuration.json) owns
 each input's native binding, default/type/required checks, runtime parameter and
-secret role. SDK declarations and actual export bindings supply the export and
+secret role. An input with `requiredWhen` lists the boolean feature flags that
+cannot work without it; the deploy refuses any of those flags set to `true`
+while the input is empty. SDK declarations and actual export bindings supply the export and
 runtime-account inventory; do not maintain a second export list. The common
 runner exposes these operations from the repository root in Bash:
 
