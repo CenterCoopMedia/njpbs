@@ -751,6 +751,17 @@ describe("MediaRoute", () => {
     expect(mocks.listSources).not.toHaveBeenCalled();
   });
 
+  it("keeps the search when switching between media tabs", async () => {
+    const { router } = renderRoute("/media/images?q=harbor");
+    await screen.findByRole("heading", { name: "Images" });
+    expect(screen.getByRole("link", { name: /^Videos/ })).toHaveAttribute("href", "/media/videos?q=harbor");
+
+    fireEvent.click(screen.getByRole("link", { name: /^Videos/ }));
+    await screen.findByRole("heading", { name: "Videos" });
+    expect(router.state.location.search).toBe("?q=harbor");
+    expect(screen.getByRole("link", { name: /^Images/ })).toHaveAttribute("href", "/media/images?q=harbor");
+  });
+
   it("keeps each fixed source in the URL and restores it through history", async () => {
     const { router } = renderRoute("/media/images");
     await screen.findByRole("button", { name: /^Studio control room/ });

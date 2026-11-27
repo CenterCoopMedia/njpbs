@@ -16,6 +16,9 @@ export interface MediaTabsProps {
 // sideways instead of wrapping and never scrolls the page to show the current tab.
 export function MediaTabs({ currentId, tabs }: MediaTabsProps) {
   const location = useLocation();
+  // A search follows the person to the next tab, so one query covers Images, Videos and Audio.
+  const query = new URLSearchParams(location.search).get("q")?.trim();
+  const carried = query ? `?${new URLSearchParams({ q: query })}` : "";
   const stripRef = useRef<HTMLElement>(null);
   const currentRef = useRef<HTMLAnchorElement>(null);
 
@@ -65,7 +68,7 @@ export function MediaTabs({ currentId, tabs }: MediaTabsProps) {
                 if (shouldSuppressTabClick(event, tab.path, location.pathname)) event.preventDefault();
               }}
               ref={current ? currentRef : undefined}
-              to={tab.path}
+              to={`${tab.path}${carried}`}
             >
               <Icon name={tab.icon} />
               <span className="media-tab-label">{tab.label}</span>
