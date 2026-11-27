@@ -16,15 +16,16 @@ type CatalogVideo = { slug: string; premieredOn: string | null };
  * Keep the newest videos per program (premiere date, then `tie`), using the largest per-program limit that keeps
  * the index, program and video pages within MAX_CATALOG_PAGES. Undefined when one video per program does not fit.
  */
-export function fitCatalogPages<V extends CatalogVideo, P extends { episodes: V[] }>(programs: P[],
-    tie: (video: V) => string = video => video.slug): P[] | undefined {
+export function fitCatalogPages<P extends { episodes: CatalogVideo[] }>(programs: P[],
+    tie: (video: P["episodes"][number]) => string = video => video.slug): P[] | undefined {
+  type V = P["episodes"][number];
   const date = (video: V) => catalogDate(video.premieredOn) ? video.premieredOn : "";
   for (let limit = MAX_PROGRAM_VIDEOS; limit > 0; limit -= 1) {
     const pages = 1 + programs.reduce((sum, program) => sum + 1 + Math.min(program.episodes.length, limit), 0);
     if (pages > MAX_CATALOG_PAGES) continue;
     return programs.map(program => ({ ...program, episodes: [...program.episodes]
       .sort((a, b) => date(b).localeCompare(date(a)) || (tie(a) < tie(b) ? -1 : tie(a) > tie(b) ? 1 : 0))
-      .slice(0, limit).sort((a, b) => a.slug.localeCompare(b.slug, "en")) }));
+      .slice(0, limit).sort((a, b) => a.slug.localeCompare(b.slug, "en")) }) as P);
   }
   return undefined;
 }

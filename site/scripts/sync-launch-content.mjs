@@ -241,9 +241,8 @@ export async function writeLaunchContent(config, payload, outage = false, newsca
 async function writeLaunchContentFile(config, output, retainedCatalog) {
   if (output.videoCatalog && retainedCatalog && Buffer.byteLength(launchFileText(output)) > MAX_EXTERNAL_INPUT_BYTES) {
     console.warn("Media Manager video catalog refresh failed (launch file limit exceeded). Retaining the last valid catalog when available.");
-    const { videoCatalog: _rejected, ...rest } = output;
-    const previous = await retainedCatalog();
-    output = previous ? { ...rest, videoCatalog: previous } : rest;
+    output = { ...output, videoCatalog: await retainedCatalog() };
+    if (!output.videoCatalog) delete output.videoCatalog;
   }
   const outputPath = path.resolve(config.outputPath);
   await mkdir(path.dirname(outputPath), { recursive: true });
