@@ -284,7 +284,7 @@ function AuthorProfilesSurface() {
         );
       } else if (action === "restore") {
         setNotice(
-          "Profile restored. It can be chosen for new bylines again and stays private until it is published.",
+          "Profile restored. It stays private until it is published. A profile linked to a deactivated account stays off new bylines.",
         );
       } else {
         setConfirmingArchive(false);
@@ -919,11 +919,12 @@ function AuthorProfilesSurface() {
             <div className="author-profile-archive">
               <h3>Restore profile</h3>
               <p>
-                Restore returns this identity to new bylines and lets its owner
-                open their profile again. It stays private until it is
-                published.
+                Restore makes this profile active again. It stays private until
+                it is published. A profile linked to a deactivated account stays
+                off new bylines.
               </p>
               <AsyncActionButton
+                disabled={dirty}
                 label="Restore profile"
                 pending={lifecycleAction === "restore"}
                 pendingAnnouncement="Restoring this profile."
