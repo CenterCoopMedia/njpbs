@@ -1,12 +1,15 @@
 import { buildProgram, type AssetAttributes, type EpisodeAttributes, type MediaManagerRecord,
   type RawShow, type SeasonAttributes, type ShowAttributes } from "../src/lib/media-manager-catalog.ts";
 import { reportMediaCoverage } from "../src/lib/media-manager-coverage.ts";
-import { catalogCaptionLanguage, catalogDate, catalogRecord, catalogSlug, isCatalogImage, MAX_CATALOG_BYTES, MAX_CATALOG_VIDEOS,
+import { catalogCaptionLanguage, catalogDate, catalogRecord, catalogSlug, fitCatalogPages, isCatalogImage, MAX_CATALOG_BYTES,
   mediaManagerWindowAt, readPublicVideoCatalog, type PublicVideo, type PublicVideoCatalog } from "../src/lib/public-video-catalog.ts";
 
 const MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
-const MAX_FETCH_BYTES = 128 * 1024 * 1024;
-const MAX_REQUESTS = 100;
+// Nov. 27, 2026 full read: 170 requests, 218 MB and 101 s for 6,379 public assets.
+const MAX_FETCH_BYTES = 1024 * 1024 * 1024;
+const MAX_REQUESTS = 1_000;
+// The external refresh claim lasts 10 minutes and needs time after the fetch to seal and upload its inputs.
+const FETCH_DEADLINE_MS = 5 * 60_000;
 const SHOWS_PER_REQUEST = 20;
 const PAGE_SIZE = 50;
 
@@ -51,7 +54,7 @@ function nextPage(value: unknown, first: URL, page: number): URL | null {
 }
 
 function createCollectionReader(authorization: string, fetchImpl: typeof fetch) {
-  const deadline = AbortSignal.timeout(90_000);
+  const deadline = AbortSignal.timeout(FETCH_DEADLINE_MS);
   let requests = 0;
   let totalBytes = 0;
   return async function* readCollection(first: URL, type: string) {
@@ -184,7 +187,6 @@ export async function fetchPublicVideoCatalog(config: { url: URL; authorization:
   if (shows.length === 0) throw new PublicVideoCatalogError("No routable Media Manager programs");
   const sources = new Map<string, CatalogSource>(shows.map(show => [show.id,
     { raw: { show, seasons: [], specials: [] }, seasons: new Map(), videos: new Map() }]));
-  let videoCount = 0;
   let hasPublicAsset = false;
   for (let offset = 0; offset < shows.length; offset += SHOWS_PER_REQUEST) {
     const batch = new Map(shows.slice(offset, offset + SHOWS_PER_REQUEST).map(({ id }) => [id, sources.get(id)!]));
@@ -192,17 +194,20 @@ export async function fetchPublicVideoCatalog(config: { url: URL; authorization:
     url.search = new URLSearchParams({ available: "public", type: "full_length", "platform-slug": "partnerplayer", "page-size": `${PAGE_SIZE}` }).toString();
     for (const id of batch.keys()) url.searchParams.append("show-id", id);
     for await (const asset of read(url, "asset")) {
-      if (++videoCount > MAX_CATALOG_VIDEOS) throw new PublicVideoCatalogError("Media Manager video limit exceeded");
       if (addPublicAsset(batch, asset, now)) hasPublicAsset = true;
     }
   }
 
-  const coverage = [];
-  const programs = [];
-  for (const { raw, videos } of sources.values()) {
+  const built = [...sources.values()].flatMap(({ raw, videos }) => {
     const program = buildProgram(raw);
     const episodes = uniqueSlugs(program.episodes.filter(({ playback }) => playback.partnerPlayerSrc !== null));
-    if (!episodes.length) continue;
+    return episodes.length ? [{ raw, videos, program, episodes }] : [];
+  });
+  const fitted = fitCatalogPages(built, video => video.id);
+  if (!fitted) throw new PublicVideoCatalogError("Media Manager catalog page limit exceeded");
+  const coverage = [];
+  const programs = [];
+  for (const { raw, videos, program, episodes } of fitted) {
     coverage.push({ ...program, episodes });
     programs.push({ slug: program.slug, title: program.title, description: program.description,
       image: raw.show.image, genre: program.genre,

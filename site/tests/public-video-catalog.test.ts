@@ -4,7 +4,7 @@ import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { fetchPublicVideoCatalog } from "../scripts/fetch-public-video-catalog";
 import { main } from "../scripts/sync-launch-content.mjs";
-import { mediaManagerWindowAt, readPublicVideoCatalog } from "../src/lib/public-video-catalog";
+import { MAX_CATALOG_BYTES, MAX_CATALOG_PAGES, mediaManagerWindowAt, readPublicVideoCatalog } from "../src/lib/public-video-catalog";
 import { catalogAsset, coastShow, duplicateCoastShow, riverShow } from "./fixtures/public-video-catalog";
 
 const now = new Date("2026-11-20T12:00:00.000Z");
@@ -130,6 +130,52 @@ describe("public video catalog", () => {
     for (const image of invalidImages) {
       expect(() => readPublicVideoCatalog({ ...snapshot, programs: [{ ...program, image }] })).toThrow(/Invalid public video catalog/);
     }
+  });
+
+  it("reads more than 2,000 videos and keeps the newest 10 per program", async () => {
+    const total = 2_050; // 41 asset pages of 50. Videos 2n and 2n - 1 share a premiere date.
+    const premiere = (index: number) => new Date(Date.UTC(2020, 0, 1 + Math.floor((index + 1) / 2))).toISOString().slice(0, 10);
+    const assets = Array.from({ length: total }, (_, index) =>
+      catalogAsset(`river-${index}`, { attributes: { premiered_on: premiere(index) } }));
+    const fetch = vi.fn(async (input: URL | string | Request) => {
+      const url = new URL(input.toString());
+      if (url.pathname.endsWith("/shows/")) return result([riverShow]);
+      const page = Number(url.searchParams.get("page") ?? 1);
+      const next = new URL(url);
+      next.searchParams.set("page", `${page + 1}`);
+      return result(assets.slice((page - 1) * 50, page * 50), page * 50 < total ? next.href : null);
+    });
+    const snapshot = await fetchPublicVideoCatalog(config, fetch, now);
+    expect(fetch).toHaveBeenCalledTimes(42);
+    // 2049 is newest; 2040 and 2039 tie for tenth place and the lower id wins.
+    expect(snapshot.programs[0].episodes.map(video => video.slug)).toEqual(["river-2039", "river-2041", "river-2042",
+      "river-2043", "river-2044", "river-2045", "river-2046", "river-2047", "river-2048", "river-2049"]);
+    expect(readPublicVideoCatalog(snapshot)).toEqual(snapshot);
+
+    const [program] = snapshot.programs;
+    const description = "x".repeat(2_000);
+    const programs = Array.from({ length: Math.ceil(MAX_CATALOG_BYTES / (description.length * 10)) }, (_, index) => ({
+      ...program, slug: `program-${index}`, episodes: program.episodes.map(video => ({ ...video, description })) }));
+    const oversized = { ...snapshot, programs };
+    expect(Buffer.byteLength(JSON.stringify(oversized))).toBeGreaterThan(MAX_CATALOG_BYTES);
+    expect(() => readPublicVideoCatalog(oversized)).toThrow(/Invalid public video catalog/);
+  });
+
+  it("publishes a retained catalog within the page limit by lowering the videos kept per program", async () => {
+    const fetch = async (input: URL | string | Request) => new URL(input.toString()).pathname.endsWith("/shows/")
+      ? result([riverShow]) : result([catalogAsset("river-episode")]);
+    const [video] = (await fetchPublicVideoCatalog(config, fetch, now)).programs[0].episodes;
+    // 200 programs of 12: limit 10 needs 2,201 pages, 7 needs 1,601, 6 needs 1,401 (MAX_CATALOG_PAGES is 1,460).
+    expect(MAX_CATALOG_PAGES).toBe(1_460);
+    const retained = { checkedAt: now.toISOString(), programs: Array.from({ length: 200 }, (_, program) => ({
+      slug: `program-${program}`, title: "Program", description: "Program description.", genre: null,
+      episodes: Array.from({ length: 12 }, (_, index) => ({ ...video, slug: `video-${index}`,
+        premieredOn: `2026-01-${String(index + 1).padStart(2, "0")}` })),
+    })) };
+    const published = readPublicVideoCatalog(retained, now)!;
+    expect(published.programs).toHaveLength(200);
+    expect(published.programs.every(({ episodes }) =>
+      episodes.map(({ slug }) => slug).join() === "video-10,video-11,video-6,video-7,video-8,video-9")).toBe(true);
   });
 
   it("preserves the last valid catalog when a later asset page fails", async () => {
