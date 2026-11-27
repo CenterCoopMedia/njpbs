@@ -179,8 +179,9 @@ describe("provider call rule", () => {
 
   it("names only the category of a fault whose message can quote private input", () => {
     const faults = [http(503), Object.assign(new Error("private"), { code: "ENOENT" }), Object.assign(new Error("private"), { code: 7 }),
+      ...["provider-http-refused", "auth/invalid-credential", "private provider text", "https://private.invalid/x"].map(code => Object.assign(new Error("private"), { code })),
       Object.assign(new Error("private"), { status: 2, stderr: "private" }), new TypeError("private"), new (class ReferencedRecordError extends Error {})("private")];
-    expect(faults.map(faultKind)).toEqual(["HTTP 503", "ENOENT", "code 7", "exit 2", "TypeError", "Error"]);
+    expect(faults.map(faultKind)).toEqual(["HTTP 503", "ENOENT", "code 7", "provider-http-refused", "auth/invalid-credential", "Error", "Error", "exit 2", "TypeError", "Error"]);
     expect(failureText(new Error("Fixed sentence", kindCause(new Error("private", { cause: new Error("private") }))))).toBe("Fixed sentence; cause: Error");
   });
 

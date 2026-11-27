@@ -19,6 +19,7 @@ import { readDeploymentManifest, renderCommittedDeploymentSource } from "./rende
 import { devPublicationIdentity } from "./assert-dev-cms-targets.mjs";
 import { isDevelopmentName } from "./lib/cms-target.mjs";
 import { contractRecipe, writeFunctionsContracts } from "./lib/functions-contracts.mjs";
+import { faultKind } from "./lib/provider-call.mjs";
 
 const execute = promisify(execFile);
 const trustedRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -100,10 +101,12 @@ export async function prepareDependencies({ directory, cwd, environment, candida
       rendererSha = publication.body?.commitSha;
       priorAdminSha = previous?.priorAdminSha ?? admin.body?.build?.revision;
       if (!SHA.test(rendererSha ?? "") || !SHA.test(priorAdminSha ?? "")) refuse("prepare-source");
-    } catch {
+    } catch (error) {
       // No dev baseline is a full/unknown plan, not permission to publish.
       // The held full method must still be able to establish the first baseline.
-      if (environment !== "development" || process.env.CMS_DEV_PUBLISH_ENABLED !== "false") refuse("prepare-source");
+      if (environment !== "development" || process.env.CMS_DEV_PUBLISH_ENABLED !== "false") {
+        throw Object.assign(new CmsPublicContractError("prepare-source"), { diagnostic: { cause: faultKind(error) } });
+      }
       await writeFile(join(directory, "dependencies.json"), JSON.stringify({ candidateSha, roots: { trusted: trustedRoot, C1: cwd } }), { mode: 0o600 });
       return;
     }

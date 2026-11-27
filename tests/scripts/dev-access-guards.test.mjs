@@ -245,7 +245,7 @@ test('failed preflight cannot change DNS', async t => {
 
 test('restoration failure is explicit and cannot report success', async t => {
   const h = harness(t, { restoreFails: true });
-  await assert.rejects(h.run(), /restoration is unverified/);
+  await assert.rejects(h.run(), error => /restoration is unverified/.test(error.message) && /Cloudflare request refused$/.test(error.cause?.message));
   assert.ok(h.lines.some(line => line.startsWith('RESTORE FAILED')));
 });
 
@@ -293,7 +293,7 @@ test('a concurrent preflight record edit is preserved without a write', async t 
 
 test('restored DNS with continued exposure is an explicit escalation', async t => {
   const h = harness(t, { restoreProofFails: true });
-  await assert.rejects(h.run(), /restored but HTTP verification failed/);
+  await assert.rejects(h.run(), error => /restored but HTTP verification failed/.test(error.message) && error.cause?.message === "Error");
   assert.deepEqual(h.current(), h.initial);
   assert.ok(h.lines.some(line => line.startsWith('RESTORED BUT PROOF FAILED')));
   assert.ok(readFileSync(h.receiptPath, 'utf8').includes('restored proof failed'));

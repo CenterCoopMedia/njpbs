@@ -8,8 +8,9 @@ export function studioTitleFilesParameter(encoded, enabled) {
     // Single-quoted dotenv values preserve JSON escapes and # characters. Encode
     // apostrophes inside JSON so none can terminate the surrounding dotenv quote.
     return JSON.stringify({ headline: titleFiles.headline, name_title: titleFiles.name_title }).replaceAll("'", "\\u0027");
-  } catch {
+  } catch (error) {
     if (enabled === "false") return "";
-    throw new Error("Studio preset configuration is unavailable");
+    // The staged rollback helpers load this module without provider-call.
+    throw new Error(`Studio preset configuration is unavailable (${error.name})`);
   }
 }

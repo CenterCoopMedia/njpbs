@@ -11,6 +11,7 @@ import mediaContract from "../functions/lib/media-contract.js";
 import thumbnailModule from "../functions/lib/media-thumbnails.js";
 import storageModule from "../functions/lib/r2-media.js";
 import { cmsTarget } from "./lib/cms-target.mjs";
+import { faultKind, kindCause } from "./lib/provider-call.mjs";
 
 const PAGE_SIZE = 100;
 const CONCURRENCY = 2;
@@ -76,8 +77,8 @@ async function checkedImageWidth(buffer, asset) {
     });
     metadata = await image.metadata();
     await image.stats();
-  } catch {
-    throw new MediaThumbnailError("The image cannot be decoded safely");
+  } catch (error) {
+    throw new MediaThumbnailError("The image cannot be decoded safely", kindCause(error));
   }
   const frameHeight = metadata.pageHeight ?? metadata.height;
   const width = metadata.orientation >= 5 && metadata.orientation <= 8
@@ -174,10 +175,10 @@ async function backfillOne({ firestore, storage, publicOrigin, document }) {
     return updated;
   } catch (error) {
     if (isTransientFailure(error)) {
-      console.warn(`Thumbnail backfill deferred asset ${document.id}: ${error?.name || "Error"}`);
+      console.warn(`Thumbnail backfill deferred asset ${document.id}: ${faultKind(error)}`);
       return "retryable";
     }
-    console.warn(`Thumbnail backfill failed for asset ${document.id}: ${error?.name || "Error"}`);
+    console.warn(`Thumbnail backfill failed for asset ${document.id}: ${faultKind(error)}`);
     return "failed";
   }
 }
@@ -291,7 +292,7 @@ async function main() {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   main().catch((error) => {
-    console.error(`Thumbnail backfill failed: ${error?.name || "Error"}`);
+    console.error(`Thumbnail backfill failed: ${faultKind(error)}`);
     process.exitCode = 1;
   });
 }

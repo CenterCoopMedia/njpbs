@@ -341,9 +341,10 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
       const count = renderDevelopmentConfig(root, process.env, options);
       process.stdout.write(`Development configuration rendered: ${count} files\n`);
     }
-  } catch {
-    // OS and parser errors can contain paths or configured values.
-    console.error("Development configuration render refused; check inputs and the clean template checkout");
+  } catch (error) {
+    // OS and parser errors can contain paths or configured values. This file runs
+    // alone from a sparse checkout, so it names the code or class by itself.
+    console.error(`Development configuration render refused (${/^[A-Z][A-Z0-9_]{2,40}$/.test(error?.code ?? "") ? error.code : error?.name}); check inputs and the clean template checkout`);
     process.exitCode = 1;
   }
 }

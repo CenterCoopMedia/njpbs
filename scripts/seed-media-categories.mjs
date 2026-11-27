@@ -12,6 +12,7 @@ import { deleteApp, getApps, initializeApp } from "firebase-admin/app";
 import { FieldValue, getFirestore } from "firebase-admin/firestore";
 import mediaCategories from "../functions/lib/media-categories.js";
 import { cmsTarget } from "./lib/cms-target.mjs";
+import { kindCause } from "./lib/provider-call.mjs";
 
 const SYSTEM_ACTOR = "system:media-category-seed";
 const MAX_CATEGORIES_PER_TRANSACTION = 250;
@@ -66,9 +67,10 @@ async function referencedCategoryIds(firestore) {
       if (typeof value !== "string") continue;
       try {
         ids.add(normalizeMediaCategoryId(value));
-      } catch {
+      } catch (error) {
         throw new Error(
           `Stored media record ${document.ref.path} has an invalid category id`,
+          kindCause(error),
         );
       }
     }

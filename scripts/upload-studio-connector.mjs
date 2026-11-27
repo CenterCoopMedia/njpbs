@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { failureText, faultKind, kindCause } from "./lib/provider-call.mjs";
 
 const require = createRequire(import.meta.url);
 const { PutObjectCommand } = require("@aws-sdk/client-s3");
@@ -12,19 +13,19 @@ const digest = bytes => createHash("sha256").update(bytes).digest("hex");
 
 class PackageUploadError extends Error {}
 export function describeUploadFailure(error) {
-  if (error instanceof PackageUploadError) return error.message;
+  if (error instanceof PackageUploadError) return failureText(error);
   if (error?.code === "ENOENT") return "A required package file was not found.";
   if (error?.code === "EACCES") return "Package files could not be read.";
   const status = error?.$metadata?.httpStatusCode;
   if (Number.isInteger(status) && status >= 400 && status <= 599) return `Storage request failed (HTTP ${status}).`;
-  return "Storage could not be reached or configured. Check its configuration and try again.";
+  return `Storage could not be reached or configured (${faultKind(error)}). Check its configuration and try again.`;
 }
 
 export async function uploadConnectorPackage({ path, sourceSha, storage }) {
   const manifestBytes = await readFile(path);
   let manifest;
   try { manifest = parseConnectorManifest(JSON.parse(manifestBytes.toString("utf8")), sourceSha); }
-  catch { throw new PackageUploadError("Connector manifest is invalid or its source differs."); }
+  catch (error) { throw new PackageUploadError("Connector manifest is invalid or its source differs.", kindCause(error)); }
   const zip = await readFile(join(dirname(path), manifest.filename));
   if (zip.length !== manifest.sizeBytes || digest(zip) !== manifest.sha256) throw new PackageUploadError("Connector package bytes differ from the manifest");
   async function put(key, bytes, contentType) {
