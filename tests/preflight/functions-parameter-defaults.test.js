@@ -3,8 +3,9 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 // The deploy writes every Functions parameter into the runtime .env, using the table default when
-// no variable is set. A table default that differs from the code's defineString default silently
-// replaces it: an empty table default emptied the voiceover bucket in production.
+// no variable is set. A code default that differs from the table default is therefore never used,
+// and it hides a missing variable: the voiceover bucket's code default stopped applying once the
+// deploy wrote the empty table default, and voiceover audio failed in production.
 const table = JSON.parse(readFileSync("config/functions-configuration.json", "utf8"));
 
 function codeDefaults(dir = "functions") {

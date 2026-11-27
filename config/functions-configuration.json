@@ -76,7 +76,7 @@
     "CMS_MEDIA_R2_BUCKET": {"variable": "CMS_MEDIA_R2_BUCKET", "default": "", "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{2,220}$", "required": true},
     "UGC_R2_BUCKET": {"variable": "UGC_R2_BUCKET", "default": "", "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{2,220}$", "required": false},
     "CMS_MEDIA_CLOUDFLARE_ZONE_ID": {"variable": "CMS_MEDIA_CLOUDFLARE_ZONE_ID", "default": "", "type": "string", "pattern": "^[a-f0-9]{32}$", "required": true},
-    "CMS_VOICEOVER_R2_BUCKET": {"variable": "CMS_VOICEOVER_R2_BUCKET", "default": "njpbs-cms-voiceover", "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{2,220}$", "required": false},
+    "CMS_VOICEOVER_R2_BUCKET": {"variable": "CMS_VOICEOVER_R2_BUCKET", "default": "", "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{2,220}$", "required": false},
     "CMS_MEDIA_MASTER_R2_BUCKET": {"variable": "CMS_MEDIA_MASTER_R2_BUCKET", "default": "", "type": "string"},
     "CMS_STAFF_EMAIL_FROM": {"variable": "CMS_STAFF_EMAIL_FROM", "default": "", "type": "string"},
     "CMS_STAFF_EMAIL_REPLY_TO": {"variable": "CMS_STAFF_EMAIL_REPLY_TO", "default": "", "type": "string"},

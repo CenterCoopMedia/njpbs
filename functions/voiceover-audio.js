@@ -25,9 +25,7 @@ const {
 const R2_ACCESS_KEY_ID = defineSecret("CMS_VOICEOVER_R2_ACCESS_KEY_ID");
 const R2_SECRET_ACCESS_KEY = defineSecret("CMS_VOICEOVER_R2_SECRET_ACCESS_KEY");
 const R2_ENDPOINT = defineString("CMS_VOICEOVER_R2_ENDPOINT", { default: "" });
-const R2_BUCKET = defineString("CMS_VOICEOVER_R2_BUCKET", {
-  default: "njpbs-cms-voiceover",
-});
+const R2_BUCKET = defineString("CMS_VOICEOVER_R2_BUCKET", { default: "" });
 const MAX_AUDIO_REQUEST_BYTES = 2 * 1024;
 
 function configuredStorage() {
