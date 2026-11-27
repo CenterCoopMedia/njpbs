@@ -1,7 +1,11 @@
 import { extractPartnerPlayerSrc, type AssetAvailabilityWindow } from "./media-manager-catalog.ts";
 
-// The catalog has no video count limit. Its serialized size bounds it: 3.7 MB for 6,102 videos on Nov. 27, 2026.
-export const MAX_CATALOG_BYTES = 16 * 1024 * 1024;
+// Its serialized size bounds the catalog: 0.8 MB for 1,105 videos on Nov. 27, 2026.
+// The launch file stores it pretty-printed under a 16 MiB input bound, so the compact catalog keeps half of that.
+export const MAX_CATALOG_BYTES = 8 * 1024 * 1024;
+// Every video is its own page in the videoCatalog publication family (4,096 files, 64 MB). Pages are about 34 KB.
+// The newest 10 per program measured 1,425 files and 49 MB on Nov. 27, 2026 (73% of the byte limit); 11 exceeds 75%.
+export const MAX_PROGRAM_VIDEOS = 10;
 
 export interface PublicVideo {
   slug: string;
@@ -166,7 +170,8 @@ export function readPublicVideoCatalog(value: unknown, now?: Date): PublicVideoC
     if (!program || !catalogSlug(program.slug) || programSlugs.has(program.slug) || !text(program.title) ||
         !text(program.description) || (program.image !== undefined && !isCatalogImage(program.image)) ||
         (program.genre !== null && !text(program.genre)) ||
-        !Array.isArray(program.episodes) || program.episodes.length === 0) throw invalid();
+        !Array.isArray(program.episodes) || program.episodes.length === 0 ||
+        program.episodes.length > MAX_PROGRAM_VIDEOS) throw invalid();
     programSlugs.add(program.slug);
     const episodeSlugs = new Set<string>();
     for (const rawEpisode of program.episodes as unknown[]) {

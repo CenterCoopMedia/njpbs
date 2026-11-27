@@ -132,9 +132,11 @@ describe("public video catalog", () => {
     }
   });
 
-  it("publishes more than 2,000 videos and bounds the catalog by size", async () => {
-    const total = 2_050; // 41 asset pages of 50.
-    const assets = Array.from({ length: total }, (_, index) => catalogAsset(`river-${index}`));
+  it("reads more than 2,000 videos and keeps the newest 10 per program", async () => {
+    const total = 2_050; // 41 asset pages of 50. Videos 2n and 2n - 1 share a premiere date.
+    const premiere = (index: number) => new Date(Date.UTC(2020, 0, 1 + Math.floor((index + 1) / 2))).toISOString().slice(0, 10);
+    const assets = Array.from({ length: total }, (_, index) =>
+      catalogAsset(`river-${index}`, { attributes: { premiered_on: premiere(index) } }));
     const fetch = vi.fn(async (input: URL | string | Request) => {
       const url = new URL(input.toString());
       if (url.pathname.endsWith("/shows/")) return result([riverShow]);
@@ -145,14 +147,19 @@ describe("public video catalog", () => {
     });
     const snapshot = await fetchPublicVideoCatalog(config, fetch, now);
     expect(fetch).toHaveBeenCalledTimes(42);
-    expect(snapshot.programs[0].episodes).toHaveLength(total);
+    // 2049 is newest; 2040 and 2039 tie for tenth place and the lower id wins.
+    expect(snapshot.programs[0].episodes.map(video => video.slug)).toEqual(["river-2039", "river-2041", "river-2042",
+      "river-2043", "river-2044", "river-2045", "river-2046", "river-2047", "river-2048", "river-2049"]);
     expect(readPublicVideoCatalog(snapshot)).toEqual(snapshot);
 
-    const [episode] = snapshot.programs[0].episodes;
+    const [program] = snapshot.programs;
+    const eleven = [...program.episodes, { ...program.episodes[0], slug: "river-extra" }];
+    expect(() => readPublicVideoCatalog({ ...snapshot, programs: [{ ...program, episodes: eleven }] }))
+      .toThrow(/Invalid public video catalog/);
     const description = "x".repeat(2_000);
-    const episodes = Array.from({ length: Math.ceil(MAX_CATALOG_BYTES / description.length) },
-      (_, index) => ({ ...episode, slug: `oversized-${index}`, description }));
-    const oversized = { ...snapshot, programs: [{ ...snapshot.programs[0], episodes }] };
+    const programs = Array.from({ length: Math.ceil(MAX_CATALOG_BYTES / (description.length * 10)) }, (_, index) => ({
+      ...program, slug: `program-${index}`, episodes: program.episodes.map(video => ({ ...video, description })) }));
+    const oversized = { ...snapshot, programs };
     expect(Buffer.byteLength(JSON.stringify(oversized))).toBeGreaterThan(MAX_CATALOG_BYTES);
     expect(() => readPublicVideoCatalog(oversized)).toThrow(/Invalid public video catalog/);
   });

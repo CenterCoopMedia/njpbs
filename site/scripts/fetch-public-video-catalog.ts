@@ -1,14 +1,15 @@
 import { buildProgram, type AssetAttributes, type EpisodeAttributes, type MediaManagerRecord,
   type RawShow, type SeasonAttributes, type ShowAttributes } from "../src/lib/media-manager-catalog.ts";
 import { reportMediaCoverage } from "../src/lib/media-manager-coverage.ts";
-import { catalogCaptionLanguage, catalogDate, catalogRecord, catalogSlug, isCatalogImage, MAX_CATALOG_BYTES,
+import { catalogCaptionLanguage, catalogDate, catalogRecord, catalogSlug, isCatalogImage, MAX_CATALOG_BYTES, MAX_PROGRAM_VIDEOS,
   mediaManagerWindowAt, readPublicVideoCatalog, type PublicVideo, type PublicVideoCatalog } from "../src/lib/public-video-catalog.ts";
 
 const MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
-// Nov. 27, 2026 full read: 170 requests, 218 MB and 101 s for 6,379 public assets. The bounds leave about 5x growth.
+// Nov. 27, 2026 full read: 170 requests, 218 MB and 101 s for 6,379 public assets.
 const MAX_FETCH_BYTES = 1024 * 1024 * 1024;
 const MAX_REQUESTS = 1_000;
-const FETCH_DEADLINE_MS = 10 * 60_000;
+// The external refresh claim lasts 10 minutes and needs time after the fetch to seal and upload its inputs.
+const FETCH_DEADLINE_MS = 5 * 60_000;
 const SHOWS_PER_REQUEST = 20;
 const PAGE_SIZE = 50;
 
@@ -106,6 +107,13 @@ function uniqueSlugs<T extends { slug: string }>(rows: T[]): T[] {
   return rows.filter(({ slug }) => slugs.get(slug) === 1).sort((a, b) => a.slug.localeCompare(b.slug, "en"));
 }
 
+/** Keep the newest videos by premiere date, ties by id, in slug order. Undated videos sort last. */
+function newestVideos<T extends { id: string; slug: string; premieredOn: string | null }>(rows: T[]): T[] {
+  const date = (row: T) => catalogDate(row.premieredOn) ? row.premieredOn! : "";
+  return [...rows].sort((a, b) => date(b).localeCompare(date(a)) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+    .slice(0, MAX_PROGRAM_VIDEOS).sort((a, b) => a.slug.localeCompare(b.slug, "en"));
+}
+
 function catalogImage(attributes: Record<string, unknown>, profile: RegExp): string | undefined {
   const images: unknown[] = Array.isArray(attributes.images) ? attributes.images : [];
   for (const value of images) {
@@ -201,7 +209,7 @@ export async function fetchPublicVideoCatalog(config: { url: URL; authorization:
   const programs = [];
   for (const { raw, videos } of sources.values()) {
     const program = buildProgram(raw);
-    const episodes = uniqueSlugs(program.episodes.filter(({ playback }) => playback.partnerPlayerSrc !== null));
+    const episodes = newestVideos(uniqueSlugs(program.episodes.filter(({ playback }) => playback.partnerPlayerSrc !== null)));
     if (!episodes.length) continue;
     coverage.push({ ...program, episodes });
     programs.push({ slug: program.slug, title: program.title, description: program.description,
