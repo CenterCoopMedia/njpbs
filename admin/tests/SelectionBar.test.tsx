@@ -13,7 +13,7 @@ const css = readFileSync(resolve(process.cwd(), "src/components/media/SelectionB
 function bar(overrides: Partial<SelectionBarProps> = {}) {
   const count = overrides.count ?? 5;
   const props: SelectionBarProps = {
-    label: "Collection selection",
+    label: "Image selection",
     count,
     offPage: 0,
     info: "Selection carries across image pages and filters.",
@@ -30,9 +30,9 @@ function bar(overrides: Partial<SelectionBarProps> = {}) {
 describe("SelectionBar", () => {
   it("shows only with a selection", () => {
     const { rerender, props } = bar({ count: 0 });
-    expect(screen.queryByRole("group", { name: "Collection selection" })).toBeNull();
+    expect(screen.queryByRole("group", { name: "Image selection" })).toBeNull();
     rerender(<SelectionBar {...props} count={5} />);
-    const group = screen.getByRole("group", { name: "Collection selection" });
+    const group = screen.getByRole("group", { name: "Image selection" });
     // The route's always-mounted status announces the count; the bar has no live region.
     expect(group.querySelector("[role='status'], [aria-live]")).toBeNull();
     expect(screen.getByRole("button", { name: "About selection" })).toHaveAccessibleDescription(
@@ -54,7 +54,7 @@ describe("SelectionBar", () => {
       selectionSummary({ count: 7, offPage: 3, cap: 100 }),
     );
     expect(screen.getAllByRole("button").map((button) => button.textContent)).toEqual([
-      "Add to favorites", "Remove from favorites", "Add to collection", "Edit selected", "Clear selection",
+      "Edit selected", "Clear selection",
     ]);
   });
 
@@ -73,20 +73,23 @@ describe("SelectionBar", () => {
     expect(props.onPageChange).toHaveBeenLastCalledWith(false);
   });
 
-  it("Add to collection is disabled past 30 and says why", () => {
-    const { props } = bar({ count: 31 });
-    const collect = screen.getByRole("button", { name: "Add to collection" });
-    expect(collect).toBeDisabled();
-    expect(collect).toHaveAccessibleDescription("Select no more than 30 items for one collection change.");
-    expect(screen.getByRole("alert")).toHaveTextContent("Select no more than 30 items for one collection change.");
-    fireEvent.click(collect);
+  it("Edit tags is disabled past 100 and says why", () => {
+    const { props } = bar({
+      count: 101,
+      actions: mediaBarActions(mediaSelectionActions({ surface: "images", count: 101, canEdit: true })),
+    });
+    const editTags = screen.getByRole("button", { name: "Edit tags" });
+    expect(editTags).toBeDisabled();
+    expect(editTags).toHaveAccessibleDescription("Select no more than 100 items in one batch.");
+    expect(screen.getByRole("alert")).toHaveTextContent("Select no more than 100 items in one batch.");
+    fireEvent.click(editTags);
     expect(props.onAction).not.toHaveBeenCalled();
   });
 
   it("the promoted actions call back with their ids", () => {
-    const { props } = bar();
-    fireEvent.click(screen.getByRole("button", { name: "Add to collection" }));
-    expect(props.onAction).toHaveBeenCalledWith("collect");
+    const { props } = bar({ actions: mediaBarActions(mediaSelectionActions({ surface: "images", count: 5, canEdit: true })) });
+    fireEvent.click(screen.getByRole("button", { name: "Edit tags" }));
+    expect(props.onAction).toHaveBeenCalledWith("edit-tags");
   });
 
   it("Clear selection clears and hands focus back to the caller", () => {
@@ -99,7 +102,7 @@ describe("SelectionBar", () => {
           <SelectionBar
             actions={mediaBarActions(mediaSelectionActions({ surface: "images", count, canEdit: false }))}
             count={count}
-            label="Collection selection"
+            label="Image selection"
             offPage={0}
             onAction={() => {}}
             onClear={() => {
@@ -114,7 +117,7 @@ describe("SelectionBar", () => {
     }
     render(<Caller />);
     fireEvent.click(screen.getByRole("button", { name: "Clear selection" }));
-    expect(screen.queryByRole("group", { name: "Collection selection" })).toBeNull();
+    expect(screen.queryByRole("group", { name: "Image selection" })).toBeNull();
     expect(screen.getByRole("button", { name: "Item 3" })).toHaveFocus();
   });
 

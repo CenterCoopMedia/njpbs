@@ -9,7 +9,6 @@ import { Timestamp, getFirestore } from "firebase-admin/firestore";
 import mediaCategories from "../functions/lib/media-categories.js";
 import mediaContract from "../functions/lib/media-contract.js";
 import mediaDiscovery from "../functions/lib/media-discovery.js";
-import mediaFavorites from "../functions/lib/media-favorites.js";
 import voiceoverReview from "../functions/lib/voiceover-review.js";
 
 const DEMO_PROJECT_ID = "demo-njpbs";
@@ -28,11 +27,6 @@ const MAX_TRANSACTION_CHUNK_SIZE = 25;
 const { normalizeMediaCategoryId, parseMediaCategoryDefinition } = mediaCategories;
 const { assertAssetId, normalizeOriginalName, normalizeTags } = mediaContract;
 const { bumpMediaDiscoveryRevision, withMediaDiscovery } = mediaDiscovery;
-const {
-  canonicalFavoriteRef,
-  favoriteDocumentId,
-  storedFavoriteRef,
-} = mediaFavorites;
 const {
   LIBRARY_DOCUMENT,
   MAX_AUDIO_BYTES,
@@ -211,40 +205,6 @@ function mediaRecord({ category, projection, performerName, raw }) {
   };
 }
 
-function favoriteSourceHash({ takeId, projection, raw }) {
-  return fingerprint({
-    takeId,
-    manifestVersion: raw.manifestVersion,
-    favorite: projection.favorite,
-    createdAt: raw.createdAt,
-  });
-}
-
-function timestampForReview(raw) {
-  assertSourceTimestamps("Voiceover review", raw);
-  return Timestamp.fromDate(new Date(raw.createdAt));
-}
-
-function favoriteRecord({ category, mediaId, path, takeId, projection, raw }) {
-  const ref = { backend: "r2", id: mediaId };
-  const base = {
-    ref,
-    canonicalRef: canonicalFavoriteRef(ref),
-    createdAt: timestampForReview(raw),
-  };
-  return {
-    ...base,
-    voiceoverMigration: {
-      id: MIGRATION_ID,
-      version: MIGRATION_VERSION,
-      category,
-      sourcePath: path,
-      sourceReviewHash: favoriteSourceHash({ takeId, projection, raw }),
-      fingerprint: fingerprint(base),
-    },
-  };
-}
-
 function migrationMarker(value, category) {
   const marker = value?.voiceoverMigration;
   return marker?.id === MIGRATION_ID &&
@@ -259,10 +219,6 @@ function sourceDatasetHash(sources) {
     library: sources.libraryRaw,
     takes: sources.takes.map(({ path, raw }) => ({ path, value: raw })),
   });
-}
-
-function sourceReviewDatasetHash(reviews) {
-  return fingerprint(reviews.map(({ path, raw }) => ({ path, value: raw })));
 }
 
 function completionRecord(category, sources) {
@@ -313,25 +269,6 @@ function completionPlan(
     sourceMatches,
     conflicts: snapshot.exists && !sourceMatches ? 1 : 0,
   };
-}
-
-function validFavoriteTimestamp(value) {
-  return value instanceof Timestamp && Number.isFinite(value.toDate().getTime());
-}
-
-function correctRetainedFavorite(value, expectedCanonicalRef) {
-  const stored = storedFavoriteRef(value);
-  return Boolean(
-    stored &&
-    canonicalFavoriteRef(stored) === expectedCanonicalRef &&
-    value.canonicalRef === expectedCanonicalRef &&
-    validFavoriteTimestamp(value.createdAt)
-  );
-}
-
-function correctUnownedFavorite(value, expectedCanonicalRef) {
-  return correctRetainedFavorite(value, expectedCanonicalRef) &&
-    value.voiceoverMigration === undefined;
 }
 
 function firestoreProjectId(firestore) {
@@ -426,12 +363,7 @@ async function readVoiceoverSources(firestore) {
     const match = REVIEW_PATH.exec(snapshot.ref.path);
     if (!match) continue;
     const [, uid, takeId] = match;
-    if (!activeIds.has(takeId)) {
-      if (snapshot.data()?.favorite === true) {
-        throw new Error(`Favorite review ${snapshot.ref.path} has no active voiceover take`);
-      }
-      continue;
-    }
+    if (!activeIds.has(takeId)) continue;
     const projection = reviewProjection(
       takeId,
       snapshot.data(),
@@ -471,11 +403,9 @@ function resultForMigration({
   project,
   sources,
   media,
-  favorites,
   completion,
 }) {
   const mediaWrites = media.create.length;
-  const favoriteWrites = favorites.create.length;
   const revisionWrites = Math.ceil(mediaWrites / chunkSize);
   const completionWrites = completion.create ? 1 : 0;
   return {
@@ -493,15 +423,6 @@ function resultForMigration({
       skipped: 0,
       conflicts: 0,
     },
-    favorites: {
-      planned: favoriteWrites,
-      created: apply ? favoriteWrites : 0,
-      verified: favorites.verified,
-      retained: favorites.retained,
-      deleted: 0,
-      skipped: favorites.skipped,
-      conflicts: 0,
-    },
     discoveryRevision: {
       planned: revisionWrites,
       updated: apply ? revisionWrites : 0,
@@ -515,7 +436,7 @@ function resultForMigration({
       skipped: 0,
       conflicts: 0,
     },
-    plannedWrites: mediaWrites + favoriteWrites + revisionWrites + completionWrites,
+    plannedWrites: mediaWrites + revisionWrites + completionWrites,
   };
 }
 
@@ -533,10 +454,8 @@ async function preflightMigration({
     sources,
   );
   const media = { create: [], verified: 0 };
-  const byTakeId = new Map();
   const expectedMedia = sources.takes.map((source) => {
     const record = mediaRecord({ category, ...source });
-    byTakeId.set(source.projection.id, record.id);
     return { source, record, ref: firestore.collection(MEDIA_COLLECTION).doc(record.id) };
   });
   const mediaSnapshots = await firestore.getAll(...expectedMedia.map(({ ref }) => ref));
@@ -553,50 +472,7 @@ async function preflightMigration({
     media.verified += 1;
   }
 
-  const favorites = { create: [], verified: 0, retained: 0, skipped: 0 };
-  const expectedFavorites = sources.reviews
-    .filter(({ projection }) => projection.favorite)
-    .map((review) => {
-      const mediaId = byTakeId.get(review.takeId);
-      const ref = { backend: "r2", id: mediaId };
-      const id = favoriteDocumentId(ref);
-      return {
-        review,
-        record: favoriteRecord({ category, mediaId, ...review }),
-        ref: firestore.collection("mediaFavorites").doc(review.uid).collection("items").doc(id),
-      };
-    });
-  const favoriteSnapshots = expectedFavorites.length > 0
-    ? await firestore.getAll(...expectedFavorites.map(({ ref }) => ref))
-    : [];
-  for (const [index, expected] of expectedFavorites.entries()) {
-    const snapshot = favoriteSnapshots[index];
-    if (!snapshot.exists) {
-      if (completion.verified) {
-        favorites.retained += 1;
-        favorites.skipped += 1;
-        continue;
-      }
-      favorites.create.push(expected);
-      continue;
-    }
-    const stored = snapshot.data();
-    if (correctUnownedFavorite(stored, expected.record.canonicalRef)) {
-      favorites.retained += 1;
-      continue;
-    }
-    if (migrationMarker(stored, category) &&
-        isDeepStrictEqual(stored, expected.record)) {
-      favorites.verified += 1;
-      continue;
-    }
-    if (completion.verified && correctRetainedFavorite(stored, expected.record.canonicalRef)) {
-      favorites.retained += 1;
-      continue;
-    }
-    throw new Error(`Media favorite collision at ${snapshot.ref.path}`);
-  }
-  return { media, favorites, completion, categoryDefinition };
+  return { media, completion, categoryDefinition };
 }
 
 function currentCategoryDefinition(snapshot) {
@@ -661,46 +537,6 @@ async function commitCreatePlan({ firestore, plan, sources, category, chunkSize 
       bumpMediaDiscoveryRevision(transaction, firestore);
     });
   }
-  for (let index = 0; index < plan.favorites.create.length;
-    index += chunkSize) {
-    const entries = plan.favorites.create.slice(
-      index,
-      index + chunkSize,
-    );
-    await firestore.runTransaction(async (transaction) => {
-      const snapshots = await transaction.getAll(
-        categoryRef,
-        libraryRef,
-        ...entries.map(({ review }) => firestore.doc(review.path)),
-        ...entries.map(({ ref }) => ref),
-      );
-      const library = assertCreateContext(snapshots[0], snapshots[1], plan, sources);
-      const sourceOffset = 2;
-      const targetOffset = sourceOffset + entries.length;
-      for (const [entryIndex, entry] of entries.entries()) {
-        const review = currentReviewSource(
-          snapshots[sourceOffset + entryIndex],
-          library,
-          entry.review.uid,
-          entry.review.takeId,
-        );
-        if (!review || !review.projection.favorite || !isDeepStrictEqual(
-          favoriteRecord({
-            category,
-            mediaId: entry.record.ref.id,
-            ...review,
-          }),
-          entry.record,
-        )) {
-          throw new Error(`Voiceover review changed at ${entry.review.path}`);
-        }
-        if (snapshots[targetOffset + entryIndex].exists) {
-          throw new Error(`Media favorite collision at ${entry.ref.path}`);
-        }
-      }
-      for (const entry of entries) transaction.create(entry.ref, entry.record);
-    });
-  }
   await firestore.runTransaction(async (transaction) => {
     const [categorySnapshot, librarySnapshot, completionSnapshot] =
       await transaction.getAll(categoryRef, libraryRef, plan.completion.ref);
@@ -738,30 +574,6 @@ async function commitCreatePlan({ firestore, plan, sources, category, chunkSize 
       throw new Error("Voiceover source dataset changed after migration preflight");
     }
     if (plan.completion.create) {
-      const activeIds = new Set(currentTakes.map(({ projection }) => projection.id));
-      const reviewSnapshots = await transaction.get(firestore.collectionGroup("takes"));
-      const currentReviews = [];
-      for (const snapshot of reviewSnapshots.docs) {
-        const match = REVIEW_PATH.exec(snapshot.ref.path);
-        if (!match) continue;
-        const [, uid, takeId] = match;
-        if (!activeIds.has(takeId)) {
-          if (snapshot.data()?.favorite === true) {
-            throw new Error("Voiceover review dataset changed after migration preflight");
-          }
-          continue;
-        }
-        const review = currentReviewSource(snapshot, currentLibrary, uid, takeId);
-        if (!review) {
-          throw new Error("Voiceover review dataset changed after migration preflight");
-        }
-        currentReviews.push(review);
-      }
-      currentReviews.sort((left, right) => left.path.localeCompare(right.path));
-      if (sourceReviewDatasetHash(currentReviews) !==
-          sourceReviewDatasetHash(sources.reviews)) {
-        throw new Error("Voiceover review dataset changed after migration preflight");
-      }
       if (completionSnapshot.exists) {
         throw new Error("Voiceover migration completion marker changed after preflight");
       }
@@ -795,11 +607,8 @@ function rollbackMediaEligibility(entry, source, category) {
 }
 
 async function preflightRollback({ firestore, category, sources }) {
-  const [mediaSnapshot, favoriteSnapshot, completionSnapshot] = await Promise.all([
+  const [mediaSnapshot, completionSnapshot] = await Promise.all([
     firestore.collection(MEDIA_COLLECTION)
-      .where("voiceoverMigration.id", "==", MIGRATION_ID)
-      .get(),
-    firestore.collectionGroup("items")
       .where("voiceoverMigration.id", "==", MIGRATION_ID)
       .get(),
     firestore.doc(COMPLETION_DOCUMENT).get(),
@@ -821,16 +630,6 @@ async function preflightRollback({ firestore, category, sources }) {
       media.conflicts += 1;
     }
   }
-  // Favorites are staff state. Rollback leaves both migrated and preexisting
-  // favorites intact, including their ownership marker and original timestamp.
-  const favorites = { retained: 0, conflicts: 0 };
-  const ownedFavoritePaths = new Set();
-  for (const snapshot of favoriteSnapshot.docs) {
-    if (!REVIEW_PATH.test(snapshot.data()?.voiceoverMigration?.sourcePath ?? "") ||
-        snapshot.data()?.voiceoverMigration?.category !== category) continue;
-    ownedFavoritePaths.add(snapshot.ref.path);
-    favorites.retained += 1;
-  }
   const completion = completionPlan(
     firestore,
     completionSnapshot,
@@ -838,22 +637,7 @@ async function preflightRollback({ firestore, category, sources }) {
     sources,
     { allowSourceDrift: true },
   );
-  completion.retainedFavoriteRefs = [];
-  if (completion.verified) {
-    const expectedFavoriteRefs = sources.reviews
-      .filter(({ projection }) => projection.favorite)
-      .map(({ uid, takeId }) => firestore.collection("mediaFavorites")
-        .doc(uid).collection("items")
-        .doc(favoriteDocumentId({ backend: "r2", id: mediaIdForTake(takeId) })));
-    const snapshots = expectedFavoriteRefs.length > 0
-      ? await firestore.getAll(...expectedFavoriteRefs)
-      : [];
-    favorites.conflicts += snapshots.filter(({ exists }) => !exists).length;
-    favorites.retained += snapshots.filter((snapshot) =>
-      snapshot.exists && !ownedFavoritePaths.has(snapshot.ref.path)).length;
-    completion.retainedFavoriteRefs = expectedFavoriteRefs;
-  }
-  return { media, favorites, completion };
+  return { media, completion };
 }
 
 function resultForRollback({
@@ -862,13 +646,11 @@ function resultForRollback({
   project,
   sources,
   media,
-  favorites,
   completion,
   applied = null,
 }) {
   const mediaWrites = media.remove.length;
   const mediaConflicts = media.conflicts + (applied?.mediaConflicts ?? 0);
-  const favoriteConflicts = favorites.conflicts;
   const revisionWrites = Math.ceil(mediaWrites / chunkSize);
   const completionWrites = 0;
   const completionDeleted = apply ? (applied?.completionDeleted ?? 0) : 0;
@@ -891,15 +673,6 @@ function resultForRollback({
       deleted: apply ? (applied?.mediaDeleted ?? 0) : 0,
       skipped: mediaConflicts,
       conflicts: mediaConflicts,
-    },
-    favorites: {
-      planned: 0,
-      created: 0,
-      verified: 0,
-      retained: favorites.retained + favoriteConflicts,
-      deleted: 0,
-      skipped: favoriteConflicts,
-      conflicts: favoriteConflicts,
     },
     discoveryRevision: {
       planned: revisionWrites,
@@ -935,27 +708,6 @@ function currentTakeSource(snapshot, library) {
       path: snapshot.ref.path,
       projection,
       performerName: performer.name,
-      raw,
-    };
-  } catch {
-    return null;
-  }
-}
-
-function currentReviewSource(snapshot, library, uid, takeId) {
-  if (!snapshot.exists) return null;
-  try {
-    const raw = snapshot.data();
-    assertSourceTimestamps(`Voiceover review ${snapshot.ref.path}`, raw);
-    return {
-      path: snapshot.ref.path,
-      uid,
-      takeId,
-      projection: reviewProjection(
-        takeId,
-        raw,
-        library.manifestVersion,
-      ),
       raw,
     };
   } catch {
@@ -1028,21 +780,11 @@ async function commitRollbackPlan({ firestore, plan, category, chunkSize }) {
     if (removed > 0) result.discoveryUpdates += 1;
   }
   if (plan.completion.verified) {
-    const targetConflicts = plan.media.conflicts + plan.favorites.conflicts +
-      result.mediaConflicts;
     const outcome = await firestore.runTransaction(async (transaction) => {
       const snapshot = await transaction.get(plan.completion.ref);
       if (!snapshot.exists) return "missing";
       if (!isDeepStrictEqual(snapshot.data(), plan.completion.record)) {
         return "conflict";
-      }
-      if (targetConflicts === 0) {
-        const retainedFavorites = plan.completion.retainedFavoriteRefs.length > 0
-          ? await transaction.getAll(...plan.completion.retainedFavoriteRefs)
-          : [];
-        if (retainedFavorites.some(({ exists }) => !exists)) return "conflict";
-        // The cutover receipt survives rollback: canonical favorites remain
-        // authoritative even while the corresponding media is unavailable.
       }
       return "retained";
     });

@@ -81,12 +81,12 @@ describe("MediaInspector viewer modes", () => {
     expect(onOpenFullSize).toHaveBeenCalledOnce();
   });
 
-  it("docks details without duplicate preview controls and keeps the favorite action", () => {
+  it("docks details without duplicate preview controls and keeps the replace action", () => {
     render(
       <MediaInspector
         {...commonProps}
         docked
-        favoriteControl={<button type="button">Add to favorites</button>}
+        replaceControl={<button type="button">Replace file</button>}
       />,
     );
 
@@ -94,7 +94,7 @@ describe("MediaInspector viewer modes", () => {
     expect(within(inspector).queryByRole("button", { name: "Close details" })).not.toBeInTheDocument();
     expect(within(inspector).queryByRole("button", { name: "Preview" })).not.toBeInTheDocument();
     expect(within(inspector).queryByText("Open original")).not.toBeInTheDocument();
-    expect(within(inspector).getByRole("button", { name: "Add to favorites" })).toBeInTheDocument();
+    expect(within(inspector).getByRole("button", { name: "Replace file" })).toBeInTheDocument();
     expect(within(inspector).getByRole("button", { name: "Details" })).toBeInTheDocument();
   });
 

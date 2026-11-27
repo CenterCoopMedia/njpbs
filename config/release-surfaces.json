@@ -493,20 +493,8 @@
           "module": "functions/media-categories.js"
         },
         {
-          "name": "cmsListMediaCollectionItems",
-          "module": "functions/media-collections.js"
-        },
-        {
-          "name": "cmsListMediaCollections",
-          "module": "functions/media-collections.js"
-        },
-        {
           "name": "cmsListMediaComments",
           "module": "functions/media-feedback.js"
-        },
-        {
-          "name": "cmsListMediaFavorites",
-          "module": "functions/media-favorites.js"
         },
         {
           "name": "cmsListMediaSources",
@@ -555,10 +543,6 @@
         {
           "name": "cmsMutateMediaCategory",
           "module": "functions/media-categories.js"
-        },
-        {
-          "name": "cmsMutateMediaCollection",
-          "module": "functions/media-collections.js"
         },
         {
           "name": "cmsMutateMediaComment",
@@ -719,18 +703,6 @@
         {
           "name": "cmsSetAuthorProfileVisibility",
           "module": "functions/author-profiles.js"
-        },
-        {
-          "name": "cmsSetMediaCollectionItems",
-          "module": "functions/media-collections.js"
-        },
-        {
-          "name": "cmsSetMediaFavorite",
-          "module": "functions/media-favorites.js"
-        },
-        {
-          "name": "cmsSetMediaFavorites",
-          "module": "functions/media-favorites.js"
         },
         {
           "name": "cmsSetNavigationPreferences",
@@ -1226,8 +1198,6 @@
     {"id":"ema-byok-runner","kind":"media","sources":["functions/lib/video-transcript-byok-runner.js"],"states":["idle","leased"]},
     {"id":"ema-purge-run","kind":"media","sources":["functions/media-purge-sweep.js"],"states":["disabled","idle","leased","dry_run"]},
     {"id":"ema-master-consumer","kind":"media","sources":["functions/media-master-cleanup-consumer.js"],"states":["disabled","idle","leased","complete","failed"]},
-    {"id":"ema-media-collection","kind":"media","sources":["functions/media-collections.js"],"states":["active","archived","member_absent","member_present"]},
-    {"id":"ema-media-favorite","kind":"media","sources":["functions/media-favorites.js"],"states":["off","on"]},
     {"id":"ema-backup-runner","kind":"deploy","sources":["scripts/lib/video-backup-runner.mjs"],"states":["inventory","copy","awaiting_copy","copy_complete"]},
     {"id":"ema-ugc-quota","kind":"media","sources":["functions/lib/ugc-quota.js"],"states":["held_upload","charged_bytes","released_empty"]},
     {"id":"ema-staff-site-ui-session","kind":"ui","sources":["admin/src/lib/staff-site-read.ts","admin/src/lib/staff-site.ts"],"states":["read","renewing","retried","refused"]},
@@ -1238,7 +1208,6 @@
     {"id":"ema-editor-presence-ui","kind":"ui","sources":["admin/src/hooks/useEditorLock.ts"],"states":["disabled","checking","ready","claiming","owned","blocked","yielded","error","displaced"]},
     {"id":"ema-media-category-registry-ui","kind":"ui","sources":["admin/src/lib/use-media-categories.ts"],"states":["loading","ready_fresh","ready_stale","error"]},
     {"id":"ema-media-category","kind":"media","sources":["functions/media-categories.js"],"states":["active","archived"]},
-    {"id":"ema-media-favorite-ui","kind":"ui","sources":["admin/src/lib/use-media-favorites.ts"],"states":["awaiting_seed","loading","ready","saving","reconciling","error"]},
     {"id":"ema-vocabulary-ui","kind":"ui","sources":["admin/src/lib/use-published-vocabulary.ts"],"states":["idle","loading","ready","error"]},
     {"id":"ema-bootstrap-ui","kind":"ui","sources":["admin/src/lib/bootstrap-phases.ts"],"states":["session","admission","profile","workspace","ready"]},
     {"id":"ema-account-form-ui","kind":"ui","sources":["admin/src/App.tsx"],"states":["idle","submitting","success","error"]},

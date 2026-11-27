@@ -64,13 +64,11 @@ export function VideoUploadResults({ userId, getIdToken, children }: {
         <UploadTrayRows label="Completed video uploads" rows={receipts.map(({ asset, fileName }) => {
           const state = asset.viewingCopy?.state;
           const viewing = state ? VIEWING_COPY_MESSAGES[state] : "Viewing copy status unavailable.";
-          const placement = asset.collectionPlacement === "added" ? " Added to the selected collection."
-            : asset.collectionPlacement === "unavailable" ? " The selected collection became unavailable." : "";
           return {
             id: asset.id,
             name: fileName,
             status: "succeeded",
-            message: viewing + placement,
+            message: viewing,
             announceMessage: true,
             onViewAsset: state === "processing" ? undefined : () => {
               navigate(mediaPermalink(mediaVideosPath(asset.sourceId), asset.id));

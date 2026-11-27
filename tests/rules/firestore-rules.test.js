@@ -387,41 +387,6 @@ function db(uid, tokenOptions = {}) {
     : testEnv.unauthenticatedContext().firestore();
 }
 
-describe("media collection pins", () => {
-  const path = "mediaCollectionPins/regular";
-  const pins = { version: 1, ids: ["a".repeat(64)] };
-
-  it("keeps private pin reads and writes with the owner and refuses revoked sessions", async () => {
-    const ownerRef = doc(db("regular"), path);
-    await assertSucceeds(setDoc(ownerRef, pins));
-    expect((await assertSucceeds(getDoc(ownerRef))).data()).toEqual(pins);
-    for (const account of ["admin", "super", null]) {
-      const ref = doc(db(account), path);
-      await assertFails(getDoc(ref));
-      await assertFails(setDoc(ref, { version: 1, ids: [] }));
-    }
-    await assertFails(getDocs(collection(db("regular"), "mediaCollectionPins")));
-    await assertFails(setDoc(ownerRef, { ...pins, ids: ["not-a-collection"] }));
-    await assertFails(setDoc(ownerRef, { ...pins, ids: [pins.ids[0], pins.ids[0]] }));
-    await assertFails(setDoc(ownerRef, { ...pins, ids: [`${pins.ids[0]},${"b".repeat(64)}`] }));
-    const tooManyIds = Array.from({ length: 21 }, (_, index) => index.toString(16).padStart(64, "0"));
-    await assertFails(setDoc(ownerRef, { ...pins, ids: tooManyIds }));
-    await assertSucceeds(setDoc(ownerRef, { version: 1, ids: [] }));
-    await testEnv.withSecurityRulesDisabled(ctx =>
-      updateDoc(doc(ctx.firestore(), "users/regular"), { active: false }));
-    await assertFails(getDoc(ownerRef));
-    await assertFails(setDoc(ownerRef, pins));
-  });
-
-  it("still accepts the current Admin's profile pin write", async () => {
-    const profile = doc(db("regular"), "users/regular");
-    await assertSucceeds(setDoc(profile, { preferences: { mediaCollectionPins: pins } }, {
-      mergeFields: ["preferences.mediaCollectionPins"],
-    }));
-    expect((await getDoc(profile)).get("preferences.mediaCollectionPins")).toEqual(pins);
-  });
-});
-
 describe("maximum session age", () => {
   it("accepts a session 59 days after sign-in", async () => {
     const database = db("regular", { auth_time: nowSeconds - 59 * DAY_SECONDS });
@@ -1533,30 +1498,6 @@ describe("media library server boundary", () => {
     await assertFails(updateDoc(doc(database, "media_assets/asset-1"), { lifecycle: "tombstoned" }));
     await assertFails(deleteDoc(doc(database, "media_assets/asset-1")));
   });
-
-  it.each(["regular", "editor", "admin", "super", undefined])(
-    "client %s cannot read or write personal media favorites directly",
-    async (uid) => {
-      const database = db(uid);
-      const favorite = doc(database, "mediaFavorites/regular/items/favorite-1");
-      await assertFails(getDoc(favorite));
-      await assertFails(setDoc(favorite, { forged: true }));
-    },
-  );
-
-  it.each(["regular", "editor", "admin", "super", undefined])(
-    "client %s cannot read or write media collections directly",
-    async (uid) => {
-      const database = db(uid);
-      const collectionRecord = doc(database, "mediaCollections/collection-1");
-      const item = doc(database, "mediaCollections/collection-1/items/item-1");
-      const receipt = doc(database, "mediaCollections/collection-1/requests/request-1");
-      for (const reference of [collectionRecord, item, receipt]) {
-        await assertFails(getDoc(reference));
-        await assertFails(setDoc(reference, { forged: true }));
-      }
-    },
-  );
 
   it.each(["regular", "editor", "admin", "super", undefined])(
     "client %s cannot bypass the media feedback API",

@@ -11,7 +11,6 @@ import staffAccess from "../../functions/staff-access.js";
 import preview from "../../functions/preview.js";
 import templates from "../../functions/post-templates.js";
 import authorProfiles from "../../functions/author-profiles.js";
-import favorites from "../../functions/media-favorites.js";
 import discovery from "../../functions/lib/media-discovery.js";
 
 const project = "demo-njpbs";
@@ -221,6 +220,8 @@ describe("tier readers through real Auth and Firestore", () => {
   });
   it.each([null, "invalid"])("invalid tier %s cannot pass an account-only media admission gate", async (tier) => {
     await setTier(tier);
-    expect((await call(favorites.createCmsListMediaFavoritesHandler(), {})).statusCode).toBe(403);
+    expect((await call(media.createCmsListMediaHandler(), {
+      profilePhotoScope: "self", categories: ["staff-profile"], kinds: ["image"],
+    })).statusCode).toBe(403);
   });
 });

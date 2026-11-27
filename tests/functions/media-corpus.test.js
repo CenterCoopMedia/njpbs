@@ -140,7 +140,7 @@ describe("bounded Images corpus", () => {
   it.each([
     { corpus: false }, { corpus: true, q: "" }, { corpus: true, page: 1 },
     { corpus: true, assetIds: [] }, { corpus: true, counts: true },
-    { corpus: true, favorites: true }, { corpus: true, profilePhotoScope: "self" },
+    { corpus: true, kinds: ["image"] }, { corpus: true, profilePhotoScope: "self" },
     { corpus: true, limit: null }, { corpus: true, limit: 0 }, { corpus: true, limit: 501 }, { corpus: true, limit: 1.5 },
     { corpus: true, cursor: null }, { corpus: true, cursor: "" }, { corpus: true, cursor: "!bad" },
     { corpus: true, cursor: encodeMediaCorpusCursor("other-user", "asset") },

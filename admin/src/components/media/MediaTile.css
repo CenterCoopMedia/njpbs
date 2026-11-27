@@ -201,7 +201,7 @@
 
 /* Quick actions share the compact fine-pointer and coarse target roles on the chrome
    layer, top right. Each keeps the shared quiet role.
-   Hidden at rest. In selection mode the cluster holds only More and pointer screens hide it. */
+   Hidden at rest. Pointer screens hide it in selection mode. */
 .media-tile-actions {
   position: absolute;
   top: var(--cms-space-1);
@@ -219,7 +219,7 @@
   transition: opacity var(--cms-motion-fast) var(--cms-ease);
 }
 
-/* While the selection bar is open, pointer screens hide the cluster (it holds only More). */
+/* While the selection bar is open, pointer screens hide the actions. */
 .media-tile[data-selection-mode] .media-tile-actions {
   display: none;
 }
@@ -255,15 +255,6 @@
   background: var(--cms-action-quiet-pressed);
 }
 
-.media-tile-actions .media-tile-favorite[aria-pressed="true"] {
-  color: var(--cms-brand);
-}
-
-.media-tile-favorite[aria-pressed="true"] .icon,
-.media-tile-badge-favorite .icon {
-  fill: currentColor;
-}
-
 /* Badges: bottom right on the thumbnail scrim, always words, with a glyph where one helps. */
 .media-tile-badges {
   position: absolute;
@@ -296,12 +287,6 @@
   width: 0.8125rem;
   height: 0.8125rem;
   flex: none;
-}
-
-/* The heart in the cluster stands in for the Favorite badge only while the cluster shows it.
-   An unavailable item has no heart, so its badge stays. */
-.media-tile:not([data-selection-mode]):has(.media-tile-favorite):is(:hover, :focus-within) .media-tile-badge-favorite {
-  visibility: hidden;
 }
 
 /* Caption: the name with a two-line clamp, then the Display meta line. */
@@ -416,18 +401,6 @@
   font-size: var(--cms-font-xs);
 }
 
-/* A narrow tile keeps only More; Favorite and Add to collection stay in its menu. */
-@container (max-width: 11.5rem) {
-  .media-tile-actions .media-tile-favorite,
-  .media-tile-actions .media-tile-collect {
-    display: none;
-  }
-
-  .media-tile:not([data-selection-mode]):has(.media-tile-favorite):is(:hover, :focus-within) .media-tile-badge-favorite {
-    visibility: visible;
-  }
-}
-
 /* Phones and touch screens always show the mark and More. The meta
    lines keep every fact Display chose and wrap: a touch screen has no hover card to show a
    clipped fact. */
@@ -439,15 +412,6 @@
 
   .media-tile[data-selection-mode] .media-tile-actions {
     display: flex;
-  }
-
-  .media-tile-actions .media-tile-favorite,
-  .media-tile-actions .media-tile-collect {
-    display: none;
-  }
-
-  .media-tile:not([data-selection-mode]):has(.media-tile-favorite):is(:hover, :focus-within) .media-tile-badge-favorite {
-    visibility: visible;
   }
 }
 

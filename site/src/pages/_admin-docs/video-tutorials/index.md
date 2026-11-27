@@ -13,7 +13,7 @@ the shared toolbar, use the current [Videos steps](/guide/shared-video-library#f
 The recordings show the earlier media tab names. **Images and documents** is now
 **Images**, **Shared video library** is now **Videos**, **Submissions** is now
 **UGC**, and **Voiceovers** is now **Audio**. The tab order is now Images,
-Videos, UGC, Audio, Favorites and Collections.
+Videos, UGC and Audio.
 
 ## Find, upload, and organize shared videos
 

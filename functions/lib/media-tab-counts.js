@@ -20,8 +20,6 @@ const {
 const MEDIA_CAPABILITIES = Object.freeze(["media.upload", "media.manage"]);
 const IMAGE_CAPABILITIES = Object.freeze(["media.image.read", ...MEDIA_CAPABILITIES]);
 const AUDIO_CAPABILITIES = Object.freeze(["media.audio.read", ...MEDIA_CAPABILITIES]);
-const FAVORITES_COLLECTION = "mediaFavorites";
-const FAVORITES_ITEMS_COLLECTION = "items";
 
 class CountUnavailable extends Error {}
 
@@ -68,13 +66,6 @@ async function countSourceVideos(firestore, sourceId) {
     .orderBy("updatedAtSort", "desc")));
 }
 
-async function countFavorites(firestore, uid) {
-  return exactCount(await aggregationCount(firestore
-    .collection(FAVORITES_COLLECTION)
-    .doc(uid)
-    .collection(FAVORITES_ITEMS_COLLECTION)));
-}
-
 async function browsableSources({ firestore, actor, registry, approvedActive, authorizeFn, failed }) {
   let archiveCategory;
   const archiveCategoryActiveFn = (store) => {
@@ -103,7 +94,7 @@ async function browsableSources({ firestore, actor, registry, approvedActive, au
 }
 
 /**
- * @returns {Promise<{images?: number, audio?: number, favorites?: number, voiceovers?: number,
+ * @returns {Promise<{images?: number, audio?: number, voiceovers?: number,
  *   sources?: Record<string, number>}>}
  */
 async function computeMediaTabCounts({
@@ -141,7 +132,6 @@ async function computeMediaTabCounts({
     }
   }
   if (approvedActive === true && typeof actor?.uid === "string" && actor.uid.length > 0) {
-    tasks.push(["favorites", countFavorites(firestore, actor.uid)]);
     const sourceIds = Array.isArray(browseSourceIds)
       ? browseSourceIds.filter((id) => registry.has(id))
       : await browsableSources({ firestore, actor, registry, approvedActive, authorizeFn, failed });

@@ -1,6 +1,4 @@
 import {
-  mediaCollectionsPath,
-  mediaFavoritesPath,
   mediaImagesPath,
   mediaVideosPath,
   mediaVoiceoversPath,
@@ -12,7 +10,7 @@ import {
 // click suppression, accessible names and scroll hints. Each tab is its own page; the strip
 // only links them.
 
-export type MediaTabIcon = "image" | "video" | "microphone" | "heart" | "folder";
+export type MediaTabIcon = "image" | "video" | "microphone" | "folder";
 
 export interface MediaTab {
   id: string;
@@ -50,8 +48,6 @@ export function mediaTabs({
     ...rest.map((source) => ({ id: source.id, label: source.label, path: mediaVideosPath(source.id), icon: "video" as const })),
     ...(canReviewSubmissions ? [{ id: "submissions", label: "Public submissions", path: mediaSubmissionsPath(), icon: "folder" as const }] : []),
     { id: "voiceovers", label: "Audio", path: mediaVoiceoversPath(), icon: "microphone" },
-    { id: "favorites", label: "Favorites", path: mediaFavoritesPath(), icon: "heart" },
-    { id: "collections", label: "Collections", path: mediaCollectionsPath(), icon: "folder" },
   ];
   return tabs.map((tab) => (typeof counts[tab.id] === "number" ? { ...tab, count: counts[tab.id] } : tab));
 }

@@ -102,12 +102,10 @@ Read search and social fields as standalone copy before saving.
 ## Review media and give staff feedback
 
 The common review and comments interface covers images, documents, videos, imported UGC, audio, episodes, and
-packages in the Media library, including items opened from Favorites or
-Collections. In the UGC queue, use **Open the library asset** after import. Pending and rejected submissions keep their existing decision workflow.
+packages in the Media library. In the UGC queue, use **Open the library asset** after import. Pending and rejected submissions keep their existing decision workflow.
 
 Open an item to see **Your review**. **More like this** and **Notes** belong to
-your account. Only you can read them. Use the heart to add or remove your
-private favorite. Notes accept up to 2,000 characters. Select **Save** in Asset
+your account. Only you can read them. Notes accept up to 2,000 characters. Select **Save** in Asset
 details, or **Save details** in the full-size viewer, for an image, document,
 or audio review. Select **Save review** inside a video's
 **Your review** section. If another session saved first, reload the saved review
@@ -232,7 +230,7 @@ Changing media metadata does not publish a review or staff comment.
 <p>The NJ PBS logo and &quot;More help: open the Boardwalk guide from Home.&quot;</p>
 </details>
 
-Open **Media library**, then choose a tab from the row at the top: **Images**, **Videos** or another video source, **Public submissions**, **Audio**, **Favorites** or **Collections**. **Images** holds images and PDF documents. **Public submissions** holds files from the public and appears only for site-wide media managers. Each tab is a link, so it opens with a click or with Enter when it has keyboard focus. The current tab is underlined. On wider screens, **Images** shows its count when the full count is known. The browser address records that choice, so a refresh, bookmark, or browser Back and Forward action returns to the same library. Older **Media library** and `/voiceovers` bookmarks continue to open the shared workspace.
+Open **Media library**, then choose a tab from the row at the top: **Images**, **Videos** or another video source, **Public submissions** or **Audio**. **Images** holds images and PDF documents. **Public submissions** holds files from the public and appears only for site-wide media managers. Each tab is a link, so it opens with a click or with Enter when it has keyboard focus. The current tab is underlined. On wider screens, **Images** shows its count when the full count is known. The browser address records that choice, so a refresh, bookmark, or browser Back and Forward action returns to the same library. Older **Media library** and `/voiceovers` bookmarks continue to open the shared workspace.
 
 In **Audio**, staff-uploaded WAV files and station voiceovers use the same media
 results. Search by the normal media fields or voiceover text. Open **Filter** to
@@ -280,7 +278,7 @@ Name it, and choose **Include display settings** only if the layout should
 travel with the view. Open **Filter** to use or delete a saved view. A view
 opens with its filters in the address, so a copied link still applies them
 when the recipient does not have your personal view. Views are available for
-Images, Audio, each video source, Favorites, and the Collections list. **Reset
+Images, Audio, and each video source. **Reset
 filters to default** in Display clears the current surface's filters. You can
 keep up to 20 personal views.
 
@@ -323,8 +321,7 @@ filters group related files; adding a category does not grant access.
 ### Select and act on images
 
 Each image and document card has quick actions. Point at a card, or move to it
-with the keyboard, to show its selection box, **Add to favorites**, **Add to
-collection** and **More actions**. On phones the selection box and **More
+with the keyboard, to show its selection box and **More actions**. On phones the selection box and **More
 actions** always show.
 
 - Select a card's name or picture to open its details. Opening a card keeps any
@@ -340,8 +337,7 @@ actions** always show.
   page** in the toolbar's **More actions** does the same without the keyboard.
   Escape clears the selection, then closes details, then clears the search.
 - Right-click a card, or press Shift+F10, for the same actions as **More
-  actions**: **Open details**, **Add to favorites**, **Add to collection**,
-  **Select**, **Copy link** and **Delete from library**. **Delete from library**
+  actions**: **Open details**, **Select**, **Copy link** and **Delete from library**. **Delete from library**
   opens details at the confirmation, so nothing is deleted until you confirm.
 - Rest the pointer on a card, or keep keyboard focus on it, for a moment to see
   its full name, type, size, category, update time and tags.
@@ -438,96 +434,12 @@ controls wait until you save or discard them.
 Do not download and re-upload an existing asset simply to make it easier to
 find. Improve the existing metadata when your role permits it.
 
-## Save personal media favorites
-
-Select the heart on an image, document, audio, or private video card to save it
-to your Boardwalk account. The heart does not open or choose the asset. The same
-control appears in Asset details and the image picker. In the picker, selecting
-the heart does not fill the editor field.
-
-Open **Media library → Favorites** to review saved images, documents, audio,
-and private videos together. **Type** shows Images, Documents, Audio, or Videos
-on the current page. It does not search later pages. **Display** switches
-between cards and rows. Select a card to open the full viewer; **Previous file**
-and **Next file** move through the loaded mixed-media order without closing it.
-**Quick Look** shows the available preview without opening the full file. The
-viewer asks before closing or stepping away from unsaved metadata.
-
-Select the filled heart to remove one favorite. Select several records to show
-**Remove from favorites**, which accepts up to 100 records in one request. A
-failed record stays selected and shows its own error; records that were removed
-leave the page. **Add to collection** accepts up to 30 available records.
-Selection can carry to another favorites page. **Select this page** selects
-only the visible records. If an item is no longer available to your account,
-it remains labeled **Unavailable favorite**. You can select or remove it, but
-cannot open it or add it to a collection.
-
-Favorites are personal to the signed-in CMS account. They do not change media
-permissions or publish an asset. The heart on a voiceover is this shared media
-favorite. Its **More like this** and **Notes** fields remain private review
-choices and save only when you select **Save** in Asset details or **Save details**
-in the full-size viewer. Wait for the heart
-control to finish saving before closing the page. If a save fails, select the
-same control again after the failure message appears. Use **Try again** when the
-favorite list could not be loaded.
-
 ## Listen to audio
 
 Open **Audio** in the Media library. Cards and list rows show recorded voice,
 style, take, duration and creation facts. Select **Listen** on a card to play it;
 the control becomes **Pause** during playback. Private audio loads only after
 you choose Listen. Open the item to find Voiceover facts directly below Preview.
-
-## Organize a media collection
-
-Use the corner **Pin** toggle to keep a collection near the top. It is separate
-from the card that opens the collection. **New collection** is the primary
-action; **Upload** stays available in the workspace.
-
-Use **Collections** for a fixed package of images, documents, audio, and private
-videos. A collection saves references to existing files. It does not copy,
-upload, publish, or change access to those files.
-
-<figure class="admin-docs-screenshot">
-  <p class="admin-docs-image-note">Screenshot omitted from this source distribution.</p>
-  <figcaption><strong>Choose who can organize each package.</strong> Private collections stay with their owner. All-staff collections can be organized by any approved active staff account. Each file keeps its existing access. The packages shown are synthetic local examples. </figcaption>
-</figure>
-
-1. Open **Media library → Collections**, then select **New collection**.
-2. Enter a name and optional description.
-3. Choose **Only me** for a private collection, or **All active staff** for a
-   collection that any approved active staff member can organize.
-4. Create the collection. Use **Pin** to move it ahead of other collections
-   after it is loaded in your own list.
-5. Open **Images**, **Audio**, or a video source. Select up to 30 items. A bar
-   with **Select this page** and **Add to collection** appears at the bottom of
-   the results once an item is selected. To add one item, use **Add to
-   collection** on its card instead. Select **Add to collection** and choose
-   the destination. Add another source in a separate pass to build a mixed
-   package.
-
-Use **Filter** on the Collections list to show Active or Archived status and
-Private or All staff scope. Scope applies only to collections already loaded
-on this page. A pin stays ahead of other collections in the visible scope.
-If a scope has no collections, choose **Clear scope** to see the other scope.
-
-Open a collection to rename it, review items as cards or rows, or archive it.
-Select up to 30 items and choose **Remove from collection** to remove their
-references in one step. You can also remove one item from its menu. Removing a
-reference does not delete or change the file. Use **Load more items** for the
-next page. Quick Look and the full viewer follow the loaded collection order;
-each file still requires its own access. To add an item, start in its source
-library. Archiving preserves the collection and every file; choose Archived in
-the Status filter to restore it. A private unavailable reference stays labeled
-**Unavailable item** so its owner can remove it. It cannot open or preview.
-Shared collections omit items that the current account cannot access.
-If the item list reloads, the full viewer closes and the list starts at page 1.
-
-A collection is a fixed list. It does not update automatically when new files
-match a search. Its folder shape does not create nested folders or move files.
-Collection membership does not grant file access. A voiceover can be added as
-an Audio asset, but each person still needs access to its primary category and
-must use authenticated playback.
 
 ## Caption a post's lead image
 
@@ -675,10 +587,8 @@ notice names that library and offers to open it. The Images upload sheet accepts
 images and PDFs. Choose WAV files from **Audio**. The Audio upload sheet accepts
 WAV files and directs other library types to Images. See
 [Audio](/guide/voiceover-library/) for supported PCM formats and the 10 MiB limit.
-Favorites and Collections have a general **Upload media** control. It sends
-images, PDFs, and WAV files to their library and does not switch tabs. Files
-that a control does not accept are named in the intake message; accepted files
-continue.
+Files that a control does not accept are named in the intake message; accepted
+files continue.
 
 Before upload:
 

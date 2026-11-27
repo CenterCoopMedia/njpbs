@@ -17,16 +17,10 @@ for (const width of [1280, 320]) for (const presentation of ["icons", "text"] as
     if (width === 320) {
       await more.click();
       await expect(page.getByRole("menu")).toContainText("Current results · 3 of 24");
-      await page.getByRole("menuitemcheckbox", { name: "Favorite", exact: true }).click();
-      await more.click();
-      await expect(page.getByRole("menuitemcheckbox", { name: "Favorite", exact: true })).toHaveAttribute("aria-checked", "true");
       await page.keyboard.press("Escape");
       await expect(more).toBeFocused();
     } else {
       await expect(header.getByRole("group", { name: "Step through this page", exact: true })).toContainText("3 of 24");
-      const favorite = header.getByRole("button", { name: /Favorite/ });
-      await favorite.click();
-      await expect(favorite).toHaveAttribute("aria-pressed", "true");
     }
     await title.fill("A local video draft");
     await expect(save).toBeEnabled();

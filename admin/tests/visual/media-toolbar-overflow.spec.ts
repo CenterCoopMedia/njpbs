@@ -2,9 +2,7 @@ import { expect, test } from "./fixtures";
 
 const libraries = [
   { id: "media-browsing", name: "Images" },
-  { id: "media-favorites", name: "Favorites" },
   { id: "audio-library", name: "Audio" },
-  { id: "media-collections-list", name: "Collections" },
 ];
 
 for (const width of [320, 768]) {

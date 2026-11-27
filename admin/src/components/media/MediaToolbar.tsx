@@ -145,38 +145,6 @@ export type MediaToolbarSurfaceConfiguration =
     shortcuts: null;
   }
   | {
-    surface: "favorites";
-    search: null;
-    filter: MediaToolbarFilterConfiguration;
-    sort: null;
-    display: MediaDisplayConfiguration;
-    upload: null;
-    moreItems: readonly MenuItem[];
-    shortcuts: null;
-  }
-  | {
-    surface: "collections";
-    view: "list";
-    search: null;
-    filter: MediaToolbarFilterConfiguration;
-    sort: null;
-    display: null;
-    upload: null;
-    moreItems: readonly [];
-    shortcuts: null;
-  }
-  | {
-    surface: "collections";
-    view: "items";
-    search: null;
-    filter: null;
-    sort: null;
-    display: MediaDisplayConfiguration;
-    upload: null;
-    moreItems: readonly MenuItem[];
-    shortcuts: null;
-  }
-  | {
     surface: "voiceovers";
     search: MediaToolbarSearchConfiguration;
     filter: MediaToolbarFilterConfiguration;
@@ -189,7 +157,7 @@ export type MediaToolbarSurfaceConfiguration =
 
 export interface ConfiguredMediaToolbarProps {
   configuration: MediaToolbarSurfaceConfiguration;
-  /** Used by Images, Video, Favorites and the Collections list. */
+  /** Used by Images and Video. */
   savedViews?: MediaToolbarSavedViewsConfiguration;
   initialPopover?: MediaToolbarPopover;
   initialFilterProperty?: MediaFilterProperty;
@@ -676,11 +644,7 @@ function MediaToolbarOwner({
       onClearAll={filter.onClearAll}
       onEdit={editChip}
       onRemove={filter.onRemove}
-      showClearAllWithOneChip={
-        configuration.surface === "video" ||
-        configuration.surface === "favorites" ||
-        configuration.surface === "collections"
-      }
+      showClearAllWithOneChip={configuration.surface === "video"}
     />
   ) : null;
   const displayItems: OverflowToolbarItem[] = display ? [{
@@ -841,10 +805,7 @@ function propertiesCloseAfterSelection(properties: readonly MediaFilterPropertyM
 }
 
 function supportsSavedViews(configuration: MediaToolbarSurfaceConfiguration): boolean {
-  return configuration.surface === "images"
-    || configuration.surface === "video"
-    || configuration.surface === "favorites"
-    || (configuration.surface === "collections" && configuration.view === "list");
+  return configuration.surface === "images" || configuration.surface === "video";
 }
 
 interface MediaToolbarSurfaceRules {
@@ -857,15 +818,8 @@ function mediaToolbarSurfaceRules(configuration: MediaToolbarSurfaceConfiguratio
     case "images":
       return { hideMoreItemsOnPhone: true, imageShortcuts: true };
     case "video":
-    case "favorites":
     case "voiceovers":
       return { hideMoreItemsOnPhone: false, imageShortcuts: false };
-    case "collections":
-      switch (configuration.view) {
-        case "list":
-        case "items":
-          return { hideMoreItemsOnPhone: false, imageShortcuts: false };
-      }
   }
 }
 
@@ -873,15 +827,8 @@ function ConfiguredMediaToolbar(props: ConfiguredMediaToolbarProps) {
   switch (props.configuration.surface) {
     case "images":
     case "video":
-    case "favorites":
     case "voiceovers":
       return <MediaToolbarOwner {...props} />;
-    case "collections":
-      switch (props.configuration.view) {
-        case "list":
-        case "items":
-          return <MediaToolbarOwner {...props} />;
-      }
   }
 }
 

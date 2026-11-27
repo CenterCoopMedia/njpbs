@@ -1,11 +1,6 @@
 import { useSearchParams } from "react-router";
 import type { Principal } from "../../../packages/content-core/src/rbac";
-import type { CmsUserDoc } from "../lib/principal";
 import type { MediaSourceSummary } from "../lib/source-media";
-import { canUseMediaLibrary } from "../lib/access";
-import { useMediaCategories } from "../lib/use-media-categories";
-import { MediaCollectionsLibrary } from "./MediaCollectionsLibrary";
-import { MediaFavoritesLibrary } from "./MediaFavoritesLibrary";
 import { SourceMediaLibrary } from "./SourceMediaLibrary";
 import { UgcSubmissionsRoute } from "./UgcSubmissionsRoute";
 import { VideoRecycleBin } from "../components/VideoRecycleBin";
@@ -13,27 +8,12 @@ import { DeferredMediaTransferGuard } from "./MediaRouteLeaveGuards";
 
 interface ExitRiskProps {
   extraExitRisk: boolean;
-  videoTransferActive: boolean;
   onDiscardExtra: () => void;
   onDiscardVideo: () => void;
 }
 
 type MediaSecondarySurfaceProps =
   | { kind: "submissions" }
-  | ({
-      kind: "favorites";
-      principal: Principal;
-      userId: string;
-      getIdToken: () => Promise<string>;
-    } & ExitRiskProps)
-  | ({
-      kind: "collections";
-      collectionId: string | null;
-      principal: Principal;
-      userId: string;
-      userDoc: CmsUserDoc | null;
-      getIdToken: () => Promise<string>;
-    } & ExitRiskProps)
   | ({
       kind: "source";
       principal: Principal;
@@ -46,58 +26,7 @@ type MediaSecondarySurfaceProps =
       routedVideoActive: boolean;
       suppressUpload: boolean;
       hasExtraExitRisk: () => boolean;
-    } & Omit<ExitRiskProps, "videoTransferActive">);
-
-function FavoritesMediaRoute({
-  principal,
-  userId,
-  getIdToken,
-  extraExitRisk,
-  videoTransferActive,
-  onDiscardExtra,
-  onDiscardVideo,
-}: Extract<MediaSecondarySurfaceProps, { kind: "favorites" }>) {
-  const { state: categoryRegistry } = useMediaCategories();
-  return <MediaFavoritesLibrary
-    principal={principal}
-    userId={userId}
-    getIdToken={getIdToken}
-    extraExitRisk={extraExitRisk}
-    videoTransferActive={videoTransferActive}
-    onDiscardExtra={onDiscardExtra}
-    onDiscardVideo={onDiscardVideo}
-    categoryRegistry={categoryRegistry}
-  />;
-}
-
-function CollectionsMediaRoute({
-  collectionId,
-  principal,
-  userId,
-  userDoc,
-  getIdToken,
-  extraExitRisk,
-  videoTransferActive,
-  onDiscardExtra,
-  onDiscardVideo,
-}: Extract<MediaSecondarySurfaceProps, { kind: "collections" }>) {
-  const { state: categoryRegistry } = useMediaCategories(
-    Boolean(collectionId) && canUseMediaLibrary(principal),
-  );
-  return <MediaCollectionsLibrary
-    collectionId={collectionId}
-    userId={userId}
-    userDoc={userDoc}
-    principal={principal}
-    categories={categoryRegistry.categories}
-    canBrowseImages={canUseMediaLibrary(principal)}
-    getIdToken={getIdToken}
-    extraExitRisk={extraExitRisk}
-    videoTransferActive={videoTransferActive}
-    onDiscardExtra={onDiscardExtra}
-    onDiscardVideo={onDiscardVideo}
-  />;
-}
+    } & ExitRiskProps);
 
 function SourceMediaRoute(props: Extract<MediaSecondarySurfaceProps, { kind: "source" }>) {
   const [params] = useSearchParams();
@@ -129,7 +58,5 @@ function SourceMediaRoute(props: Extract<MediaSecondarySurfaceProps, { kind: "so
 
 export function MediaSecondarySurface(props: MediaSecondarySurfaceProps) {
   if (props.kind === "submissions") return <UgcSubmissionsRoute />;
-  if (props.kind === "favorites") return <FavoritesMediaRoute {...props} />;
-  if (props.kind === "collections") return <CollectionsMediaRoute {...props} />;
   return <SourceMediaRoute {...props} />;
 }

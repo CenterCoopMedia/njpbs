@@ -15,7 +15,7 @@ export type MediaDensity = "app" | "compact" | "comfortable" | "loose";
 export type MediaCardField = "type" | "category" | "size" | "dimensions" | "updated" | "tags";
 export type VideoMediaCardField = "type" | "size" | "duration" | "rights" | "updated" | "tags" | "uploader";
 export type VideoMediaPageSize = 24 | 48 | 96;
-export type MediaDisplaySurface = "images" | "video" | "favorites" | "collections";
+export type MediaDisplaySurface = "images" | "video";
 export type MediaLayout = "grid" | "list";
 /** A list layout column: the name is always first, then the card fields. */
 export type MediaListColumn = "name" | MediaCardField;

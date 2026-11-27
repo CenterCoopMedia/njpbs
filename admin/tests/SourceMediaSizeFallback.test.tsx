@@ -23,7 +23,6 @@ it.each(["size_desc", "size_asc"])("loads videos and preserves filters when %s i
       const page = { success: true, records: [asset], total: null, nextCursor: "next-update-page", hasMore: true };
       return new Response(JSON.stringify({ ...page, ...(!sizeReady && query.sort?.startsWith("size_") ? { sortFallback: "updated_desc" } : {}) }));
     }
-    if (endpoint === "cmsListMediaFavorites") return new Response(JSON.stringify({ success: true, favorites: [], states: [], records: [], nextCursor: null }));
     throw new Error(`Unexpected fixture endpoint: ${endpoint}`);
   }));
   const router = createMemoryRouter([{ path: "/media", element: <SourceMediaLibrary
@@ -64,7 +63,6 @@ it("keeps the current video selection when a delayed fallback changes the sort",
       if (query.sort === "size_desc") { sizeRequested = true; return pendingSize; }
       return new Response(JSON.stringify(page));
     }
-    if (endpoint === "cmsListMediaFavorites") return new Response(JSON.stringify({ success: true, states: [] }));
     throw new Error(`Unexpected fixture endpoint: ${endpoint}`);
   }));
   const router = createMemoryRouter([{ path: "/media", element: <SourceMediaLibrary

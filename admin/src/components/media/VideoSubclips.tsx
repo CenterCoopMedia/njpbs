@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { postFunction } from "../../lib/functions";
 import { videoTime } from "../../lib/video-production";
-import { MediaCollectionPicker } from "../MediaCollectionPicker";
 import { Button, InlineMessage, TextInput } from "../ui/Primitives";
 
 interface Range { inMs: number; outMs: number }
@@ -16,8 +15,7 @@ type Action = { action: "list" }
   | { action: "open"; id: string; fileVersion: string }
   | { action: "remove"; id: string };
 
-export function VideoSubclips({ userId, assetId, fileVersion, durationMs, range, getIdToken, disabled, onOpen }: {
-  userId: string;
+export function VideoSubclips({ assetId, fileVersion, durationMs, range, getIdToken, disabled, onOpen }: {
   assetId: string;
   fileVersion: string;
   durationMs: number;
@@ -31,7 +29,6 @@ export function VideoSubclips({ userId, assetId, fileVersion, durationMs, range,
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const [collectionTarget, setCollectionTarget] = useState<{ clip: Subclip; opener: HTMLButtonElement }>();
   const active = useRef<AbortController | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
 
@@ -105,19 +102,10 @@ export function VideoSubclips({ userId, assetId, fileVersion, durationMs, range,
         <div className="video-production-buttons">
           <Button disabled={disabled || busy || replaced || unavailable} aria-label={`Open range for ${clip.name}`}
             onClick={() => void act({ action: "open", id: clip.id, fileVersion })}>Open range</Button>
-          <Button disabled={disabled || busy || replaced || unavailable} aria-label={`Add ${clip.name} to collection`}
-            onClick={event => setCollectionTarget({ clip, opener: event.currentTarget })}>Add to collection</Button>
           <Button disabled={disabled || busy} aria-label={`Remove subclip ${clip.name}`}
             onClick={() => void act({ action: "remove", id: clip.id })}>Remove</Button>
         </div>
       </li>;
     })}</ul> : null}
-    {collectionTarget ? <MediaCollectionPicker open userId={userId} getIdToken={getIdToken}
-      refs={[{ backend: "subclip", id: collectionTarget.clip.id }]} subclipAssetId={assetId}
-      focusOpener={collectionTarget.opener} onClose={() => setCollectionTarget(undefined)}
-      onAdded={collection => {
-        setNotice(`Subclip is in ${collection.name}.`);
-        setCollectionTarget(undefined);
-      }} /> : null}
   </section>;
 }

@@ -3,7 +3,7 @@ import { AudioPlayback, AudioDownload, type AudioToken } from "./AudioMedia";
 import { MediaDialogNotice } from "../../context/MediaDialogContext";
 import { ActionControl } from "../ui/ActionControl";
 import { Menu } from "../ui/Menu";
-import { MediaPreviewHeaderActions, type MediaPreviewHeaderActionsProps } from "./MediaPreviewHeaderActions";
+import { MediaPreviewHeaderActions } from "./MediaPreviewHeaderActions";
 import { mediaPermalink } from "../../lib/media-permalink";
 import { mediaImagesPath, mediaVoiceoversPath } from "../../lib/routes";
 import {
@@ -30,9 +30,8 @@ import "./ImageViewer.css";
 
 export interface ImageViewerProps extends Omit<
   MediaInspectorProps,
-  "asset" | "docked" | "onClose" | "onOpenFullSize" | "onDirtyChange" | "onSavingChange" | "favoriteControl"
+  "asset" | "docked" | "onClose" | "onOpenFullSize" | "onDirtyChange" | "onSavingChange"
 > {
-  favorite?: MediaPreviewHeaderActionsProps["favorite"];
   asset: MediaAssetSummary;
   steppingOrder: readonly MediaAssetSummary[];
   onStep: (asset: MediaAssetSummary) => void;
@@ -46,7 +45,7 @@ export interface ImageViewerProps extends Omit<
 
 export interface ImageViewerBodyProps extends Omit<
   ImageViewerProps,
-  "steppingOrder" | "onStep" | "onClose" | "onDirtyChange" | "onSavingChange" | "favoriteControl"
+  "steppingOrder" | "onStep" | "onClose" | "onDirtyChange" | "onSavingChange"
 > {
   comparisonAssets?: readonly MediaAssetSummary[];
   onDirtyChange: (dirty: boolean) => void;
@@ -184,15 +183,12 @@ export function imageViewerFacts(asset: MediaAssetSummary): string {
 export function ImageViewerHeaderActions({
   asset,
   getIdToken,
-  favorite,
 }: {
   asset: MediaAssetSummary;
   getIdToken?: AudioToken;
-  favorite?: MediaPreviewHeaderActionsProps["favorite"];
 }) {
   return <MediaPreviewHeaderActions
     downloads={<ImageDownload asset={asset} getIdToken={getIdToken} />}
-    favorite={favorite}
     copyLink={mediaPermalink(asset.kind === "audio" ? mediaVoiceoversPath() : mediaImagesPath(), asset.id)}
   />;
 }
@@ -207,7 +203,6 @@ export function ImageViewer({
   reloadBusy = false,
   reloadError,
   navigationPrompt,
-  favorite,
   ...bodyProps
 }: ImageViewerProps) {
   const [dirty, setDirty] = useState(false);
@@ -317,7 +312,7 @@ export function ImageViewer({
       headerNavigation={navigation}
       variant="media"
       headerFacts={facts}
-      headerActions={<ImageViewerHeaderActions getIdToken={bodyProps.getIdToken} key={asset.id} asset={asset} favorite={favorite} />}
+      headerActions={<ImageViewerHeaderActions getIdToken={bodyProps.getIdToken} key={asset.id} asset={asset} />}
       footerActions={<div className="media-viewer-footer-slot" ref={setFooterTarget} />}
       onFrameKeyDown={(event) => {
         if (navigationPrompt) return;

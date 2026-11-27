@@ -141,8 +141,8 @@ The default rail can include:
 - Analytics, Reports, and Admin settings, grouped as Administration
 - Around NJ
 
-Inside **Media library**, choose a tab: **Images**, **Videos**, **Public submissions**,
-**Audio**, **Favorites** or **Collections**. **Images** also holds PDF
+Inside **Media library**, choose a tab: **Images**, **Videos**, **Public submissions**
+or **Audio**. **Images** also holds PDF
 documents. **Public submissions** holds files from the public and appears only for site-wide
 media managers. Tabs are links, so Enter opens the focused tab. An existing
 `/voiceovers` bookmark opens Media library with the **Audio** tab selected.

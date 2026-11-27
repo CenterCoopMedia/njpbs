@@ -49,7 +49,6 @@ for (const coarse of [false, true]) {
           await expect(page.getByRole("menu")).toContainText("Current results · 2 of 3");
           await expect(page.getByRole("menuitem", { name: "Previous file", exact: true })).toBeVisible();
           await expect(page.getByRole("menuitem", { name: "Next file", exact: true })).toBeVisible();
-          await expect(page.getByRole("menuitemcheckbox", { name: "Favorite", exact: true })).toBeVisible();
           await expect(page.getByRole("menuitem", { name: "Copy link", exact: true })).toBeVisible();
           await page.keyboard.press("Escape");
           await expect(more).toBeFocused();
@@ -111,17 +110,6 @@ for (const presentation of ["icons", "text"] as const) {
   if (await watch.isVisible()) await watch.click();
   const title = page.getByRole("textbox", { name: "Title", exact: true });
     await title.fill("Unchanged asset with a local draft");
-    const favorite = header.getByRole("button", { name: /^Favorite:/ });
-    const copy = header.getByRole("button", { name: "Copy link", exact: true });
-    await favorite.focus();
-    await favorite.press("ArrowRight");
-    await expect(copy).toBeFocused();
-    await copy.press("ArrowLeft");
-    await expect(favorite).toBeFocused();
-    await favorite.press("End");
-    await expect(copy).toBeFocused();
-    await copy.press("Home");
-    await expect(favorite).toBeFocused();
     await expect(page.getByRole("dialog")).toHaveAccessibleName("Waterfront oral history — interview master");
     await expect(title).toHaveValue("Unchanged asset with a local draft");
     await expect(page.getByRole("button", { name: "Keep editing", exact: true })).toHaveCount(0);
@@ -513,39 +501,5 @@ for (const coarse of [false, true]) {
         await expect(name).toHaveValue("Image draft held through resize");
       });
     }
-  });
-}
-
-for (const presentation of ["icons", "text"] as const) {
-  test(`phone document ${presentation} keeps dirty Save, discard and the edited field visible`, async ({ page }) => {
-    await openSpecimen(page, { id: "media-collections-viewer-document", title: "Document details", width: 320, presentation }, { normalizeGeneratedIds: false });
-    const viewer = page.getByRole("dialog", { name: "Field production guide" });
-    const name = viewer.getByRole("textbox", { name: "Name", exact: true });
-    await name.fill("Document with a local draft");
-    const save = viewer.locator(".media-image-inspector-footer").getByRole("button", { name: "Save details", exact: true });
-    const cancel = viewer.getByRole("button", { name: "Cancel changes", exact: true });
-    await expect(save).toBeEnabled();
-    await expectRevealed(save);
-    await expectRevealed(cancel);
-    await expect(cancel.locator("span")).toHaveCSS("clip-path", "none");
-    await expect(name).toBeFocused();
-    const footer = viewer.locator(".ui-inspector-footer");
-    expect((await name.boundingBox())!.y + (await name.boundingBox())!.height).toBeLessThanOrEqual((await footer.boundingBox())!.y);
-    const description = viewer.getByRole("textbox", { name: "Description", exact: true });
-    await description.focus();
-    await expect(description).toBeFocused();
-    expect((await description.boundingBox())!.y + (await description.boundingBox())!.height).toBeLessThanOrEqual((await footer.boundingBox())!.y);
-    await page.addStyleTag({ content: "html { font-size:200%; }" });
-    await expectRevealed(save);
-    await expectRevealed(cancel);
-    const label = (await cancel.locator("span").boundingBox())!;
-    const button = (await cancel.boundingBox())!;
-    expect(label.x).toBeGreaterThanOrEqual(button.x);
-    expect(label.x + label.width).toBeLessThanOrEqual(button.x + button.width);
-    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(await page.evaluate(() => document.documentElement.clientWidth));
-    await cancel.click();
-    await expect(name).toHaveValue("Field production guide");
-    await expect(save).toBeDisabled();
-    await expect(cancel).toHaveCount(0);
   });
 }

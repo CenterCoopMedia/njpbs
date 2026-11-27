@@ -68,7 +68,7 @@
    this section only and re-declares every spacing variable, so an override never inherits a
    different shell density. Comfortable restates the defaults; controls keep their 44px
    baseline except in Loose, as in the shell. Without an override the shell's density applies. */
-:is(.media-library, .favorite-media-library, .media-collection-items-shell)[data-density="comfortable"] {
+.media-library[data-density="comfortable"] {
   --studio-control-height: var(--cms-control-height);
   --studio-icon-control: var(--cms-control-height);
   --studio-gap: var(--cms-workspace-gap);
@@ -82,8 +82,8 @@
   --media-card-pad: 10px;
 }
 
-:is(:root[data-cms-theme="editorial"][data-density="compact"], .app-shell[data-density="compact"]) :is(.media-library, .favorite-media-library, .media-collection-items-shell):not([data-density]),
-:is(.media-library, .favorite-media-library, .media-collection-items-shell)[data-density="compact"] {
+:is(:root[data-cms-theme="editorial"][data-density="compact"], .app-shell[data-density="compact"]) .media-library:not([data-density]),
+.media-library[data-density="compact"] {
   --studio-control-height: var(--cms-control-height);
   --studio-icon-control: var(--cms-control-height);
   --studio-gap: var(--space-1);
@@ -97,8 +97,8 @@
   --media-card-pad: var(--cms-space-2);
 }
 
-:is(:root[data-cms-theme="editorial"][data-density="loose"], .app-shell[data-density="loose"]) :is(.media-library, .favorite-media-library, .media-collection-items-shell):not([data-density]),
-:is(.media-library, .favorite-media-library, .media-collection-items-shell)[data-density="loose"] {
+:is(:root[data-cms-theme="editorial"][data-density="loose"], .app-shell[data-density="loose"]) .media-library:not([data-density]),
+.media-library[data-density="loose"] {
   --studio-control-height: 3rem;
   --studio-icon-control: 3rem;
   --studio-gap: var(--space-3);
@@ -262,21 +262,21 @@
 }
 
 /* Display thumbnail size sets the shared grid's column minimum (9, 13 and 18rem) and density sets its gap. MediaGrid.css lays the columns out from these. */
-:is(.media-library, .favorite-media-library, .media-collection-items-shell) .media-grid {
+.media-library .media-grid {
   --media-grid-thumb: var(--cms-thumb-md);
   gap: var(--media-grid-gap);
 }
 
-:is(.media-library, .favorite-media-library, .media-collection-items-shell)[data-thumbnail="s"] .media-grid {
+.media-library[data-thumbnail="s"] .media-grid {
   --media-grid-thumb: var(--cms-thumb-sm);
 }
 
-:is(.media-library, .favorite-media-library, .media-collection-items-shell)[data-thumbnail="l"] .media-grid {
+.media-library[data-thumbnail="l"] .media-grid {
   --media-grid-thumb: var(--cms-thumb-lg);
 }
 
 /* Display density sets the whole card's padding. Comfortable keeps the tile's own. */
-:is(.media-library, .favorite-media-library, .media-collection-items-shell) .media-tile {
+.media-library .media-tile {
   padding: var(--media-card-pad);
 }
 
@@ -456,96 +456,6 @@
   min-width: 0;
 }
 
-.favorite-media-library {
-  --media-grid-gap: var(--cms-space-4);
-  --media-card-pad: 10px;
-  min-width: 0;
-  display: grid;
-  gap: var(--cms-space-5);
-  padding: var(--cms-space-8);
-}
-
-.media-workspace > .favorite-media-library {
-  padding: 0;
-}
-
-.favorite-media-video-preview {
-  display: grid;
-  place-items: center;
-  width: 100%;
-  height: 100%;
-  min-height: 5rem;
-  background: var(--cms-surface-muted);
-  color: var(--cms-ink-muted);
-}
-
-.favorite-media-video-preview svg {
-  width: 3rem;
-  height: 3rem;
-}
-
-.favorite-media-grid[data-layout="list"] .media-row-thumb {
-  position: relative;
-}
-
-.favorite-media-grid[data-layout="list"] .favorite-media-video-preview {
-  position: absolute;
-  inset: 0;
-  min-height: 0;
-  height: auto;
-}
-
-.favorite-media-grid[data-layout="list"] .favorite-media-video-preview svg {
-  width: 1.25rem;
-  height: 1.25rem;
-}
-
-.favorite-media-unavailable {
-  display: grid;
-  align-content: start;
-  gap: var(--cms-space-2);
-  min-width: 0;
-  border: var(--border-width) solid var(--cms-line);
-  border-radius: var(--radius-surface);
-  padding: var(--cms-space-4);
-  background: var(--cms-surface-soft);
-}
-
-.favorite-media-unavailable > button:first-child {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: var(--cms-space-3);
-  min-height: 44px;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--cms-ink);
-  font: inherit;
-  text-align: left;
-  overflow-wrap: normal;
-}
-
-.favorite-media-unavailable p {
-  margin: var(--cms-space-1) 0 0;
-  color: var(--cms-ink-muted);
-  font-size: var(--cms-font-sm);
-}
-
-.favorite-media-unavailable > .media-favorite-button {
-  justify-self: start;
-}
-
-.favorite-media-unavailable-row .media-row-sub {
-  display: block;
-  color: var(--cms-ink-muted);
-}
-
-.favorite-media-unavailable-row .media-row-actions > .media-favorite-button {
-  min-width: var(--cms-control-height);
-  width: var(--cms-control-height);
-}
-
 @media (max-width: 61.99rem) {
   .media-library .media-library-layout:has(> .ui-inspector:not([hidden])) {
     grid-template-columns: minmax(0, 1fr);
@@ -554,7 +464,6 @@
 
 @media (max-width: 720px) {
   .media-library,
-  .favorite-media-library,
   .content-area-studio:has(> .media-library) {
     padding: var(--cms-space-4);
   }
@@ -574,27 +483,27 @@
   }
 
   /* Phones: thumbnail size sets the column count. Small 3, Medium 2, Large 1. */
-  :is(.media-library, .favorite-media-library, .media-collection-items-shell) .media-grid {
+  .media-library .media-grid {
     --media-grid-phone-columns: 2;
     gap: var(--cms-space-2);
   }
 
-  :is(.media-library, .favorite-media-library, .media-collection-items-shell)[data-thumbnail="s"] .media-grid {
+  .media-library[data-thumbnail="s"] .media-grid {
     --media-grid-phone-columns: 3;
   }
 
-  :is(.media-library, .favorite-media-library, .media-collection-items-shell)[data-thumbnail="l"] .media-grid {
+  .media-library[data-thumbnail="l"] .media-grid {
     --media-grid-phone-columns: 1;
   }
 }
 
 /* The narrowest phones: Small 2, Medium and Large 1. */
 @media (max-width: 340px) {
-  :is(.media-library, .favorite-media-library, .media-collection-items-shell) .media-grid {
+  .media-library .media-grid {
     --media-grid-phone-columns: 1;
   }
 
-  :is(.media-library, .favorite-media-library, .media-collection-items-shell)[data-thumbnail="s"] .media-grid {
+  .media-library[data-thumbnail="s"] .media-grid {
     --media-grid-phone-columns: 2;
   }
 }

@@ -78,7 +78,6 @@ export function MediaGridKeyboardSpecimen({ initialLayout = "grid" }: { initialL
   const [layout, setLayout] = useState<Layout>(initialLayout);
   const [sort, setSort] = useState<SpecimenSort>({ sort: "updatedAt", direction: "desc" });
   const [selection, setSelection] = useState<MediaSelection<MediaAssetSummary>>(emptySelection);
-  const [favorites, setFavorites] = useState<ReadonlySet<string>>(new Set(["p1-4"]));
   const [opened, setOpened] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [log, setLog] = useState("No action yet.");
@@ -108,14 +107,6 @@ export function MediaGridKeyboardSpecimen({ initialLayout = "grid" }: { initialL
 
   function onAction(item: MediaAssetSummary, id: MediaTileActionId) {
     if (id === "open") setOpened(item.id);
-    if (id === "favorite") {
-      setFavorites((current) => {
-        const next = new Set(current);
-        if (next.has(item.id)) next.delete(item.id);
-        else next.add(item.id);
-        return next;
-      });
-    }
     if (id === "select") setSelection((current) => toggleSelection(current, item));
     if (id === "delete") {
       // The route opens the confirmation in details; the gallery removes the card at once
@@ -138,12 +129,10 @@ export function MediaGridKeyboardSpecimen({ initialLayout = "grid" }: { initialL
   }
 
   function renderItem(item: MediaAssetSummary, context: MediaGridItemContext) {
-    const favorite = favorites.has(item.id);
     const shared = {
       asset: item,
       canDelete: true,
       categoryLabel,
-      favorite,
       fields: DEFAULT_MEDIA_DISPLAY.fields,
       onAction: (id: MediaTileActionId) => onAction(item, id),
       onOpen: () => onAction(item, "open"),
@@ -157,7 +146,7 @@ export function MediaGridKeyboardSpecimen({ initialLayout = "grid" }: { initialL
         onAction={(id) => onAction(item, id)}
         onSelectionAction={onSelectionAction}
         selectionCount={count}
-        tile={{ surface: "images", name: item.name, favorite, available: true, selected: context.selected, canDelete: true }}
+        tile={{ surface: "images", name: item.name, selected: context.selected, canDelete: true }}
       >
         {child}
       </MediaContextMenu>
@@ -241,7 +230,7 @@ export function MediaGridKeyboardSpecimen({ initialLayout = "grid" }: { initialL
           actions={mediaBarActions(mediaSelectionActions({ surface: "images", count, canEdit: false }))}
           count={count}
           info="Selection carries across image pages and filters."
-          label="Collection selection"
+          label="Image selection"
           offPage={offPageCount(selection.items, visible)}
           onAction={onSelectionAction}
           onClear={clear}
@@ -279,7 +268,7 @@ export function MediaSelectionBarSpecimen() {
           actions={images(5)}
           count={5}
           info="Selection carries across image pages and filters."
-          label="Collection selection"
+          label="Image selection"
           offPage={2}
           onAction={noop}
           onClear={noop}
@@ -300,25 +289,12 @@ export function MediaSelectionBarSpecimen() {
           pageState="all"
         />
       </BarFrame>
-      <BarFrame caption="Past 30: Add to collection is disabled and says why">
-        <SelectionBar
-          actions={images(31)}
-          count={31}
-          info="Selection carries across image pages and filters."
-          label="Collection selection"
-          offPage={26}
-          onAction={noop}
-          onClear={noop}
-          onPageChange={noop}
-          pageState="all"
-        />
-      </BarFrame>
       <BarFrame caption="Results narrower than 21rem: action words follow the presentation preference; the page checkbox keeps its accessible name" narrow>
         <SelectionBar
           actions={images(5)}
           count={5}
           info="Selection carries across image pages and filters."
-          label="Collection selection"
+          label="Image selection"
           offPage={2}
           onAction={noop}
           onClear={noop}
@@ -358,13 +334,12 @@ function MenuTile({ asset, selected, selectionCount }: { asset: MediaAssetSummar
       onAction={noop}
       onSelectionAction={noop}
       selectionCount={selectionCount}
-      tile={{ surface: "images", name: asset.name, favorite: false, available: true, selected, canDelete: true }}
+      tile={{ surface: "images", name: asset.name, selected, canDelete: true }}
     >
       <MediaTile
         asset={asset}
         canDelete
         categoryLabel={categoryLabel}
-        favorite={false}
         fields={DEFAULT_MEDIA_DISPLAY.fields}
         onAction={noop}
         onOpen={noop}
@@ -392,7 +367,7 @@ export function MediaContextMenuSpecimen() {
         </div>
       </figure>
       <figure className="media-grid-specimen-figure media-context-specimen-figure">
-        <figcaption>A selected card in a five-item selection: the menu is titled 5 items and can add or remove favorites.</figcaption>
+        <figcaption>A selected card in a five-item selection: the menu is titled 5 items and lists the selection actions.</figcaption>
         <div className="media-context-specimen-tile" ref={multiple}>
           <MenuTile asset={image("menu-many", "Rowhouse framing, Jersey City", housingImage)} selected selectionCount={5} />
         </div>

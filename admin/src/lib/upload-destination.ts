@@ -43,15 +43,10 @@ export function routedBatchNotice(
 
 export function videoUploadCompletionMessage(asset: VideoUploadResult): string {
   const state = asset.viewingCopy?.state;
-  const status = state === "ready" ? `${asset.name} is ready to view.`
+  return state === "ready" ? `${asset.name} is ready to view.`
     : state === "processing" ? `${asset.name} uploaded. Its viewing copy is processing.`
       : state === "failed" ? `${asset.name} uploaded. Its viewing copy could not be prepared. Check the video in Videos.`
         : `${asset.name} uploaded to the video library.`;
-  if (asset.collectionPlacement === "added") return `${status} Added to the selected collection.`;
-  if (asset.collectionPlacement === "unavailable") {
-    return `${status} The selected collection became unavailable. Open Videos to choose another collection.`;
-  }
-  return status;
 }
 
 export const VIDEO_UPLOAD_ACCEPT = [

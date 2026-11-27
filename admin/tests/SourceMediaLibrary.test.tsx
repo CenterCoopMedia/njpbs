@@ -12,18 +12,11 @@ import { installTestLockManager } from "./helpers/web-locks";
 import { cachedPoster, clearMediaSessionCache, invalidateMediaLists } from "../src/lib/media-session-cache";
 import { resetUploadRouter, uploadRouterSnapshot } from "../src/lib/upload-router";
 import { SuccessNoticeProvider } from "../src/components/ui/SuccessNoticeRegion";
-import type { MediaFavoriteRef } from "../src/lib/media-favorites";
 import type { Principal } from "../../packages/content-core/src/rbac";
 import { useSourceMediaAssetRefresh } from "../src/lib/use-source-media-asset-refresh";
 
-vi.mock("../src/lib/media-collections", async importOriginal => ({
-  ...await importOriginal<typeof import("../src/lib/media-collections")>(),
-  listMediaCollections: async () => ({ success: true, collections: [], nextCursor: null, hasMore: false }),
-}));
-const { getIdToken, listFavoriteStates, setFavorite, productionTranscriptReads, productionClipReads, loadSavedViews, mutateSavedViews } = vi.hoisted(() => ({
+const { getIdToken, productionTranscriptReads, productionClipReads, loadSavedViews, mutateSavedViews } = vi.hoisted(() => ({
   getIdToken: vi.fn().mockResolvedValue("staff-token"),
-  listFavoriteStates: vi.fn(),
-  setFavorite: vi.fn(),
   productionTranscriptReads: vi.fn(),
   productionClipReads: vi.fn(),
   loadSavedViews: vi.fn(),
@@ -35,10 +28,6 @@ vi.mock("../src/lib/source-media-upload", () => ({
   startVideoUpload: vi.fn(),
   transferVideo: vi.fn(),
   cancelVideoUpload: vi.fn(),
-}));
-vi.mock("../src/lib/media-favorites", () => ({
-  listMediaFavoriteStates: (...args: unknown[]) => listFavoriteStates(...args),
-  setMediaFavorite: (...args: unknown[]) => setFavorite(...args),
 }));
 vi.mock("../src/lib/saved-media-view-store", () => ({
   loadMediaLibraryViews: (...args: unknown[]) => loadSavedViews(...args),
@@ -244,13 +233,6 @@ beforeEach(() => {
   installTestLockManager();
   vi.mocked(listSourceMedia).mockResolvedValue({ success: true, records: [asset], nextCursor: null, hasMore: false, total: 1 });
   loadSavedViews.mockResolvedValue([]);
-  listFavoriteStates.mockImplementation(async (_token: string, refs: MediaFavoriteRef[]) => ({
-    success: true,
-    states: refs.map(ref => ({ ref, favorite: false })),
-  }));
-  setFavorite.mockImplementation(async (_token: string, ref: MediaFavoriteRef, favorite: boolean) => ({
-    success: true, ref, favorite, changed: true,
-  }));
   vi.mocked(createSourceMediaRead).mockImplementation(async (_token, _sourceId, assetId, action) => mediaRead(action, assetId));
   vi.mocked(startVideoUpload).mockResolvedValue({ success: true, upload: {
     sessionId: "upload-session", assetId: "upload-asset", partSize: 4, totalParts: 1,
@@ -447,44 +429,6 @@ describe("private video library", () => {
     expect(screen.queryByRole("button", { name: "Upload media" })).not.toBeInTheDocument();
   });
 
-  it("favorites a video without opening it and uses one page lookup", async () => {
-    renderLibrary();
-
-    const favorite = await screen.findByRole("button", {
-      name: "Add to favorites: News update",
-    });
-    // The heart sits in the tile's quick-action cluster.
-    expect(favorite.closest(".media-tile-actions")).not.toBeNull();
-    expect(listFavoriteStates).toHaveBeenCalledTimes(1);
-    expect(listFavoriteStates).toHaveBeenCalledWith("staff-token", [
-      { backend: "s3", sourceId: "video-library", id: "video-1" },
-    ]);
-
-    fireEvent.click(favorite);
-    await waitFor(() => expect(setFavorite).toHaveBeenCalledWith(
-      "staff-token",
-      { backend: "s3", sourceId: "video-library", id: "video-1" },
-      true,
-    ));
-    expect(createSourceMediaRead).not.toHaveBeenCalled();
-    expect(screen.queryByLabelText("Preview News update")).not.toBeInTheDocument();
-  });
-
-  it.each([1280, 390])("offers Undo for a confirmed video favorite using its full source identity at %ipx", async width => {
-    setViewport(width);
-    const router = createMemoryRouter([{ path: "/media", element: <SuccessNoticeProvider routeKey="staff:video"><SourceMediaLibrary
-      principal={usersViewer} userId="staff" source={source} getIdToken={getIdToken} />
-    </SuccessNoticeProvider> }], { initialEntries: ["/media"] });
-    render(<RouterProvider router={router} />);
-    fireEvent.click(await screen.findByRole("button", { name: "Add to favorites: News update" }));
-    const notice = await screen.findByRole("region", { name: "Notifications" });
-    await waitFor(() => expect(notice).toHaveTextContent("News update was added to your favorites."));
-    fireEvent.click(within(notice).getByRole("button", { name: "Undo" }));
-    await waitFor(() => expect(setFavorite).toHaveBeenCalledTimes(2));
-    expect(setFavorite).toHaveBeenLastCalledWith("staff-token", { backend: "s3", sourceId: "video-library", id: "video-1" }, false);
-    expect(listSourceMedia).toHaveBeenCalledOnce();
-  });
-
   it("requests private playback only after selection and provides native seeking controls", async () => {
     renderLibrary();
     fireEvent.click(await screen.findByRole("button", { name: card("News update") }));
@@ -497,7 +441,7 @@ describe("private video library", () => {
     expect(screen.queryByLabelText("Preview News update")).not.toBeInTheDocument();
   });
 
-  it.each([1280, 390])("steps through the fixed page with one preview read and no list or favorite read at %ipx", async (width) => {
+  it.each([1280, 390])("steps through the fixed page with one preview read and no list read at %ipx", async (width) => {
     setViewport(width);
     const records = videoRecords(3);
     vi.mocked(listSourceMedia).mockResolvedValue({ success: true, records, nextCursor: null, hasMore: false, total: 3 });
@@ -518,7 +462,6 @@ describe("private video library", () => {
       ["video-1", "preview"], ["video-2", "preview"],
     ]);
     expect(listSourceMedia).toHaveBeenCalledTimes(1);
-    expect(listFavoriteStates).toHaveBeenCalledTimes(1);
 
     fireEvent.click(screen.getByRole("button", { name: "Next file" }));
     await screen.findByLabelText("Preview Video 3");
@@ -527,7 +470,6 @@ describe("private video library", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "Previous file" })).toHaveFocus());
     expect(createSourceMediaRead).toHaveBeenCalledTimes(3);
     expect(listSourceMedia).toHaveBeenCalledTimes(1);
-    expect(listFavoriteStates).toHaveBeenCalledTimes(1);
   });
 
   it("shows the opening page position and does not prefetch another preview", async () => {
@@ -2526,7 +2468,6 @@ describe("video library organization", () => {
     expect(videoSearch()).toHaveValue("News");
     expect(screen.getByRole("button", { name: "Edit filter Rights: Needs review" })).toBeInTheDocument();
     expect(updateSourceMediaMetadata).not.toHaveBeenCalled();
-    expect(setFavorite).not.toHaveBeenCalled();
     expect(deleteSourceMedia).not.toHaveBeenCalled();
   });
 
@@ -2719,8 +2660,6 @@ describe("video library grid", () => {
     return {
       list: vi.mocked(listSourceMedia).mock.calls.length,
       read: vi.mocked(createSourceMediaRead).mock.calls.length,
-      favorites: listFavoriteStates.mock.calls.length,
-      favorite: setFavorite.mock.calls.length,
     };
   }
   function videos(count: number, prefix = "Video") {
@@ -2730,7 +2669,7 @@ describe("video library grid", () => {
   it("selects from the tile mark without opening the player", async () => {
     renderLibrary();
     await screen.findByRole("grid", { name: "Videos" });
-    await waitFor(() => expect(listFavoriteStates).toHaveBeenCalled());
+    await waitFor(() => expect(listSourceMedia).toHaveBeenCalled());
     const calls = requestCounts();
     fireEvent.click(screen.getByRole("checkbox", { name: "Select News update" }));
     expect(selectionBar()).toHaveTextContent("1 of 100 selected");
@@ -2768,7 +2707,7 @@ describe("video library grid", () => {
     await screen.findByRole("button", { name: card("Other 1") });
     expect(selectionBar()).toHaveTextContent("7 of 100 selected · 3 not on this page");
     expect(within(selectionBar()).getByRole("checkbox", { name: "Select this page" })).toBePartiallyChecked();
-    expect(within(selectionBar()).getByRole("button", { name: "Add to collection" })).toBeEnabled();
+    expect(within(selectionBar()).getByRole("button", { name: "Clear selection" })).toBeEnabled();
     // The always-mounted status announces the count; the bar has no live region of its own.
     expect(within(selectionBar()).queryByRole("status")).toBeNull();
     expect(screen.getAllByRole("status").some(status => status.textContent === "7 of 100 selected · 3 not on this page")).toBe(true);
@@ -2781,7 +2720,7 @@ describe("video library grid", () => {
     ], nextCursor: null, hasMore: false, total: 2 });
     renderLibrary();
     const withUid = await screen.findByRole("button", { name: card("News update") });
-    await waitFor(() => expect(listFavoriteStates).toHaveBeenCalled());
+    await waitFor(() => expect(listSourceMedia).toHaveBeenCalled());
     const calls = requestCounts();
     // The uploader field is optional; the menu action still uses a server-presented name.
     expect(screen.queryByText("Uploaded by Alex Rivera")).toBeNull();
@@ -2795,7 +2734,7 @@ describe("video library grid", () => {
     fireEvent.keyDown(withUid, { key: "F10", shiftKey: true });
     const menu = screen.getByRole("menu", { name: "News update" });
     expect(within(menu).getAllByRole("menuitem").map(item => item.textContent)).toEqual([
-      "Open and play", "Quick Look", "Add to favorites", "Add to collection", "Select", "Show videos uploaded by Alex Rivera",
+      "Open and play", "Quick Look", "Select", "Show videos uploaded by Alex Rivera",
     ]);
     expect(requestCounts()).toEqual(calls);
     fireEvent.click(within(menu).getByRole("menuitem", { name: "Show videos uploaded by Alex Rivera" }));
@@ -2819,7 +2758,7 @@ describe("video library grid", () => {
     });
     renderLibrary();
     const open = await screen.findByRole("button", { name: card("News update") });
-    await waitFor(() => expect(listFavoriteStates).toHaveBeenCalled());
+    await waitFor(() => expect(listSourceMedia).toHaveBeenCalled());
     const calls = requestCounts();
     act(() => open.focus());
     expect(screen.queryByRole("group", { name: "Details for News update" })).toBeNull();
@@ -2921,8 +2860,6 @@ describe("video library list", () => {
     return {
       list: vi.mocked(listSourceMedia).mock.calls.length,
       read: vi.mocked(createSourceMediaRead).mock.calls.length,
-      favorites: listFavoriteStates.mock.calls.length,
-      favorite: setFavorite.mock.calls.length,
     };
   }
   function videos(count: number, prefix = "Video") {
@@ -2933,7 +2870,7 @@ describe("video library list", () => {
   }
   function rowOf(name: string) { return screen.getByRole("button", { name: card(name) }).closest(".media-row") as HTMLElement; }
 
-  it("renders Compact list as the shared list layout with one row per video and the same selection, menu and favorite actions as cards", async () => {
+  it("renders Compact list as the shared list layout with one row per video and the same selection and menu actions as cards", async () => {
     vi.mocked(listSourceMedia).mockResolvedValue({ success: true, records: [
       { ...asset, uploadedBy: { uid: "alex", name: "Alex Rivera" }, tags: ["Interview"],
         viewingCopy: { state: "ready", durationSeconds: 166, sizeBytes: 90 * 1024 ** 2 }, updatedAt: "2026-09-23T16:05:00.000Z" },
@@ -2941,7 +2878,7 @@ describe("video library list", () => {
     ], nextCursor: null, hasMore: false, total: 2 });
     renderLibrary();
     await screen.findByRole("grid", { name: "Videos" });
-    await waitFor(() => expect(listFavoriteStates).toHaveBeenCalled());
+    await waitFor(() => expect(listSourceMedia).toHaveBeenCalled());
     chooseView("Compact list");
 
     const grid = screen.getByRole("grid", { name: "Videos" });
@@ -2971,21 +2908,17 @@ describe("video library list", () => {
     fireEvent.keyDown(within(first).getByRole("button", { name: card("News update") }), { key: "F10", shiftKey: true });
     const menu = screen.getByRole("menu", { name: "News update" });
     expect(within(menu).getAllByRole("menuitem").map(item => item.textContent)).toEqual([
-      "Open and play", "Quick Look", "Add to favorites", "Add to collection", "Deselect", "Show videos uploaded by Alex Rivera",
+      "Open and play", "Quick Look", "Deselect", "Show videos uploaded by Alex Rivera",
     ]);
     fireEvent.keyDown(menu, { key: "Escape" });
     expect(requestCounts()).toEqual(calls);
-
-    fireEvent.click(within(first).getByRole("button", { name: "Add to favorites: News update" }));
-    await waitFor(() => expect(setFavorite).toHaveBeenCalledWith("staff-token", { backend: "s3", sourceId: "video-library", id: "video-1" }, true));
-    expect(requestCounts()).toEqual({ ...calls, favorite: calls.favorite + 1 });
   });
 
   it("keeps the chosen View across paging and search, and sends no extra request when it changes", async () => {
     vi.mocked(listSourceMedia).mockResolvedValue({ success: true, records: videos(3), nextCursor: "page-two", hasMore: true, total: 6 });
     renderLibrary();
     const second = await screen.findByRole("button", { name: card("Video 2") });
-    await waitFor(() => expect(listFavoriteStates).toHaveBeenCalled());
+    await waitFor(() => expect(listSourceMedia).toHaveBeenCalled());
     fireEvent.click(screen.getByRole("checkbox", { name: "Select Video 2" }));
     act(() => second.focus());
     const calls = requestCounts();
@@ -3271,7 +3204,6 @@ describe("video personal saved views", () => {
     mutateSavedViews.mockImplementationOnce(async (_userId, mutation: { view: unknown }) => [view, mutation.view]);
     const counts = () => ({
       list: vi.mocked(listSourceMedia).mock.calls.length,
-      favoriteStates: listFavoriteStates.mock.calls.length,
       posterReads: vi.mocked(createSourceMediaRead).mock.calls.filter((call) => call[3] === "poster").length,
       savedReads: loadSavedViews.mock.calls.length,
       savedTransactions: mutateSavedViews.mock.calls.length,
@@ -3280,14 +3212,14 @@ describe("video personal saved views", () => {
     const router = renderLibrary(source, "/media?q=Current", principal, savedUser);
     await screen.findByRole("button", { name: card("News update") });
     await waitFor(() => expect(counts()).toEqual({
-      list: 1, favoriteStates: 1, posterReads: 0, savedReads: 0, savedTransactions: 0,
+      list: 1, posterReads: 0, savedReads: 0, savedTransactions: 0,
     }));
 
     fireEvent.click(screen.getByRole("button", { name: /^Filter/ }));
     const filter = screen.getByRole("dialog", { name: "Filter" });
     expect(await within(filter).findByRole("button", { name: view.name })).toBeInTheDocument();
     expect(counts()).toEqual({
-      list: 1, favoriteStates: 1, posterReads: 0, savedReads: 1, savedTransactions: 0,
+      list: 1, posterReads: 0, savedReads: 1, savedTransactions: 0,
     });
     fireEvent.keyDown(filter, { key: "Escape" });
 
@@ -3295,13 +3227,13 @@ describe("video personal saved views", () => {
     const display = screen.getByRole("dialog", { name: "Display" });
     expect(within(display).getByRole("button", { name: "Save as view" })).toBeEnabled();
     expect(counts()).toEqual({
-      list: 1, favoriteStates: 1, posterReads: 0, savedReads: 1, savedTransactions: 0,
+      list: 1, posterReads: 0, savedReads: 1, savedTransactions: 0,
     });
     fireEvent.click(within(display).getByRole("button", { name: "Save as view" }));
     fireEvent.change(within(display).getByRole("textbox", { name: "Name" }), { target: { value: "Current videos" } });
     fireEvent.click(within(display).getByRole("button", { name: "Save view" }));
     await waitFor(() => expect(counts()).toEqual({
-      list: 1, favoriteStates: 1, posterReads: 0, savedReads: 1, savedTransactions: 1,
+      list: 1, posterReads: 0, savedReads: 1, savedTransactions: 1,
     }));
     fireEvent.keyDown(display, { key: "Escape" });
 
@@ -3309,7 +3241,7 @@ describe("video personal saved views", () => {
     fireEvent.click(await screen.findByRole("button", { name: view.name }));
     await waitFor(() => expect(router.state.location.search).toBe(`?q=News&rights=pending&sort=updated_asc&limit=48&view=${view.id}`));
     await waitFor(() => expect(counts()).toEqual({
-      list: 2, favoriteStates: 1, posterReads: 0, savedReads: 1, savedTransactions: 1,
+      list: 2, posterReads: 0, savedReads: 1, savedTransactions: 1,
     }));
   });
 

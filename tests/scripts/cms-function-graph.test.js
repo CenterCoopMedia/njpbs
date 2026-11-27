@@ -53,8 +53,8 @@ async function releaseInputs(before, after, cwd) {
   };
 }
 
-// Edits functions/media-collections.js and its library, and nothing else that a Function contains.
-const FUNCTION_EDIT = { before: "489a896edcdef0caaa3f8ce932855e9e9d14e4b5", after: "a51a0b8ddba16d734aa5ddb1b8d13e7d4df3e2ef" };
+// Edits functions/video-clips.js and its contract library, and nothing else that a Function contains.
+const FUNCTION_EDIT = { before: "5fcf022001fec08f14d7ebae04ce6ea227b0d8d8", after: "2a8b779299c8270a8db4295e3dacc9789764c5aa" };
 
 // A second reading of the committed modules, without esbuild, so an expected target
 // list does not come from the graph under test.
@@ -413,9 +413,9 @@ describe("committed Functions module graph", () => {
     expect(decideRelease(tools.plan)).toMatchObject({ functionsMutated: false, functionDeployTargets: "", releaseReason: "unchanged" });
     const { before, after } = FUNCTION_EDIT;
     const { plan } = await releaseInputs(before, after);
-    const edited = ["functions/media-collections.js", "functions/lib/media-collections.js"];
+    const edited = ["functions/video-clips.js", "functions/lib/video-clip-contract.js"];
     const changed = exportsReaching(after, path => edited.includes(path));
-    expect(changed).toEqual(expect.arrayContaining(["cmsListMediaCollections", "cmsSetMediaCollectionItems"]));
+    expect(changed).toEqual(expect.arrayContaining(["cmsRequestVideoClip", "cmsGetVideoClip"]));
     expect(changed).not.toContain("health");
     expect(decideRelease(plan)).toMatchObject({ functionDeployTargets: changed.map(name => `functions:${name}`).join(",") });
   });

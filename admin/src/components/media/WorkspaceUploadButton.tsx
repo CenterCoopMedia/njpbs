@@ -9,7 +9,7 @@ import { WorkspaceBrowseToolbar } from "../WorkspaceActions";
 // The upload control for a media tab that does not already have one. Images and an
 // uploadable video source keep their own controls. This button uses the same accept
 // list and the same router, so a mixed batch still splits by file type.
-export function WorkspaceUploadButton({ buttonRef, secondary = false }: { buttonRef?: Ref<HTMLButtonElement>; secondary?: boolean }) {
+export function WorkspaceUploadButton({ buttonRef }: { buttonRef?: Ref<HTMLButtonElement> }) {
   const inputRef = useRef<HTMLInputElement>(null);
   return (
     <ControlSizingProvider size="standard"><WorkspaceBrowseToolbar trailing><div className="media-workspace-upload">
@@ -31,7 +31,7 @@ export function WorkspaceUploadButton({ buttonRef, secondary = false }: { button
         onClick={() => inputRef.current?.click()}
         ref={buttonRef}
         title="Upload images, PDFs, WAV audio, or videos"
-        variant={secondary ? "secondary" : "primary"}
+        variant="primary"
       >
         <Icon name="upload" />
         <span className="button-compact-label">Upload</span>

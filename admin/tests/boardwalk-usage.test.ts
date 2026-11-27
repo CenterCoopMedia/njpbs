@@ -29,8 +29,6 @@ describe("standard usage analytics (#4495)", () => {
   it("classifies destinations without retaining addresses, queries or source IDs", () => {
     expect(usageScreen("/content/post/record-123/edit")).toBe("posts-editor");
     expect(usageScreen("/content/post")).toBe("posts-list");
-    expect(usageScreen("/media/favorites")).toBe("media-favorites");
-    expect(usageScreen("/media/collections/private-collection")).toBe("media-collections");
     expect(usageScreen("/media/submissions")).toBe("media-submissions");
     expect(usageScreen("/media")).toBe("media-landing");
     expect(usageScreen("/media/videos/custom-private-source")).toBe("videos");

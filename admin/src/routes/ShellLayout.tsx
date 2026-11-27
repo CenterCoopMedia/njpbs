@@ -308,7 +308,7 @@ function ShellLayoutContents() {
   const editorHeader = contentPath && !browsingContent;
   const headerMenu = sharedChrome || editorHeader;
   const mediaPath = parseMediaWorkspacePath(location.pathname);
-  const mediaTitle = mediaPath.kind === "images" ? "Images" : mediaPath.kind === "videos" ? "Videos" : mediaPath.kind === "favorites" ? "Favorites" : mediaPath.kind === "collections" ? "Collections" : mediaPath.kind === "voiceovers" ? "Audio" : mediaPath.kind === "submissions" ? "Public submissions" : "Media library";
+  const mediaTitle = mediaPath.kind === "images" ? "Images" : mediaPath.kind === "videos" ? "Videos" : mediaPath.kind === "voiceovers" ? "Audio" : mediaPath.kind === "submissions" ? "Public submissions" : "Media library";
   const routeLoading = navigation.state === "loading";
   const showRouteProgress = useDelayedFlag(routeLoading, ROUTE_PROGRESS_DELAY_MS);
   // The menu belongs to the page it opened on, so a destination never inherits an open drawer.

@@ -229,7 +229,6 @@
   border-color: var(--cms-action-secondary-border);
   color: var(--cms-action-secondary-text);
 }
-.action-control[data-action="media-favorite"][aria-pressed="true"] .icon { fill: currentColor; }
 
 .action-control-text.button {
   width: auto;

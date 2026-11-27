@@ -37,9 +37,6 @@ export const VIDEO_SELECTION_CAP: SelectionCap = Object.freeze({
   message: `Select no more than ${MAX_BULK_VIDEOS} videos in one batch. No additional videos were selected.`,
 });
 
-/** One collection change takes at most this many items, for images and video. */
-export const COLLECTION_CHANGE_LIMIT = 30;
-
 export type PageSelectionState = "none" | "some" | "all";
 
 export function emptySelection<T extends SelectableMedia>(): MediaSelection<T> {
@@ -139,13 +136,6 @@ export function pageSelectionState(items: readonly SelectableMedia[], visible: r
   const count = visible.filter((item) => selected.has(item.id)).length;
   if (count === 0) return "none";
   return count === visible.length ? "all" : "some";
-}
-
-/** The existing collection-limit message once a selection passes 30, else null. */
-export function collectionCapError(count: number, noun: "items" | "videos"): string | null {
-  return count > COLLECTION_CHANGE_LIMIT
-    ? `Select no more than ${COLLECTION_CHANGE_LIMIT} ${noun} for one collection change.`
-    : null;
 }
 
 /** The bar's count: "5 selected", "7 of 100 selected · 3 not on this page". */

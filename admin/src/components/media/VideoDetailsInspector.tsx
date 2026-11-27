@@ -6,7 +6,6 @@ import {
   useRef,
   useState,
   type FormEvent,
-  type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
 import { Link } from "react-router";
@@ -100,7 +99,6 @@ export function VideoDetailsInspector({
   commentTiming,
   deleteConfirmationId,
   disabled = false,
-  favoriteControl,
   feedback: sharedFeedback,
   footerTarget,
   getIdToken,
@@ -132,7 +130,6 @@ export function VideoDetailsInspector({
   commentTiming?: CommentTiming;
   deleteConfirmationId: string;
   disabled?: boolean;
-  favoriteControl?: ReactNode;
   /** Feedback loaded by the viewer, so the player timeline and this list share one state. */
   feedback?: MediaFeedback;
   /** Stable full-viewer action slot; the media frame places it in the header. */
@@ -305,7 +302,7 @@ export function VideoDetailsInspector({
 
   const headerSave = useContext(MediaDialogContext).actionsInHeader && Boolean(footerTarget);
   const iconSave = useControlPresentation() === "icons" && headerSave;
-  const actions = <div className="video-inspector-actions">{favoriteControl}
+  const actions = <div className="video-inspector-actions">
     {canEditMetadata ? <AsyncActionButton variant={headerSave ? "ghost" : "primary"}
       className={iconSave ? "media-details-save-icon" : undefined}
       form={metadataFormId} type="submit" disabled={busy || !detailsDirty}

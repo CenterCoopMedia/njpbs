@@ -32,10 +32,6 @@ describe("saved media views", () => {
         "q=news&tag=Interview&cursor=opaque&asset=asset-one&sort=name_asc&limit=48",
       ).query,
     ).toBe("q=news&tag=Interview&sort=name_asc&limit=48");
-    expect(createSavedMediaView("favorites-one", "Videos", "favorites", "kind=video&asset=r2%3Aa1").query)
-      .toBe("kind=video");
-    expect(createSavedMediaView("collections-one", "Archived", "collections", "show=archived&scope=all_staff&asset=r2%3Aa1").query)
-      .toBe("show=archived&scope=all_staff");
   });
 
   it("keeps Audio views distinct from Images while preserving shared media query and display settings", () => {
@@ -125,13 +121,15 @@ describe("saved media views", () => {
   it("parses untrusted profile data, keeps the first valid id, and enforces the cap", () => {
     const parsed = parseSavedMediaViews([
       { id: "one", name: " One ", surface: "images", query: "page=9&kind=image" },
-      { id: "one", name: "Duplicate", surface: "favorites", query: "kind=video" },
+      { id: "one", name: "Duplicate", surface: "images", query: "kind=video" },
       { id: "broken", name: "", surface: "images", query: "" },
+      { id: "old-favorites", name: "Old", surface: "favorites", query: "kind=video" },
+      { id: "old-collections", name: "Old", surface: "collections", query: "show=archived" },
       ...Array.from({ length: MAX_SAVED_MEDIA_VIEWS }, (_, index) => ({
         id: `view-${index}`,
         name: `View ${index}`,
-        surface: "collections",
-        query: index % 2 === 0 ? "show=archived" : "",
+        surface: "video:archive",
+        query: index % 2 === 0 ? "sort=name_asc" : "",
       })),
     ]);
 
@@ -143,6 +141,7 @@ describe("saved media views", () => {
       query: "kind=image",
     });
     expect(parsed.filter((view) => view.id === "one")).toHaveLength(1);
+    expect(parsed.some((view) => view.id.startsWith("old-"))).toBe(false);
   });
 
   it("applies one add or delete and checks duplicates within a surface", () => {
@@ -153,7 +152,7 @@ describe("saved media views", () => {
     expect(
       applySavedMediaViewMutation(current, {
         type: "add",
-        view: { id: "favorites", name: "Recent", surface: "favorites", query: "kind=video" },
+        view: { id: "audio", name: "Recent", surface: "audio", query: "q=station" },
       }),
     ).toHaveLength(3);
     expect(applySavedMediaViewMutation(current, { type: "delete", id: "images" }))

@@ -20,7 +20,7 @@ const PROOF_PATHS = [...contractInputs, "scripts/lib/cms-public-contract.mjs", "
 const PRIVATE_LIMIT = 16 * 1024 * 1024;
 const CREDENTIAL_KEYS = new Set(["authorization", "cookie", "password", "private_key", "secretAccessKey", "accessKeyId", "refreshToken", "idToken", "accessToken", "client_secret"]);
 const DIRECT_WRITE_OWNERS = new Set(["lib/editor-lock-store.ts", "lib/control-presentation-store.ts", "lib/home-shortcuts-store.ts",
-  "lib/media-collection-pins-store.ts", "lib/saved-content-view-store.ts", "lib/saved-media-view-store.ts"]);
+  "lib/saved-content-view-store.ts", "lib/saved-media-view-store.ts"]);
 const FIRESTORE_READ_IMPORTS = new Set(["collection", "doc", "documentId", "getDoc", "getDocFromServer", "getDocs", "limit", "onSnapshot", "query", "where",
   "getFirestore", "connectFirestoreEmulator", "deleteField", "serverTimestamp", "Timestamp", "orderBy"]);
 

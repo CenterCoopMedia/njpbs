@@ -51,12 +51,7 @@ for (const width of [390, 1280]) {
     await expect(details).toBeVisible();
     await expect(details.getByLabel("Play Station interview")).toHaveAttribute("preload", "none");
     await expect(details.getByText("No license entered", { exact: true })).toBeVisible();
-    const favorite = details.getByRole("button", { name: "Add to favorites: Station interview" });
-    await favorite.click();
-    await expect(details.getByRole("button", { name: "Remove from favorites: Station interview" }))
-      .toHaveAttribute("aria-pressed", "true");
     await details.getByRole("button", { name: "Close details" }).click();
-    await expect(grid.getByRole("button", { name: /^Station interview, audio.*favorite$/ })).toBeVisible();
 
     await page.getByRole("button", { name: "Upload media", exact: true }).click();
     await page.getByLabel(/Files \(25 MB/).setInputFiles({
@@ -100,7 +95,7 @@ test("loads private voiceover audio and review details only after selection", as
   }, { normalizeGeneratedIds: false, readyRegion: "Audio" });
 
   const grid = page.getByRole("grid", { name: "Audio" });
-  await grid.getByRole("button", { name: /^Station identification, audio.*favorite$/ }).click();
+  await grid.getByRole("button", { name: /^Station identification, audio/ }).click();
   const details = assetDetails(page, 1280);
   await expect(details.getByText("Jordan Avery", { exact: true })).toBeVisible();
   await expect(details.getByRole("textbox", { name: "Notes" }))
@@ -108,12 +103,5 @@ test("loads private voiceover audio and review details only after selection", as
   await expect(details.getByLabel("Play Station identification")).toHaveCount(0);
   await details.getByRole("button", { name: "Listen to Station identification" }).click();
   await expect(details.getByLabel("Play Station identification")).toHaveAttribute("preload", "none");
-
-  const favorite = details.getByRole("button", {
-    name: "Remove from favorites: Station identification",
-  });
-  await favorite.click();
-  await expect(details.getByRole("button", { name: "Add to favorites: Station identification" }))
-    .toHaveAttribute("aria-pressed", "false");
   await expectNoHorizontalOverflow(page);
 });

@@ -87,7 +87,6 @@ async function bundleClient(source: string, revision: string, name: string) {
     export {CoverageLabelsSettings, DEFAULT_COVERAGE_LABELS} from './admin/src/components/CoverageLabelsSettings.tsx';
     export * from './admin/src/lib/control-presentation-store.ts';
     export * from './admin/src/lib/home-shortcuts-store.ts';
-    export * from './admin/src/lib/media-collection-pins-store.ts';
     export * from './admin/src/lib/saved-content-view-store.ts';
     export * from './admin/src/lib/saved-media-view-store.ts';
     export {editorLockClient} from './admin/src/lib/editor-lock-store.ts';
@@ -536,7 +535,6 @@ it("executes discovered direct SDK preference writers through unchanged real rul
   for (const client of [c1Client, c0Client]) {
     await client.saveControlPresentation(actorId, "text");
     await client.saveHomeShortcuts(actorId, null);
-    await client.saveMediaCollectionPin(actorId, "a".repeat(64), true);
     await client.mutateContentLibraryViews(actorId, { type: "delete", id: "contract-view" });
     await client.mutateMediaLibraryViews(actorId, { type: "delete", id: "contract-view" });
     const session = "contract-session-0123456789";

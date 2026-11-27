@@ -25,7 +25,7 @@ import {
   type MediaSelection,
 } from "../lib/media-selection";
 import { availableSelectionActions, mediaBarActions, mediaSelectionActions, type MediaTileActionId } from "../lib/media-tile-actions";
-import { cachedMediaList, favoritesChangeRevisionValue, invalidateMediaLists, markMediaTabCountsStale, mediaTabCounts, publishFavoritesChange, setMediaCachePrincipal, setMediaImagesCount, setMediaSourceCount, subscribeFavoritesChange, subscribeMediaTabCounts } from "../lib/media-session-cache";
+import { cachedMediaList, invalidateMediaLists, mediaTabCounts, setMediaCachePrincipal, setMediaImagesCount, setMediaSourceCount, subscribeMediaTabCounts } from "../lib/media-session-cache";
 import { withMediaTabCounts } from "../lib/media-tab-counts";
 import { mediaShortcutBlocked } from "../lib/media-search";
 import { routedBatchNotice, UNSUPPORTED_UPLOAD_MESSAGE, videoUploadCompletionMessage } from "../lib/upload-destination";
@@ -34,7 +34,6 @@ import { clearRejectedUploads, currentLibraryEpoch, finishLibraryUpload, finishV
 import { MediaTabs } from "../components/media/MediaTabs";
 import { WorkspaceUploadButton } from "../components/media/WorkspaceUploadButton";
 import { useSuccessNotice } from "../components/ui/SuccessNoticeRegion";
-import { useFavoriteUndo } from "../lib/use-favorite-undo";
 import { useClearFilterUndo } from "../lib/use-clear-filter-undo";
 import { currentMediaTabId, mediaTabs } from "../lib/media-tabs";
 
@@ -131,11 +130,6 @@ import "./MediaRoute.css";
 import { VideoUploadPanel } from "../components/VideoUploadPanel";
 import { VideoUploadResults } from "../components/media/VideoUploadResults";
 import { listMediaSources, uploadableSharedVideoSource, type MediaSourceSummary } from "../lib/source-media";
-import { MediaFavoriteButton } from "../components/MediaFavoriteButton";
-import { MediaCollectionPicker } from "../components/MediaCollectionPicker";
-import { useMediaFavorites } from "../lib/use-media-favorites";
-import { setMediaFavorites, type MediaFavoriteRef } from "../lib/media-favorites";
-import type { MediaAssetRef } from "../lib/media-identity";
 import { mediaImageSources } from "../lib/media-image";
 import { MediaInspector, type MediaInspectorSaveReceipt } from "../components/media/MediaInspector";
 import { ImageViewer } from "../components/media/ImageViewer";
@@ -146,7 +140,6 @@ import { SourceMediaBulkEditor } from "../components/SourceMediaBulkEditor";
 import { MAX_BULK_IMAGES, type BulkMetadataDraft, type BulkResult, type ImageBulkPatch } from "../lib/source-media-bulk";
 import { readRecentTags, recordRecentTags } from "../lib/recent-media-tags";
 import {
-  mediaCollectionsPath,
   mediaImagesPath,
   mediaLibraryPath,
   mediaVideosPath,
@@ -316,7 +309,7 @@ export function MediaLibrarySurface({
   >([]);
   const [activeReused, setActiveReused] = useState<MediaUploadBatchReuse[]>([]);
   const [deleteSuccess, setDeleteSuccess] = useState<string | null>(null);
-  const [collectionSelection, setCollectionSelection] = useState<MediaSelection<MediaAssetSummary>>(emptySelection);
+  const [imageSelection, setImageSelection] = useState<MediaSelection<MediaAssetSummary>>(emptySelection);
   const [bulkSession, setBulkSession] = useState<{
     assets: readonly MediaAssetSummary[];
     reviewing: boolean;
@@ -340,15 +333,6 @@ export function MediaLibrarySurface({
   const pendingViewerFocus = useRef<{ currentId: string; currentName: string; order: string[]; queryKey: string } | null>(null);
   const [viewerAnnouncement, setViewerAnnouncement] = useState("");
   const [bulkSaving, setBulkSaving] = useState(false);
-  // What the collection picker adds: the selection from the bar, or one card's image.
-  const [pickerTarget, setPickerTarget] = useState<{
-    assets: readonly MediaAssetSummary[]; bulk: boolean; opener: Element | null;
-  } | null>(null);
-  const collectionPickerOpen = pickerTarget !== null;
-  const [collectionSuccess, setCollectionSuccess] = useState("");
-  const [favoritesSaving, setFavoritesSaving] = useState(false);
-  const [favoritesStatus, setFavoritesStatus] = useState("");
-  const [favoritesError, setFavoritesError] = useState("");
   // A card menu's Delete from library opens that item's details at the delete confirmation.
   const [deleteRequest, setDeleteRequest] = useState<{ id: string; count: number } | null>(null);
   const [recentTagsVersion, setRecentTagsVersion] = useState(0);
@@ -376,7 +360,7 @@ export function MediaLibrarySurface({
   }, [mayUpload]);
 
   useEffect(() => {
-    setCollectionSelection(emptySelection());
+    setImageSelection(emptySelection());
     setBulkSession(null);
     setPendingBulkOpen(null);
     setImageViewer(null);
@@ -386,8 +370,6 @@ export function MediaLibrarySurface({
     viewerGeneration.current += 1;
     setViewerReloading(false);
     setViewerReloadError("");
-    setPickerTarget(null);
-    setCollectionSuccess("");
   }, [userId]);
 
   useEffect(() => {
@@ -552,7 +534,7 @@ export function MediaLibrarySurface({
     restartList();
   }, [inspectorDirty, locationKey, metadataSaving, replaceBusy, setSearchParams, uploadDirty, uploadReceipt]);
 
-  const { favoriteSeed, awaitingFavoriteSeed } = useMediaLibraryList({
+  useMediaLibraryList({
     attempt,
     loadMedia,
     requestKey,
@@ -707,7 +689,7 @@ export function MediaLibrarySurface({
   function finishDelete(asset: MediaAssetSummary) {
     invalidateMediaLists();
     setRelatedSelection(previous => previous?.asset.id === asset.id ? null : previous);
-    setCollectionSelection(previous => previous.items.some(item => item.id === asset.id) ? removeSelected(previous, asset.id) : previous);
+    setImageSelection(previous => previous.items.some(item => item.id === asset.id) ? removeSelected(previous, asset.id) : previous);
     setMetadataDirty(false);
     setDeleteSuccess(asset.name);
     writeLocation({ ...location, selectedId: null });
@@ -820,28 +802,11 @@ export function MediaLibrarySurface({
     viewerNavigationKeep.current?.focus();
     viewerNavigationKeep.current?.scrollIntoView?.({ block: "nearest" });
   }, [blocker.state, viewerOpen]);
-  const favoriteRefs: MediaFavoriteRef[] = [
-    ...(result?.records.map(asset => ({ backend: "r2" as const, id: asset.id })) ?? []),
-    ...(selectedAsset ? [{ backend: "r2" as const, id: selectedAsset.id }] : []),
-    ...(imageViewerAsset && !result?.records.some(asset => asset.id === imageViewerAsset.id) && selectedAsset?.id !== imageViewerAsset.id
-      ? [{ backend: "r2" as const, id: imageViewerAsset.id }] : []),
-  ];
-  const favorites = useMediaFavorites(userId, favoriteRefs, getIdToken, favoriteSeed, awaitingFavoriteSeed);
-  const favoriteUndo = useFavoriteUndo(userId, favorites);
-  const favoritesLibraryRevision = useSyncExternalStore(subscribeFavoritesChange, favoritesChangeRevisionValue);
-  const seenFavoritesRevision = useRef(favoritesLibraryRevision);
-  useEffect(() => {
-    if (seenFavoritesRevision.current === favoritesLibraryRevision) return;
-    seenFavoritesRevision.current = favoritesLibraryRevision;
-    favorites.reconcile();
-    restartList();
-  }, [favorites, favoritesLibraryRevision]);
-  const collectionAssets = collectionSelection.items;
-  const pickerRefs: MediaAssetRef[] = (pickerTarget?.assets ?? []).map(asset => ({ backend: "r2", id: asset.id }));
+  const selectedImages = imageSelection.items;
   const pageAssets = useMemo(() => result?.records ?? [], [result]);
   const pageTags = useMemo(() => pageAssets.flatMap((asset) => asset.tags), [pageAssets]);
   const recentTags = useMemo(() => readRecentTags("images", userId), [recentTagsVersion, userId]);
-  const canEditSelection = collectionAssets.some(asset => canManageMediaMetadata(principal, asset.category));
+  const canEditSelection = selectedImages.some(asset => canManageMediaMetadata(principal, asset.category));
   useEffect(() => {
     if (!pendingBulkOpen || location.selectedId || blocker.state !== "unblocked") return;
     setBulkSession({ assets: pendingBulkOpen, reviewing: false, focusRequest: 0 });
@@ -868,16 +833,15 @@ export function MediaLibrarySurface({
       if (imageViewer.userId === userId && imageViewer.queryKey === queryKey) restartList();
     }
   }, [imageViewer, userId, queryKey, location.selectedId, permalinkId]);
-  // Selecting, favoriting or collecting from a card waits while details or an upload hold
-  // unsaved work, while a metadata write is in flight, or while the collection picker is open.
-  const cardsLocked = dirty || metadataSaving || bulkSaving || favoritesSaving || showUpload || collectionPickerOpen || bulkSession !== null || activeImageViewer !== null;
-  const quickLookLocked = inspectorDirty || metadataSaving || bulkSaving || favoritesSaving || showUpload || collectionPickerOpen || bulkSession !== null || activeImageViewer !== null;
-  const selectionBusy = favoritesSaving || collectionPickerOpen || bulkSession !== null;
+  // Selecting from a card waits while details or an upload hold unsaved work or while a
+  // metadata write is in flight.
+  const cardsLocked = dirty || metadataSaving || bulkSaving || showUpload || bulkSession !== null || activeImageViewer !== null;
+  const quickLookLocked = inspectorDirty || metadataSaving || bulkSaving || showUpload || bulkSession !== null || activeImageViewer !== null;
+  const selectionBusy = bulkSession !== null;
   const allowBulkTransition = metadataDirty && !bulkSession && !metadataSaving && !uploadDirty && !showUpload ? "edit-tags" as const : undefined;
-  function changeCollectionSelection(next: MediaSelection<MediaAssetSummary>) {
+  function changeImageSelection(next: MediaSelection<MediaAssetSummary>) {
     if (cardsLocked) return;
-    setCollectionSelection(next);
-    setCollectionSuccess("");
+    setImageSelection(next);
   }
   const categoryLabel = useCallback((id: string) => mediaCategoryLabel(categories, id), [categories]);
   const filtered =
@@ -971,15 +935,15 @@ export function MediaLibrarySurface({
     restoreMediaFocus(gridRef.current, focusSearch);
   }
 
-  function clearCollectionSelection() {
-    setCollectionSelection(emptySelection());
+  function clearImageSelection() {
+    setImageSelection(emptySelection());
     returnFocus();
   }
 
   // Escape in the grid: clear the selection, else close details, else clear search.
   function escapeResults() {
-    if (collectionAssets.length > 0) {
-      if (!selectionBusy) clearCollectionSelection();
+    if (selectedImages.length > 0) {
+      if (!selectionBusy) clearImageSelection();
       return;
     }
     if (selectedAsset && !showUpload) {
@@ -1095,7 +1059,7 @@ export function MediaLibrarySurface({
     setViewerReloadError("");
     setImageViewer(null);
     setRelatedSelection(previous => previous?.asset.id === asset.id ? null : previous);
-    setCollectionSelection(previous => previous.items.some(item => item.id === asset.id) ? removeSelected(previous, asset.id) : previous);
+    setImageSelection(previous => previous.items.some(item => item.id === asset.id) ? removeSelected(previous, asset.id) : previous);
     setMetadataDirty(false);
     setDeleteSuccess(asset.name);
     if (permalinkId) {
@@ -1136,9 +1100,7 @@ export function MediaLibrarySurface({
     if (id === "quick-look") { openQuickLook(asset); return; }
     if (cardsLocked) return;
     if (id === "open-full-size") { openFullSize(asset); return; }
-    if (id === "favorite") void favoriteUndo.toggle({ backend: "r2", id: asset.id }, asset.name);
-    if (id === "collect") setPickerTarget({ assets: [asset], bulk: false, opener: document.activeElement });
-    if (id === "select") changeCollectionSelection(toggleSelection(collectionSelection, asset));
+    if (id === "select") changeImageSelection(toggleSelection(imageSelection, asset));
     if (id === "delete") {
       setDeleteRequest(previous => ({ id: asset.id, count: (previous?.count ?? 0) + 1 }));
       openAsset(asset);
@@ -1146,63 +1108,13 @@ export function MediaLibrarySurface({
   }
 
   function imageSelectionActions() {
-    const actions = mediaSelectionActions({ surface: "images", count: collectionAssets.length, canEdit: canEditSelection });
-    if (!favorites.retryDisabled) return actions;
-    return actions.map(action =>
-      action.id === "favorite-add" || action.id === "favorite-remove"
-        ? { ...action, disabledReason: "Wait for the favorite save to finish." }
-        : action);
-  }
-
-  async function favoriteSelection(favorite: boolean) {
-    if (cardsLocked || favorites.retryDisabled || collectionAssets.length === 0 || collectionAssets.length > 100) return;
-    const refs: MediaFavoriteRef[] = collectionAssets.map(asset => ({ backend: "r2", id: asset.id }));
-    setFavoritesSaving(true);
-    setFavoritesStatus("");
-    setFavoritesError("");
-    try {
-      const token = await getIdToken();
-      const result = await setMediaFavorites(token, refs, favorite);
-      const changedCount = result.results.filter(item => "changed" in item && item.changed).length;
-      const unchangedCount = result.results.filter(item => "changed" in item && !item.changed).length;
-      const failed = result.results.filter(item => "error" in item);
-      const savedIds = new Set(result.results.filter(item => "changed" in item).map(item => item.ref.id));
-      const remaining = collectionAssets.filter(asset => !savedIds.has(asset.id));
-      setCollectionSelection(previous => ({ ...previous, items: previous.items.filter(asset => !savedIds.has(asset.id)) }));
-      const already = unchangedCount
-        ? `${unchangedCount} already ${favorite ? "a favorite" : "not a favorite"}.`
-        : "";
-      const missed = failed.length ? `${failed.length} could not be changed.` : "";
-      if (changedCount === 0 && failed.length > 0) {
-        setFavoritesError([already, missed].filter(Boolean).join(" "));
-      } else {
-        const verb = favorite ? "Added" : "Removed";
-        const direction = favorite ? "to" : "from";
-        setFavoritesStatus([`${verb} ${changedCount} ${direction} favorites.`, already, missed].filter(Boolean).join(" "));
-      }
-      if (remaining.length === 0) requestAnimationFrame(returnFocus);
-    } catch (error) {
-      markMediaTabCountsStale();
-      setFavoritesError(error instanceof Error ? error.message : "Favorites could not be saved. Try again.");
-    } finally {
-      favorites.reconcile();
-      publishFavoritesChange();
-      setFavoritesSaving(false);
-    }
+    return mediaSelectionActions({ surface: "images", count: selectedImages.length, canEdit: canEditSelection });
   }
 
   function selectionAction(id: MediaTileActionId) {
-    if (favoritesSaving) return;
-    if (id === "favorite-add" || id === "favorite-remove") {
-      void favoriteSelection(id === "favorite-add");
-      return;
-    }
-    if (id === "clear-selection" && !selectionBusy) clearCollectionSelection();
-    if (id === "collect" && !dirty && !metadataSaving && !showUpload) {
-      setPickerTarget({ assets: collectionAssets, bulk: true, opener: document.activeElement });
-    }
-    if (id === "edit-tags" && canEditSelection && collectionAssets.length > 0 && collectionAssets.length <= MAX_BULK_IMAGES && !bulkSession && !metadataSaving && !showUpload && !collectionPickerOpen) {
-      const assets = [...collectionAssets];
+    if (id === "clear-selection" && !selectionBusy) clearImageSelection();
+    if (id === "edit-tags" && canEditSelection && selectedImages.length > 0 && selectedImages.length <= MAX_BULK_IMAGES && !bulkSession && !metadataSaving && !showUpload) {
+      const assets = [...selectedImages];
       if (location.selectedId) {
         setPendingBulkOpen(assets);
         selectAsset(null);
@@ -1218,7 +1130,7 @@ export function MediaLibrarySurface({
     setBulkReviewDirty(false);
     if (results) {
       const completed = new Set(results.filter(row => row.status === "saved" || row.status === "unchanged").map(row => row.asset.id));
-      setCollectionSelection(previous => ({ ...previous, items: previous.items.filter(asset => !completed.has(asset.id)) }));
+      setImageSelection(previous => ({ ...previous, items: previous.items.filter(asset => !completed.has(asset.id)) }));
       const savedTags = results.filter(row => row.status === "saved").flatMap(row => row.changes.tags ?? []);
       if (savedTags.length) {
         recordRecentTags("images", savedTags, userId);
@@ -1235,13 +1147,10 @@ export function MediaLibrarySurface({
   // One owner for both layouts: a tile in its context menu, or a list row whose cells sit in
   // the same context menu (the row stays the grid's row). cardsLocked is the one guard.
   function renderTile(asset: MediaAssetSummary, context: MediaGridItemContext) {
-    const ref = { backend: "r2" as const, id: asset.id };
-    const favorite = favorites.value(ref);
-    const favoritePending = favorites.pending(ref);
     // Delete opens the confirmation in details, which offers it for uploads the role manages.
     const canDelete = asset.source === "upload" && canManageMediaMetadata(principal, asset.category);
-    const selectionMenu = context.selected && collectionAssets.length > 1 ? {
-      count: collectionAssets.length,
+    const selectionMenu = context.selected && selectedImages.length > 1 ? {
+      count: selectedImages.length,
       actions: availableSelectionActions(imageSelectionActions().filter(action => !action.disabledReason), cardsLocked, selectionBusy, allowBulkTransition),
       onAction: selectionAction,
     } : undefined;
@@ -1251,12 +1160,11 @@ export function MediaLibrarySurface({
         allowSelectionActionWhileDisabled={allowBulkTransition}
         canEditSelection={canEditSelection}
         selectionBusy={selectionBusy}
-        favoriteSettled={favorite !== undefined && !favoritePending}
         onAction={(id) => tileAction(asset, id)}
         onSelectionAction={selectionAction}
         selectionActions={imageSelectionActions().filter(action => !action.disabledReason)}
-        selectionCount={collectionAssets.length}
-        tile={{ surface: "images", name: asset.name, favorite: favorite === true, available: true, selected: context.selected, canDelete, quickLook: true, openFullSize: true, copyFileAddress: asset.kind === "image" && Boolean(asset.url) }}
+        selectionCount={selectedImages.length}
+        tile={{ surface: "images", name: asset.name, selected: context.selected, canDelete, quickLook: true, openFullSize: true, copyFileAddress: asset.kind === "image" && Boolean(asset.url) }}
       >
         {children}
       </MediaContextMenu>
@@ -1266,8 +1174,6 @@ export function MediaLibrarySurface({
       asset,
       canDelete,
       categoryLabel,
-      favorite,
-      favoritePending,
       fields: display.fields,
       onAction: (id: MediaTileActionId) => tileAction(asset, id),
       onOpen: () => openAsset(asset),
@@ -1287,8 +1193,8 @@ export function MediaLibrarySurface({
   // The selection count is announced from one always-mounted status, so the bar can come and
   // go without a live region of its own.
   const [hadSelection, setHadSelection] = useState(false);
-  if (collectionAssets.length > 0 && !hadSelection) setHadSelection(true);
-  const selectionStatus = selectionAnnouncement(collectionAssets.length, hadSelection ? 1 : 0);
+  if (selectedImages.length > 0 && !hadSelection) setHadSelection(true);
+  const selectionStatus = selectionAnnouncement(selectedImages.length, hadSelection ? 1 : 0);
   const resultQuery = state.status === "ready" ? state.query : location.query;
   const quickLookAsset = quickLook?.order.find(item => item.id === quickLook.id);
   const quickLookDisplay = quickLookAsset ? quickLookImage(quickLookAsset) : null;
@@ -1346,7 +1252,7 @@ export function MediaLibrarySurface({
         onClearAll={clearFilters}
         // More's Select this page, the same change as Cmd+A in the grid.
         onSelectPage={pageAssets.length > 0 && !cardsLocked
-          ? () => changeCollectionSelection(setPageSelection(collectionSelection, pageAssets, true))
+          ? () => changeImageSelection(setPageSelection(imageSelection, pageAssets, true))
           : undefined}
         onStateChange={(next) => writeLocation({ ...next, view: undefined })}
         onOpenRecycleBin={hasCapability(principal, "media.manage") && !cardsLocked ? () => {
@@ -1463,20 +1369,6 @@ export function MediaLibrarySurface({
         </InlineMessage>
       ) : null}
 
-      {favorites.loadError || favorites.saveError ? (
-        <InlineMessage tone="error" title="Favorites need attention">
-          <span>{favorites.loadError || favorites.saveError}</span>
-          {favorites.loadError ? (
-            <Button disabled={favorites.retryDisabled} onClick={favorites.retry}>
-              Try again
-            </Button>
-          ) : null}
-        </InlineMessage>
-      ) : null}
-
-      {favoritesStatus ? <p role="status">{favoritesStatus}</p> : null}
-      {favoritesError ? <InlineMessage tone="error" title="Favorites could not be saved">{favoritesError}</InlineMessage> : null}
-      {collectionSuccess ? <InlineMessage tone="success" title="Items added to collection">{collectionSuccess}</InlineMessage> : null}
       {permalink.error || permalinkError ? <InlineMessage tone="warning" title="Media unavailable">{permalink.error || permalinkError}</InlineMessage> : null}
       {copyResult?.status === "failed" ? (
         <InlineMessage tone="error" title="Link was not copied">
@@ -1521,16 +1413,16 @@ export function MediaLibrarySurface({
               onEscape: escapeResults,
               onOpen: openAsset,
               onQuickLook: quickLookLocked ? undefined : openQuickLook,
-              onSelectionChange: changeCollectionSelection,
+              onSelectionChange: changeImageSelection,
               renderItem: renderTile,
-              selection: collectionSelection,
+              selection: imageSelection,
             }}
             rowHeader={{
               fields: display.fields,
               pageSelection: {
-                state: pageSelectionState(collectionAssets, pageAssets),
+                state: pageSelectionState(selectedImages, pageAssets),
                 disabled: cardsLocked,
-                onChange: (checked) => changeCollectionSelection(setPageSelection(collectionSelection, pageAssets, checked)),
+                onChange: (checked) => changeImageSelection(setPageSelection(imageSelection, pageAssets, checked)),
               },
               sort: {
                 sort: location.query.sort,
@@ -1556,18 +1448,18 @@ export function MediaLibrarySurface({
               so selecting never moves the grid under the pointer. */}
           <SelectionBar
             actions={mediaBarActions(imageSelectionActions())}
-            actionsDisabled={dirty || metadataSaving || bulkSaving || favoritesSaving || showUpload || bulkSession !== null}
+            actionsDisabled={dirty || metadataSaving || bulkSaving || showUpload || bulkSession !== null}
             allowActionWhileDisabled={allowBulkTransition}
             clearDisabled={selectionBusy}
-            count={collectionAssets.length}
+            count={selectedImages.length}
             info="Selection carries across media pages and filters."
             label="Collection selection"
-            offPage={offPageCount(collectionAssets, pageAssets)}
+            offPage={offPageCount(selectedImages, pageAssets)}
             onAction={selectionAction}
-            onClear={clearCollectionSelection}
-            onPageChange={(checked) => changeCollectionSelection(setPageSelection(collectionSelection, pageAssets, checked))}
+            onClear={clearImageSelection}
+            onPageChange={(checked) => changeImageSelection(setPageSelection(imageSelection, pageAssets, checked))}
             pageDisabled={pageAssets.length === 0 || cardsLocked}
-            pageState={pageSelectionState(collectionAssets, pageAssets)}
+            pageState={pageSelectionState(selectedImages, pageAssets)}
           />
           {mayUpload && uploadTrayStarted ? (
             <UploadTray
@@ -1669,14 +1561,6 @@ export function MediaLibrarySurface({
                   />
                 </Suspense>
               ) : undefined}
-            favoriteControl={(
-              <MediaFavoriteButton
-                name={selectedAsset.name}
-                favorite={favorites.value({ backend: "r2", id: selectedAsset.id })}
-                pending={favorites.pending({ backend: "r2", id: selectedAsset.id }) || favoritesSaving}
-                onToggle={() => void favoriteUndo.toggle({ backend: "r2", id: selectedAsset.id }, selectedAsset.name)}
-              />
-            )}
           />
         ) : null}
       </div>
@@ -1745,12 +1629,6 @@ export function MediaLibrarySurface({
         pageTags={pageTags}
         recentTags={recentTags}
         saveMetadata={saveMetadata}
-        favorite={{
-          name: imageViewerAsset.name,
-          favorite: favorites.value({ backend: "r2", id: imageViewerAsset.id }),
-          pending: favorites.pending({ backend: "r2", id: imageViewerAsset.id }) || favoritesSaving,
-          onToggle: () => void favoriteUndo.toggle({ backend: "r2", id: imageViewerAsset.id }, imageViewerAsset.name),
-        }}
       /> : null}
 
       {quickLook && quickLookAsset && quickLookDisplay ? <QuickLook item={{ id: quickLookAsset.id, name: quickLookAsset.name,
@@ -1797,21 +1675,6 @@ export function MediaLibrarySurface({
           if (blocker.state === "blocked") blocker.proceed();
         }}
       /> : null}
-      {pickerTarget ? <MediaCollectionPicker
-        open
-        userId={userId}
-        refs={pickerRefs}
-        getIdToken={getIdToken}
-        onClose={() => setPickerTarget(null)}
-        focusOpener={pickerTarget.opener}
-        onFocusFallback={returnFocus}
-        onOpenCollections={() => navigate(mediaCollectionsPath())}
-        onAdded={collection => {
-          const count = pickerTarget.assets.length;
-          setPickerTarget(null);
-          if (pickerTarget.bulk) setCollectionSelection(emptySelection());
-          if (!notice.available) setCollectionSuccess(`${count} ${count === 1 ? "item was" : "items were"} added to ${collection.name}.`);
-        }} /> : null}
     </section>
   );
 }
@@ -1833,18 +1696,8 @@ function ImageMediaRoute({ audioLibrary = false, videoTransferActive = false, on
       const scopedQuery: MediaListQuery = audioLibrary ? { ...query, kinds: ["audio"] } : query;
       if (!options?.tabCounts) return cmsListMedia(token, scopedQuery, options?.signal);
       // Counts ride on this visible-page load only when the session has none or a write made
-      // them stale; they are stripped before the list result reaches the list cache. The page's
-      // favorite states ride along too, so the hearts need no second request after the list.
-      return withMediaTabCounts(async withCounts => {
-        const send = (favorites: boolean) => cmsListMedia(token, scopedQuery, options?.signal, { counts: withCounts, favorites });
-        try {
-          return await send(true);
-        } catch (error) {
-          // An older Function rejects the unknown flag; the favorites hook then asks separately.
-          if (error instanceof HttpError && error.status === 400 && /favorites/i.test(error.message)) return send(false);
-          throw error;
-        }
-      });
+      // them stale; they are stripped before the list result reaches the list cache.
+      return withMediaTabCounts(withCounts => cmsListMedia(token, scopedQuery, options?.signal, { counts: withCounts }));
     },
     [getIdToken, audioLibrary],
   );
@@ -1913,7 +1766,7 @@ export function MediaRoute({
   reloadDocument?: () => void;
 } = {}) {
   const notice = useSuccessNotice();
-  const { principal, user, userDoc } = useShell();
+  const { principal, user } = useShell();
   const { getIdToken } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
@@ -2023,9 +1876,9 @@ export function MediaRoute({
     return <Navigate to={mediaVideosPath()} replace />;
   }
 
-  // The current tab follows the route kind and source id, never a path prefix, so Collections
-  // stays current on a collection and a custom source is current only once its tab exists.
-  // Collections has no count. A missing key shows no count: never 0 and never a spinner.
+  // The current tab follows the route kind and source id, never a path prefix, so a custom
+  // source is current only once its tab exists.
+  // A missing key shows no count: never 0 and never a spinner.
   const tabs = mediaTabs({
     canUseImages: canUseMediaLibrary(principal),
     canReviewSubmissions: canReviewUgcSubmissions(principal),
@@ -2034,7 +1887,6 @@ export function MediaRoute({
       ...tabCounts.sources,
       images: tabCounts.images,
       voiceovers: tabCounts.audio,
-      favorites: tabCounts.favorites,
     },
   });
   // Images and an uploadable video source already have an upload control. Other tabs use
@@ -2104,29 +1956,6 @@ export function MediaRoute({
         </>}>
           {routedUploads.librarySession && mediaRoute.kind === "images" ? null
           : mediaRoute.kind === "submissions" ? <DeferredMediaSecondarySurface kind="submissions" />
-          : mediaRoute.kind === "favorites" ? <DeferredMediaSecondarySurface
-            kind="favorites"
-            principal={principal}
-            userId={user.uid}
-            getIdToken={getIdToken}
-            extraExitRisk={routedLibraryDirty || routedUploads.librarySession}
-            videoTransferActive={routedVideoActive || routedUploads.videoSession}
-            onDiscardExtra={() => { reportRoutedLibraryDirty(false); finishLibraryUpload(); }}
-            onDiscardVideo={() => finishVideoUpload()}
-          />
-          : mediaRoute.kind === "collections" ? <DeferredMediaSecondarySurface
-            key={user.uid}
-            kind="collections"
-            collectionId={mediaRoute.collectionId}
-            principal={principal}
-            userId={user.uid}
-            userDoc={userDoc}
-            getIdToken={getIdToken}
-            extraExitRisk={routedLibraryDirty || routedUploads.librarySession}
-            videoTransferActive={routedVideoActive || routedUploads.videoSession}
-            onDiscardExtra={() => { reportRoutedLibraryDirty(false); finishLibraryUpload(); }}
-            onDiscardVideo={() => finishVideoUpload()}
-          />
           : mediaRoute.kind === "images" || mediaRoute.kind === "voiceovers" ? <ImageMediaRoute
             audioLibrary={mediaRoute.kind === "voiceovers"}
             videoTransferActive={routedVideoActive || routedUploads.videoSession}
@@ -2155,8 +1984,6 @@ export function MediaRoute({
       </MediaSecondaryLoadBoundary>
       {routedUploads.videoSession && !routedUploads.librarySession && !(
         mediaRoute.kind === "images"
-        || mediaRoute.kind === "favorites"
-        || mediaRoute.kind === "collections"
         || mediaRoute.kind === "voiceovers"
         || mediaRoute.kind === "submissions"
         || (mediaRoute.kind === "videos" && Boolean(source) && !sourceError && !loading)
@@ -2167,7 +1994,7 @@ export function MediaRoute({
     <div className="media-workspace">
       <div className="media-workspace-bar">
         <MediaTabs tabs={tabs} currentId={currentMediaTabId(mediaRoute, sources)} />
-        {showWorkspaceUpload ? <WorkspaceUploadButton buttonRef={workspaceUploadRef} secondary={mediaRoute.kind === "collections"} /> : null}
+        {showWorkspaceUpload ? <WorkspaceUploadButton buttonRef={workspaceUploadRef} /> : null}
       </div>
       {workspaceContent}
     </div>
@@ -2296,9 +2123,7 @@ function RoutedVideoUpload({ onActiveChange, onAdmissionFailed, onDestinationUpd
   const completed = useRef<VideoUploadResult[]>([]);
   function completedBatchMessage(assets: VideoUploadResult[], label: string) {
     if (assets.length === 1) return videoUploadCompletionMessage(assets[0]);
-    const summary = `${assets.length} videos uploaded to ${label}.`;
-    return assets.some(asset => asset.collectionPlacement === "unavailable")
-      ? `${summary} Some selected collections became unavailable. Choose new collections from Videos.` : summary;
+    return `${assets.length} videos uploaded to ${label}.`;
   }
   useEffect(() => () => onActiveChange(false), [onActiveChange]);
   useEffect(() => {

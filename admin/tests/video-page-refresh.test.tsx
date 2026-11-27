@@ -52,7 +52,6 @@ beforeEach(() => {
       downloadStarted = true;
       return new Promise<Response>(resolve => { finishDownload = () => resolve(readOf("download", original.fileVersion)); });
     }
-    if (endpoint === "cmsListMediaFavorites") return Response.json({ success: true, favorites: [], states: [], records: [], nextCursor: null });
     if (endpoint === "cmsGetMediaReview") return Response.json({ success: true, review: null });
     if (endpoint === "cmsListMediaComments") return Response.json({ success: true, comments: [], nextCursor: null });
     throw new Error(`Unexpected endpoint: ${endpoint}`);

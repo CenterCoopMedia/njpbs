@@ -318,7 +318,6 @@ export function VideoViewerInspectorSpecimen({
   }));
   const [activeRef, setActiveRef] = useState({ backend: "s3" as const, sourceId: VIDEO_ASSET.sourceId, id: VIDEO_ASSET.id });
   const [open, setOpen] = useState(true);
-  const [favorites, setFavorites] = useState<string[]>([]);
   const opener = useRef<HTMLButtonElement>(null);
   const items: MediaFullViewerItem[] = assets.map(asset => ({
     ref: { backend: "s3", sourceId: asset.sourceId, id: asset.id },
@@ -327,8 +326,6 @@ export function VideoViewerInspectorSpecimen({
     footerNote: "Private media stays in the staff library.",
     actions: <MediaPreviewHeaderActions
       copyLink={`/media/videos?asset=${asset.id}`}
-      favorite={{ name: asset.name, favorite: favorites.includes(asset.id), onToggle: () => setFavorites(current =>
-        current.includes(asset.id) ? current.filter(id => id !== asset.id) : [...current, asset.id]) }}
       downloads={<Menu label="Download" tooltip="Download" icon="download" variant="primary" items={[
         { key: "web", label: "Web copy", onSelect: () => undefined },
         { key: "original", label: "Original", onSelect: () => undefined },

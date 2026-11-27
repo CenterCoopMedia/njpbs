@@ -217,9 +217,6 @@ export function operationCategoryForEndpoint(
   if (
     endpoint === "cmsListMedia" ||
     endpoint === "cmsListMediaCategories" ||
-    endpoint === "cmsListMediaFavorites" ||
-    endpoint === "cmsListMediaCollections" ||
-    endpoint === "cmsListMediaCollectionItems" ||
     endpoint === "cmsListBinnedMedia" ||
     endpoint === "cmsListMediaUsage" ||
     endpoint === "cmsCreateMediaDownload"
@@ -232,10 +229,6 @@ export function operationCategoryForEndpoint(
     endpoint === "cmsReplaceMediaBinary" ||
     endpoint === "cmsUpdateMediaMetadata" ||
     endpoint === "cmsMutateMediaCategory" ||
-    endpoint === "cmsSetMediaFavorite" ||
-    endpoint === "cmsSetMediaFavorites" ||
-    endpoint === "cmsMutateMediaCollection" ||
-    endpoint === "cmsSetMediaCollectionItems" ||
     endpoint === "cmsRestoreMedia" ||
     endpoint === "cmsSourceVideoBin" ||
     endpoint === "cmsPurgeBinnedImage"

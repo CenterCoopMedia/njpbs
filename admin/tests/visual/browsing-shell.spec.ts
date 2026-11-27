@@ -320,60 +320,16 @@ for (const tab of ["images", "voiceovers"]) {
       await expect(toolbar).toHaveCSS("padding-left", "0px");
       await expect(toolbar).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
       await expect(chrome.locator(".media-toolbar-filter .button-compact-label")).toBeVisible();
-      if (tab !== "favorites" && tab !== "collections") {
-        await expect(chrome.locator(".media-toolbar-upload .button-compact-label")).toBeVisible();
-      }
+      await expect(chrome.locator(".media-toolbar-upload .button-compact-label")).toBeVisible();
       for (const label of await chrome.locator(":is(.media-toolbar-filter, .media-toolbar-upload) .button-compact-label").all()) {
         await expect(label).toHaveCSS("clip-path", "none");
         await expect(label).toHaveCSS("position", "static");
         expect((await label.boundingBox())!.width).toBeGreaterThan(20);
       }
-      if (tab === "favorites" || tab === "collections") {
-        const upload = page.locator(".workspace-browse-toolbar").getByRole("button", { name: "Upload media", exact: true });
-        await expect(upload.locator(".button-compact-label")).toBeVisible();
-        await expect(upload.locator(".button-compact-label")).toHaveCSS("clip-path", "none");
-        await expect(upload.locator(".button-compact-label")).toHaveCSS("position", "static");
-        expect((await upload.boundingBox())!.height).toBe(36);
-        const bar = (await page.locator(".workspace-browse-toolbar").boundingBox())!;
-        const action = (await upload.boundingBox())!;
-        expect(action.x + action.width).toBeLessThanOrEqual(bar.x + bar.width - (width === 390 ? 12 : 20));
-      }
     }
     // Images search starts the meaning worker. Its dependencies must not reload
     // either document while the next direct-load tab's toolbar is being exercised.
     expect(documentNavigations).toBe(1);
-    if (tab === "favorites" || tab === "collections") {
-      const chooserPromise = page.waitForEvent("filechooser");
-      await page.getByRole("button", { name: "Upload media", exact: true }).click();
-      const chooser = await chooserPromise;
-      expect(chooser.isMultiple()).toBe(true);
-      await chooser.setFiles([]);
-    }
-  });
-}
-
-for (const tab of ["favorites", "collections"]) {
-  test(`${tab} native command order stays main then Upload when its panel mounts later`, async ({ page }) => {
-    await page.setViewportSize({ width: 1280, height: 900 });
-    await page.goto(`/gallery.html?embed=browsing-family-shell&family=media&tab=${tab}&deferPanel=1&presentation=icons&guide=1`);
-    const upload = page.locator(".workspace-browse-trailing").getByRole("button", { name: "Upload media", exact: true });
-    await expect(upload).toBeVisible();
-    await expect(page.getByRole("toolbar", { name: "Library controls", exact: true })).toHaveCount(0);
-    await page.getByRole("button", { name: "Load media fixture", exact: true }).click();
-    await expect(page.getByRole("toolbar", { name: "Library controls", exact: true })).toBeVisible();
-    for (const width of [1280, 390, 1280]) {
-      await page.setViewportSize({ width, height: 800 });
-      const chrome = page.locator(".workspace-browse-main .media-chrome");
-      if (width === 390) await expect(chrome).toHaveClass(/media-chrome-compact/);
-      else await expect(chrome).not.toHaveClass(/media-chrome-compact/);
-      const lastMain = page.locator(".workspace-browse-main").locator("button:visible:not(:disabled), input:visible:not(:disabled), select:visible:not(:disabled), a[href]:visible").last();
-      await lastMain.focus();
-      await expect(lastMain).toBeFocused();
-      await page.keyboard.press("Tab");
-      await expect(upload).toBeFocused();
-      await page.keyboard.press("Shift+Tab");
-      await expect(lastMain).toBeFocused();
-    }
   });
 }
 

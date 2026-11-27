@@ -4,22 +4,16 @@ import { createMemoryRouter, RouterProvider } from "react-router";
 import { SourceMediaLibrary } from "../src/routes/SourceMediaLibrary";
 import { createSourceMediaRead, listSourceMedia, updateSourceMediaMetadata, type MediaSourceSummary, type SourceMediaAssetSummary, type SourceMediaRead } from "../src/lib/source-media";
 import { clearMediaSessionCache } from "../src/lib/media-session-cache";
-import type { MediaFavoriteRef } from "../src/lib/media-favorites";
 
 // Choosing Delete from library in a card menu opens the viewer at its delete confirmation.
 // That intent must not outlive the viewer: a later open from a meaning-search result must
 // start at the video, not at a deletion prompt for an unrelated video.
 
-const { getIdToken, listFavoriteStates } = vi.hoisted(() => ({
+const { getIdToken } = vi.hoisted(() => ({
   getIdToken: vi.fn().mockResolvedValue("staff-token"),
-  listFavoriteStates: vi.fn(),
 }));
 
 vi.mock("../src/lib/source-media", () => ({ createSourceMediaRead: vi.fn(), deleteSourceMedia: vi.fn(), listSourceMedia: vi.fn(), updateSourceMediaMetadata: vi.fn() }));
-vi.mock("../src/lib/media-favorites", () => ({
-  listMediaFavoriteStates: (...args: unknown[]) => listFavoriteStates(...args),
-  setMediaFavorite: vi.fn(),
-}));
 const other: { current: SourceMediaAssetSummary | null } = { current: null };
 vi.mock("../src/components/VideoMeaningSearch", () => ({
   VideoMeaningSearch: ({ onOpen }: { onOpen: (asset: SourceMediaAssetSummary, seconds: number) => void }) => (
@@ -60,7 +54,6 @@ beforeEach(() => {
   installMediaFeedbackFetch();
   other.current = second;
   vi.mocked(listSourceMedia).mockResolvedValue({ success: true, records: [asset, second], nextCursor: null, hasMore: false, total: 2 });
-  listFavoriteStates.mockImplementation(async (_token: string, refs: MediaFavoriteRef[]) => ({ success: true, states: refs.map(ref => ({ ref, favorite: false })) }));
   vi.mocked(createSourceMediaRead).mockImplementation(async (_token, _sourceId, assetId, action) => mediaRead(action, assetId));
 });
 afterEach(() => {

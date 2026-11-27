@@ -1,8 +1,6 @@
 import { clearEmulatorFirestore } from "../helpers/emulator-firestore.js";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { Timestamp } from "firebase-admin/firestore";
 import adminPkg from "../helpers/firebase-admin.js";
-import favoriteContract from "../../functions/lib/media-favorites.js";
 import {
   assertMigrationEnvironment,
   migrateVoiceoversToMedia,
@@ -17,7 +15,6 @@ import {
 const admin = adminPkg;
 const PROJECT = "demo-njpbs";
 const COMPLETION_PATH = "system/voiceoverMediaMigrationV1";
-const { favoriteDocumentId } = favoriteContract;
 let db;
 
 async function clearFirestore() {
@@ -43,17 +40,13 @@ async function sourceSnapshot() {
 }
 
 async function migrationTargetSnapshot() {
-  const [media, favorites, discovery, completion] = await Promise.all([
+  const [media, discovery, completion] = await Promise.all([
     db.collection("media_assets").get(),
-    db.collectionGroup("items").get(),
     db.doc("system/mediaDiscovery").get(),
     db.doc(COMPLETION_PATH).get(),
   ]);
   return {
     media: media.docs
-      .map((document) => [document.ref.path, document.data()])
-      .sort(([left], [right]) => left.localeCompare(right)),
-    favorites: favorites.docs
       .map((document) => [document.ref.path, document.data()])
       .sort(([left], [right]) => left.localeCompare(right)),
     discovery: discovery.data(),
@@ -68,11 +61,6 @@ function migrationOptions(overrides = {}) {
     nowIso: FIXTURE_NOW,
     ...overrides,
   };
-}
-
-function favoritePath(uid, takeId) {
-  const ref = { backend: "r2", id: `voiceover-${takeId}` };
-  return `mediaFavorites/${uid}/items/${favoriteDocumentId(ref)}`;
 }
 
 function firestoreWithTransactionRace(firestore, mutate, transactionNumber = 1) {
@@ -119,7 +107,7 @@ describe("voiceover media migration", () => {
       before = await sourceSnapshot();
     });
 
-    it("dry-runs all 196 assets and favorite writes without changing Firestore", async () => {
+    it("dry-runs all 196 assets without changing Firestore", async () => {
 
       const result = await migrateVoiceoversToMedia(migrationOptions());
 
@@ -146,15 +134,6 @@ describe("voiceover media migration", () => {
           skipped: 0,
           conflicts: 0,
         },
-        favorites: {
-          planned: 2,
-          created: 0,
-          verified: 0,
-          retained: 1,
-          deleted: 0,
-          skipped: 0,
-          conflicts: 0,
-        },
         discoveryRevision: { planned: 8, updated: 0 },
         completion: {
           planned: 1,
@@ -165,21 +144,19 @@ describe("voiceover media migration", () => {
           skipped: 0,
           conflicts: 0,
         },
-        plannedWrites: 207,
+        plannedWrites: 205,
       });
       expect((await db.collection("media_assets").get()).empty).toBe(true);
-      expect((await db.collectionGroup("items").get()).size).toBe(1);
       expect((await db.doc("system/mediaDiscovery").get()).exists).toBe(false);
       expect((await db.doc(COMPLETION_PATH).get()).exists).toBe(false);
       expect(await sourceSnapshot()).toEqual(before);
-      expect((await db.doc(fixture.existingFavoritePath).get()).exists).toBe(true);
       const serialized = JSON.stringify(result);
       expect(serialized).not.toContain(fixture.takes[0].objectKey);
       expect(serialized).not.toContain(fixture.takes[0].contentHash);
       expect(serialized).not.toContain("Warm delivery.");
     });
 
-    it("applies the canonical assets and favorites, then verifies an exact rerun", async () => {
+    it("applies the canonical assets, then verifies an exact rerun", async () => {
       const categoryBefore = (await db.doc(
         `mediaCategories/${FIXTURE_CATEGORY}`,
       ).get()).data();
@@ -187,17 +164,10 @@ describe("voiceover media migration", () => {
       const applied = await migrateVoiceoversToMedia(migrationOptions({ apply: true }));
 
       expect(applied.media).toMatchObject({ planned: 196, created: 196, verified: 0 });
-      expect(applied.favorites).toMatchObject({
-        planned: 2,
-        created: 2,
-        verified: 0,
-        retained: 1,
-      });
       expect(applied.discoveryRevision).toEqual({ planned: 8, updated: 8 });
       expect(applied.completion).toMatchObject({ planned: 1, created: 1 });
-      expect(applied.plannedWrites).toBe(207);
+      expect(applied.plannedWrites).toBe(205);
       expect((await db.collection("media_assets").get()).size).toBe(196);
-      expect((await db.collectionGroup("items").get()).size).toBe(3);
       expect((await db.doc("system/mediaDiscovery").get()).data().revision).toBe(8);
       const completionMarker = (await db.doc(COMPLETION_PATH).get()).data();
       expect(completionMarker).toMatchObject({
@@ -277,12 +247,6 @@ describe("voiceover media migration", () => {
         nowIso: "2026-10-05T15:00:00.000Z",
       }));
       expect(rerun.media).toMatchObject({ planned: 0, created: 0, verified: 196 });
-      expect(rerun.favorites).toMatchObject({
-        planned: 0,
-        created: 0,
-        verified: 2,
-        retained: 1,
-      });
       expect(rerun.discoveryRevision).toEqual({ planned: 0, updated: 0 });
       expect(rerun.completion).toMatchObject({ planned: 0, verified: 1 });
       expect(rerun.plannedWrites).toBe(0);
@@ -293,7 +257,7 @@ describe("voiceover media migration", () => {
   });
 
   it("aborts an apply when a source take changes after preflight", async () => {
-    const fixture = await seedVoiceoverMediaFixture(db, { seedExistingFavorite: false });
+    const fixture = await seedVoiceoverMediaFixture(db);
     const changedTake = [...fixture.takes]
       .sort((left, right) => left.id.localeCompare(right.id))[0];
     const raced = firestoreWithTransactionRace(db, async () => {
@@ -307,12 +271,11 @@ describe("voiceover media migration", () => {
       firestore: raced,
     })).rejects.toThrow(/Voiceover source changed/);
     expect((await db.collection("media_assets").get()).empty).toBe(true);
-    expect((await db.collectionGroup("items").get()).empty).toBe(true);
     expect((await db.doc("system/mediaDiscovery").get()).exists).toBe(false);
   });
 
   it("aborts an apply when the active category changes after preflight", async () => {
-    await seedVoiceoverMediaFixture(db, { seedExistingFavorite: false });
+    await seedVoiceoverMediaFixture(db);
     const raced = firestoreWithTransactionRace(db, async () => {
       await db.doc(`mediaCategories/${FIXTURE_CATEGORY}`).update({ active: false });
     });
@@ -322,12 +285,11 @@ describe("voiceover media migration", () => {
       firestore: raced,
     })).rejects.toThrow(/Media category changed/);
     expect((await db.collection("media_assets").get()).empty).toBe(true);
-    expect((await db.collectionGroup("items").get()).empty).toBe(true);
     expect((await db.doc("system/mediaDiscovery").get()).exists).toBe(false);
   });
 
   it("aborts an apply when a missing target appears after preflight", async () => {
-    const fixture = await seedVoiceoverMediaFixture(db, { seedExistingFavorite: false });
+    const fixture = await seedVoiceoverMediaFixture(db);
     const changedTake = [...fixture.takes]
       .sort((left, right) => left.id.localeCompare(right.id))[0];
     const targetPath = `media_assets/voiceover-${changedTake.id}`;
@@ -340,37 +302,7 @@ describe("voiceover media migration", () => {
       firestore: raced,
     })).rejects.toThrow(/Media asset collision/);
     expect((await db.collection("media_assets").get()).size).toBe(1);
-    expect((await db.collectionGroup("items").get()).empty).toBe(true);
     expect((await db.doc("system/mediaDiscovery").get()).exists).toBe(false);
-  });
-
-  it("does not create a favorite when its review changes after preflight", async () => {
-    const fixture = await seedVoiceoverMediaFixture(db, { seedExistingFavorite: false });
-    const reviewPath = `voiceoverReviews/reviewer-a/takes/${fixture.takes[0].id}`;
-    const raced = firestoreWithTransactionRace(db, async () => {
-      await db.doc(reviewPath).update({
-        favorite: false,
-        version: 2,
-        updatedAt: "2026-10-04T16:30:00.000Z",
-      });
-    });
-
-    await expect(migrateVoiceoversToMedia({
-      ...migrationOptions({ apply: true }),
-      firestore: raced,
-    })).rejects.toThrow(/Voiceover review changed/);
-    expect((await db.doc(favoritePath("reviewer-a", fixture.takes[0].id)).get()).exists)
-      .toBe(false);
-    expect((await db.collectionGroup("items").get()).empty).toBe(true);
-    expect((await db.collection("media_assets").get()).size).toBe(196);
-    expect((await db.doc(COMPLETION_PATH).get()).exists).toBe(false);
-
-    const resumed = await migrateVoiceoversToMedia(migrationOptions({ apply: true }));
-    expect(resumed.media).toMatchObject({ planned: 0, verified: 196 });
-    expect(resumed.favorites).toMatchObject({ planned: 2, created: 2 });
-    expect(resumed.completion).toMatchObject({ planned: 1, created: 1 });
-    expect(resumed.plannedWrites).toBe(3);
-    expect((await db.doc(COMPLETION_PATH).get()).exists).toBe(true);
   });
 
   it("accepts unmapped personal review edits on a completed rerun", async () => {
@@ -387,12 +319,6 @@ describe("voiceover media migration", () => {
     const rerun = await migrateVoiceoversToMedia(migrationOptions({ apply: true }));
 
     expect(rerun.media).toMatchObject({ planned: 0, verified: 196 });
-    expect(rerun.favorites).toMatchObject({
-      planned: 0,
-      verified: 2,
-      retained: 1,
-      conflicts: 0,
-    });
     expect(rerun.completion).toMatchObject({ planned: 0, verified: 1 });
     expect(rerun.plannedWrites).toBe(0);
     expect((await db.doc(reviewPath).get()).data()).toMatchObject({
@@ -405,17 +331,12 @@ describe("voiceover media migration", () => {
   it("does not let completion suppress a changed source collision", async () => {
     const fixture = await seedVoiceoverMediaFixture(db);
     await migrateVoiceoversToMedia(migrationOptions({ apply: true }));
-    const removedPath = favoritePath("reviewer-a", fixture.takes[0].id);
-    await Promise.all([
-      db.doc(removedPath).delete(),
-      db.doc(`voiceoverTakes/${fixture.takes[0].id}`).update({
-        updatedAt: "2026-10-04T18:00:00.000Z",
-      }),
-    ]);
+    await db.doc(`voiceoverTakes/${fixture.takes[0].id}`).update({
+      updatedAt: "2026-10-04T18:00:00.000Z",
+    });
 
     await expect(migrateVoiceoversToMedia(migrationOptions({ apply: true })))
       .rejects.toThrow(/completion marker collision/);
-    expect((await db.doc(removedPath).get()).exists).toBe(false);
     expect((await db.doc(COMPLETION_PATH).get()).exists).toBe(true);
   });
 
@@ -443,15 +364,12 @@ describe("voiceover media migration", () => {
   });
 
   it("rolls back only owned unchanged records and keeps every legacy source", async () => {
-    const fixture = await seedVoiceoverMediaFixture(db);
+    await seedVoiceoverMediaFixture(db);
     const before = await sourceSnapshot();
     await migrateVoiceoversToMedia(migrationOptions({ apply: true }));
 
-    const favoritesBefore = (await migrationTargetSnapshot()).favorites;
-
     const dryRun = await migrateVoiceoversToMedia(migrationOptions({ rollback: true }));
     expect(dryRun.media).toMatchObject({ planned: 196, deleted: 0, conflicts: 0 });
-    expect(dryRun.favorites).toMatchObject({ planned: 0, deleted: 0, retained: 3, conflicts: 0 });
     expect(dryRun.discoveryRevision).toEqual({ planned: 8, updated: 0 });
     expect(dryRun.completion).toMatchObject({ planned: 0, deleted: 0, retained: 1 });
     expect(dryRun.plannedWrites).toBe(204);
@@ -466,16 +384,12 @@ describe("voiceover media migration", () => {
       retained: 0,
       conflicts: 0,
     });
-    expect(rolledBack.favorites).toMatchObject({ planned: 0, deleted: 0, retained: 3, conflicts: 0 });
     expect(rolledBack.discoveryRevision).toEqual({ planned: 8, updated: 8 });
     expect(rolledBack.completion).toMatchObject({ planned: 0, deleted: 0, retained: 1 });
     expect((await db.collection("media_assets").get()).empty).toBe(true);
-    expect((await db.collectionGroup("items").get()).size).toBe(3);
-    expect((await db.doc(fixture.existingFavoritePath).get()).exists).toBe(true);
     expect((await db.doc("system/mediaDiscovery").get()).data().revision).toBe(16);
     expect((await db.doc(COMPLETION_PATH).get()).exists).toBe(true);
     expect(await sourceSnapshot()).toEqual(before);
-    expect((await migrationTargetSnapshot()).favorites).toEqual(favoritesBefore);
   });
 
   it("plans one-record transaction chunks without writes", async () => {
@@ -489,12 +403,10 @@ describe("voiceover media migration", () => {
 
     expect(dryRun.chunkSize).toBe(1);
     expect(dryRun.media).toMatchObject({ planned: 196, created: 0 });
-    expect(dryRun.favorites).toMatchObject({ planned: 2, created: 0, retained: 1 });
     expect(dryRun.discoveryRevision).toEqual({ planned: 196, updated: 0 });
     expect(dryRun.completion).toMatchObject({ planned: 1, created: 0 });
-    expect(dryRun.plannedWrites).toBe(395);
+    expect(dryRun.plannedWrites).toBe(393);
     expect((await db.collection("media_assets").get()).empty).toBe(true);
-    expect((await db.collectionGroup("items").get()).size).toBe(1);
     expect((await db.doc(COMPLETION_PATH).get()).exists).toBe(false);
     expect(await sourceSnapshot()).toEqual(legacyBefore);
   });
@@ -513,10 +425,9 @@ describe("voiceover media migration", () => {
 
     expect(applied.chunkSize).toBe(1);
     expect(applied.media).toMatchObject({ planned: 196, created: 196 });
-    expect(applied.favorites).toMatchObject({ planned: 2, created: 2, retained: 1 });
     expect(applied.discoveryRevision).toEqual({ planned: 196, updated: 196 });
     expect(applied.completion).toMatchObject({ planned: 1, created: 1 });
-    expect(applied.plannedWrites).toBe(395);
+    expect(applied.plannedWrites).toBe(393);
     expect((await db.doc("system/mediaDiscovery").get()).data().revision).toBe(196);
     expect(await sourceSnapshot()).toEqual(legacyBefore);
 
@@ -527,7 +438,6 @@ describe("voiceover media migration", () => {
 
     expect(rerun.chunkSize).toBe(1);
     expect(rerun.media).toMatchObject({ planned: 0, verified: 196 });
-    expect(rerun.favorites).toMatchObject({ planned: 0, verified: 2, retained: 1 });
     expect(rerun.discoveryRevision).toEqual({ planned: 0, updated: 0 });
     expect(rerun.completion).toMatchObject({ planned: 0, verified: 1 });
     expect(rerun.plannedWrites).toBe(0);
@@ -535,15 +445,14 @@ describe("voiceover media migration", () => {
   });
 
   describe("one-record rollback", () => {
-    let fixture;
     let legacyBefore;
 
     beforeEach(async () => {
-      fixture = await seedVoiceoverMediaFixture(db);
+      await seedVoiceoverMediaFixture(db);
       legacyBefore = await sourceSnapshot();
       const setup = await migrateVoiceoversToMedia(migrationOptions({ apply: true }));
       expect(setup.chunkSize).toBe(25);
-      expect(setup.plannedWrites).toBe(207);
+      expect(setup.plannedWrites).toBe(205);
       expect(await sourceSnapshot()).toEqual(legacyBefore);
     });
 
@@ -556,14 +465,11 @@ describe("voiceover media migration", () => {
 
       expect(rolledBack.chunkSize).toBe(1);
       expect(rolledBack.media).toMatchObject({ planned: 196, deleted: 196 });
-      expect(rolledBack.favorites).toMatchObject({ planned: 0, deleted: 0, retained: 3, conflicts: 0 });
       expect(rolledBack.discoveryRevision).toEqual({ planned: 196, updated: 196 });
       expect(rolledBack.completion).toMatchObject({ planned: 0, deleted: 0, retained: 1 });
       expect(rolledBack.plannedWrites).toBe(392);
       expect((await db.doc("system/mediaDiscovery").get()).data().revision).toBe(204);
       expect((await db.collection("media_assets").get()).empty).toBe(true);
-      expect((await db.collectionGroup("items").get()).size).toBe(3);
-      expect((await db.doc(fixture.existingFavoritePath).get()).exists).toBe(true);
       expect((await db.doc(COMPLETION_PATH).get()).exists).toBe(true);
       expect(await sourceSnapshot()).toEqual(legacyBefore);
     });
@@ -573,14 +479,8 @@ describe("voiceover media migration", () => {
     const fixture = await seedVoiceoverMediaFixture(db);
     await migrateVoiceoversToMedia(migrationOptions({ apply: true }));
     const editedAssetPath = `media_assets/voiceover-${fixture.takes[0].id}`;
-    const editedFavoritePath = favoritePath("reviewer-a", fixture.takes[0].id);
     const raced = firestoreWithTransactionRace(db, async () => {
-      await Promise.all([
-        db.doc(editedAssetPath).update({ name: "Staff-edited voiceover", version: 2 }),
-        db.doc(editedFavoritePath).update({
-          createdAt: Timestamp.fromDate(new Date("2026-10-04T16:00:00.000Z")),
-        }),
-      ]);
+      await db.doc(editedAssetPath).update({ name: "Staff-edited voiceover", version: 2 });
     });
 
     const result = await migrateVoiceoversToMedia({
@@ -595,7 +495,6 @@ describe("voiceover media migration", () => {
       skipped: 1,
       conflicts: 1,
     });
-    expect(result.favorites).toMatchObject({ planned: 0, deleted: 0, retained: 3, conflicts: 0 });
     expect(result.completion).toMatchObject({
       planned: 0,
       deleted: 0,
@@ -606,9 +505,7 @@ describe("voiceover media migration", () => {
       name: "Staff-edited voiceover",
       version: 2,
     });
-    expect((await db.doc(editedFavoritePath).get()).exists).toBe(true);
     expect((await db.collection("media_assets").get()).size).toBe(1);
-    expect((await db.collectionGroup("items").get()).size).toBe(3);
     expect((await db.doc(COMPLETION_PATH).get()).exists).toBe(true);
   });
 
@@ -618,7 +515,6 @@ describe("voiceover media migration", () => {
     const changedTake = fixture.takes[0];
     const changedAssetPath = `media_assets/voiceover-${changedTake.id}`;
     const changedReviewPath = `voiceoverReviews/reviewer-a/takes/${changedTake.id}`;
-    const changedFavoritePath = favoritePath("reviewer-a", changedTake.id);
     const raced = firestoreWithTransactionRace(db, async () => {
       await Promise.all([
         db.doc(`voiceoverTakes/${changedTake.id}`).update({
@@ -644,7 +540,6 @@ describe("voiceover media migration", () => {
       skipped: 1,
       conflicts: 1,
     });
-    expect(result.favorites).toMatchObject({ planned: 0, deleted: 0, retained: 3, conflicts: 0 });
     expect(result.completion).toMatchObject({
       planned: 0,
       deleted: 0,
@@ -652,7 +547,6 @@ describe("voiceover media migration", () => {
       skipped: 1,
     });
     expect((await db.doc(changedAssetPath).get()).exists).toBe(true);
-    expect((await db.doc(changedFavoritePath).get()).exists).toBe(true);
     expect((await db.doc(changedReviewPath).get()).data()).toMatchObject({
       notes: "Changed after rollback preflight.",
       version: 2,
@@ -668,64 +562,25 @@ describe("voiceover media migration", () => {
       await migrateVoiceoversToMedia(migrationOptions({ apply: true }));
     });
 
-    it("preserves a shared un-favorite after the migration completes", async () => {
-      const removedPath = favoritePath("reviewer-a", fixture.takes[0].id);
-      await db.doc(removedPath).delete();
-
-      const rerun = await migrateVoiceoversToMedia(migrationOptions({ apply: true }));
-
-      expect(rerun.media).toMatchObject({ planned: 0, verified: 196 });
-      expect(rerun.favorites).toMatchObject({
-        planned: 0,
-        created: 0,
-        verified: 1,
-        retained: 2,
-        skipped: 1,
-      });
-      expect(rerun.completion).toMatchObject({ planned: 0, verified: 1 });
-      expect(rerun.plannedWrites).toBe(0);
-      expect((await db.doc(removedPath).get()).exists).toBe(false);
-      expect((await db.doc(
-        `voiceoverReviews/reviewer-a/takes/${fixture.takes[0].id}`,
-      ).get()).data().favorite).toBe(true);
-    });
-
     describe("reapply after clean rollback", () => {
-      let favoritesBefore;
       beforeEach(async () => {
-        favoritesBefore = (await migrationTargetSnapshot()).favorites;
         const rolledBack = await migrateVoiceoversToMedia(migrationOptions({ rollback: true, apply: true }));
         expect(rolledBack.plannedWrites).toBe(204);
         expect(rolledBack.completion).toMatchObject({ planned: 0, deleted: 0, retained: 1 });
       });
 
-      it("preserves a canonical un-favorite made after clean rollback", async () => {
-        const path = favoritePath("reviewer-a", fixture.takes[0].id);
-        await db.doc(path).delete();
-        const before = await sourceSnapshot();
-        const reapplied = await migrateVoiceoversToMedia(migrationOptions({ apply: true }));
-        expect(reapplied.plannedWrites).toBe(204);
-        expect(reapplied.favorites).toMatchObject({ planned: 0, skipped: 1 });
-        expect((await db.doc(path).get()).exists).toBe(false);
-        expect(await sourceSnapshot()).toEqual(before);
-      });
-
-      it("keeps shared favorites authoritative after historical review changes", async () => {
+      it("recreates media after historical review changes", async () => {
         await db.doc(`voiceoverReviews/reviewer-a/takes/${fixture.takes[0].id}`).update({ favorite: false });
         await db.doc(`voiceoverReviews/reviewer-b/takes/${fixture.takes[1].id}`).update({ createdAt: "2026-10-04T18:00:00.000Z" });
         const before = await sourceSnapshot();
         const reapplied = await migrateVoiceoversToMedia(migrationOptions({ apply: true }));
         expect(reapplied.plannedWrites).toBe(204);
-        expect(reapplied.favorites.planned).toBe(0);
-        expect((await migrationTargetSnapshot()).favorites).toEqual(favoritesBefore);
         expect(await sourceSnapshot()).toEqual(before);
       });
     });
 
     describe("resume interrupted rollback", () => {
-      let favoritesBefore;
       beforeEach(async () => {
-        favoritesBefore = (await migrationTargetSnapshot()).favorites;
         const interrupted = firestoreWithTransactionRace(db, async () => {
           throw new Error("Simulated rollback interruption");
         }, 2);
@@ -735,25 +590,20 @@ describe("voiceover media migration", () => {
         })).rejects.toThrow("Simulated rollback interruption");
         expect((await db.collection("media_assets").get()).size).toBe(171);
       });
-      it("finishes a partial rollback without deleting shared favorites", async () => {
+      it("finishes a partial rollback", async () => {
         const result = await migrateVoiceoversToMedia(migrationOptions({ rollback: true, apply: true }));
         expect(result.media).toMatchObject({ planned: 171, deleted: 171, conflicts: 0 });
-        expect(result.favorites).toMatchObject({ planned: 0, deleted: 0, retained: 3, conflicts: 0 });
         expect(result.completion).toMatchObject({ planned: 0, deleted: 0, retained: 1 });
         expect(result.plannedWrites).toBe(178);
         expect((await db.collection("media_assets").get()).empty).toBe(true);
         expect((await db.doc(COMPLETION_PATH).get()).exists).toBe(true);
-        expect((await migrationTargetSnapshot()).favorites).toEqual(favoritesBefore);
         const rerun = await migrateVoiceoversToMedia(migrationOptions({ rollback: true, apply: true }));
         expect(rerun.plannedWrites).toBe(0);
-        expect((await migrationTargetSnapshot()).favorites).toEqual(favoritesBefore);
       });
     });
 
     describe("resume resolved rollback conflict", () => {
-      let favoritesBefore;
       beforeEach(async () => {
-        favoritesBefore = (await migrationTargetSnapshot()).favorites;
         const target = db.doc(`media_assets/voiceover-${fixture.takes[0].id}`);
         const original = (await target.get()).data();
         await target.update({ name: "Staff edit", version: 2 });
@@ -765,11 +615,9 @@ describe("voiceover media migration", () => {
       it("finishes rollback after the original asset conflict is resolved", async () => {
         const result = await migrateVoiceoversToMedia(migrationOptions({ rollback: true, apply: true }));
         expect(result.media).toMatchObject({ planned: 1, deleted: 1, conflicts: 0 });
-        expect(result.favorites).toMatchObject({ planned: 0, deleted: 0, retained: 3, conflicts: 0 });
         expect(result.completion).toMatchObject({ planned: 0, deleted: 0, retained: 1 });
         expect(result.plannedWrites).toBe(2);
         expect((await db.doc(COMPLETION_PATH).get()).exists).toBe(true);
-        expect((await migrationTargetSnapshot()).favorites).toEqual(favoritesBefore);
       });
     });
 
@@ -792,64 +640,9 @@ describe("voiceover media migration", () => {
       expect((await db.doc(COMPLETION_PATH).get()).exists).toBe(true);
     });
 
-    describe("staff removed a shared favorite", () => {
-      let removedFavoritePath;
-      let before;
-
-      beforeEach(async () => {
-        removedFavoritePath = favoritePath("reviewer-a", fixture.takes[0].id);
-        await db.doc(removedFavoritePath).delete();
-        before = await sourceSnapshot();
-      });
-
-      it("dry-runs rollback with a missing favorite as a conflict", async () => {
-        const result = await migrateVoiceoversToMedia(migrationOptions({ rollback: true }));
-        expect(result.favorites).toMatchObject({ planned: 0, deleted: 0, retained: 3, conflicts: 1 });
-        expect(result.completion).toMatchObject({ planned: 0, retained: 1 });
-        expect(result.plannedWrites).toBe(204);
-        expect((await db.doc(COMPLETION_PATH).get()).exists).toBe(true);
-      });
-
-      it("retains the marker after rollback of a removed shared favorite", async () => {
-        const result = await migrateVoiceoversToMedia(migrationOptions({ rollback: true, apply: true }));
-        expect(result.completion).toMatchObject({ planned: 0, deleted: 0, retained: 1 });
-        expect((await db.doc(COMPLETION_PATH).get()).exists).toBe(true);
-        expect((await db.doc(fixture.existingFavoritePath).get()).exists).toBe(true);
-        expect(await sourceSnapshot()).toEqual(before);
-      });
-
-      describe("rerun after rollback", () => {
-        beforeEach(async () => {
-          await migrateVoiceoversToMedia(migrationOptions({ rollback: true, apply: true }));
-        });
-
-        it("does not resurrect the staff member's removed favorite", async () => {
-          await migrateVoiceoversToMedia(migrationOptions({ apply: true }));
-          expect((await db.doc(removedFavoritePath).get()).exists).toBe(false);
-          expect((await db.doc(`voiceoverReviews/reviewer-a/takes/${fixture.takes[0].id}`).get()).data().favorite)
-            .toBe(true);
-          expect(await sourceSnapshot()).toEqual(before);
-        });
-      });
-    });
-
-    it("retains the rollback marker if a preexisting favorite is removed after preflight", async () => {
-      const before = await sourceSnapshot();
-      const raced = firestoreWithTransactionRace(db, async () => {
-        await db.doc(fixture.existingFavoritePath).delete();
-      });
-      const result = await migrateVoiceoversToMedia({
-        ...migrationOptions({ rollback: true, apply: true }),
-        firestore: raced,
-      });
-      expect(result.completion).toMatchObject({ planned: 0, deleted: 0, retained: 1, conflicts: 1 });
-      expect((await db.doc(COMPLETION_PATH).get()).exists).toBe(true);
-      expect((await db.doc(fixture.existingFavoritePath).get()).exists).toBe(false);
-      expect(await sourceSnapshot()).toEqual(before);
-    });
   });
 
-  it("preserves shared favorites after an unmapped personal review edit", async () => {
+  it("rolls back after an unmapped personal review edit", async () => {
     const fixture = await seedVoiceoverMediaFixture(db);
     await migrateVoiceoversToMedia(migrationOptions({ apply: true }));
     const reviewPath = `voiceoverReviews/reviewer-a/takes/${fixture.takes[0].id}`;
@@ -871,12 +664,9 @@ describe("voiceover media migration", () => {
       deleted: 196,
       conflicts: 0,
     });
-    expect(result.favorites).toMatchObject({ planned: 0, deleted: 0, retained: 3, conflicts: 0 });
     expect(result.completion).toMatchObject({ planned: 0, deleted: 0, retained: 1 });
     expect(result.plannedWrites).toBe(204);
     expect((await db.collection("media_assets").get()).empty).toBe(true);
-    expect((await db.collectionGroup("items").get()).size).toBe(3);
-    expect((await db.doc(fixture.existingFavoritePath).get()).exists).toBe(true);
     expect((await db.doc(COMPLETION_PATH).get()).exists).toBe(true);
     expect(await sourceSnapshot()).toEqual(legacyAfterEdit);
   });
@@ -894,7 +684,6 @@ describe("voiceover media migration", () => {
     });
 
     expect(result.media).toMatchObject({ planned: 196, deleted: 196 });
-    expect(result.favorites).toMatchObject({ planned: 0, deleted: 0, retained: 3, conflicts: 0 });
     expect(result.completion).toMatchObject({
       planned: 0,
       deleted: 0,
@@ -910,7 +699,6 @@ describe("voiceover media migration", () => {
     const changedTake = fixture.takes[0];
     const changedAssetPath = `media_assets/voiceover-${changedTake.id}`;
     const changedReviewPath = `voiceoverReviews/reviewer-a/takes/${changedTake.id}`;
-    const changedFavoritePath = favoritePath("reviewer-a", changedTake.id);
     await Promise.all([
       db.doc(`voiceoverTakes/${changedTake.id}`).update({
         updatedAt: "2026-10-04T17:00:00.000Z",
@@ -934,7 +722,6 @@ describe("voiceover media migration", () => {
       skipped: 1,
       conflicts: 1,
     });
-    expect(result.favorites).toMatchObject({ planned: 0, deleted: 0, retained: 3, conflicts: 0 });
     expect(result.completion).toMatchObject({
       planned: 0,
       deleted: 0,
@@ -942,7 +729,6 @@ describe("voiceover media migration", () => {
       skipped: 1,
     });
     expect((await db.doc(changedAssetPath).get()).exists).toBe(true);
-    expect((await db.doc(changedFavoritePath).get()).exists).toBe(true);
     expect((await db.doc(changedReviewPath).get()).data()).toMatchObject({
       favorite: false,
       version: 2,
@@ -950,28 +736,13 @@ describe("voiceover media migration", () => {
     expect((await db.doc(COMPLETION_PATH).get()).exists).toBe(true);
   });
 
-  it("fails the full preflight before writes on asset or favorite collisions", async () => {
-    const fixture = await seedVoiceoverMediaFixture(db, { seedExistingFavorite: false });
+  it("fails the full preflight before writes on an asset collision", async () => {
+    const fixture = await seedVoiceoverMediaFixture(db);
     const firstId = `voiceover-${fixture.takes[0].id}`;
     await db.doc(`media_assets/${firstId}`).set({ id: firstId, source: "other" });
     await expect(migrateVoiceoversToMedia(migrationOptions({ apply: true })))
       .rejects.toThrow(/Media asset collision/);
     expect((await db.collection("media_assets").get()).size).toBe(1);
-    expect((await db.collectionGroup("items").get()).empty).toBe(true);
-
-    await clearFirestore();
-    const favoriteFixture = await seedVoiceoverMediaFixture(db, {
-      seedExistingFavorite: false,
-    });
-    await db.doc(favoritePath("reviewer-a", favoriteFixture.takes[0].id)).set({
-      ref: { backend: "r2", id: "different-id" },
-      canonicalRef: "r2:different-id",
-      createdAt: Timestamp.fromDate(new Date(FIXTURE_NOW)),
-    });
-    await expect(migrateVoiceoversToMedia(migrationOptions({ apply: true })))
-      .rejects.toThrow(/Media favorite collision/);
-    expect((await db.collection("media_assets").get()).empty).toBe(true);
-    expect((await db.collectionGroup("items").get()).size).toBe(1);
   });
 
   it.each([
@@ -1004,17 +775,16 @@ describe("voiceover media migration", () => {
       },
     },
   ])("rejects a completion marker with a conflicting $label", async ({ marker }) => {
-    await seedVoiceoverMediaFixture(db, { seedExistingFavorite: false });
+    await seedVoiceoverMediaFixture(db);
     await db.doc(COMPLETION_PATH).set(marker);
 
     await expect(migrateVoiceoversToMedia(migrationOptions({ apply: true })))
       .rejects.toThrow(/completion marker collision/);
     expect((await db.collection("media_assets").get()).empty).toBe(true);
-    expect((await db.collectionGroup("items").get()).empty).toBe(true);
   });
 
   it("rechecks a newly appearing completion marker after target writes", async () => {
-    await seedVoiceoverMediaFixture(db, { seedExistingFavorite: false });
+    await seedVoiceoverMediaFixture(db);
     const raced = firestoreWithTransactionRace(db, async () => {
       await db.doc(COMPLETION_PATH).create({ state: "forged" });
     });
@@ -1024,100 +794,50 @@ describe("voiceover media migration", () => {
       firestore: raced,
     })).rejects.toThrow(/completion marker changed/);
     expect((await db.collection("media_assets").get()).size).toBe(196);
-    expect((await db.collectionGroup("items").get()).size).toBe(3);
     expect((await db.doc(COMPLETION_PATH).get()).data()).toEqual({ state: "forged" });
   });
 
   it("rechecks the source dataset before writing completion", async () => {
-    const fixture = await seedVoiceoverMediaFixture(db, {
-      seedExistingFavorite: false,
-    });
+    const fixture = await seedVoiceoverMediaFixture(db);
     const raced = firestoreWithTransactionRace(db, async () => {
       await db.doc(`voiceoverTakes/${fixture.takes[10].id}`).update({
         updatedAt: "2026-10-04T18:30:00.000Z",
       });
-    }, 10);
+    }, 9);
 
     await expect(migrateVoiceoversToMedia({
       ...migrationOptions({ apply: true }),
       firestore: raced,
     })).rejects.toThrow(/source dataset changed after migration preflight/);
     expect((await db.collection("media_assets").get()).size).toBe(196);
-    expect((await db.collectionGroup("items").get()).size).toBe(3);
     expect((await db.doc(COMPLETION_PATH).get()).exists).toBe(false);
   });
 
-  it("resumes after an unmapped favorite-review edit stops completion", async () => {
-    const fixture = await seedVoiceoverMediaFixture(db, {
-      seedExistingFavorite: false,
-    });
+  it("completes when an unmapped review edit lands before completion", async () => {
+    const fixture = await seedVoiceoverMediaFixture(db);
     const reviewPath = `voiceoverReviews/reviewer-a/takes/${fixture.takes[0].id}`;
     const raced = firestoreWithTransactionRace(db, async () => {
       await db.doc(reviewPath).update({
-        notes: "Changed after the favorite chunk committed.",
+        notes: "Changed after the media chunks committed.",
         moreLikeThis: true,
         version: 2,
         updatedAt: "2026-10-04T19:00:00.000Z",
       });
-    }, 10);
+    }, 9);
 
-    await expect(migrateVoiceoversToMedia({
+    const result = await migrateVoiceoversToMedia({
       ...migrationOptions({ apply: true }),
       firestore: raced,
-    })).rejects.toThrow(/review dataset changed after migration preflight/);
-    expect((await db.collection("media_assets").get()).size).toBe(196);
-    expect((await db.collectionGroup("items").get()).size).toBe(3);
-    expect((await db.doc(COMPLETION_PATH).get()).exists).toBe(false);
-
-    const resumed = await migrateVoiceoversToMedia(migrationOptions({ apply: true }));
-    expect(resumed.media).toMatchObject({ planned: 0, verified: 196 });
-    expect(resumed.favorites).toMatchObject({ planned: 0, verified: 3 });
-    expect(resumed.completion).toMatchObject({ planned: 1, created: 1 });
-    expect(resumed.plannedWrites).toBe(1);
-    expect((await db.doc(COMPLETION_PATH).get()).exists).toBe(true);
-  });
-
-  it.each([
-    {
-      label: "a false review becomes a favorite",
-      mutate: async (fixture) => {
-        await db.doc(`voiceoverReviews/reviewer-a/takes/${fixture.takes[3].id}`).update({
-          favorite: true,
-          version: 2,
-          updatedAt: "2026-10-04T18:30:00.000Z",
-        });
-      },
-    },
-    {
-      label: "a new favorite review appears",
-      mutate: async (fixture) => {
-        const takeId = fixture.takes[4].id;
-        await db.doc(`voiceoverReviews/reviewer-new/takes/${takeId}`).create({
-          schemaVersion: 1,
-          manifestVersion: 1,
-          takeId,
-          favorite: true,
-          moreLikeThis: false,
-          notes: "",
-          version: 1,
-          createdAt: "2026-10-04T18:30:00.000Z",
-          updatedAt: "2026-10-04T18:30:00.000Z",
-        });
-      },
-    },
-  ])("rechecks reviews before completion when $label", async ({ mutate }) => {
-    const fixture = await seedVoiceoverMediaFixture(db, {
-      seedExistingFavorite: false,
     });
-    const raced = firestoreWithTransactionRace(db, async () => mutate(fixture), 10);
-
-    await expect(migrateVoiceoversToMedia({
-      ...migrationOptions({ apply: true }),
-      firestore: raced,
-    })).rejects.toThrow(/review dataset changed after migration preflight/);
+    expect(result.media).toMatchObject({ planned: 196, created: 196 });
+    expect(result.completion).toMatchObject({ planned: 1, created: 1 });
+    expect(result.plannedWrites).toBe(205);
     expect((await db.collection("media_assets").get()).size).toBe(196);
-    expect((await db.collectionGroup("items").get()).size).toBe(3);
-    expect((await db.doc(COMPLETION_PATH).get()).exists).toBe(false);
+    expect((await db.doc(COMPLETION_PATH).get()).exists).toBe(true);
+    expect((await db.doc(reviewPath).get()).data()).toMatchObject({
+      notes: "Changed after the media chunks committed.",
+      version: 2,
+    });
   });
 
   it("requires an active category and explicit production access", async () => {
@@ -1206,7 +926,6 @@ describe("voiceover media migration", () => {
     },
   ])("fails closed for $label", async ({ id, message }) => {
     await seedVoiceoverMediaFixture(db, {
-      seedExistingFavorite: false,
       seedReviews: false,
       mutateTake: (take, index) => index === 0 ? {
         ...take,
@@ -1223,7 +942,6 @@ describe("voiceover media migration", () => {
   it("requires exactly 196 active takes", async () => {
     await seedVoiceoverMediaFixture(db, {
       takeCount: 195,
-      seedExistingFavorite: false,
       seedReviews: false,
     });
     await expect(migrateVoiceoversToMedia(migrationOptions({ apply: true })))
@@ -1244,7 +962,6 @@ describe("voiceover media migration", () => {
     },
   ])("rejects $label before any target write", async ({ change, message }) => {
     await seedVoiceoverMediaFixture(db, {
-      seedExistingFavorite: false,
       seedReviews: false,
       mutateTake: (take, index) => index === 0 ? { ...take, ...change } : take,
     });
@@ -1258,7 +975,6 @@ describe("voiceover media migration", () => {
     { label: "an invalid source updatedAt", field: "updatedAt", value: "not-a-date" },
   ])("rejects $label without timestamp fallback writes", async ({ field, value }) => {
     await seedVoiceoverMediaFixture(db, {
-      seedExistingFavorite: false,
       seedReviews: false,
       mutateTake: (take, index) => {
         if (index !== 0) return take;
@@ -1276,7 +992,6 @@ describe("voiceover media migration", () => {
 
   it("rejects a review with a missing source timestamp before target writes", async () => {
     await seedVoiceoverMediaFixture(db, {
-      seedExistingFavorite: false,
       mutateReview: (review, index) => {
         if (index !== 0) return review;
         const changed = { ...review };
@@ -1288,7 +1003,6 @@ describe("voiceover media migration", () => {
     await expect(migrateVoiceoversToMedia(migrationOptions({ apply: true })))
       .rejects.toThrow(/invalid source timestamps/);
     expect((await db.collection("media_assets").get()).empty).toBe(true);
-    expect((await db.collectionGroup("items").get()).empty).toBe(true);
   });
 
   it("counts omitted derived tags and preserves every raw voiceover flag", async () => {
@@ -1297,7 +1011,6 @@ describe("voiceover media migration", () => {
       ...Array.from({ length: 19 }, (_, index) => `flag-${index + 1}`),
     ];
     const fixture = await seedVoiceoverMediaFixture(db, {
-      seedExistingFavorite: false,
       seedReviews: false,
       mutateTake: (take, index) => index === 0 ? { ...take, flags } : take,
     });

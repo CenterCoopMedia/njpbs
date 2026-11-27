@@ -6,12 +6,8 @@ import {
   applyFilterDraft,
   categoryOptions,
   chooseTag,
-  clearCollectionsFilterChips,
-  clearFavoritesFilterChips,
   clearFilterChips,
   clearVideoFilterChips,
-  collectionsFilterChips,
-  favoritesFilterChips,
   filterChips,
   focusAfterChipRemoval,
   headingSort,
@@ -29,8 +25,6 @@ import {
 import {
   DEFAULT_MEDIA_QUERY,
   DEFAULT_VIDEO_MEDIA_QUERY,
-  type CollectionsMediaLocationState,
-  type FavoritesMediaLocationState,
   type MediaLocationState,
   type VideoMediaLocationState,
 } from "../src/lib/media-query";
@@ -193,27 +187,5 @@ describe("phase 5 surface filter rules", () => {
     const state = setVideoStructuredFilter(videoState, { field: "by", value: "private-user-id" });
     expect(videoFilterChips(state)[0].label).toBe("Uploader: Staff uploader");
     expect(videoFilterChips(state, () => "Me")[0].label).toBe("Uploader: Me");
-  });
-
-  it("marks Favorites kind and Collections scope chips as applying on this page", () => {
-    const favorite: FavoritesMediaLocationState = {
-      kind: "video",
-      selectedRef: { backend: "s3", sourceId: "source-one", id: "same-id" },
-    };
-    expect(favoritesFilterChips(favorite)).toEqual([
-      { key: "kind:video", field: "kind", value: "video", label: "Type: Videos", scopeLabel: "On this page" },
-    ]);
-    expect(clearFavoritesFilterChips(favorite)).toEqual({ ...favorite, kind: null });
-
-    const collections: CollectionsMediaLocationState = {
-      show: "archived",
-      scope: "private",
-      selectedRef: { backend: "r2", id: "same-id" },
-    };
-    expect(collectionsFilterChips(collections)).toEqual([
-      { key: "show:archived", field: "show", value: "archived", label: "Status: Archived" },
-      { key: "scope:private", field: "scope", value: "private", label: "Scope: Private", scopeLabel: "On this page" },
-    ]);
-    expect(clearCollectionsFilterChips(collections)).toEqual({ ...collections, show: "active", scope: null });
   });
 });

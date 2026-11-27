@@ -36,7 +36,7 @@ for (const width of [1280, 390]) {
     });
 
     const tray = page.locator(".media-upload-tray");
-    const selection = page.getByRole("group", { name: "Collection selection" });
+    const selection = page.getByRole("group", { name: "Image selection" });
     await expectClear(tray, selection);
     if (width === 1280) {
       await expect(tray.getByRole("button", { name: "Resume studio-interview.mp4" })).toBeVisible();

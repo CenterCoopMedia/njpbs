@@ -63,8 +63,6 @@ export function usageScreen(pathname: string): UsageScreen | null {
   if (content.kind === "edit-page") return "pages-editor";
   if (content.kind === "record-list" && content.type === "post") return "posts-list";
   if ((content.kind === "edit-record" || content.kind === "create-record") && content.type === "post") return "posts-editor";
-  if (under(pathname, ROUTE_PATHS.mediaFavorites)) return "media-favorites";
-  if (under(pathname, ROUTE_PATHS.mediaCollections)) return "media-collections";
   if (under(pathname, ROUTE_PATHS.mediaSubmissions)) return "media-submissions";
   if (pathname === ROUTE_PATHS.mediaImages) return "images";
   if (pathname === ROUTE_PATHS.mediaVideos || pathname.startsWith(`${ROUTE_PATHS.mediaVideos}/`)) return "videos";

@@ -9,12 +9,12 @@ const sources = [
   { id: "nj-spotlight", label: "NJ Spotlight News originals" },
 ];
 
-// Counts come from data already in hand; Collections never has one.
+// Counts come from data already in hand.
 const tabs = mediaTabs({
   canUseImages: true,
   canReviewSubmissions: true,
   sources,
-  counts: { images: 1204, "video-library": 412, "nj-spotlight": 86, voiceovers: 196, favorites: 38 },
+  counts: { images: 1204, "video-library": 412, "nj-spotlight": 86, voiceovers: 196 },
 });
 
 function Strip() {
@@ -31,7 +31,7 @@ function Strip() {
 // scrolls with an end fade, counts hide, and Upload takes the next line.
 export function MediaTabsSpecimen() {
   return (
-    <MemoryRouter initialEntries={["/media/favorites"]}>
+    <MemoryRouter initialEntries={["/media/videos/nj-spotlight"]}>
       <div className="panel">
         <Strip />
       </div>

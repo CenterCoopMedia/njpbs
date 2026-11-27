@@ -1,10 +1,6 @@
 import {
-  encodeCollectionsMediaLocation,
-  encodeFavoritesMediaLocation,
   encodeMediaLocation,
   encodeVideoMediaLocation,
-  parseCollectionsMediaLocation,
-  parseFavoritesMediaLocation,
   parseMediaLocation,
   parseVideoMediaLocation,
 } from "./media-query";
@@ -21,8 +17,6 @@ export const MAX_SAVED_MEDIA_VIEW_NAME_LENGTH = 60;
 export type SavedMediaViewSurface =
   | "images"
   | "audio"
-  | "favorites"
-  | "collections"
   | `video:${string}`;
 
 export interface SavedMediaView {
@@ -51,7 +45,7 @@ function validId(value: string, maxLength: number): boolean {
 }
 
 function parseSurface(value: string): SavedMediaViewSurface {
-  if (value === "images" || value === "audio" || value === "favorites" || value === "collections") {
+  if (value === "images" || value === "audio") {
     return value;
   }
   if (value.startsWith("video:") && validId(value.slice("video:".length), 128)) {
@@ -65,14 +59,6 @@ function canonicalQuery(surface: SavedMediaViewSurface, value: string): string {
     const { query } = parseMediaLocation(value, surface === "audio");
     return encodeMediaLocation({ ...query, page: 1 }, null).toString();
   }
-  if (surface === "favorites") {
-    const { kind } = parseFavoritesMediaLocation(value);
-    return encodeFavoritesMediaLocation(kind, null).toString();
-  }
-  if (surface === "collections") {
-    const { show, scope } = parseCollectionsMediaLocation(value);
-    return encodeCollectionsMediaLocation(show, scope, null).toString();
-  }
   const { query } = parseVideoMediaLocation(value);
   return encodeVideoMediaLocation({ ...query, cursor: undefined }, null).toString();
 }
@@ -84,10 +70,8 @@ function canonicalDisplay(
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     throw new SavedMediaViewValidationError("Saved view display settings are invalid");
   }
-  const displaySurface: MediaDisplaySurface = surface === "audio" ? "images" : surface === "images"
-    || surface === "favorites"
-    || surface === "collections"
-    ? surface
+  const displaySurface: MediaDisplaySurface = surface === "audio" || surface === "images"
+    ? "images"
     : "video";
   let serialized: string;
   try {

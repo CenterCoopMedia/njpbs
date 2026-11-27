@@ -8,42 +8,6 @@ async function settledRowBackground(row: Locator) {
   });
 }
 
-for (const pointer of ["fine", "coarse"] as const) {
-  test.describe(`${pointer} audio state geometry`, () => {
-    test.use({ hasTouch: pointer === "coarse" });
-    for (const presentation of ["icons", "text"] as const) {
-      test(`Favorite stays clear of audio actions with ${presentation} controls`, async ({ page }) => {
-        await openSpecimen(page, { id: "audio-library", title: "Audio", width: 320, presentation }, { normalizeGeneratedIds: false });
-        expect(await page.evaluate(() => matchMedia("(any-pointer: coarse)").matches)).toBe(pointer === "coarse");
-        const tile = page.locator('.media-tile[data-kind="audio"]').filter({ has: page.getByRole("button", { name: /^Station identification, audio/ }) });
-        const badge = tile.locator(".media-tile-badge-favorite");
-        const more = tile.getByRole("button", { name: /^More actions:/ });
-        for (const narrow of [false, true]) {
-          if (narrow) await tile.evaluate(element => { element.style.maxWidth = "160px"; });
-          await expect(badge).toBeVisible();
-          await expect(badge).toHaveText("Favorite");
-          const state = (await badge.boundingBox())!;
-          const header = (await tile.locator(".media-tile-thumb").boundingBox())!;
-          for (const control of [tile.locator(".media-tile-mark"), tile.locator(".media-tile-actions"), tile.locator(".media-tile-document > .icon")]) {
-            const box = (await control.boundingBox())!;
-            expect(state.y).toBeGreaterThanOrEqual(box.y + box.height + 3);
-          }
-          expect(state.x).toBeGreaterThanOrEqual(header.x);
-          expect(state.x + state.width).toBeLessThanOrEqual(header.x + header.width);
-          expect((await more.boundingBox())!.height).toBe(pointer === "coarse" ? 44 : 32);
-        }
-        await more.click();
-        await expect(page.getByRole("menuitem", { name: "Remove from favorites", exact: true })).toBeVisible();
-        await page.keyboard.press("Escape");
-        await expect(more).toBeFocused();
-        await expect(tile.getByRole("button", { name: "Listen to Station identification", exact: true })).toBeVisible();
-        await expect(tile).toContainText("soft-spoken");
-        expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(320);
-      });
-    }
-  });
-}
-
 for (const presentation of ["icons", "text"] as const) {
   test(`320px library keeps native row overflow reachable with ${presentation} controls`, async ({ page }) => {
     await openSpecimen(page, { id: "content-library", title: "All content", width: 320, presentation }, { normalizeGeneratedIds: false });
@@ -190,9 +154,9 @@ test("phone text preference keeps selection action words and clears space for th
   await openSpecimen(page, { id: "media-grid-keyboard", title: "Media selection", width: 390, presentation: "text" }, { normalizeGeneratedIds: false });
   const grid = page.getByRole("grid", { name: "Images" });
   await grid.getByRole("checkbox").first().check();
-  const bar = page.getByRole("group", { name: "Collection selection", exact: true });
+  const bar = page.getByRole("group", { name: "Image selection", exact: true });
   await expect(bar).toHaveAttribute("data-presentation", "text");
-  for (const label of ["Add to favorites", "Remove from favorites", "Add to collection", "Clear selection"]) {
+  for (const label of ["Clear selection"]) {
     const action = bar.getByRole("button", { name: label, exact: true });
     await expect(action.locator(".media-selection-bar-label")).toBeVisible();
     const box = (await action.boundingBox())!;
@@ -231,10 +195,6 @@ test("queue refresh keeps its text footprint and a failed read recovers", async 
 });
 
 test("real media focus clears a tall text selection dock and releases its measured margin on clear", async ({ page }) => {
-  await page.route("**/cmsListMediaFavorites", async route => {
-    const query = route.request().postDataJSON();
-    await route.fulfill({ json: { success: true, states: (query.refs ?? []).map((ref: unknown) => ({ ref, favorite: false })) } });
-  });
   await freezeClock(page);
   await page.setViewportSize({ width: 390, height: 800 });
   await page.goto("/gallery.html?embed=media-browsing&presentation=text&guide=1");
@@ -263,10 +223,6 @@ test("real media focus clears a tall text selection dock and releases its measur
 
 
 test("pager focus clears the same measured selection dock as grid controls", async ({ page }) => {
-  await page.route("**/cmsListMediaFavorites", async route => {
-    const query = route.request().postDataJSON();
-    await route.fulfill({ json: { success: true, states: (query.refs ?? []).map((ref: unknown) => ({ ref, favorite: false })) } });
-  });
   await openSpecimen(page, { id: "media-indexed-library", title: "Media pages", width: 390, presentation: "text" }, { normalizeGeneratedIds: false });
   await page.setViewportSize({ width: 390, height: 500 });
   await page.getByRole("grid", { name: "Images", exact: true }).getByRole("checkbox").first().check();

@@ -127,7 +127,6 @@ export function ImageViewerSpecimen() {
       image("gallery-missing", "Unavailable preview", "/comparison-missing.svg")]
     : INITIAL_ASSETS);
   const [activeId, setActiveId] = useState(INITIAL_ASSETS[1].id);
-  const [favorite, setFavorite] = useState(true);
   const current = assets.find((candidate) => candidate.id === activeId) ?? assets[0];
   const asset = new URLSearchParams(window.location.search).has("optimized")
     ? { ...current, mimeType: "image/webp", originalAvailable: true }
@@ -147,7 +146,6 @@ export function ImageViewerSpecimen() {
       canEdit
       categories={CATEGORIES}
       deleteMedia={deleteLocally}
-      favorite={{ favorite, name: asset.name, onToggle: () => setFavorite(current => !current) }}
       onClose={() => undefined}
       navigationPrompt={navigationPrompt}
       onDeleted={() => undefined}

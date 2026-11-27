@@ -19,9 +19,6 @@ interface SourceMediaLibraryBrowseProps {
   deletedName: string;
   originals: ComponentProps<typeof VideoOriginalNotices>;
   related: ReactNode;
-  favoriteError: string;
-  onRetryFavorites?: () => void;
-  favoriteRetryDisabled: boolean;
   sizeSortFallback: boolean;
   selectionStatus: string;
   viewerAnnouncement: string;
@@ -56,9 +53,6 @@ export function SourceMediaLibraryBrowse({
   deletedName,
   originals,
   related,
-  favoriteError,
-  onRetryFavorites,
-  favoriteRetryDisabled,
   sizeSortFallback,
   selectionStatus,
   viewerAnnouncement,
@@ -90,10 +84,6 @@ export function SourceMediaLibraryBrowse({
         {linkError ? <InlineMessage tone="warning" title="Media link">{linkError}</InlineMessage> : null}
         {related}
         {deletedName ? <InlineMessage tone="success" title="Video deleted from library">{deletedName} was moved to the video recycle bin.</InlineMessage> : null}
-        {favoriteError ? <InlineMessage tone="error" title="Favorites need attention">
-          <span>{favoriteError}</span>
-          {onRetryFavorites ? <Button disabled={favoriteRetryDisabled} onClick={onRetryFavorites}>Try again</Button> : null}
-        </InlineMessage> : null}
         {bulkNotice}
         {sizeSortFallback ? <InlineMessage tone="info" role="status" title="File-size sorting is getting ready">
           Videos are shown by most recent update. Try file-size sorting again later.

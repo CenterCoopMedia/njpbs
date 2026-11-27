@@ -11,7 +11,6 @@ import { SuccessNoticeProvider } from "../src/components/ui/SuccessNoticeRegion"
 import { ShellProvider, type ShellData } from "../src/routes/ShellContext";
 import { ExitGuardProvider, useExitGuard } from "../src/routes/ExitGuard";
 import { HttpError, type ListMediaResponse, type MediaAssetSummary, type MediaListQuery } from "../src/lib/functions";
-import type { MediaFavoriteRef } from "../src/lib/media-favorites";
 import { installTestLockManager } from "./helpers/web-locks";
 import { DEFAULT_MEDIA_QUERY } from "../src/lib/media-query";
 import { DEFAULT_MEDIA_DISPLAY, MEDIA_DISPLAY_STORAGE_KEY } from "../src/lib/media-display";
@@ -21,7 +20,6 @@ import * as sourceMediaUpload from "../src/lib/source-media-upload";
 const mocks = vi.hoisted(() => ({
   getIdToken: vi.fn(),
   list: vi.fn(),
-  favoriteWriteEpoch: vi.fn((): number | null => 0),
   listCategories: vi.fn(),
   listSources: vi.fn(),
   upload: vi.fn(),
@@ -29,14 +27,6 @@ const mocks = vi.hoisted(() => ({
   update: vi.fn(),
   remove: vi.fn(),
   listBin: vi.fn(),
-  listFavoriteStates: vi.fn(),
-  listFavorites: vi.fn(),
-  setFavorite: vi.fn(),
-  setFavorites: vi.fn(),
-  listCollections: vi.fn(),
-  listCollectionItems: vi.fn(),
-  mutateCollection: vi.fn(),
-  setCollectionItems: vi.fn(),
   loadSavedViews: vi.fn(),
   mutateSavedViews: vi.fn(),
   meaningAsset: null as MediaAssetSummary | null,
@@ -109,22 +99,6 @@ vi.mock("../src/lib/source-media", async (importOriginal) => {
     listSourceMedia: vi.fn(async () => ({ records: [], total: 0, hasMore: false, nextCursor: null })),
   };
 });
-
-vi.mock("../src/lib/media-favorites", () => ({
-  listMediaFavoriteStates: (...args: unknown[]) => mocks.listFavoriteStates(...args),
-  listMediaFavorites: (...args: unknown[]) => mocks.listFavorites(...args),
-  setMediaFavorite: (...args: unknown[]) => mocks.setFavorite(...args),
-  setMediaFavorites: (...args: unknown[]) => mocks.setFavorites(...args),
-  mediaFavoriteWriteEpoch: () => mocks.favoriteWriteEpoch(),
-}));
-
-vi.mock("../src/lib/media-collections", async importOriginal => ({
-  ...(await importOriginal<typeof import("../src/lib/media-collections")>()),
-  listMediaCollections: (...args: unknown[]) => mocks.listCollections(...args),
-  listMediaCollectionItems: (...args: unknown[]) => mocks.listCollectionItems(...args),
-  mutateMediaCollection: (...args: unknown[]) => mocks.mutateCollection(...args),
-  setMediaCollectionItems: (...args: unknown[]) => mocks.setCollectionItems(...args),
-}));
 
 vi.mock("../src/lib/saved-media-view-store", () => ({
   loadMediaLibraryViews: (...args: unknown[]) => mocks.loadSavedViews(...args),
@@ -408,22 +382,7 @@ beforeEach(() => {
     sources: [{ id: "video-library", label: "Videos", description: "Staff videos", mediaKind: "video", canBrowse: true, canUpload: false }],
   });
   vi.mocked(listSourceMedia).mockResolvedValue({ success: true, records: [], total: 0, hasMore: false, nextCursor: null });
-  mocks.listFavoriteStates.mockImplementation(async (_token: string, refs: MediaFavoriteRef[]) => ({
-    success: true,
-    states: refs.map((ref: unknown) => ({ ref, favorite: false })),
-  }));
-  mocks.listFavorites.mockResolvedValue({ success: true, records: [], nextCursor: null, hasMore: false });
-  mocks.setFavorite.mockImplementation(async (_token: string, ref: MediaFavoriteRef, favorite: boolean) => ({ success: true, ref, favorite, changed: true }));
-  mocks.listCollections.mockResolvedValue({ success: true, collections: [], nextCursor: null, hasMore: false });
   mocks.loadSavedViews.mockResolvedValue([]);
-  mocks.setCollectionItems.mockResolvedValue({
-    success: true,
-    collectionId: "c".repeat(64),
-    changed: true,
-    replayed: false,
-    version: 1,
-    membershipVersion: 2,
-  });
   mocks.update.mockResolvedValue({
     success: true,
     changed: true,
@@ -489,7 +448,7 @@ describe("MediaRoute", () => {
     expect(screen.queryByRole("heading", { name: "Recycle bin" })).not.toBeInTheDocument();
   });
   it.each([
-    ["/media/favorites?q=harbor", "Favorites", "/media/images?bin=1&binAsset=binned-image"],
+    ["/media/videos?q=harbor", "Videos", "/media/images?bin=1&binAsset=binned-image"],
     ["/media/images?q=harbor&view=bin", "Images", "/media/images?q=harbor&view=bin&bin=1&binAsset=binned-image"],
   ])("guards a routed duplicate pointer from %s with only image filters", async (path, heading, expectedHref) => {
     mocks.upload.mockRejectedValue(new HttpError(409, "This file is already in the media library", { duplicateAssetId: "binned-image" }));
@@ -565,7 +524,7 @@ describe("MediaRoute", () => {
       return <button onClick={() => requestExit(signedOut)}>Sign out</button>;
     }
     const router = createMemoryRouter([{ path: "/media/*", element: <MediaRoute /> }], {
-      initialEntries: ["/media/favorites"],
+      initialEntries: ["/media/videos"],
     });
     render(<ExitGuardProvider><ShellProvider value={shell}>
       <SignOutButton />
@@ -642,7 +601,7 @@ describe("MediaRoute", () => {
       await waitFor(() => expect(transferSignal).toBeDefined());
       const transfers = await screen.findByRole("region", { name: "Video transfers" });
 
-      await act(async () => { await router.navigate("/media/favorites"); });
+      await act(async () => { await router.navigate("/media/videos"); });
       const failure = await screen.findByRole("alert");
       expect(failure).toHaveTextContent("Media workspace unavailable");
       expect(screen.getByRole("region", { name: "Video transfers" })).toBe(transfers);
@@ -650,7 +609,7 @@ describe("MediaRoute", () => {
 
       act(() => { void router.navigate("/away"); });
       expect(await screen.findByRole("dialog", { name: "Leave with unsaved changes?" })).toBeVisible();
-      expect(router.state.location.pathname).toBe("/media/favorites");
+      expect(router.state.location.pathname).toBe("/media/videos");
       fireEvent.click(screen.getByRole("button", { name: "Keep editing" }));
 
       expect(failure).toHaveTextContent("Finish or cancel the current upload before reloading this page.");
@@ -675,7 +634,7 @@ describe("MediaRoute", () => {
     try {
       const router = createMemoryRouter(
         [{ path: "/media/*", element: <MediaRoute loadSecondaryModule={loadSecondaryModule} reloadDocument={reloadDocument} /> }],
-        { initialEntries: ["/media/favorites"] },
+        { initialEntries: ["/media/videos"] },
       );
       render(<ShellProvider value={shell}><RouterProvider router={router} /></ShellProvider>);
 
@@ -784,48 +743,19 @@ describe("MediaRoute", () => {
     expect(router.state.location.pathname).toBe("/media/videos");
     expect(screen.getByRole("link", { name: /^Videos/ })).toHaveAttribute("aria-current", "page");
 
-    fireEvent.click(screen.getByRole("link", { name: "Favorites" }));
-    await waitFor(() => expect(router.state.location.pathname).toBe("/media/favorites"));
-    await waitFor(() => expect(screen.getByRole("link", { name: "Favorites" })).toHaveAttribute("aria-current", "page"));
+    fireEvent.click(screen.getByRole("link", { name: /^Audio/ }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/media/voiceovers"));
+    await waitFor(() => expect(screen.getByRole("link", { name: /^Audio/ })).toHaveAttribute("aria-current", "page"));
     expect(screen.getByRole("link", { name: /^Videos/ })).not.toHaveAttribute("aria-current");
 
     await act(async () => { await router.navigate(-1); });
     expect(router.state.location.pathname).toBe("/media/videos");
     await waitFor(() => expect(screen.getByRole("link", { name: /^Videos/ })).toHaveAttribute("aria-current", "page"));
-    expect(screen.getByRole("link", { name: "Favorites" })).not.toHaveAttribute("aria-current");
+    expect(screen.getByRole("link", { name: /^Audio/ })).not.toHaveAttribute("aria-current");
 
     await act(async () => { await router.navigate(1); });
-    expect(router.state.location.pathname).toBe("/media/favorites");
-    await waitFor(() => expect(screen.getByRole("link", { name: "Favorites" })).toHaveAttribute("aria-current", "page"));
-  });
-
-  it("opens the Favorites destination from its own URL", async () => {
-    const { router } = renderRoute("/media/favorites");
-    expect(await screen.findByRole("link", { name: "Favorites" })).toHaveAttribute("aria-current", "page");
-    await waitFor(() => expect(mocks.listFavorites).toHaveBeenCalledTimes(1));
-    expect(router.state.location.pathname).toBe("/media/favorites");
-    expect(mocks.list).not.toHaveBeenCalled();
-    expect(mocks.listSources).not.toHaveBeenCalled();
-  });
-
-  it("opens Collections from its own URL and restores it through history", async () => {
-    const { router } = renderRoute("/media/collections");
-    expect(await screen.findByRole("link", { name: "Collections" })).toHaveAttribute("aria-current", "page");
-    expect(await screen.findByRole("heading", { name: "Collections" })).toBeInTheDocument();
-    expect(await screen.findByText("No active collections")).toBeInTheDocument();
-    expect(mocks.listCollections).toHaveBeenCalledTimes(2);
-    expect(mocks.listSources).not.toHaveBeenCalled();
-
-    fireEvent.click(screen.getByRole("link", { name: "Favorites" }));
-    await waitFor(() => expect(router.state.location.pathname).toBe("/media/favorites"));
-    await act(async () => { await router.navigate(-1); });
-    expect(router.state.location.pathname).toBe("/media/collections");
-    expect(screen.getByRole("link", { name: "Collections" })).toHaveAttribute("aria-current", "page");
-    expect(await screen.findByText("No active collections")).toBeInTheDocument();
-
-    const collectionId = "c".repeat(64);
-    await act(async () => { await router.navigate(`/media/collections/${collectionId}`); });
-    expect(screen.getByRole("link", { name: "Collections" })).toHaveAttribute("aria-current", "page");
+    expect(router.state.location.pathname).toBe("/media/voiceovers");
+    await waitFor(() => expect(screen.getByRole("link", { name: /^Audio/ })).toHaveAttribute("aria-current", "page"));
   });
 
   it("keeps a custom video source identity across a direct load", async () => {
@@ -858,37 +788,18 @@ describe("MediaRoute", () => {
     expect(screen.queryByRole("link", { name: /^Images/ })).toBeNull();
   });
 
-  it("does not request image categories for video-only collection staff", async () => {
-    const id = "c".repeat(64);
-    const staffShell: ShellData = {
-      ...shell,
-      principal: { id: "staff-1", grants: [{ role: "staff" }] },
-      user: { uid: "staff-1", email: "staff@example.test" } as ShellData["user"],
-    };
-    mocks.listCollectionItems.mockResolvedValue({
-      success: true,
-      collection: { id, scope: "all_staff", name: "Video package", description: "", color: "blue",
-        lifecycle: "active", version: 1, membershipVersion: 1, cover: null, canEdit: true,
-        createdAt: null, updatedAt: null },
-      items: [], nextCursor: null, hasMore: false,
-    });
-    renderRoute(`/media/collections/${id}`, staffShell);
-    expect(await screen.findByRole("heading", { name: "Items" })).toBeVisible();
-    expect(mocks.listCategories).not.toHaveBeenCalled();
-  });
-
   it("lists media tabs as links in the new order and marks only the current one", async () => {
     renderRoute("/media/images");
     await screen.findByRole("button", { name: /^Studio control room/ });
     const strip = screen.getByRole("navigation", { name: "Media sources" });
     const links = within(strip).getAllByRole("link");
     expect(links.map(link => link.querySelector(".media-tab-label")?.textContent)).toEqual([
-      "Images", "Videos", "Audio", "Favorites", "Collections",
+      "Images", "Videos", "Audio",
     ]);
     expect(within(strip).queryAllByRole("button")).toHaveLength(0);
     expect(links.filter(link => link.getAttribute("aria-current") === "page")).toEqual([links[0]]);
     expect(links.map(link => link.getAttribute("href"))).toEqual([
-      "/media/images", "/media/videos", "/media/voiceovers", "/media/favorites", "/media/collections",
+      "/media/images", "/media/videos", "/media/voiceovers",
     ]);
   });
 
@@ -910,33 +821,23 @@ describe("MediaRoute", () => {
     expect(mocks.list).toHaveBeenCalledTimes(1);
   });
 
-  it("returns to the collection list from the Collections tab on a collection detail", async () => {
-    const collectionId = "c".repeat(64);
-    const { router } = renderRoute(`/media/collections/${collectionId}`);
-    const tab = await screen.findByRole("link", { name: "Collections" });
-    expect(tab).toHaveAttribute("aria-current", "page");
-    fireEvent.click(tab);
-    await waitFor(() => expect(router.state.location.pathname).toBe("/media/collections"));
-    expect(screen.getByRole("link", { name: "Collections" })).toHaveAttribute("aria-current", "page");
-  });
-
   it("shows the images count in the Images tab name from the loaded list without another request", async () => {
     renderRoute("/media/images");
     expect(await screen.findByRole("link", { name: "Images 1 item" })).toHaveAttribute("aria-current", "page");
     expect(mocks.list).toHaveBeenCalledTimes(1);
     expect(mocks.listSources).not.toHaveBeenCalled();
     // Only the Images tab carries a count in this release.
-    for (const name of ["Videos", "Audio", "Favorites", "Collections"]) {
+    for (const name of ["Videos", "Audio"]) {
       expect(screen.getByRole("link", { name })).toBeInTheDocument();
     }
   });
 
-  it("keeps the images count while visiting Favorites and drops it for another account", async () => {
+  it("keeps the images count while visiting Videos and drops it for another account", async () => {
     const { router, rerender } = renderRoute("/media/images");
     await screen.findByRole("link", { name: "Images 1 item" });
 
-    fireEvent.click(screen.getByRole("link", { name: "Favorites" }));
-    await waitFor(() => expect(router.state.location.pathname).toBe("/media/favorites"));
+    fireEvent.click(screen.getByRole("link", { name: /^Videos/ }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/media/videos"));
     expect(screen.getByRole("link", { name: "Images 1 item" })).not.toHaveAttribute("aria-current");
     expect(mocks.list).toHaveBeenCalledTimes(1);
 
@@ -950,38 +851,12 @@ describe("MediaRoute", () => {
     expect(mocks.list).toHaveBeenCalledTimes(1);
   });
 
-  it("drops the images count after a media write from Favorites", async () => {
-    mocks.listFavorites.mockResolvedValue({
-      success: true,
-      records: [{ ref: { backend: "r2", id: asset.id }, createdAt: "2026-09-22T12:00:00.000Z", available: true, asset }],
-      nextCursor: null,
-      hasMore: false,
-    });
-    // The real cmsDeleteMedia invalidates the media lists after a write; the mock keeps that contract.
-    mocks.remove.mockImplementation(async () => {
-      invalidateMediaLists();
-      return { success: true, changed: true, deleted: true, asset: { id: asset.id, lifecycle: "tombstoned", version: 3, etag: '"media.YXNzZXQtb25l.3"' } };
-    });
-    const { router } = renderRoute("/media/images");
-    await screen.findByRole("link", { name: "Images 1 item" });
-
-    fireEvent.click(screen.getByRole("link", { name: "Favorites" }));
-    await waitFor(() => expect(router.state.location.pathname).toBe("/media/favorites"));
-    fireEvent.click(await screen.findByRole("button", { name: /^Studio control room, image/ }));
-    await startMediaDelete();
-    fireEvent.click(screen.getByRole("button", { name: "Yes, delete from library" }));
-
-    await waitFor(() => expect(mocks.remove).toHaveBeenCalledTimes(1));
-    expect(await screen.findByRole("link", { name: "Images" })).toBeInTheDocument();
-    expect(mocks.list).toHaveBeenCalledTimes(1);
-  });
-
   it("drops the images count after a denied refresh", async () => {
     let denyRefresh!: (error: Error) => void;
     mocks.list.mockResolvedValueOnce(selection()).mockImplementationOnce(() => new Promise((_resolve, reject) => { denyRefresh = reject; }));
     const { router } = renderRoute("/media/images");
     await screen.findByRole("link", { name: "Images 1 item" });
-    await act(async () => { await router.navigate("/media/favorites"); });
+    await act(async () => { await router.navigate("/media/videos"); });
     await act(async () => { await router.navigate("/media/images"); });
     await waitFor(() => expect(mocks.list).toHaveBeenCalledTimes(2));
     await act(async () => denyRefresh(new HttpError(403, "Access changed")));
@@ -992,17 +867,14 @@ describe("MediaRoute", () => {
   it("shows every tab count from the first Images list without another request", async () => {
     mocks.list.mockResolvedValueOnce({
       ...selection(),
-      counts: { images: 1, favorites: 3, audio: 196, sources: { "video-library": 1204 } },
+      counts: { images: 1, audio: 196, sources: { "video-library": 1204 } },
     });
     renderRoute("/media/images");
     expect(await screen.findByRole("link", { name: "Images 1 item" })).toHaveAttribute("aria-current", "page");
     expect(await screen.findByRole("link", { name: "Videos 1,204 items" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Audio 196 items" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Favorites 3 items" })).toBeInTheDocument();
-    // Collections never shows a count.
-    expect(screen.getByRole("link", { name: "Collections" })).toBeInTheDocument();
     expect(mocks.list).toHaveBeenCalledTimes(1);
-    expect(mocks.list).toHaveBeenCalledWith("id-token", expect.any(Object), undefined, { counts: true, favorites: true });
+    expect(mocks.list).toHaveBeenCalledWith("id-token", expect.any(Object), undefined, { counts: true });
     expect(mocks.listSources).not.toHaveBeenCalled();
     // The counts stay out of the cached list, whose key is unchanged.
     const cached = cachedMediaList(shell.user.uid, {
@@ -1013,40 +885,27 @@ describe("MediaRoute", () => {
     expect(cached).not.toHaveProperty("counts");
   });
 
-  it("shows no counts on a direct Favorites landing and makes no count request", async () => {
-    renderRoute("/media/favorites");
-    expect(await screen.findByRole("link", { name: "Favorites" })).toHaveAttribute("aria-current", "page");
-    await waitFor(() => expect(mocks.listFavorites).toHaveBeenCalledTimes(1));
-    for (const name of ["Images", "Videos", "Audio", "Collections"]) {
-      expect(screen.getByRole("link", { name })).toBeInTheDocument();
-    }
-    expect(mocks.list).not.toHaveBeenCalled();
-    expect(mocks.listSources).not.toHaveBeenCalled();
-  });
-
   it("asks the video sources call for counts once per page session", async () => {
     mocks.listSources.mockResolvedValueOnce({
       sources: [{ id: "video-library", label: "Videos", description: "Staff videos", mediaKind: "video", canBrowse: true, canUpload: false }],
-      counts: { images: 9, favorites: 2, audio: 5 },
+      counts: { images: 9, audio: 5 },
     });
     const { router } = renderRoute("/media/videos");
-    expect(await screen.findByRole("link", { name: "Favorites 2 items" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Audio 5 items" })).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: "Audio 5 items" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Images 9 items" })).toBeInTheDocument();
     expect(mocks.listSources).toHaveBeenCalledWith("id-token", { counts: true });
     // The unfiltered video page's own total fills that source's count at no extra cost.
     expect(await screen.findByRole("link", { name: "Videos 0 items" })).toBeInTheDocument();
 
-    await act(async () => { await router.navigate("/media/favorites"); });
-    await act(async () => { await router.navigate("/media/videos"); });
-    await waitFor(() => expect(mocks.listSources).toHaveBeenCalledTimes(2));
-    expect(mocks.listSources.mock.calls[1]).toEqual(["id-token"]);
-
     // The Images list reuses the counts in hand and replaces the Images count with its own total.
     await act(async () => { await router.navigate("/media/images"); });
     expect(await screen.findByRole("link", { name: "Images 1 item" })).toBeInTheDocument();
-    expect(mocks.list.mock.calls[0][3]).toEqual({ counts: false, favorites: true });
-    expect(screen.getByRole("link", { name: "Favorites 2 items" })).toBeInTheDocument();
+    expect(mocks.list.mock.calls[0][3]).toEqual({ counts: false });
+    expect(screen.getByRole("link", { name: "Audio 5 items" })).toBeInTheDocument();
+
+    await act(async () => { await router.navigate("/media/videos"); });
+    await waitFor(() => expect(mocks.listSources).toHaveBeenCalledTimes(2));
+    expect(mocks.listSources.mock.calls[1]).toEqual(["id-token"]);
   });
 
   it("waits for renewed video source access before showing the library on tab return", async () => {
@@ -1055,7 +914,7 @@ describe("MediaRoute", () => {
     mocks.listSources.mockResolvedValueOnce(available).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
     const { router } = renderRoute("/media/videos");
     expect(await screen.findByRole("heading", { name: "Videos" })).toBeInTheDocument();
-    await act(async () => { await router.navigate("/media/favorites"); });
+    await act(async () => { await router.navigate("/media/images"); });
     await act(async () => { await router.navigate("/media/videos"); });
     await waitFor(() => expect(mocks.listSources).toHaveBeenCalledTimes(2));
     expect(screen.queryByRole("heading", { name: "Videos" })).not.toBeInTheDocument();
@@ -1070,190 +929,30 @@ describe("MediaRoute", () => {
     renderRoute("/media/images");
     expect(await screen.findByRole("button", { name: /^Studio control room/ })).toBeInTheDocument();
     expect(mocks.list).toHaveBeenCalledTimes(2);
-    expect(mocks.list.mock.calls[1][3]).toEqual({ counts: false, favorites: true });
+    expect(mocks.list.mock.calls[1][3]).toEqual({ counts: false });
     expect(screen.getByRole("link", { name: "Images 1 item" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Favorites" })).toBeInTheDocument();
   });
 
-  it("uses the favorite states from the list instead of a second favorites request", async () => {
-    mocks.list.mockImplementation(async (_token: string, query: { assetIds?: string[] }, _signal: unknown, options?: { favorites?: boolean }) => {
-      const result = selection();
-      return options?.favorites && !query.assetIds
-        ? { ...result, favoriteStates: result.records.map((record: { id: string }) => ({ ref: { backend: "r2", id: record.id }, favorite: true })) }
-        : result;
-    });
-    renderRoute("/media/images");
-    expect(await screen.findByRole("button", { name: /^Studio control room/ })).toBeInTheDocument();
-    expect((await screen.findAllByRole("button", { name: /Remove from favorites/ })).length).toBeGreaterThan(0);
-    expect(mocks.listFavoriteStates).not.toHaveBeenCalled();
-  });
-
-  it("drops list favorite states read before a favorite write and asks again", async () => {
-    let finish!: (value: unknown) => void;
-    mocks.list.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
-    renderRoute("/media/images");
-    await waitFor(() => expect(mocks.list).toHaveBeenCalledTimes(1));
-    mocks.favoriteWriteEpoch.mockReturnValue(1);
-    const result = selection();
-    await act(async () => { finish({ ...result, favoriteStates: result.records.map((record: { id: string }) => ({ ref: { backend: "r2", id: record.id }, favorite: true })) }); });
-    expect(await screen.findByRole("button", { name: /^Studio control room/ })).toBeInTheDocument();
-    await waitFor(() => expect(mocks.listFavoriteStates).toHaveBeenCalledTimes(1));
-    mocks.favoriteWriteEpoch.mockReturnValue(0);
-  });
-
-  it("drops list favorite states read while a favorite write is in flight", async () => {
-    let finish!: (value: unknown) => void;
-    mocks.list.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
-    mocks.favoriteWriteEpoch.mockReturnValue(null);
-    renderRoute("/media/images");
-    await waitFor(() => expect(mocks.list).toHaveBeenCalledTimes(1));
-    const result = selection();
-    await act(async () => { finish({ ...result, favoriteStates: result.records.map((record: { id: string }) => ({ ref: { backend: "r2", id: record.id }, favorite: true })) }); });
-    expect(await screen.findByRole("button", { name: /^Studio control room/ })).toBeInTheDocument();
-    await waitFor(() => expect(mocks.listFavoriteStates).toHaveBeenCalledTimes(1));
-    mocks.favoriteWriteEpoch.mockReturnValue(0);
-  });
-
-  it("waits for the seeded refresh of cached rows instead of a separate favorites lookup", async () => {
-    mocks.list.mockImplementation(async (_token: string, query: { assetIds?: string[] }, _signal: unknown, options?: { favorites?: boolean }) => {
-      const result = selection();
-      return options?.favorites && !query.assetIds
-        ? { ...result, favoriteStates: result.records.map((record: { id: string }) => ({ ref: { backend: "r2", id: record.id }, favorite: false })) }
-        : result;
-    });
-    const { router } = renderRoute("/media/images");
-    expect(await screen.findByRole("button", { name: /^Studio control room/ })).toBeInTheDocument();
-    await act(async () => { await router.navigate("/media/favorites"); });
-    await act(async () => { await router.navigate("/media/images"); });
-    await waitFor(() => expect(mocks.list.mock.calls.filter(call => !call[1]?.assetIds).length).toBeGreaterThanOrEqual(2));
-    expect(await screen.findByRole("button", { name: /^Studio control room/ })).toBeInTheDocument();
-    expect(mocks.listFavoriteStates).not.toHaveBeenCalled();
-  });
-
-  it("lists images without favorite states when an older Function rejects that flag", async () => {
-    mocks.list
-      .mockRejectedValueOnce(new HttpError(400, "Unknown media list field favorites"))
-      .mockResolvedValue(selection());
-    renderRoute("/media/images");
-    expect(await screen.findByRole("button", { name: /^Studio control room/ })).toBeInTheDocument();
-    expect(mocks.list.mock.calls[1][3]).toEqual({ counts: true, favorites: false });
-    await waitFor(() => expect(mocks.listFavoriteStates).toHaveBeenCalledTimes(1));
-  });
-
-  it("makes no list, sources, favorites or collections request when switching tabs beyond each tab's own load", async () => {
+  it("makes no list or sources request when switching tabs beyond each tab's own load", async () => {
     const { router } = renderRoute("/media/images");
     await screen.findByRole("link", { name: "Images 1 item" });
     expect(mocks.list).toHaveBeenCalledTimes(1);
-    expect(mocks.listFavorites).not.toHaveBeenCalled();
-    expect(mocks.listCollections).not.toHaveBeenCalled();
+    expect(mocks.listSources).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole("link", { name: "Favorites" }));
-    await waitFor(() => expect(router.state.location.pathname).toBe("/media/favorites"));
-    await waitFor(() => expect(mocks.listFavorites).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole("link", { name: /^Videos/ }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/media/videos"));
+    await waitFor(() => expect(mocks.listSources).toHaveBeenCalledTimes(1));
 
     // Activating the tab already shown makes no request at all.
-    fireEvent.click(screen.getByRole("link", { name: "Favorites" }));
+    fireEvent.click(screen.getByRole("link", { name: /^Videos/ }));
     await act(async () => { await Promise.resolve(); });
 
-    expect(router.state.location.pathname).toBe("/media/favorites");
-    expect(mocks.listFavorites).toHaveBeenCalledTimes(1);
+    expect(router.state.location.pathname).toBe("/media/videos");
+    expect(mocks.listSources).toHaveBeenCalledTimes(1);
     expect(mocks.list).toHaveBeenCalledTimes(1);
-    expect(mocks.listSources).not.toHaveBeenCalled();
-    expect(mocks.listCollections).not.toHaveBeenCalled();
   });
 
-  it("favorites an image without opening it and uses one page lookup", async () => {
-    let finishLookup!: (value: unknown) => void;
-    mocks.listFavoriteStates.mockImplementationOnce(() => new Promise(resolve => { finishLookup = resolve; }));
-    let finishFavorite!: (value: unknown) => void;
-    mocks.setFavorite.mockImplementationOnce(() => new Promise(resolve => { finishFavorite = resolve; }));
-    const { router } = renderRoute();
-
-    const loading = await screen.findByRole("button", { name: "Loading favorite: Studio control room" });
-    expect(loading).toBeDisabled();
-    fireEvent.click(loading);
-    expect(mocks.setFavorite).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "More actions: Studio control room" }));
-    expect(screen.queryByRole("menuitem", { name: /(?:Add to|Remove from) favorites/ })).toBeNull();
-    fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
-    await act(async () => finishLookup({ success: true, states: [{ ref: { backend: "r2", id: "asset-one" }, favorite: false }] }));
-    const favorite = await screen.findByRole("button", {
-      name: "Add to favorites: Studio control room",
-    });
-    expect(mocks.listFavoriteStates).toHaveBeenCalledTimes(1);
-    expect(mocks.listFavoriteStates).toHaveBeenCalledWith("id-token", [
-      { backend: "r2", id: "asset-one" },
-    ]);
-
-    fireEvent.click(favorite);
-    await waitFor(() => expect(mocks.setFavorite).toHaveBeenCalledWith(
-      "id-token",
-      { backend: "r2", id: "asset-one" },
-      true,
-    ));
-    const pending = screen.getByRole("button", { name: "Saving favorite: Studio control room" });
-    expect(pending).toHaveAttribute("aria-busy", "true");
-    fireEvent.click(pending);
-    fireEvent.click(screen.getByRole("button", { name: "More actions: Studio control room" }));
-    expect(screen.queryByRole("menuitem", { name: /(?:Add to|Remove from) favorites/ })).toBeNull();
-    fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
-    expect(mocks.setFavorite).toHaveBeenCalledTimes(1);
-    await act(async () => finishFavorite({ success: true, ref: { backend: "r2", id: "asset-one" }, favorite: true, changed: true }));
-    expect(await screen.findByRole("button", { name: "Remove from favorites: Studio control room" })).toBeEnabled();
-    expect(screen.queryByRole("button", { name: "Close details" })).not.toBeInTheDocument();
-  });
-
-  it("offers Undo for a confirmed image favorite with one reverse request", async () => {
-    const router = createMemoryRouter([{ path: "/media/*", element: <SuccessNoticeProvider routeKey="editor-1:images"><MediaRoute /></SuccessNoticeProvider> }],
-      { initialEntries: ["/media/images"] });
-    render(<ShellProvider value={shell}><RouterProvider router={router} /></ShellProvider>);
-    fireEvent.click(await screen.findByRole("button", { name: "Add to favorites: Studio control room" }));
-    const notice = await screen.findByRole("region", { name: "Notifications" });
-    await waitFor(() => expect(notice).toHaveTextContent("Studio control room was added to your favorites."));
-    fireEvent.click(within(notice).getByRole("button", { name: "Undo" }));
-    await waitFor(() => expect(mocks.setFavorite).toHaveBeenCalledTimes(2));
-    expect(mocks.setFavorite).toHaveBeenLastCalledWith("id-token", { backend: "r2", id: "asset-one" }, false);
-    expect(mocks.list).toHaveBeenCalledOnce();
-  });
-
-  it("adds a selected image reference to a collection and returns focus to the card that last had focus", async () => {
-    mocks.listCollections.mockImplementation(async (_token: string, query: { scope: string }) => ({
-      success: true,
-      collections: query.scope === "private" ? [{
-        id: "c".repeat(64),
-        scope: "private",
-        name: "Homepage package",
-        description: "",
-        lifecycle: "active",
-        version: 1,
-        membershipVersion: 1,
-        cover: null,
-        canEdit: true,
-        createdAt: null,
-        updatedAt: null,
-        itemCount: 0,
-      }] : [],
-      nextCursor: null,
-      hasMore: false,
-    }));
-    renderRoute();
-    fireEvent.click(await screen.findByRole("checkbox", { name: "Select Studio control room" }));
-    fireEvent.click(within(screen.getByRole("group", { name: "Collection selection" })).getByRole("button", { name: "Add to collection" }));
-    fireEvent.click(await screen.findByRole("radio", { name: /Homepage package/ }));
-    fireEvent.click(within(screen.getByRole("dialog", { name: "Add selected to collection" })).getByRole("button", { name: "Add to collection" }));
-
-    await waitFor(() => expect(mocks.setCollectionItems).toHaveBeenCalledWith("id-token", expect.objectContaining({
-      collectionId: "c".repeat(64),
-      present: true,
-      refs: [{ backend: "r2", id: "asset-one" }],
-    })));
-    // Decision 3: a bulk action returns focus to the card that last had focus.
-    await waitFor(() => expect(screen.getByRole("button", { name: /^Studio control room, image/ })).toHaveFocus());
-    expect(screen.queryByRole("group", { name: "Collection selection" })).toBeNull();
-    expect(mocks.upload).not.toHaveBeenCalled();
-  });
-
-  it("keeps collection actions available when a filter has no visible images", async () => {
+  it("keeps the selection bar available when a filter has no visible images", async () => {
     renderRoute();
     fireEvent.click(await screen.findByRole("checkbox", { name: "Select Studio control room" }));
     mocks.list.mockResolvedValue(selection([]));
@@ -1264,7 +963,6 @@ describe("MediaRoute", () => {
 
     await waitFor(() => expect(screen.getByRole("group", { name: "Collection selection" })).toBeInTheDocument());
     await waitFor(() => expect(screen.getByRole("checkbox", { name: "Select this page" })).toBeDisabled());
-    expect(screen.getByRole("button", { name: "Add to collection" })).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: "Clear selection" }));
     expect(screen.queryByRole("group", { name: "Collection selection" })).toBeNull();
     // The card that last had focus is gone, so focus falls back to search.
@@ -1327,7 +1025,7 @@ describe("MediaRoute", () => {
       direction: "desc",
       page: 1,
       paging: "cursor",
-    }, undefined, { counts: true, favorites: true });
+    }, undefined, { counts: true });
 
     // Filtering reuses the counts in hand, so the call has no flag.
     fireEvent.click(screen.getByRole("button", { name: "Filter" }));
@@ -1343,7 +1041,7 @@ describe("MediaRoute", () => {
       expect(mocks.list).toHaveBeenLastCalledWith(
         "id-token",
         expect.objectContaining({ kinds: ["image"], page: 1 }),
-        undefined, expect.objectContaining({ favorites: true }),
+        undefined, expect.objectContaining({ counts: expect.any(Boolean) }),
       );
     });
   });
@@ -1384,7 +1082,7 @@ describe("MediaRoute", () => {
       expect(mocks.list).toHaveBeenLastCalledWith(
         "id-token",
         expect.objectContaining({ q: "studio", page: 1 }),
-        undefined, expect.objectContaining({ favorites: true }),
+        undefined, expect.objectContaining({ counts: expect.any(Boolean) }),
       );
 
       await act(async () => {
@@ -1406,7 +1104,7 @@ describe("MediaRoute", () => {
       expect(mocks.list).toHaveBeenLastCalledWith(
         "id-token",
         expect.objectContaining({ q: "", page: 1 }),
-        undefined, expect.objectContaining({ favorites: true }),
+        undefined, expect.objectContaining({ counts: expect.any(Boolean) }),
       );
       expect(screen.queryByText("Search refresh failed")).toBeNull();
 
@@ -1420,7 +1118,7 @@ describe("MediaRoute", () => {
       expect(mocks.list).toHaveBeenLastCalledWith(
         "id-token",
         expect.objectContaining({ q: "camera", page: 1 }),
-        undefined, expect.objectContaining({ favorites: true }),
+        undefined, expect.objectContaining({ counts: expect.any(Boolean) }),
       );
       expect(mocks.list).toHaveBeenCalledTimes(callsBeforeSubmit + 1);
       await act(async () => {
@@ -1467,7 +1165,7 @@ describe("MediaRoute", () => {
       expect(mocks.list).toHaveBeenLastCalledWith(
         "id-token",
         expect.objectContaining({ q: "camera", page: 1 }),
-        undefined, expect.objectContaining({ favorites: true }),
+        undefined, expect.objectContaining({ counts: expect.any(Boolean) }),
       );
     } finally {
       vi.useRealTimers();
@@ -1686,7 +1384,7 @@ describe("MediaRoute", () => {
         direction: "desc",
         page: 1,
         paging: "cursor",
-      }, undefined, expect.objectContaining({ favorites: true }));
+      }, undefined, expect.objectContaining({ counts: expect.any(Boolean) }));
     });
     expect(
       await screen.findByRole("button", { name: /^News desk/ }),
@@ -2014,7 +1712,7 @@ describe("MediaRoute", () => {
         height: null,
       },
     });
-    const { router } = renderRouteWithNotices("/media/favorites");
+    const { router } = renderRouteWithNotices("/media/videos");
     const upload = await screen.findByRole("button", { name: "Upload media" });
     const input = upload.parentElement?.querySelector("input[type=file]");
     if (!(input instanceof HTMLInputElement)) throw new Error("The upload control has no file input.");
@@ -2026,14 +1724,13 @@ describe("MediaRoute", () => {
 
     const notice = await screen.findByRole("region", { name: "Notifications" });
     expect(notice).toHaveTextContent("Studio control room is in Audio.");
-    expect(router.state.location.pathname).toBe("/media/favorites");
+    expect(router.state.location.pathname).toBe("/media/videos");
     fireEvent.click(within(notice).getByRole("button", { name: "Open Audio" }));
     await waitFor(() => expect(router.state.location.pathname).toBe("/media/voiceovers"));
   });
 
   it.each([
-    ["/media/favorites", "Upload images, PDFs, WAV audio, or videos"],
-    ["/media/collections", "Upload images, PDFs, WAV audio, or videos"],
+    ["/media/videos", "Upload images, PDFs, WAV audio, or videos"],
     ["/media/voiceovers", "Upload WAV audio or videos"],
   ])("offers upload on %s without putting it in the tab strip", async (path, title) => {
     renderRoute(path);
@@ -2043,11 +1740,11 @@ describe("MediaRoute", () => {
   });
 
   it("does not offer upload without media upload permission", async () => {
-    renderRoute("/media/favorites", {
+    renderRoute("/media/videos", {
       ...shell,
       principal: { id: "contributor-1", grants: [{ role: "contributor" }] },
     });
-    expect(await screen.findByRole("heading", { name: "Favorites" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Videos" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Upload media" })).toBeNull();
   });
 
@@ -2058,16 +1755,16 @@ describe("MediaRoute", () => {
     expect(screen.getAllByRole("button", { name: "Upload media" })).toHaveLength(1);
   });
 
-  it("keeps Favorites mounted while an image upload is open", async () => {
-    renderRoute("/media/favorites");
-    expect(await screen.findByRole("heading", { name: "Favorites" })).toBeInTheDocument();
+  it("keeps a video source mounted while an image upload is open", async () => {
+    renderRoute("/media/videos");
+    expect(await screen.findByRole("heading", { name: "Videos" })).toBeInTheDocument();
     act(() => routeChosenFiles([new File(["image"], "shore.png", { type: "image/png" })]));
     expect(await screen.findByText("shore.png")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Favorites" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Videos" })).toBeInTheDocument();
   });
 
   it("protects a routed image and returns focus to Upload after it is discarded", async () => {
-    renderRoute("/media/favorites");
+    renderRoute("/media/videos");
     const upload = await screen.findByRole("button", { name: "Upload media" });
     const input = upload.parentElement?.querySelector("input[type=file]");
     if (!(input instanceof HTMLInputElement)) throw new Error("The upload control has no file input.");
@@ -2181,9 +1878,12 @@ describe("MediaRoute", () => {
   it("keeps one upload control while a routed video is open", async () => {
     installTestLockManager();
     mocks.listSources.mockResolvedValue({
-      sources: [{ id: "video-library", label: "Videos", description: "Staff videos", mediaKind: "video", canBrowse: true, canUpload: true }],
+      sources: [
+        { id: "video-library", label: "Videos", description: "Staff videos", mediaKind: "video", canBrowse: true, canUpload: true },
+        { id: "archive", label: "Archive", description: "Closed archive", mediaKind: "video", canBrowse: true, canUpload: false },
+      ],
     });
-    renderRoute("/media/favorites");
+    renderRoute("/media/videos/archive");
     const upload = await screen.findByRole("button", { name: "Upload media" });
     const input = upload.parentElement?.querySelector("input[type=file]");
     if (!(input instanceof HTMLInputElement)) throw new Error("The upload control has no file input.");
@@ -2226,7 +1926,7 @@ describe("MediaRoute", () => {
     const transferUpload = vi.spyOn(sourceMediaUpload, "transferVideo").mockImplementation(({ session }) =>
       new Promise(resolve => { finishing.set(session.assetId, resolve); }));
     try {
-      const { router } = renderRoute("/media/favorites");
+      const { router } = renderRoute("/media/images");
       act(() => routeChosenFiles(files));
       fireEvent.click(await screen.findByRole("button", { name: "Start all uploads" }));
       await waitFor(() => expect(finishing.size).toBe(2));
@@ -2235,7 +1935,7 @@ describe("MediaRoute", () => {
       await act(async () => {
         ids.forEach((id, index) => finishing.get(id)?.({
           id, sourceId, name: files[index].name, fileVersion: "original-1",
-          viewingCopy: { state: "processing" }, collectionPlacement: "added",
+          viewingCopy: { state: "processing" },
         } as sourceMediaUpload.VideoUploadResult));
       });
       expect(uploadRouterSnapshot().videoSession).toBe(false);
@@ -2247,7 +1947,6 @@ describe("MediaRoute", () => {
       expect(listSourceMedia).toHaveBeenCalledWith("id-token", { sourceId, pendingIds: [failedId, readyId] });
       expect(uploads.getByText(/Ready to view/)).toHaveTextContent(/ready\.mp4.*Ready to view/);
       expect(uploads.getByText(/Viewing copy failed/)).toHaveTextContent(/failed\.mp4.*Viewing copy failed/);
-      expect(uploads.getByText(/Viewing copy failed/)).toHaveTextContent("Added to the selected collection");
       await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
       expect(listSourceMedia).toHaveBeenCalledTimes(1);
 
@@ -2265,7 +1964,10 @@ describe("MediaRoute", () => {
   it("reloads the open destination library after a routed video finishes", async () => {
     installTestLockManager();
     mocks.listSources.mockResolvedValue({
-      sources: [{ id: "video-library", label: "Videos", description: "Staff videos", mediaKind: "video", canBrowse: true, canUpload: true, canEditMetadata: true }],
+      sources: [
+        { id: "video-library", label: "Videos", description: "Staff videos", mediaKind: "video", canBrowse: true, canUpload: true, canEditMetadata: true },
+        { id: "archive", label: "Archive", description: "Closed archive", mediaKind: "video", canBrowse: true, canUpload: false },
+      ],
     });
     const existingVideo = {
       id: "video-existing",
@@ -2296,7 +1998,7 @@ describe("MediaRoute", () => {
       return new Promise(resolve => { finishTransfer = resolve; });
     });
     try {
-      renderRoute("/media/favorites");
+      renderRoute("/media/videos/archive");
       const upload = await screen.findByRole("button", { name: "Upload media" });
       const input = upload.parentElement?.querySelector("input[type=file]");
       if (!(input instanceof HTMLInputElement)) throw new Error("The upload control has no file input.");
@@ -2331,7 +2033,7 @@ describe("MediaRoute", () => {
       mocks.listSources.mockResolvedValue({
         sources: [{ id: "video-library", label: "Videos", description: "Staff videos", mediaKind: "video", canBrowse: true, canUpload: true }],
       });
-      renderRoute("/media/favorites");
+      renderRoute("/media/images");
       act(() => routeChosenFiles([new File(["video"], "clip.mp4", { type: "video/mp4" })]));
 
       expect(await screen.findByText("Uploads are unavailable in this browser. The selected video was not added.")).toBeInTheDocument();
@@ -2350,9 +2052,13 @@ describe("MediaRoute", () => {
       Array.from({ length: 19 }, (_, index) => ({ id: `saved-${index}`, name: `saved-${index}.mp4`, size: 4, lastModified: 42 })),
     ));
     mocks.listSources.mockResolvedValue({
-      sources: [{ id: "video-library", label: "Videos", description: "Staff videos", mediaKind: "video", canBrowse: true, canUpload: true }],
+      sources: [
+        { id: "video-library", label: "Videos", description: "Staff videos", mediaKind: "video", canBrowse: true, canUpload: true },
+        { id: "archive", label: "Archive", description: "Closed archive", mediaKind: "video", canBrowse: true, canUpload: false },
+      ],
     });
-    renderRoute("/media/favorites");
+    renderRoute("/media/videos/archive");
+    await screen.findByRole("button", { name: "Upload media" });
     act(() => routeChosenFiles(["one.mp4", "two.mp4"].map(name => new File(["video"], name, { type: "video/mp4" }))));
 
     await waitFor(() => expect(uploadRouterSnapshot().videoSession).toBe(false));
@@ -2366,8 +2072,8 @@ describe("MediaRoute", () => {
       sources: [{ id: "video-library", label: "Videos", description: "Staff videos", mediaKind: "video", canBrowse: true, canUpload: true }],
     };
     mocks.listSources.mockResolvedValue(videoSources);
-    renderRoute("/media/favorites");
-    await waitFor(() => expect(mocks.listFavorites).toHaveBeenCalledOnce());
+    renderRoute("/media/images");
+    await screen.findByRole("button", { name: /^Studio control room/ });
     if (failure === "token") mocks.getIdToken.mockRejectedValueOnce(new Error("Token failed"));
     else mocks.listSources.mockRejectedValueOnce(new Error("Source list failed"));
     act(() => routeChosenFiles([new File(["video"], "clip.mp4", { type: "video/mp4" })]));
@@ -2382,7 +2088,7 @@ describe("MediaRoute", () => {
   });
 
   it("keeps a routed video when the Media link redirects to Images", async () => {
-    const { router } = renderRoute("/media/favorites");
+    const { router } = renderRoute("/media/videos");
     act(() => routeChosenFiles([new File(["video"], "clip.mp4", { type: "video/mp4" })]));
     expect(await screen.findByText("Video uploads are not available.")).toBeInTheDocument();
 
@@ -2394,8 +2100,8 @@ describe("MediaRoute", () => {
     expect(screen.getByText("Video uploads are not available.")).toBeInTheDocument();
   });
 
-  it("routes a mixed batch from Favorites and stays on that tab", async () => {
-    const { router } = renderRoute("/media/favorites");
+  it("routes a mixed batch from a video source and stays on that tab", async () => {
+    const { router } = renderRoute("/media/videos");
     const upload = await screen.findByRole("button", { name: "Upload media" });
     const input = upload.parentElement?.querySelector("input[type=file]");
     if (!(input instanceof HTMLInputElement)) throw new Error("The upload control has no file input.");
@@ -2413,7 +2119,7 @@ describe("MediaRoute", () => {
     expect(screen.getByText("notes.txt")).toBeInTheDocument();
     expect(screen.getByText("Choose an image, PDF, WAV audio file, or video.")).toBeInTheDocument();
     expect(await screen.findByText("Video uploads are not available.")).toBeInTheDocument();
-    expect(router.state.location.pathname).toBe("/media/favorites");
+    expect(router.state.location.pathname).toBe("/media/videos");
     expect(mocks.upload).not.toHaveBeenCalled();
   });
 
@@ -2444,7 +2150,7 @@ describe("MediaRoute", () => {
         path: "/media/*",
         element: <SuccessNoticeProvider routeKey="media"><MediaRoute /></SuccessNoticeProvider>,
       }],
-      { initialEntries: ["/media/favorites"] },
+      { initialEntries: ["/media/videos"] },
     );
     render(<ShellProvider value={shell}><RouterProvider router={router} /></ShellProvider>);
     const upload = await screen.findByRole("button", { name: "Upload media" });
@@ -2461,7 +2167,7 @@ describe("MediaRoute", () => {
 
     const notice = await screen.findByRole("region", { name: "Notifications" });
     expect(notice).toHaveTextContent("Studio control room is in Images.");
-    expect(router.state.location.pathname).toBe("/media/favorites");
+    expect(router.state.location.pathname).toBe("/media/videos");
     fireEvent.click(screen.getByRole("button", { name: "Open Images" }));
     await waitFor(() => expect(router.state.location.pathname).toBe("/media/images"));
     expect(await screen.findByRole("button", { name: /^Studio control room/ })).toBeInTheDocument();
@@ -2892,7 +2598,7 @@ describe("MediaRoute", () => {
     renderRoute("/media/images?selected=asset-one");
     const inspector = await screen.findByRole("complementary", { name: "Asset details" });
     const details = within(inspector).getByRole("button", { name: "Details" });
-    const calls = [mocks.list.mock.calls.length, mocks.update.mock.calls.length, mocks.setFavorite.mock.calls.length];
+    const calls = [mocks.list.mock.calls.length, mocks.update.mock.calls.length];
 
     fireEvent.click(details);
     expect(details).toHaveAttribute("aria-expanded", "false");
@@ -2900,7 +2606,7 @@ describe("MediaRoute", () => {
     fireEvent.click(await screen.findByRole("button", { name: /^Studio control room, image/ }));
 
     expect(within(await screen.findByRole("complementary", { name: "Asset details" })).getByRole("button", { name: "Details" })).toHaveAttribute("aria-expanded", "false");
-    expect([mocks.list.mock.calls.length, mocks.update.mock.calls.length, mocks.setFavorite.mock.calls.length]).toEqual(calls);
+    expect([mocks.list.mock.calls.length, mocks.update.mock.calls.length]).toEqual(calls);
   });
 
   it("uses tag tokens and loaded or recent suggestions without making a request", async () => {
@@ -2914,13 +2620,13 @@ describe("MediaRoute", () => {
     localStorage.setItem("njpbs-admin:media-recent-tags:images:editor-1", JSON.stringify(["transportation"]));
     renderRoute("/media/images?selected=asset-one");
     const tags = await screen.findByRole("combobox", { name: "Tags" });
-    const calls = [mocks.list.mock.calls.length, mocks.update.mock.calls.length, mocks.setFavorite.mock.calls.length];
+    const calls = [mocks.list.mock.calls.length, mocks.update.mock.calls.length];
 
     fireEvent.change(tags, { target: { value: "tr" } });
     expect(await screen.findByRole("option", { name: "trenton" })).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "transportation" })).toBeInTheDocument();
     expect(screen.getByText("From this page and your recent tags.")).toBeInTheDocument();
-    expect([mocks.list.mock.calls.length, mocks.update.mock.calls.length, mocks.setFavorite.mock.calls.length]).toEqual(calls);
+    expect([mocks.list.mock.calls.length, mocks.update.mock.calls.length]).toEqual(calls);
 
     fireEvent.change(tags, { target: { value: "switcher," } });
     expect(screen.getByRole("button", { name: "Remove tag switcher" })).toBeInTheDocument();
@@ -3000,13 +2706,13 @@ describe("MediaRoute", () => {
   it("resizes image details locally without making a request", async () => {
     renderRoute("/media/images?selected=asset-one");
     const handle = await screen.findByRole("separator", { name: "Resize details" });
-    const calls = [mocks.list.mock.calls.length, mocks.update.mock.calls.length, mocks.setFavorite.mock.calls.length];
+    const calls = [mocks.list.mock.calls.length, mocks.update.mock.calls.length];
 
     fireEvent.keyDown(handle, { key: "ArrowLeft" });
 
     expect(handle).toHaveAttribute("aria-valuenow", "21");
     expect(localStorage.getItem("cms.inspector.images.width")).toBe("21");
-    expect([mocks.list.mock.calls.length, mocks.update.mock.calls.length, mocks.setFavorite.mock.calls.length]).toEqual(calls);
+    expect([mocks.list.mock.calls.length, mocks.update.mock.calls.length]).toEqual(calls);
   });
 
   it("shows and removes an archived assignment while keeping the primary", async () => {
@@ -3397,50 +3103,9 @@ describe("MediaRoute images page messages", () => {
     expect(screen.queryByText("Media library could not be loaded")).toBeNull();
   });
 
-  it("shows Favorites need attention with its retry", async () => {
-    mocks.listFavoriteStates.mockRejectedValueOnce(new Error("Favorites are offline"));
-    renderRoute("/media/images");
-    const message = (await screen.findByText("Favorites need attention")).closest(".inline-message") as HTMLElement;
-    expect(message).toHaveTextContent("Favorites could not be loaded.");
-    const callsBeforeRetry = mocks.listFavoriteStates.mock.calls.length;
-    fireEvent.click(within(message).getByRole("button", { name: "Try again" }));
-    await waitFor(() => expect(mocks.listFavoriteStates).toHaveBeenCalledTimes(callsBeforeRetry + 1));
-    await waitFor(() => expect(screen.queryByText("Favorites need attention")).toBeNull());
-  });
-
-  it("announces Items added to collection", async () => {
-    mocks.listCollections.mockImplementation(async (_token: string, query: { scope: string }) => ({
-      success: true,
-      collections: query.scope === "private" ? [{
-        id: "c".repeat(64), scope: "private", name: "Homepage package", description: "", lifecycle: "active",
-        version: 1, membershipVersion: 1, cover: null, canEdit: true, createdAt: null, updatedAt: null, itemCount: 0,
-      }] : [],
-      nextCursor: null,
-      hasMore: false,
-    }));
-    renderRoute("/media/images");
-    fireEvent.click(await screen.findByRole("checkbox", { name: "Select Studio control room" }));
-    fireEvent.click(within(screen.getByRole("group", { name: "Collection selection" })).getByRole("button", { name: "Add to collection" }));
-    fireEvent.click(await screen.findByRole("radio", { name: /Homepage package/ }));
-    fireEvent.click(within(screen.getByRole("dialog", { name: "Add selected to collection" })).getByRole("button", { name: "Add to collection" }));
-    const notice = (await screen.findByText("Items added to collection")).closest("[role=status]");
-    expect(notice).toHaveTextContent("1 item was added to Homepage package.");
-  });
-
-  it("says Select no more than 30 items for one collection change. once 31 are selected", async () => {
-    mocks.list.mockResolvedValue(selection(pageOf(31)));
-    renderRoute("/media/images");
-    fireEvent.click(await screen.findByRole("checkbox", { name: /^Select Image 00( for a collection)?$/ }));
-    const bar = screen.getByRole("group", { name: "Collection selection" });
-    expect(within(bar).queryByRole("alert")).toBeNull();
-    fireEvent.click(within(bar).getByRole("checkbox", { name: "Select this page" }));
-    expect(within(bar).getByRole("alert")).toHaveTextContent("Select no more than 30 items for one collection change.");
-    expect(within(bar).getByRole("button", { name: "Add to collection" })).toBeDisabled();
-  });
-
   it("keeps Selection carries across media pages and filters. as the selection bar's info", async () => {
     renderRoute("/media/images");
-    fireEvent.click(await screen.findByRole("checkbox", { name: /^Select Studio control room( for a collection)?$/ }));
+    fireEvent.click(await screen.findByRole("checkbox", { name: "Select Studio control room" }));
     const bar = screen.getByRole("group", { name: "Collection selection" });
     expect(within(bar).getByRole("button", { name: "About selection" }))
       .toHaveAccessibleDescription("Selection carries across media pages and filters.");
@@ -3556,7 +3221,7 @@ describe("MediaRoute images toolbar", () => {
       vi.useRealTimers();
     }
     expect(mocks.list).toHaveBeenCalledTimes(calls + 1);
-    expect(mocks.list).toHaveBeenLastCalledWith("id-token", expect.objectContaining({ kinds: ["image"], page: 1 }), undefined, expect.objectContaining({ favorites: true }));
+    expect(mocks.list).toHaveBeenLastCalledWith("id-token", expect.objectContaining({ kinds: ["image"], page: 1 }), undefined, expect.objectContaining({ counts: expect.any(Boolean) }));
     expect(screen.getByRole("button", { name: "Edit filter Type: Images" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Remove filter Type: Images" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Filter, 1 applied" })).toBeInTheDocument();
@@ -3597,10 +3262,6 @@ describe("MediaRoute images toolbar", () => {
         mocks.remove,
         mocks.upload,
         mocks.replace,
-        mocks.setFavorite,
-        mocks.setFavorites,
-        mocks.mutateCollection,
-        mocks.setCollectionItems,
       ];
       const writeCounts = writes.map((mock) => mock.mock.calls.length);
 
@@ -3636,7 +3297,7 @@ describe("MediaRoute images toolbar", () => {
     await waitFor(() => expect(mocks.list).toHaveBeenCalledTimes(calls + 1));
     await new Promise((resolve) => setTimeout(resolve, 350));
     expect(mocks.list).toHaveBeenCalledTimes(calls + 1);
-    expect(mocks.list).toHaveBeenLastCalledWith("id-token", expect.objectContaining({ categories: ["news", "arts"], page: 1 }), undefined, expect.objectContaining({ favorites: true }));
+    expect(mocks.list).toHaveBeenLastCalledWith("id-token", expect.objectContaining({ categories: ["news", "arts"], page: 1 }), undefined, expect.objectContaining({ counts: expect.any(Boolean) }));
   });
 
   it("while details are unsaved, a Type toggle asks to leave at once; Keep editing restores the option and returns focus to Filter", async () => {
@@ -3777,7 +3438,7 @@ describe("MediaRoute images toolbar", () => {
     expect(params(router).get("page")).toBeNull();
     expect(router.state.historyAction).toBe("REPLACE");
     await waitFor(() => expect(mocks.list).toHaveBeenCalledTimes(calls + 1));
-    expect(mocks.list).toHaveBeenLastCalledWith("id-token", expect.objectContaining({ sort: "name", page: 1 }), undefined, expect.objectContaining({ favorites: true }));
+    expect(mocks.list).toHaveBeenLastCalledWith("id-token", expect.objectContaining({ sort: "name", page: 1 }), undefined, expect.objectContaining({ counts: expect.any(Boolean) }));
     expect(screen.getByRole("button", { name: "Sort: Name, Z–A" })).toBeInTheDocument();
   });
 
@@ -3794,7 +3455,7 @@ describe("MediaRoute images toolbar", () => {
     await waitFor(() => expect(mocks.list).toHaveBeenCalledTimes(calls + 1));
     expect(mocks.list).toHaveBeenLastCalledWith("id-token", expect.objectContaining({
       cursor: cursorTokens[0], paging: "cursor", page: 2,
-    }), undefined, expect.objectContaining({ favorites: true }));
+    }), undefined, expect.objectContaining({ counts: expect.any(Boolean) }));
     expect(params(router).get("page")).toBeNull();
     expect(document.querySelector(".media-result-status")).toHaveTextContent("90 results");
     expect(screen.getByText("Page 2 · reload returns to page 1")).toBeVisible();
@@ -4191,8 +3852,7 @@ describe("MediaRoute images toolbar", () => {
     try {
       renderRoute("/media/images");
       await screen.findByRole("button", { name: /^Studio control room/ });
-      await waitFor(() => expect(mocks.listFavoriteStates).toHaveBeenCalled());
-      const requests = [mocks.list, mocks.listFavoriteStates, mocks.listCollections, mocks.upload]
+      const requests = [mocks.list, mocks.upload]
         .map((mock) => mock.mock.calls.length);
 
       fireEvent.keyDown(window, { key: "u", metaKey: true });
@@ -4200,7 +3860,7 @@ describe("MediaRoute images toolbar", () => {
         target: { files: [new File(["image"], `intake-${width}.png`, { type: "image/png" })] },
       });
 
-      expect([mocks.list, mocks.listFavoriteStates, mocks.listCollections, mocks.upload]
+      expect([mocks.list, mocks.upload]
         .map((mock) => mock.mock.calls.length)).toEqual(requests);
     } finally {
       vi.unstubAllGlobals();
@@ -4286,7 +3946,6 @@ describe("MediaRoute images toolbar", () => {
   it("typing in search re-renders neither the cards nor the toolbar", async () => {
     renderRoute("/media/images");
     await screen.findByRole("button", { name: /^Studio control room/ });
-    await waitFor(() => expect(mocks.listFavoriteStates).toHaveBeenCalled());
     await new Promise((resolve) => setTimeout(resolve, 50));
     const search = screen.getByRole("searchbox", { name: "Search media" });
     expect(mocks.tileRenders).toBeGreaterThan(0);
@@ -4308,25 +3967,9 @@ describe("MediaRoute images grid", () => {
   const status = () => document.querySelector(".media-selection-status") as HTMLElement;
   const requestCounts = () => [
     mocks.list.mock.calls.length,
-    mocks.listFavoriteStates.mock.calls.length,
-    mocks.setFavorite.mock.calls.length,
-    mocks.listCollections.mock.calls.length,
-    mocks.setCollectionItems.mock.calls.length,
     mocks.update.mock.calls.length,
     mocks.remove.mock.calls.length,
   ];
-  const favoritesSettled = async (name = "Studio control room") => {
-    await waitFor(() => expect(screen.getByRole("button", { name: `Add to favorites: ${name}` })).toBeEnabled());
-  };
-  const privateCollection = () => mocks.listCollections.mockImplementation(async (_token: string, query: { scope: string }) => ({
-    success: true,
-    collections: query.scope === "private" ? [{
-      id: "c".repeat(64), scope: "private", name: "Homepage package", description: "", lifecycle: "active",
-      version: 1, membershipVersion: 1, cover: null, canEdit: true, createdAt: null, updatedAt: null, itemCount: 0,
-    }] : [],
-    nextCursor: null,
-    hasMore: false,
-  }));
 
   it("selects from the tile mark without opening details", async () => {
     const { router } = renderRoute("/media/images");
@@ -4377,7 +4020,6 @@ describe("MediaRoute images grid", () => {
     fireEvent.click(screen.getByRole("menuitem", { name: "Open full size" }));
     const viewer = await screen.findByRole("dialog", { name: "Studio control room" });
     expect(viewer.querySelector("img[src='https://media.njpbs.org/studio.png']")).toBeInTheDocument();
-    expect(within(viewer.querySelector("header")!).getByRole("button", { name: "Favorite: Studio control room" })).toHaveAttribute("aria-pressed", "false");
     expect(within(viewer.querySelector("header")!).getByRole("status")).toHaveTextContent("1 of 2");
     fireEvent.click(within(viewer).getByRole("button", { name: "Next file" }));
     expect(within(viewer.querySelector("header")!).getByRole("status")).toHaveTextContent("2 of 2");
@@ -4819,8 +4461,8 @@ describe("MediaRoute images grid", () => {
     fireEvent.click(screen.getByRole("button", { name: "Apply to 1 image" }));
     await screen.findByRole("heading", { name: "Batch results" });
 
-    await act(async () => { await router.navigate("/media/favorites"); });
-    expect(router.state.location.pathname).toBe("/media/favorites");
+    await act(async () => { await router.navigate("/media/videos"); });
+    expect(router.state.location.pathname).toBe("/media/videos");
     expect(screen.queryByRole("dialog", { name: "Leave with unsaved changes?" })).toBeNull();
   });
 
@@ -4833,7 +4475,7 @@ describe("MediaRoute images grid", () => {
     fireEvent.click(screen.getByRole("menuitem", { name: "Clear all tags" }));
     fireEvent.click(screen.getByRole("button", { name: "Review 1 changes" }));
 
-    await act(async () => { await router.navigate("/media/favorites"); });
+    await act(async () => { await router.navigate("/media/videos"); });
     expect(screen.getByText("Leave with unsaved batch changes?")).toBeInTheDocument();
     expect(screen.queryByRole("dialog", { name: "Leave with unsaved changes?" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Keep editing" }));
@@ -4878,7 +4520,7 @@ describe("MediaRoute images grid", () => {
     fireEvent.click(screen.getByRole("menuitem", { name: "Clear all tags" }));
     fireEvent.click(screen.getByRole("button", { name: "Review 1 changes" }));
     fireEvent.click(screen.getByRole("button", { name: "Apply to 1 image" }));
-    await act(async () => { await router.navigate("/media/favorites"); });
+    await act(async () => { await router.navigate("/media/videos"); });
     expect(screen.queryByRole("button", { name: "Leave without saving" })).toBeNull();
     await act(async () => {
       finishSave({
@@ -4887,7 +4529,7 @@ describe("MediaRoute images grid", () => {
         asset: { ...asset, tags: [], version: 3, etag: '"saved"' },
       });
     });
-    await waitFor(() => expect(router.state.location.pathname).toBe("/media/favorites"));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/media/videos"));
     expect(screen.queryByRole("button", { name: "Leave without saving" })).toBeNull();
   });
 
@@ -4946,7 +4588,7 @@ describe("MediaRoute images grid", () => {
     const bar = screen.getByRole("group", { name: "Collection selection" });
     expect(bar).toHaveTextContent(/^30 selected/);
     expect(within(bar).getByRole("checkbox", { name: "Select this page" })).toBeChecked();
-    expect(within(bar).getByRole("button", { name: "Add to collection" })).toBeEnabled();
+    expect(within(bar).getByRole("button", { name: "Edit tags" })).toBeEnabled();
     expect(status()).toHaveTextContent("30 selected");
     expect(requestCounts()).toEqual(calls);
   });
@@ -4974,44 +4616,9 @@ describe("MediaRoute images grid", () => {
     await waitFor(() => expect(screen.getByRole("searchbox", { name: "Search media" })).toHaveFocus());
   });
 
-  it("adds two selected images to favorites and keeps a failed image selected", async () => {
-    mocks.list.mockResolvedValue(selection([asset, { ...asset, id: "asset-two", name: "News desk" }]));
-    let finish!: (value: unknown) => void;
-    mocks.setFavorites.mockReturnValue(new Promise(resolve => { finish = resolve; }));
-    renderRoute("/media/images");
-    await screen.findByRole("grid", { name: "Images" });
-    fireEvent.click(screen.getByRole("checkbox", { name: "Select Studio control room" }));
-    fireEvent.click(screen.getByRole("checkbox", { name: "Select News desk" }));
-    fireEvent.click(screen.getAllByRole("button", { name: "More actions: 2 items" })[0]);
-    fireEvent.click(within(screen.getByRole("menu")).getByRole("menuitem", { name: "Add to favorites" }));
-
-    await waitFor(() => expect(mocks.setFavorites).toHaveBeenCalledWith("id-token", [
-      { backend: "r2", id: "asset-one" },
-      { backend: "r2", id: "asset-two" },
-    ], true));
-    const bar = screen.getByRole("group", { name: "Collection selection" });
-    expect(within(bar).getByRole("button", { name: "Add to favorites" })).toBeDisabled();
-    expect(within(bar).getByRole("button", { name: "Clear selection" })).toBeDisabled();
-    await act(async () => finish({
-      success: true,
-      favorite: true,
-      results: [
-        { ref: { backend: "r2", id: "asset-one" }, favorite: true, changed: false },
-        { ref: { backend: "r2", id: "asset-two" }, error: "Could not save", status: 500 },
-      ],
-    }));
-
-    expect(await screen.findByRole("alert")).toHaveTextContent("1 already a favorite. 1 could not be changed.");
-    expect(screen.getByRole("checkbox", { name: "Select Studio control room" })).not.toBeChecked();
-    expect(screen.getByRole("checkbox", { name: "Select News desk" })).toBeChecked();
-    expect(status()).toHaveTextContent("1 selected");
-    expect(within(bar).getByRole("button", { name: "Add to favorites" })).toBeEnabled();
-  });
-
   it("the context menu mirrors the tile actions and opening it makes no request", async () => {
     renderRoute("/media/images");
     await screen.findByRole("grid", { name: "Images" });
-    await favoritesSettled();
     const calls = requestCounts();
 
     fireEvent.click(within(tile("Studio control room")).getByRole("button", { name: "More actions: Studio control room" }));
@@ -5022,7 +4629,7 @@ describe("MediaRoute images grid", () => {
     fireEvent.contextMenu(tile("Studio control room").querySelector(".media-tile-thumb") as HTMLElement, { clientX: 40, clientY: 40 });
     const menu = screen.getByRole("menu", { name: "Studio control room" });
     const items = within(menu).getAllByRole("menuitem").map((item) => item.textContent);
-    expect(items).toEqual(["Open details", "Quick Look", "Open full size", "Add to favorites", "Add to collection", "Select", "Copy link", "Copy file address", "Delete from library"]);
+    expect(items).toEqual(["Open details", "Quick Look", "Open full size", "Select", "Copy link", "Copy file address", "Delete from library"]);
     expect(items).toEqual(moreItems);
     fireEvent.keyDown(menu, { key: "Escape" });
     expect(requestCounts()).toEqual(calls);
@@ -5080,7 +4687,6 @@ describe("MediaRoute images grid", () => {
   it("a hover card shows the loaded facts after the pause and makes no request", async () => {
     renderRoute("/media/images");
     await screen.findByRole("grid", { name: "Images" });
-    await favoritesSettled();
     const calls = requestCounts();
     const card = openControl("Studio control room");
     act(() => card.focus());
@@ -5101,8 +4707,6 @@ describe("MediaRoute images grid", () => {
     fireEvent.change(await screen.findByRole("textbox", { name: "Name" }), { target: { value: "Unsaved control room" } });
     const other = tile("News desk");
     expect(within(other).getByRole("checkbox", { name: "Select News desk" })).toBeDisabled();
-    expect(within(other).getByRole("button", { name: /^(Add to favorites|Loading favorite|Saving favorite): News desk$/ })).toBeDisabled();
-    expect(within(other).getByRole("button", { name: "Add to collection: News desk" })).toBeDisabled();
 
     const card = openControl("News desk");
     card.focus();
@@ -5113,22 +4717,8 @@ describe("MediaRoute images grid", () => {
 
     fireEvent.contextMenu(other.querySelector(".media-tile-thumb") as HTMLElement);
     expect(within(screen.getByRole("menu", { name: "News desk" })).getAllByRole("menuitem").map((item) => item.textContent)).toEqual(["Open details"]);
-    expect(mocks.setFavorite).not.toHaveBeenCalled();
   });
 
-  it("adds one image to a collection from its tile", async () => {
-    privateCollection();
-    mocks.list.mockResolvedValue(selection([asset, { ...asset, id: "asset-two", name: "News desk", etag: '"media.YXNzZXQtdHdv.2"' }]));
-    renderRoute("/media/images");
-    await screen.findByRole("grid", { name: "Images" });
-    fireEvent.click(within(tile("News desk")).getByRole("button", { name: "Add to collection: News desk" }));
-    fireEvent.click(await screen.findByRole("radio", { name: /Homepage package/ }));
-    fireEvent.click(within(screen.getByRole("dialog", { name: "Add selected to collection" })).getByRole("button", { name: "Add to collection" }));
-    await waitFor(() => expect(mocks.setCollectionItems).toHaveBeenCalledWith("id-token", expect.objectContaining({
-      refs: [{ backend: "r2", id: "asset-two" }],
-    })));
-    expect((await screen.findByText("Items added to collection")).closest("[role=status]")).toHaveTextContent("1 item was added to Homepage package.");
-  });
 });
 
 describe("MediaRoute images list", () => {
@@ -5140,17 +4730,10 @@ describe("MediaRoute images list", () => {
   const columns = (element: HTMLElement) => [...element.querySelectorAll<HTMLElement>("[data-column]")].map((cell) => cell.dataset.column);
   const requestCounts = () => [
     mocks.list.mock.calls.length,
-    mocks.listFavoriteStates.mock.calls.length,
-    mocks.setFavorite.mock.calls.length,
-    mocks.listCollections.mock.calls.length,
-    mocks.setCollectionItems.mock.calls.length,
     mocks.update.mock.calls.length,
     mocks.remove.mock.calls.length,
   ];
   const useList = () => localStorage.setItem(MEDIA_DISPLAY_STORAGE_KEY, JSON.stringify({ layout: "list" }));
-  const favoritesSettled = async (name = "Studio control room") => {
-    await waitFor(() => expect(screen.getByRole("button", { name: `Add to favorites: ${name}` })).toBeEnabled());
-  };
 
   it("list columns follow the card fields plus Updated", async () => {
     useList();
@@ -5188,13 +4771,13 @@ describe("MediaRoute images list", () => {
     expect(params(router).get("page")).toBeNull();
     expect(router.state.historyAction).toBe("REPLACE");
     await waitFor(() => expect(mocks.list).toHaveBeenCalledTimes(calls + 1));
-    expect(mocks.list).toHaveBeenLastCalledWith("id-token", expect.objectContaining({ sort: "name", direction: "asc", page: 1 }), undefined, expect.objectContaining({ favorites: true }));
+    expect(mocks.list).toHaveBeenLastCalledWith("id-token", expect.objectContaining({ sort: "name", direction: "asc", page: 1 }), undefined, expect.objectContaining({ counts: expect.any(Boolean) }));
     // The toolbar's Sort control reads the same state.
     expect(screen.getByRole("button", { name: "Sort: Name, A–Z" })).toBeInTheDocument();
 
     fireEvent.click(within(header()).getByRole("button", { name: "Name" }));
     await waitFor(() => expect(mocks.list).toHaveBeenCalledTimes(calls + 2));
-    expect(mocks.list).toHaveBeenLastCalledWith("id-token", expect.objectContaining({ sort: "name", direction: "desc", page: 1 }), undefined, expect.objectContaining({ favorites: true }));
+    expect(mocks.list).toHaveBeenLastCalledWith("id-token", expect.objectContaining({ sort: "name", direction: "desc", page: 1 }), undefined, expect.objectContaining({ counts: expect.any(Boolean) }));
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(mocks.list).toHaveBeenCalledTimes(calls + 2);
   });
@@ -5246,7 +4829,6 @@ describe("MediaRoute images list", () => {
     mocks.list.mockResolvedValue(two());
     const { router } = renderRoute("/media/images?sort=name&direction=asc");
     await screen.findByRole("grid", { name: "Images" });
-    await favoritesSettled();
     const search = router.state.location.search;
     const calls = requestCounts();
     const history = router.state.historyAction;
@@ -5292,7 +4874,6 @@ describe("MediaRoute images list", () => {
     mocks.list.mockResolvedValue(two());
     renderRoute("/media/images");
     await screen.findByRole("grid", { name: "Images" });
-    await favoritesSettled();
     const calls = requestCounts();
 
     fireEvent.click(within(row("Studio control room")).getByRole("button", { name: "More actions: Studio control room" }));
@@ -5302,7 +4883,7 @@ describe("MediaRoute images list", () => {
     fireEvent.contextMenu(row("Studio control room").querySelector(".media-row-thumb") as HTMLElement, { clientX: 40, clientY: 40 });
     let menu = screen.getByRole("menu", { name: "Studio control room" });
     expect(within(menu).getAllByRole("menuitem").map((item) => item.textContent))
-      .toEqual(["Open details", "Quick Look", "Open full size", "Add to favorites", "Add to collection", "Select", "Copy link", "Copy file address", "Delete from library"]);
+      .toEqual(["Open details", "Quick Look", "Open full size", "Select", "Copy link", "Copy file address", "Delete from library"]);
     expect(within(menu).getAllByRole("menuitem").map((item) => item.textContent)).toEqual(moreItems);
     fireEvent.keyDown(menu, { key: "Escape" });
     await waitFor(() => expect(openControl("Studio control room")).toHaveFocus());
@@ -5330,7 +4911,6 @@ describe("MediaRoute images list", () => {
     fireEvent.change(await screen.findByRole("textbox", { name: "Name" }), { target: { value: "Unsaved control room" } });
     const other = row("News desk");
     expect(within(other).getByRole("checkbox", { name: "Select News desk" })).toBeDisabled();
-    expect(within(other).getByRole("button", { name: /^(Add to favorites|Loading favorite|Saving favorite): News desk$/ })).toBeDisabled();
     expect(within(header()).getByRole("checkbox", { name: "Select this page" })).toBeDisabled();
     fireEvent.contextMenu(other.querySelector(".media-row-thumb") as HTMLElement);
     expect(within(screen.getByRole("menu", { name: "News desk" })).getAllByRole("menuitem").map((item) => item.textContent)).toEqual(["Open details"]);
@@ -5340,7 +4920,6 @@ describe("MediaRoute images list", () => {
     fireEvent.keyDown(card, { key: " " });
     fireEvent.keyDown(card, { key: "a", ctrlKey: true });
     expect(screen.queryByRole("group", { name: "Collection selection" })).toBeNull();
-    expect(mocks.setFavorite).not.toHaveBeenCalled();
   });
 
   it("a heading click while details are unsaved asks to leave and keeps the sort", async () => {
@@ -5626,7 +5205,6 @@ describe("image personal saved views", () => {
     const counts = () => ({
       list: mocks.list.mock.calls.length,
       categories: mocks.listCategories.mock.calls.length,
-      favoriteStates: mocks.listFavoriteStates.mock.calls.length,
       savedReads: mocks.loadSavedViews.mock.calls.length,
       savedTransactions: mocks.mutateSavedViews.mock.calls.length,
     });
@@ -5635,14 +5213,14 @@ describe("image personal saved views", () => {
       const { router } = renderRoute("/media/images?q=Current", savedViewShell);
       await screen.findByRole("button", { name: /^Studio control room/ });
       await waitFor(() => expect(counts()).toEqual({
-        list: 1, categories: 1, favoriteStates: 1, savedReads: 0, savedTransactions: 0,
+        list: 1, categories: 1, savedReads: 0, savedTransactions: 0,
       }));
 
       fireEvent.click(screen.getByRole("button", { name: /^Filter/ }));
       const filter = screen.getByRole("dialog", { name: "Filter" });
       expect(await within(filter).findByRole("button", { name: view.name })).toBeInTheDocument();
       expect(counts()).toEqual({
-        list: 1, categories: 1, favoriteStates: 1, savedReads: 1, savedTransactions: 0,
+        list: 1, categories: 1, savedReads: 1, savedTransactions: 0,
       });
       fireEvent.keyDown(filter, { key: "Escape" });
 
@@ -5650,13 +5228,13 @@ describe("image personal saved views", () => {
       const display = screen.getByRole("dialog", { name: "Display" });
       expect(within(display).getByRole("button", { name: "Save as view" })).toBeEnabled();
       expect(counts()).toEqual({
-        list: 1, categories: 1, favoriteStates: 1, savedReads: 1, savedTransactions: 0,
+        list: 1, categories: 1, savedReads: 1, savedTransactions: 0,
       });
       fireEvent.click(within(display).getByRole("button", { name: "Save as view" }));
       fireEvent.change(within(display).getByRole("textbox", { name: "Name" }), { target: { value: "Current images" } });
       fireEvent.click(within(display).getByRole("button", { name: "Save view" }));
       await waitFor(() => expect(counts()).toEqual({
-        list: 1, categories: 1, favoriteStates: 1, savedReads: 1, savedTransactions: 1,
+        list: 1, categories: 1, savedReads: 1, savedTransactions: 1,
       }));
       fireEvent.keyDown(display, { key: "Escape" });
 
@@ -5664,7 +5242,7 @@ describe("image personal saved views", () => {
       fireEvent.click(await screen.findByRole("button", { name: view.name }));
       await waitFor(() => expect(router.state.location.search).toBe(`?q=News&kind=image&sort=name&direction=asc&view=${view.id}`));
       await waitFor(() => expect(counts()).toEqual({
-        list: 2, categories: 1, favoriteStates: 2, savedReads: 1, savedTransactions: 1,
+        list: 2, categories: 1, savedReads: 1, savedTransactions: 1,
       }));
     } finally {
       vi.unstubAllGlobals();

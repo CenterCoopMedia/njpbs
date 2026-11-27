@@ -6,9 +6,8 @@ import { DEFAULT_VIDEO_MEDIA_DISPLAY, mediaCardFactEntries, VIDEO_MEDIA_CARD_FIE
 import { formatMediaBytes, formatMediaDuration, formatMediaUpdated, formatVideoBytes, viewingCopyStatus } from "../../lib/media-format";
 import { imageHoverFacts, MEDIA_HOVER_DELAY_MS, videoHoverFacts } from "../../lib/media-hover-facts";
 import { mediaImageSources } from "../../lib/media-image";
-import { lockedMenuActions, mediaClusterActions, mediaMenuItems, mediaTileActions, settledMenuActions, type MediaTileAction, type MediaTileActionId } from "../../lib/media-tile-actions";
+import { lockedMenuActions, mediaMenuItems, mediaTileActions, type MediaTileAction, type MediaTileActionId } from "../../lib/media-tile-actions";
 import type { SourceMediaAssetSummary } from "../../lib/source-media";
-import { ActionControl } from "../ui/ActionControl";
 import { AssetImage } from "../ui/AssetImage";
 import { Checkbox } from "../ui/Checkbox";
 import { Chip } from "../ui/Chip";
@@ -24,11 +23,6 @@ import "./MediaTile.css";
 // grid can rove focus to it; Tab then walks the mark and the quick actions. The thumbnail sits above the caption by CSS order only.
 
 interface MediaTileCommonProps extends Omit<HTMLAttributes<HTMLDivElement>, "children" | "onSelect"> {
-  /** Undefined while favorites load: the heart is disabled and says so. */
-  favorite: boolean | undefined;
-  favoritePending?: boolean;
-  /** False for an archived or unavailable item; its favorite action is hidden. */
-  available?: boolean;
   selected: boolean;
   /** A selection exists on this surface: every mark shows and the quick actions hide. */
   selectionMode: boolean;
@@ -41,8 +35,6 @@ interface MediaTileCommonProps extends Omit<HTMLAttributes<HTMLDivElement>, "chi
   openFullSize?: boolean;
   onSelectChange: (checked: boolean, modifiers: { shiftKey: boolean }) => void;
   onAction: (id: MediaTileActionId) => void;
-  /** A mixed surface can supply its own bounded action set. */
-  actionOverride?: readonly MediaTileAction[];
   /** The current multi-selection's actions for this selected card's visible More button. */
   selectionMenu?: { count: number; actions: readonly MediaTileAction[]; onAction: (id: MediaTileActionId) => void };
   /**
@@ -83,7 +75,6 @@ interface TileBadge {
   key: string;
   text: string;
   icon?: IconName;
-  className?: string;
   field?: VideoMediaCardField;
 }
 
@@ -121,35 +112,26 @@ function videoCardFactEntries(
 
 /** The open control's name: the item name plus its status words. */
 export type MediaTileLabelInput =
-  | { surface: "images"; asset: MediaAssetSummary; favorite: boolean | undefined }
-  | { surface: "video"; asset: SourceMediaAssetSummary; favorite: boolean | undefined };
+  | { surface: "images"; asset: MediaAssetSummary }
+  | { surface: "video"; asset: SourceMediaAssetSummary };
 
 export function mediaTileOpenLabel(props: MediaTileLabelInput): string {
-  const favorite = props.favorite ? ", favorite" : "";
   if (props.surface === "images") {
     const { asset } = props;
-    return `${asset.name}, ${asset.kind === "document" ? "PDF" : asset.kind === "audio" ? "audio" : "image"}, ${formatMediaBytes(asset.sizeBytes)}${favorite}`;
+    return `${asset.name}, ${asset.kind === "document" ? "PDF" : asset.kind === "audio" ? "audio" : "image"}, ${formatMediaBytes(asset.sizeBytes)}`;
   }
   const duration = videoDuration(props.asset);
   const review = props.asset.rightsStatus === "pending" ? ", needs review" : "";
-  return `${props.asset.name}, video${duration ? `, ${duration}` : ""}${review}${favorite}`;
-}
-
-function favoriteBadge(favorite: boolean | undefined): TileBadge[] {
-  return favorite ? [{ key: "favorite", text: "Favorite", icon: "heart", className: "media-tile-badge-favorite" }] : [];
+  return `${props.asset.name}, video${duration ? `, ${duration}` : ""}${review}`;
 }
 
 export function MediaTile(props: MediaTileProps) {
   const {
     actionsDisabled = false,
     asset,
-    available = true,
     canDelete,
     className,
-    favorite,
-    favoritePending = false,
     onAction,
-    actionOverride,
     onOpen,
     onSelectChange,
     quickLook = false,
@@ -167,11 +149,9 @@ export function MediaTile(props: MediaTileProps) {
   const tileId = useId();
   const factsId = `${tileId}-facts`;
   const name = asset.name;
-  const actions = actionOverride ?? mediaTileActions({
+  const actions = mediaTileActions({
     surface,
     name,
-    favorite: favorite === true,
-    available,
     selected,
     canDelete,
     quickLook,
@@ -179,7 +159,6 @@ export function MediaTile(props: MediaTileProps) {
     copyFileAddress: props.surface === "images" && props.asset.kind === "image" && Boolean(props.asset.url),
     uploader: surface === "video" && showUploaderFilter ? props.asset.uploadedBy : undefined,
   });
-  const cluster = mediaClusterActions(actions);
   // Strip the variant props so they never reach the root element.
   const rootProps = { ...rest } as Record<string, unknown>;
   for (const key of ["fields", "categoryLabel", "thumbnail", "onTagFilter", "getAudioToken"]) delete rootProps[key];
@@ -231,7 +210,7 @@ export function MediaTile(props: MediaTileProps) {
       </p> : null}
       {image.kind === "audio" ? <AudioCardPlayback asset={image} getIdToken={props.getAudioToken} tabIndex={tabIndex} /> : null}
     </>;
-    badges = [...favoriteBadge(favorite), ...(image.kind === "document" ? [{ key: "type", text: "PDF" }] : [])];
+    badges = image.kind === "document" ? [{ key: "type", text: "PDF" }] : [];
     // Type and size are already in the name; the description carries the other card facts.
     description = [...takeFacts, ...facts.filter((fact) => fact.field !== "type" && fact.field !== "size").map((fact) => fact.text)].join(", ");
     hoverFacts = imageHoverFacts(image, props.categoryLabel);
@@ -291,7 +270,6 @@ export function MediaTile(props: MediaTileProps) {
       </div>
     ) : null;
     badges = [
-      ...favoriteBadge(favorite),
       ...(fields.duration && duration ? [{ key: "duration", text: duration, field: "duration" as const }] : []),
       ...(fields.rights ? [{ key: "review", text: video.rightsStatus === "pending" ? "Needs review" : "Rights recorded",
         icon: "flag" as const, field: "rights" as const }] : []),
@@ -309,12 +287,7 @@ export function MediaTile(props: MediaTileProps) {
     hoverFacts = videoHoverFacts(video);
   }
 
-  const favoriteLabel = favorite === undefined
-    ? "Loading favorite"
-    : favoritePending
-      ? "Saving favorite"
-      : favorite ? "Remove from favorites" : "Add to favorites";
-  const menuActions = lockedMenuActions(settledMenuActions([...actions], favorite !== undefined && !favoritePending), actionsDisabled);
+  const menuActions = lockedMenuActions([...actions], actionsDisabled);
 
   return (
     <div
@@ -366,42 +339,6 @@ export function MediaTile(props: MediaTileProps) {
         {/* In selection mode only More stays; CSS shows it on phones and touch screens, which
             always keep the checkbox and More. */}
         <div aria-label={`Actions for ${name}`} className="media-tile-actions" role="group">
-          {(selectionMode ? [] : cluster).map((action) => action.id === "favorite" ? (
-            <ActionControl
-              action="media-favorite"
-              size="compact"
-              aria-busy={favoritePending || undefined}
-              aria-pressed={favorite === true}
-              className="media-tile-action media-tile-favorite"
-              contextLabel={name}
-              disabled={favorite === undefined || actionsDisabled}
-              graphic={<Icon name="heart" />}
-              key={action.id}
-              label={favoriteLabel}
-              onClick={() => {
-                if (!favoritePending) onAction("favorite");
-              }}
-              tabIndex={tabIndex}
-              variant="ghost"
-            />
-          ) : (
-            <ActionControl
-              action="media-collect"
-              size="compact"
-              className="media-tile-action media-tile-collect"
-              contextLabel={name}
-              disabled={actionsDisabled}
-              id={`${tileId}-collect`}
-              key={action.id}
-              label={action.label}
-              onClick={event => {
-                event.currentTarget.focus();
-                onAction(action.id);
-              }}
-              tabIndex={tabIndex}
-              variant="ghost"
-            />
-          ))}
           <Menu
             className="media-tile-action media-tile-more"
             items={selectionMenu ? mediaMenuItems(selectionMenu.actions, selectionMenu.onAction) : mediaMenuItems(menuActions, onAction)}
@@ -412,7 +349,7 @@ export function MediaTile(props: MediaTileProps) {
         </div>
         <div className="media-tile-badges">
           {badges.map((badge) => (
-            <span className={["media-tile-badge", badge.className].filter(Boolean).join(" ")} data-field={badge.field} key={badge.key}>
+            <span className="media-tile-badge" data-field={badge.field} key={badge.key}>
               {badge.icon ? <><Icon name={badge.icon} /><span>{badge.text}</span></> : badge.text}
             </span>
           ))}
