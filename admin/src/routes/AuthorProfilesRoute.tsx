@@ -661,7 +661,7 @@ function AuthorProfilesSurface() {
             />
 
             <AuthorPageControls
-              disabled={saving}
+              disabled={saving || selected.lifecycle === "archived" || lifecycleAction !== null}
               hasMore={authorPagePosts.hasMore}
               idPrefix={`admin-profile-${selected.authorId}`}
               loadingMore={authorPagePosts.loadingMore}
