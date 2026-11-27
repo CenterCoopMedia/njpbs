@@ -30,6 +30,7 @@ const admin = adminPkg;
 const {
   AuthorProfileError,
   archiveProfile,
+  restoreProfile,
   createManagedProfile,
   deleteDraftProfile,
   ensureAuthorIdentity,
@@ -282,6 +283,44 @@ describe("byline projection", () => {
       eligible: false,
     });
     expect((await bylineSelf("uid-1").get()).exists).toBe(false);
+  });
+
+  it("restores an archived self profile to bylines and to its owner", async () => {
+    await seedUser("uid-1", { displayName: "Taylor Example" });
+    const { profile } = await ensure("uid-1");
+    const { profile: archived } = await archiveProfile({
+      firestore: db,
+      authorId: profile.authorId,
+      expectedVersion: profile.version,
+      nowIso: LATER,
+      actorUid: "uid-admin",
+    });
+    await expect(ensure("uid-1")).rejects.toMatchObject({ status: 409, code: "profile_archived" });
+
+    const { profile: restored } = await restoreProfile({
+      firestore: db,
+      authorId: profile.authorId,
+      expectedVersion: archived.version,
+      nowIso: LATER,
+      actorUid: "uid-admin",
+    });
+    expect(restored).toMatchObject({
+      lifecycle: "active",
+      archivedAt: null,
+      archivedBy: null,
+      visibility: "private",
+      version: archived.version + 1,
+    });
+    expect((await bylineDirectory(profile.authorId).get()).data()).toMatchObject({ eligible: true });
+    expect((await bylineSelf("uid-1").get()).data()).toEqual({ authorId: profile.authorId });
+    expect((await ensure("uid-1")).profile).toMatchObject({ authorId: profile.authorId, lifecycle: "active" });
+    await expect(restoreProfile({
+      firestore: db,
+      authorId: profile.authorId,
+      expectedVersion: restored.version,
+      nowIso: LATER,
+      actorUid: "uid-admin",
+    })).rejects.toMatchObject({ status: 409, code: "profile_not_archived" });
   });
 
   it("backfills redacted tombstones and preserves source pagination", async () => {

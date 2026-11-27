@@ -594,6 +594,9 @@ function createAdminUpdateAuthorProfileHandler(deps = {}) {
         case "archive":
           result = await store.archiveProfile(common);
           break;
+        case "restore":
+          result = await store.restoreProfile(common);
+          break;
         case "delete":
           result = await store.deleteDraftProfile(common);
           break;
@@ -606,7 +609,7 @@ function createAdminUpdateAuthorProfileHandler(deps = {}) {
         default:
           throw new AuthorProfileError(
             400,
-            'action must be "create", "edit", "publish", "withdraw", "rename", "link", "archive", or "delete"',
+            'action must be "create", "edit", "publish", "withdraw", "rename", "link", "archive", "restore", or "delete"',
           );
       }
 

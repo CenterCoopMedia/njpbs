@@ -104,7 +104,7 @@ function AuthorProfilesSurface() {
   const [withdrawing, setWithdrawing] = useState(false);
   const [linkedUid, setLinkedUid] = useState("");
   const [lifecycleAction, setLifecycleAction] = useState<
-    "publish" | "link" | "archive" | "delete" | null
+    "publish" | "link" | "archive" | "restore" | "delete" | null
   >(null);
   const [confirmingArchive, setConfirmingArchive] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -242,7 +242,7 @@ function AuthorProfilesSurface() {
   }
 
   async function runLifecycleAction(
-    action: "publish" | "link" | "archive",
+    action: "publish" | "link" | "archive" | "restore",
   ): Promise<void> {
     if (!selected) return;
     setLifecycleAction(action);
@@ -265,7 +265,7 @@ function AuthorProfilesSurface() {
                 expectedVersion: selected.version,
               })
             : await cmsAdminUpdateAuthorProfile(token, {
-                action: "archive",
+                action,
                 authorId: selected.authorId,
                 expectedVersion: selected.version,
               });
@@ -281,6 +281,10 @@ function AuthorProfilesSurface() {
       } else if (action === "publish") {
         setNotice(
           "Profile published in the CMS with its stable public address.",
+        );
+      } else if (action === "restore") {
+        setNotice(
+          "Profile restored. It can be chosen for new bylines again and stays private until it is published.",
         );
       } else {
         setConfirmingArchive(false);
@@ -908,6 +912,25 @@ function AuthorProfilesSurface() {
                   Archive profile
                 </Button>
               )}
+            </div>
+          ) : null}
+
+          {selected.lifecycle === "archived" ? (
+            <div className="author-profile-archive">
+              <h3>Restore profile</h3>
+              <p>
+                Restore returns this identity to new bylines and lets its owner
+                open their profile again. It stays private until it is
+                published.
+              </p>
+              <AsyncActionButton
+                label="Restore profile"
+                pending={lifecycleAction === "restore"}
+                pendingAnnouncement="Restoring this profile."
+                pendingLabel="Restoring…"
+                onClick={() => void runLifecycleAction("restore")}
+                variant="secondary"
+              />
             </div>
           ) : null}
 

@@ -6,6 +6,7 @@ import {
   useState,
 } from "react";
 import { hasCapability } from "../../../packages/content-core/src/rbac";
+import { ACCESS_TIER_TEXT } from "../lib/access-tier-text";
 import { useAuth } from "../context/AuthContext";
 import { AuthorProfileFields, AuthorProfilePreview } from "../components/AuthorProfileFields";
 import { LoadingIndicator } from "../components/ui/LoadingIndicator";
@@ -58,7 +59,13 @@ import {
 // "inactive" is its own state, not a flavour of "error". A deactivated account is refused
 // by every self endpoint, reads included, so there is no profile to show and nothing to
 // retry: the honest surface is a plain explanation, not a form the server will not accept.
-type LoadState = "loading" | "ready" | "error" | "inactive";
+// "archived" is the same shape for an active account whose profile an administrator archived.
+type LoadState = "loading" | "ready" | "error" | "inactive" | "archived";
+
+function isArchivedProfileError(error: unknown): boolean {
+  return (error as { status?: unknown; data?: { code?: unknown } } | null)?.status === 409 &&
+    (error as { data?: { code?: unknown } }).data?.code === "profile_archived";
+}
 
 type Visibility = "published" | "private";
 
@@ -188,6 +195,10 @@ function EditableAuthorProfileRoute() {
       if (!mountedRef.current) return;
       if (isInactiveAccountError(error)) {
         setLoadState("inactive");
+        return;
+      }
+      if (isArchivedProfileError(error)) {
+        setLoadState("archived");
         return;
       }
       setLoadError(
@@ -456,6 +467,37 @@ function EditableAuthorProfileRoute() {
                 stays online. Ask an administrator to reactivate your account if you
                 think this is a mistake.
               </p>
+            </div>
+          </div>
+        </Panel>
+      </div>
+    );
+  }
+
+  if (loadState === "archived") {
+    const tier = state?.status === "signed-in"
+      ? state.principal.grants.find((grant) => grant.tier !== undefined)?.tier
+      : undefined;
+    const access = tier ? ACCESS_TIER_TEXT[tier] : null;
+    return (
+      <div className="author-profile">
+        <Panel aria-labelledby="author-profile-archived-heading">
+          <div className="panel-heading">
+            <div>
+              <h2 id="author-profile-archived-heading">
+                Your author profile is archived
+              </h2>
+              <p>
+                An administrator archived your author profile, so it cannot be
+                edited or chosen for new bylines. Your CMS account and access
+                are unchanged. Ask an administrator to restore your profile in
+                Author profiles.
+              </p>
+              {access ? (
+                <p>
+                  Your access level is {access.name}: {access.summary}
+                </p>
+              ) : null}
             </div>
           </div>
         </Panel>

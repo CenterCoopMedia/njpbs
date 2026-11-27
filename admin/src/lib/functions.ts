@@ -2573,6 +2573,7 @@ export type AdminAuthorProfileRequest =
   | { authorId: string; action: "publish"; expectedVersion: number }
   | { authorId: string; action: "link"; uid: string; expectedVersion: number }
   | { authorId: string; action: "archive"; expectedVersion: number }
+  | { authorId: string; action: "restore"; expectedVersion: number }
   | { authorId: string; action: "delete"; expectedVersion: number }
   | {
       authorId: string;

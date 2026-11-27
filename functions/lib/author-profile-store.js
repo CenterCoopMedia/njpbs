@@ -75,6 +75,7 @@ const AUDIT_ACTIONS = Object.freeze({
   rename: "author_profile.slug_rename",
   link: "author_profile.account_link",
   archive: "author_profile.archive",
+  restore: "author_profile.restore",
   delete: "author_profile.delete_draft",
   backfill: "author_profile.backfill",
   // A photograph of a real person is its own audited event, separate from the
@@ -1635,6 +1636,57 @@ async function archiveProfile({
   });
 }
 
+/**
+ * Return an archived profile to active use. The public snapshot stays withdrawn: the profile
+ * comes back private, and publishing it again is a separate, deliberate step.
+ */
+async function restoreProfile({
+  firestore,
+  authorId,
+  expectedVersion,
+  nowIso,
+  actorUid,
+  requireAdminAccess = false,
+  actorEmail = null,
+  source = null,
+}) {
+  const collections = refs(firestore);
+  const profileRef = collections.profiles.doc(authorId);
+  return firestore.runTransaction(async (transaction) => {
+    if (requireAdminAccess) await assertProfileAdmin(firestore, actorUid, transaction);
+    const snapshot = await transaction.get(profileRef);
+    if (!snapshot.exists)
+      throw new AuthorProfileError(404, "Author profile not found");
+    const before = snapshot.data();
+    assertVersion(before, expectedVersion);
+    if (profileLifecycle(before) !== "archived") {
+      throw new AuthorProfileError(409, "This staff profile is not archived", "profile_not_archived");
+    }
+    const staff = await linkedStaff(transaction, collections, before);
+    const after = {
+      ...before,
+      lifecycle: "active",
+      archivedAt: null,
+      archivedBy: null,
+      version: before.version + 1,
+      updatedAt: nowIso,
+      updatedBy: actorUid,
+    };
+    transaction.set(profileRef, after);
+    syncBylineProjection(transaction, firestore, authorId, after, staff);
+    auditRow(transaction, firestore, {
+      actorUid,
+      actorEmail,
+      action: AUDIT_ACTIONS.restore,
+      target: `${AUTHOR_PROFILE_COLLECTIONS.workingProfiles}/${authorId}`,
+      before: auditShape(before),
+      after: auditShape(after),
+      source,
+    });
+    return { profile: after };
+  });
+}
+
 /** Permanently delete only a never-published, unlinked and unreferenced draft. */
 async function deleteDraftProfile({
   firestore,
@@ -1851,6 +1903,7 @@ module.exports = {
   deactivateStaffLinkage,
   reactivateStaffLinkage,
   archiveProfile,
+  restoreProfile,
   assertProfileAdmin,
   createManagedProfile,
   deleteDraftProfile,
