@@ -45,6 +45,7 @@ const REPEAT_ACTIONS = { "content.publish.request": "publish", "preview.request"
 const PREVIEW_RETENTION_MS = 30 * DAY_MS;
 const OPEN_REPORT_STATUSES = ["open", "acknowledged", "in_progress", "blocked"];
 // Open draft age buckets in days: under 1, under 7, under 30, then older.
+/** @type {[string, number][]} */
 const DRAFT_AGES = [["day", 1], ["week", 7], ["month", 30], ["older", Infinity]];
 
 // Eastern midnight as an instant. 05:00 UTC is before the 2 AM local DST switch, so its offset is midnight's.
