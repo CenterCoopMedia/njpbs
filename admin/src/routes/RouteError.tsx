@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { isRouteErrorResponse, useNavigate, useRouteError } from "react-router";
 import { Button, Panel } from "../components/ui/Primitives";
 import { dashboardPath } from "../lib/routes";
@@ -42,19 +42,23 @@ export function RouteErrorBoundary() {
   const error = useRouteError();
   const navigate = useNavigate();
   const detail = describe(error);
-  const [reloadKey, setReloadKey] = useState(() =>
-    staleModuleReloadKey(error, sessionStore(), adminPerf.receipt().build ?? null));
+  // The boundary can stay mounted while the route error changes, so decide again for each error.
+  const reloadKey = useMemo(
+    () => staleModuleReloadKey(error, sessionStore(), adminPerf.receipt().build ?? null),
+    [error],
+  );
+  const [failedKey, setFailedKey] = useState<string | null>(null);
   useEffect(() => {
     if (!reloadKey) return;
     const storage = sessionStore();
-    if (!storage || !markAndReload(storage, reloadKey, () => window.location.reload())) setReloadKey(null);
+    if (!storage || !markAndReload(storage, reloadKey, () => window.location.reload())) setFailedKey(reloadKey);
   }, [reloadKey]);
 
   // The boundary stops the throw from reaching the console on its own, and a swallowed stack is
   // how the original crash stayed hidden.
   console.error("Admin route surface crashed:", error);
 
-  if (reloadKey) {
+  if (reloadKey && reloadKey !== failedKey) {
     return (
       <Panel className="route-error-panel" aria-labelledby="route-error-heading">
         <h2 id="route-error-heading">Loading the latest Boardwalk</h2>
