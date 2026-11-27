@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-27",
+  "kind": "improved",
+  "title": "Clear message when your browser blocks the security check",
+  "body": "If your browser's tracking protection or ad blocker stops Boardwalk's security check, uploads and edits that need it now say so and tell you how to allow it.",
+  "prs": []
+}

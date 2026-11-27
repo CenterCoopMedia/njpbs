@@ -17,6 +17,7 @@ import type { MenuItem } from "./ui/Menu";
 import { MediaDialogNotice } from "../context/MediaDialogContext";
 import type { SourceMediaAssetSummary } from "../lib/source-media";
 import { avidFrameRates, type AvidFrameRate, type TranscriptDownloadFormat, cancelVideoTranscriptAlignment, clipResolutionAvailable, estimateAwsTranscriptionCharge, transcriptionChargeLabel, getVideoClip, getVideoTranscript, listVideoClips, parseVideoTime, readVideoClip, readVideoTranscript, readClipTranscript, type ClipTranscriptFormat, requestVideoClip, requestVideoTranscript, requestVideoTranscriptAlignment, saveVideoTranscript, videoTime, type ClipSettings, type TranscriptSegment, type TranscriptResponse, type TranscriptSettings, type VideoClip } from "../lib/video-production";
+import { BLOCKED_SECURITY_CHECK_MESSAGE } from "../lib/app-check-failure";
 import "./VideoProductionTools.css";
 
 function downloadFile(url: string, name: string) {
@@ -34,7 +35,7 @@ export function videoProductionMessage(error: unknown, fallback: string, operati
   const originalMessage = originalAccessMessage(error);
   if (originalMessage) return originalMessage;
   if (error && typeof error === "object" && "name" in error && error.name === "RequestNotDispatchedError") {
-    return "Browser verification failed. Reload Boardwalk, then try again.";
+    return detail === BLOCKED_SECURITY_CHECK_MESSAGE ? detail : "Browser verification failed. Reload Boardwalk, then try again.";
   }
   if (operation === "download_clip_transcript" && status === 409) {
     if (detail === "Align the edited transcript or move the clip boundary to a passage boundary before exporting its transcript") return "This clip cuts through an edited passage without aligned words. Resync the transcript or export a clip that includes the full passage.";
