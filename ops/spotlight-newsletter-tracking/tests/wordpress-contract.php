@@ -132,5 +132,8 @@ check(substr_count($rendered, 'id="spotlight-newsletter-choice"') === 1, 'One fo
 check(strpos($rendered, 'consent.js') < strpos($rendered, '</body>'), 'Initialization stays inside the body footer');
 check(strpos($rendered, 'diffuser-cdn') === false && strpos($rendered, 'wisepops.net/h/') === false
     && strpos($rendered, 'googletagmanager') === false && strpos($rendered, 'gtag(') === false, 'The server never emits a vendor script request');
-check(strpos($filters['the_content'][0]('Existing policy'), 'Existing policy<section id="analytics-privacy">') === 0, 'The privacy addition preserves the existing notice');
+$policy = $filters['the_content'][0]('Existing policy');
+check(strpos($policy, 'Existing policy<section id="analytics-privacy">') === 0, 'The privacy addition preserves the existing notice');
+check(substr_count($policy, '<section id="analytics-privacy">') === 1 && substr_count($policy, '<section id="newsletter-privacy">') === 1,
+    'The privacy addition includes the analytics and newsletter notices');
 echo "Spotlight newsletter WordPress contracts passed\n";

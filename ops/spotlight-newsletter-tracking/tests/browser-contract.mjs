@@ -18,20 +18,27 @@ const browser = await chromium.launch({ channel: "chrome", headless: true, chrom
 const version = browser.version().split(".").map(Number);
 assert.ok(version[0] > 156 || (version[0] === 156 && (version[2] > 8078 || (version[2] === 8078 && version[3] >= 73))), "Use system Chrome at or above the approved version");
 
-async function context({ analytics = "", gpc = false, blockedCookies = false, blockedWrites = false, blockedSession = false, existingGlobal = false, saved = "", javaScriptEnabled = true } = {}) {
+async function context({ analytics = "", gpc = false, blockedCookies = false, blockedWrites = false, blockedWrite = "", blockedSession = false, existingGlobal = false, saved = "", javaScriptEnabled = true } = {}) {
   const ctx = await browser.newContext({ javaScriptEnabled });
   if (saved) await ctx.addCookies([{ name: "spotlight-newsletter-consent", value: saved, domain: "news.example.org", path: "/", secure: true }]);
   if (analytics) await ctx.addCookies([{ name: "spotlight-analytics-consent", value: analytics, domain: "news.example.org", path: "/", secure: true }]);
-  await ctx.addInitScript(({ gpc, blockedCookies, blockedWrites, blockedSession, existingGlobal }) => {
+  await ctx.addInitScript(({ gpc, blockedCookies, blockedWrites, blockedWrite, blockedSession, existingGlobal }) => {
     Object.defineProperty(navigator, "globalPrivacyControl", { value: gpc });
     if (blockedCookies) Object.defineProperty(document, "cookie", { get() { throw new Error("Cookie storage blocked"); }, set() {} });
     else if (blockedWrites) {
       const descriptor = Object.getOwnPropertyDescriptor(Document.prototype, "cookie");
       Object.defineProperty(document, "cookie", { get() { return descriptor.get.call(document); }, set() {} });
+    } else if (blockedWrite) {
+      // The browser accepts one choice and refuses the other.
+      const descriptor = Object.getOwnPropertyDescriptor(Document.prototype, "cookie");
+      Object.defineProperty(document, "cookie", {
+        get() { return descriptor.get.call(document); },
+        set(value) { if (!value.startsWith(`${blockedWrite}=`)) descriptor.set.call(document, value); },
+      });
     }
     if (blockedSession) Object.defineProperty(window, "sessionStorage", { get() { throw new Error("Session storage blocked"); } });
     if (existingGlobal) window.vgo = () => {};
-  }, { gpc, blockedCookies, blockedWrites, blockedSession, existingGlobal });
+  }, { gpc, blockedCookies, blockedWrites, blockedWrite, blockedSession, existingGlobal });
   const vendors = [];
   await ctx.route("**/*", async route => {
     const url = new URL(route.request().url());
@@ -154,6 +161,90 @@ try {
     assert.equal(await opener.evaluate(node => node === document.activeElement), true);
     assert.equal(await page.locator("#spotlight-newsletter-choice").isVisible(), false, "Footer settings focus stays unobscured");
     assert.equal(vendors.length, 0);
+    await ctx.close();
+  }
+  {
+    // Layout rule: the reserved page space equals the bar height, also after the bar grows.
+    const { ctx, page, vendors } = await context();
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("https://news.example.org/article/");
+    const bar = page.getByRole("region", { name: "Privacy choices", exact: true });
+    await bar.waitFor();
+    const reserved = () => page.evaluate(() => {
+      const node = document.querySelector("[data-privacy-bar]");
+      return [parseFloat(document.documentElement.style.paddingBottom), node.offsetHeight];
+    });
+    const shown = await reserved();
+    assert.equal(shown[0], shown[1], "Shown bar reserves its height");
+    await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
+    await page.waitForFunction(height => document.querySelector("[data-privacy-bar]").offsetHeight > height, shown[1]);
+    await page.waitForFunction(() => parseFloat(document.documentElement.style.paddingBottom) === document.querySelector("[data-privacy-bar]").offsetHeight);
+    await page.setViewportSize({ width: 320, height: 844 });
+    await page.waitForFunction(() => parseFloat(document.documentElement.style.paddingBottom) === document.querySelector("[data-privacy-bar]").offsetHeight);
+    const [space, height] = await reserved();
+    assert.ok(height > shown[1] && space === height, "Reserved space follows a taller bar");
+    await page.evaluate(() => { document.querySelector("main").style.minHeight = "3000px"; });
+    const footerButton = page.getByRole("button", { name: "Privacy settings", exact: true });
+    await footerButton.focus();
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    const [footerBox, barBox] = [await footerButton.boundingBox(), await bar.boundingBox()];
+    assert.ok(footerBox.y + footerBox.height <= barBox.y, "After the bar grows it still does not cover the footer button");
+    assert.equal(vendors.length, 0);
+    await ctx.close();
+  }
+  for (const percent of [200, 400]) {
+    // Layout rule: at a narrow viewport with enlarged text the bar fits the viewport and each control scrolls into it.
+    // At 200% each button fits whole (1px allows subpixel layout); at 400% a button can be taller than the bar's scroll area, so its center must be reachable.
+    const { ctx, page, vendors } = await context();
+    await page.setViewportSize({ width: 320, height: 480 });
+    await page.goto("https://news.example.org/article/");
+    await page.evaluate(percent => { document.documentElement.style.fontSize = `${percent}%`; }, percent);
+    const bar = page.getByRole("region", { name: "Privacy choices", exact: true });
+    const box = await bar.boundingBox();
+    assert.ok(box.y >= 0 && box.y + box.height <= 480, `The bar fits inside the viewport at ${percent}%`);
+    for (const name of ["Allow all", "Allow none", "Choices"]) {
+      const button = bar.getByRole("button", { name, exact: true });
+      await button.scrollIntoViewIfNeeded();
+      const target = await button.boundingBox();
+      const inside = percent === 200
+        ? target.y >= box.y - 1 && target.y + target.height <= box.y + box.height + 1
+        : target.y + target.height / 2 > box.y && target.y + target.height / 2 < box.y + box.height;
+      assert.ok(inside, `${name} scrolls into view inside the bar at ${percent}%`);
+    }
+    await page.screenshot({ path: join(evidence, `bar-narrow-text-${percent}.png`) });
+    await bar.getByRole("button", { name: "Allow none", exact: true }).click();
+    assert.equal(await bar.isVisible(), false);
+    assert.equal(vendors.length, 0);
+    await ctx.close();
+  }
+  {
+    // Another tab completes both choices while this tab shows the bar.
+    const { ctx, page, vendors } = await context();
+    await page.goto("https://news.example.org/article/");
+    const bar = page.getByRole("region", { name: "Privacy choices", exact: true });
+    await bar.waitFor();
+    const other = await ctx.newPage();
+    await other.goto("https://news.example.org/article/");
+    await other.getByRole("button", { name: "Allow all", exact: true }).click();
+    await page.waitForFunction(() => window.gaCommands && window.wpCommands?.length === 2);
+    await bar.waitFor({ state: "hidden" });
+    assert.equal(await page.evaluate(() => document.documentElement.style.paddingBottom), "", "A hidden bar reserves no space");
+    assert.equal(vendors.length, 6);
+    await ctx.close();
+  }
+  {
+    // Allow none saves the analytics withdrawal, the browser refuses the newsletter write, and the reload keeps the error.
+    const { ctx, page, vendors } = await context({ analytics: "v1:granted", blockedWrite: "spotlight-newsletter-consent" });
+    await page.goto("https://news.example.org/article/");
+    await page.waitForFunction(() => window.gaCommands);
+    await Promise.all([page.waitForEvent("load"), page.getByRole("button", { name: "Allow none", exact: true }).click()]);
+    await page.getByRole("status").filter({ hasText: "We could not save your choice. These tools remain off." }).waitFor();
+    assert.equal(await page.locator("#spotlight-newsletter-choice").isVisible(), true, "The panel shows the error after the reload");
+    assert.equal(vendors.length, 1, "The withdrawn tag does not load again");
+    const cookies = Object.fromEntries((await ctx.cookies()).map(cookie => [cookie.name, cookie.value]));
+    assert.deepEqual([cookies["spotlight-analytics-consent"], cookies["spotlight-newsletter-consent"]], ["v1%3Adenied", undefined]);
+    await page.reload();
+    assert.equal(await page.getByRole("status").filter({ hasText: "We could not save your choice." }).count(), 0, "The notice shows once");
     await ctx.close();
   }
   for (const percent of [200, 400]) {

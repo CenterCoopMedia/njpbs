@@ -5,6 +5,8 @@ const MEDIA_PARAMETER = "spotlight_newsletter_media";
 // Tabs running the earlier newsletter-only version listen on this name.
 const CHANNEL = "spotlight-newsletter-consent";
 const COOKIES = { analytics: "spotlight-analytics-consent", newsletter: "spotlight-newsletter-consent" };
+// Carries a save failure across the reload that stops a withdrawn tool.
+const NOTICE = "spotlight-privacy-notice";
 const UNAVAILABLE = { analytics: "Analytics is unavailable.", newsletter: "Newsletter tools are unavailable." };
 
 export function mountNewsletterConsent(win) {
@@ -29,11 +31,14 @@ export function mountNewsletterConsent(win) {
   const gpc = () => win.navigator.globalPrivacyControl === true;
   const anyLoaded = () => categories.some(category => category.loaded);
   // Reserve space under the fixed bar so it cannot cover focused page content, even at maximum scroll.
-  function setBarHidden(value) {
-    bar.hidden = value;
-    const space = value ? "" : `${bar.offsetHeight}px`;
+  function reserveSpace() {
+    const space = bar.hidden ? "" : `${bar.offsetHeight}px`;
     doc.documentElement.style.paddingBottom = space;
     doc.documentElement.style.scrollPaddingBottom = space;
+  }
+  function setBarHidden(value) {
+    bar.hidden = value;
+    reserveSpace();
   }
   const undecided = () => categories.some(category => ![GRANT, DENY].includes(decision(category.cookie)));
 
@@ -68,6 +73,11 @@ export function mountNewsletterConsent(win) {
   function endVendorDocument() {
     if (ending) return;
     ending = true;
+    const notice = Object.fromEntries(categories.filter(category => category.status.textContent)
+      .map(category => [category.name, category.status.textContent]));
+    if (Object.keys(notice).length) {
+      try { win.sessionStorage.setItem(NOTICE, JSON.stringify(notice)); } catch { /* The reload still stops the withdrawn tool. */ }
+    }
     stopTools();
     win.location.reload();
   }
@@ -158,7 +168,8 @@ export function mountNewsletterConsent(win) {
       // An unchanged write would wake the mutation observer again.
       if (current.textContent !== text) current.textContent = text;
     }
-    if (off) setBarHidden(true);
+    // Another tab can complete the choices while this bar is open.
+    if ((off || !undecided()) && !bar.hidden) setBarHidden(true);
     root.querySelector("[data-newsletter-gpc]").hidden = !gpc();
     root.querySelector("[data-newsletter-media]").hidden = !mediaBlocked;
     if (!root.hidden && moveFocus) root.querySelector("[data-newsletter-close]").focus();
@@ -224,6 +235,7 @@ export function mountNewsletterConsent(win) {
     opener.focus();
   });
   if (channel) channel.onmessage = reconcile;
+  if (win.ResizeObserver) new win.ResizeObserver(reserveSpace).observe(bar);
   win.addEventListener("focus", reconcile);
   win.addEventListener("pageshow", reconcile);
   doc.addEventListener("visibilitychange", reconcile);
@@ -234,10 +246,16 @@ export function mountNewsletterConsent(win) {
   doc.addEventListener("focusin", event => {
     if (!root.hidden && !root.contains(event.target)) root.hidden = true;
   });
+  let notice = {};
+  try {
+    notice = JSON.parse(win.sessionStorage.getItem(NOTICE) || "{}");
+    win.sessionStorage.removeItem(NOTICE);
+  } catch { /* No saved notice. */ }
+  for (const category of categories) category.status.textContent = notice[category.name] || "";
   display();
   opener.hidden = false;
-  root.hidden = true;
-  setBarHidden(mediaBlocked || gpc() || !undecided());
+  root.hidden = !categories.some(category => category.status.textContent);
+  setBarHidden(!root.hidden || mediaBlocked || gpc() || !undecided());
   reconcile();
 }
 
