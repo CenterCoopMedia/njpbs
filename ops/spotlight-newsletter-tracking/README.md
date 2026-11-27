@@ -56,6 +56,10 @@ opened player once only when newsletter tools were running;
 it does not repeatedly reload or record another tracking visit. New code that
 can insert a player still needs the eligibility review described below.
 Readers who have not loaded the tools keep their video document without a reload.
+If the browser saves one choice and refuses another while a withdrawn tool
+needs that reload, the `spotlight_privacy_notice` query parameter carries the
+error through it. The client removes the parameter on load, shows the error
+and moves focus to it.
 
 Admin, authenticated, preview, private, password-protected, Kids and descendant,
 child-directed, search, feed, REST, embedded, non-GET, and nonproduction requests

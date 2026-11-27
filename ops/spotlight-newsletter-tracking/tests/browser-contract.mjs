@@ -232,15 +232,21 @@ try {
     assert.equal(vendors.length, 6);
     await ctx.close();
   }
-  {
+  for (const blockedSession of [false, true]) {
     // Allow none saves the analytics withdrawal, the browser refuses the newsletter write, and the reload keeps the error.
-    const { ctx, page, vendors } = await context({ analytics: "v1:granted", blockedWrite: "spotlight-newsletter-consent" });
-    await page.goto("https://news.example.org/article/");
+    const { ctx, page, vendors } = await context({ analytics: "v1:granted", blockedWrite: "spotlight-newsletter-consent", blockedSession });
+    await page.goto("https://news.example.org/article/#comments");
     await page.waitForFunction(() => window.gaCommands);
     await Promise.all([page.waitForEvent("load"), page.getByRole("button", { name: "Allow none", exact: true }).click()]);
-    await page.getByRole("status").filter({ hasText: "We could not save your choice. These tools remain off." }).waitFor();
+    const notice = page.getByRole("status").filter({ hasText: "We could not save your choice. These tools remain off." });
+    await notice.waitFor();
     assert.equal(await page.locator("#spotlight-newsletter-choice").isVisible(), true, "The panel shows the error after the reload");
+    assert.equal(await notice.evaluate(node => node === document.activeElement), true, "Focus moves to the restored error");
+    await page.keyboard.press("Tab");
+    assert.equal(await page.locator("#spotlight-newsletter-choice").isVisible(), true, "The next Tab stays in the panel");
     assert.equal(vendors.length, 1, "The withdrawn tag does not load again");
+    const address = new URL(page.url());
+    assert.deepEqual([address.pathname, address.search, address.hash], ["/article/", "", "#comments"], "The notice leaves the address unchanged");
     const cookies = Object.fromEntries((await ctx.cookies()).map(cookie => [cookie.name, cookie.value]));
     assert.deepEqual([cookies["spotlight-analytics-consent"], cookies["spotlight-newsletter-consent"]], ["v1%3Adenied", undefined]);
     await page.reload();

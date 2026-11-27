@@ -5,8 +5,12 @@ const MEDIA_PARAMETER = "spotlight_newsletter_media";
 // Tabs running the earlier newsletter-only version listen on this name.
 const CHANNEL = "spotlight-newsletter-consent";
 const COOKIES = { analytics: "spotlight-analytics-consent", newsletter: "spotlight-newsletter-consent" };
-// Carries a save failure across the reload that stops a withdrawn tool.
-const NOTICE = "spotlight-privacy-notice";
+// Carries a save failure across the reload that stops a withdrawn tool; the address works without storage.
+const NOTICE_PARAMETER = "spotlight_privacy_notice";
+const FAILED = {
+  kept: "Your browser prevented saving this change. Your earlier permission is still active. Clear this site's cookies or block these tools in your browser to withdraw it.",
+  off: "We could not save your choice. These tools remain off.",
+};
 const UNAVAILABLE = { analytics: "Analytics is unavailable.", newsletter: "Newsletter tools are unavailable." };
 
 export function mountNewsletterConsent(win) {
@@ -17,11 +21,17 @@ export function mountNewsletterConsent(win) {
   if (!root || !opener || !bar || doc.querySelectorAll("#spotlight-newsletter-choice").length !== 1 || root.dataset.mounted) return;
   const categories = [...root.querySelectorAll("[data-category]")].map(node => ({
     name: node.dataset.category, node, cookie: COOKIES[node.dataset.category],
-    status: node.querySelector("[data-status]"), loaded: false, existing: false,
+    status: node.querySelector("[data-status]"), loaded: false, existing: false, failure: "",
   }));
   if (categories.length !== 2 || categories.some(category => !category.cookie)) return;
   root.dataset.mounted = "true";
   let ending = false;
+  const address = new win.URL(win.location.href);
+  const notice = (address.searchParams.get(NOTICE_PARAMETER) || "").split(",");
+  if (address.searchParams.has(NOTICE_PARAMETER)) {
+    address.searchParams.delete(NOTICE_PARAMETER);
+    win.history.replaceState(null, "", address.href);
+  }
   const mediaKey = `spotlight-newsletter-media:${win.location.pathname}${win.location.search}`;
   let mediaBlocked = new win.URL(win.location.href).searchParams.has(MEDIA_PARAMETER);
   try { mediaBlocked ||= win.sessionStorage.getItem(mediaKey) === "blocked"; } catch { /* A page-address marker is the storage fallback. */ }
@@ -73,10 +83,11 @@ export function mountNewsletterConsent(win) {
   function endVendorDocument() {
     if (ending) return;
     ending = true;
-    const notice = Object.fromEntries(categories.filter(category => category.status.textContent)
-      .map(category => [category.name, category.status.textContent]));
-    if (Object.keys(notice).length) {
-      try { win.sessionStorage.setItem(NOTICE, JSON.stringify(notice)); } catch { /* The reload still stops the withdrawn tool. */ }
+    const failures = categories.filter(category => category.failure).map(category => `${category.name}.${category.failure}`);
+    if (failures.length) {
+      const address = new win.URL(win.location.href);
+      address.searchParams.set(NOTICE_PARAMETER, failures.join(","));
+      win.history.replaceState(null, "", address.href);
     }
     stopTools();
     win.location.reload();
@@ -193,11 +204,11 @@ export function mountNewsletterConsent(win) {
       doc.cookie = `${category.cookie}=${encodeURIComponent(value)}; Path=/; Max-Age=15552000; SameSite=Lax; Secure`;
       if (decision(category.cookie) !== value) throw new Error("Choice was not saved");
     } catch {
-      category.status.textContent = category.loaded
-        ? "Your browser prevented saving this change. Your earlier permission is still active. Clear this site's cookies or block these tools in your browser to withdraw it."
-        : "We could not save your choice. These tools remain off.";
+      category.failure = category.loaded ? "kept" : "off";
+      category.status.textContent = FAILED[category.failure];
       return false;
     }
+    category.failure = "";
     category.status.textContent = "";
     return true;
   }
@@ -246,16 +257,20 @@ export function mountNewsletterConsent(win) {
   doc.addEventListener("focusin", event => {
     if (!root.hidden && !root.contains(event.target)) root.hidden = true;
   });
-  let notice = {};
-  try {
-    notice = JSON.parse(win.sessionStorage.getItem(NOTICE) || "{}");
-    win.sessionStorage.removeItem(NOTICE);
-  } catch { /* No saved notice. */ }
-  for (const category of categories) category.status.textContent = notice[category.name] || "";
+  for (const category of categories) {
+    const kind = Object.keys(FAILED).find(key => notice.includes(`${category.name}.${key}`));
+    category.status.textContent = kind ? FAILED[kind] : "";
+  }
   display();
   opener.hidden = false;
   root.hidden = !categories.some(category => category.status.textContent);
   setBarHidden(!root.hidden || mediaBlocked || gpc() || !undecided());
+  // Focus the restored notice so keyboard and screen-reader users meet it before the panel can close.
+  const restored = categories.find(category => category.status.textContent);
+  if (restored) {
+    restored.status.tabIndex = -1;
+    restored.status.focus();
+  }
   reconcile();
 }
 
