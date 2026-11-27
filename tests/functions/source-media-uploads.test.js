@@ -15,6 +15,7 @@ const {
   signUploadParts,
   startUpload,
   storeCompletedAsset,
+  sweepAbandonedUploads,
   updateMetadata,
 } = uploads;
 const { parseStartUploadRequest } = uploadContract;
@@ -131,20 +132,28 @@ function fakeFirestore(initial = {}, { createErrorAfterCommit = false } = {}) {
     records,
     async getAll(...refs) { return Promise.all(refs.map(reference => reference.get())); },
     collection(name) {
-      function query(filters = [], count = Infinity) {
+      const matches = {
+        "==": (actual, expected) => actual === expected,
+        in: (actual, expected) => expected.includes(actual),
+        "<=": (actual, expected) => actual !== undefined && actual <= expected,
+      };
+      function query(filters = [], count = Infinity, order) {
         return {
           collection: name,
           doc: (id) => ref(name, id),
           where(field, operator, value) {
-            expect(operator).toBe("==");
-            return query([...filters, [field, value]], count);
+            expect(Object.keys(matches)).toContain(operator);
+            return query([...filters, [field, value, operator]], count, order);
           },
-          limit(nextCount) { return query(filters, nextCount); },
+          orderBy(field) { return query(filters, count, field); },
+          limit(nextCount) { return query(filters, nextCount, order); },
           async get() { const docs = this._snapshots().map(doc => ({ ...doc, ref: ref(name, doc.id) })); return { docs, size: docs.length }; },
           _snapshots() {
             return [...records.entries()]
               .filter(([key, value]) => key.startsWith(`${name}/`) &&
-                filters.every(([field, expected]) => field.split(".").reduce((item, key) => item?.[key], value) === expected))
+                filters.every(([field, expected, operator = "=="]) =>
+                  matches[operator](field.split(".").reduce((item, key) => item?.[key], value), expected)))
+              .sort(([, left], [, right]) => (order ? String(left[order]).localeCompare(String(right[order])) : 0))
               .slice(0, count)
               .map(([key, value]) => snapshot(key.split("/")[1], value));
           },
@@ -686,6 +695,48 @@ describe("source media multipart sessions", () => {
       version: 3,
       canceledAt: "2026-09-14T17:05:00.000Z",
     });
+  });
+});
+
+describe("abandoned upload sweep", () => {
+  it("cancels expired open uploads, aborts their parts and leaves the rest alone", async () => {
+    const session = (id, overrides) => ({
+      id, actorUid: "staff-1", sourceId: "video-library", assetId: `asset-${id}`,
+      objectKey: `shared/objects/asset-${id}.mp4`, s3UploadId: `s3-${id}`, version: 1,
+      status: "active", createdAt: "2026-09-13T16:00:00.000Z", expiresAt: "2026-09-14T16:00:00.000Z",
+      ...overrides,
+    });
+    const firestore = fakeFirestore({
+      "mediaSourceUploads/abandoned": session("abandoned"),
+      "mediaSourceUploads/half-canceled": session("half-canceled", { status: "canceling", version: 2 }),
+      "mediaSourceUploads/parts-gone": session("parts-gone"),
+      "mediaSourceUploads/no-source": session("no-source", { sourceId: "retired-source" }),
+      "mediaSourceUploads/open": session("open", { expiresAt: "2026-09-15T16:00:00.000Z" }),
+      "mediaSourceUploads/completed": session("completed", { status: "completed" }),
+    });
+    const absent = Object.assign(new Error("already aborted"), { name: "NoSuchUpload" });
+    const cancel = vi.fn(async (_source, current) => {
+      expect(firestore.records.get(`mediaSourceUploads/${current.id}`).status).toBe("canceling");
+      if (current.id === "parts-gone") throw absent;
+    });
+    const log = { info: vi.fn(), warn: vi.fn() };
+    await expect(sweepAbandonedUploads({
+      firestore, log, nowFn: () => "2026-09-14T17:00:00.000Z",
+      registry: new Map([["video-library", source()]]), uploader: { cancel },
+    })).resolves.toEqual({ found: 4, canceled: 3 });
+
+    expect(cancel.mock.calls.map(([, current]) => current.s3UploadId).sort())
+      .toEqual(["s3-abandoned", "s3-half-canceled", "s3-parts-gone"]);
+    for (const [id, version] of [["abandoned", 3], ["half-canceled", 3], ["parts-gone", 3]]) {
+      expect(firestore.records.get(`mediaSourceUploads/${id}`)).toMatchObject({
+        status: "canceled", version, canceledAt: "2026-09-14T17:00:00.000Z",
+      });
+    }
+    expect(firestore.records.get("mediaSourceUploads/no-source")).toMatchObject({ status: "active", version: 1 });
+    expect(log.warn).toHaveBeenCalledWith("Abandoned upload sweep will retry",
+      { sessionId: "no-source", message: "Upload source is not configured" });
+    expect(firestore.records.get("mediaSourceUploads/open")).toMatchObject({ status: "active", version: 1 });
+    expect(firestore.records.get("mediaSourceUploads/completed")).toMatchObject({ status: "completed", version: 1 });
   });
 });
 

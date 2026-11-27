@@ -921,6 +921,10 @@
           "module": "functions/scheduled-publish.js"
         },
         {
+          "name": "onSourceMediaUploadSweep",
+          "module": "functions/source-media-uploads.js"
+        },
+        {
           "name": "onSourceVideoReplacementTick",
           "module": "functions/source-video-replacement.js"
         },

@@ -236,6 +236,7 @@ const BACKGROUND_FUNCTION_NAMES = Object.freeze([
   "onVideoSearchShardWrite",
   "onVideoPreviewTick",
   "onSourceVideoReplacementTick",
+  "onSourceMediaUploadSweep",
   "onPrivateVideoAssetWrite",
   "onPrivateVideoCopyTick",
   "onVideoClipTick",

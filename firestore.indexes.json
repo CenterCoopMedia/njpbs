@@ -10,6 +10,14 @@
       ]
     },
     {
+      "collectionGroup": "mediaSourceUploads",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "expiresAt", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "cuezTransferOperations",
       "queryScope": "COLLECTION",
       "fields": [
