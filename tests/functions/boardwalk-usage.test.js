@@ -78,8 +78,8 @@ describe("Boardwalk usage privacy and persistence contract (#4495)", () => {
     await invoke(collect, same); await invoke(collect, same); await invoke(collect, batch());
     await invoke(handlers({ authorize: async () => actor("staff-2", "editor") }).collect, batch());
     let result = await invoke(report, { days: 7 });
-    expect(result.body.daily.at(-1)).toEqual({ date: "2026-11-02", activeUsers: 2 });
-    expect(result.body.weekly).toEqual([{ week: "2026-11-02", activeUsers: 2 }]);
+    expect(result.body.daily.at(-1)).toEqual({ date: "2026-11-02", timezone: "America/New_York", activeUsers: 2 });
+    expect(result.body.weekly).toEqual([{ week: "2026-11-02", timezone: "America/New_York", activeUsers: 2 }]);
     expect(result.body.screens.find(row => row.id === "posts").views).toBe(3);
     time += 86_400_000;
     await invoke(collect, batch());
@@ -88,7 +88,45 @@ describe("Boardwalk usage privacy and persistence contract (#4495)", () => {
     expect(result.body.weekly[0].activeUsers).toBe(2);
     time += 6 * 86_400_000;
     await invoke(collect, batch());
-    expect((await invoke(report, { days: 7 })).body.weekly).toEqual([{ week: "2026-11-09", activeUsers: 1 }]);
+    expect((await invoke(report, { days: 7 })).body.weekly).toEqual([{ week: "2026-11-09", timezone: "America/New_York", activeUsers: 1 }]);
+  });
+
+  it("keys days and weeks by Eastern date and reports when Eastern keys began", async () => {
+    await firestore.collection("cmsUsageDaily").doc("2026-10-31").set({ activeUsers: 1 });
+    const { collect, report } = handlers();
+    time = Date.parse("2026-11-03T02:30:00Z"); // Monday 9:30 PM EST
+    await invoke(collect, batch());
+    time = Date.parse("2026-11-09T04:30:00Z"); // Sunday 11:30 PM EST
+    await invoke(handlers({ authorize: async () => actor("staff-2") }).collect, batch());
+    const result = (await invoke(report, { days: 7 })).body;
+    expect(result.timezone).toBe("America/New_York");
+    expect(result.daily.map(row => [row.date, row.activeUsers])).toEqual([["2026-11-02", 1], ["2026-11-03", 0],
+      ["2026-11-04", 0], ["2026-11-05", 0], ["2026-11-06", 0], ["2026-11-07", 0], ["2026-11-08", 1]]);
+    expect(result.daily.every(row => row.timezone === "America/New_York")).toBe(true);
+    expect(result.weekly).toEqual([{ week: "2026-11-02", timezone: "America/New_York", activeUsers: 2 }]);
+    expect(result.firstCollectedDate).toBe("2026-10-31");
+    expect(result.easternFromDate).toBe("2026-11-02");
+    // Window starts at Eastern midnight Nov. 2 (EST after the Nov. 1 DST change).
+    expect(result.history.start).toBe("2026-11-02T05:00:00.000Z");
+    time = Date.parse("2026-11-02T03:00:00Z"); // Sunday Nov. 1, 10 PM EST
+    expect((await invoke(handlers().report, { days: 7 })).body.history.start).toBe("2026-10-26T04:00:00.000Z");
+  });
+
+  it("keeps UTC rows from before the change separate from Eastern rows", async () => {
+    // UTC collector rows: Nov. 3 holds an evening Nov. 2 Eastern visit by staff-1.
+    await firestore.collection("cmsUsageDaily").doc("2026-11-03").set({ activeUsers: 1, views: { posts: 1 } });
+    await firestore.collection("cmsUsageWeekly").doc("2026-10-26").set({ activeUsers: 4 });
+    time = Date.parse("2026-11-03T15:00:00Z");
+    await invoke(handlers().collect, batch());
+    const result = (await invoke(handlers().report, { days: 30 })).body;
+    expect(result.easternFromDate).toBe("2026-11-03");
+    expect(result.daily.find(row => row.date === "2026-11-02")).toEqual({ date: "2026-11-02", timezone: "UTC", activeUsers: 0 });
+    // The switch date keeps its stored UTC row; staff-1 is counted again on the Eastern row.
+    expect(result.daily.filter(row => row.date === "2026-11-03")).toEqual([{ date: "2026-11-03", timezone: "UTC", activeUsers: 1 },
+      { date: "2026-11-03", timezone: "America/New_York", activeUsers: 1 }]);
+    expect(result.weekly.slice(-2)).toEqual([{ week: "2026-10-26", timezone: "UTC", activeUsers: 4 },
+      { week: "2026-11-02", timezone: "America/New_York", activeUsers: 1 }]);
+    expect(result.screens.find(row => row.id === "posts").views).toBe(2);
   });
 
   it("preserves counters across batches and returns aggregate-only numeric projections to staff", async () => {
@@ -104,7 +142,9 @@ describe("Boardwalk usage privacy and persistence contract (#4495)", () => {
     expect(res.body.screens.find(row => row.id === "guide").views).toBe(0);
     expect(res.body.actions.find(row => row.id === "preview.request").count).toBe(2);
     expect(res.body.firstCollectedDate).toBe("2026-11-02");
-    expect(res.body.daily).toHaveLength(90);
+    // 2026-11-02 has the stored UTC row and the new Eastern row.
+    expect(res.body.daily).toHaveLength(91);
+    expect(new Set(res.body.daily.map(row => row.date)).size).toBe(90);
     expect(JSON.stringify(res.body)).not.toMatch(/private-|unexpected|"(?:objectId|roles|uid)"/);
   });
 

@@ -13,3 +13,7 @@ Deploy and verify the two usage TTL policies and Functions before releasing an
 enabled Admin artifact. Verify account exclusions before enabling collection.
 The shared `analyticsEnabled` setting remains the collection stop control.
 Account changes and deployment require separate authority.
+
+Daily and weekly aggregates and presence markers are keyed by Eastern date
+with the `et-` prefix. Rows collected before that change keep their UTC date
+keys and are reported as UTC rows. The first `et-` daily row is the change date.

@@ -8,8 +8,9 @@ import type { UsageReport } from "../src/lib/boardwalk-usage";
 
 const fixture = (days = 30): UsageReport => ({ days, analyticsEnabled: false, generatedAt: "2026-11-07T12:00:00Z",
   history: { status: "ready", start: "2026-10-09", end: "2026-11-07", actions: [{ id: "auth.login", label: "Accepted sign-ins", count: 25 }] },
-  firstCollectedDate: "2026-11-01", timezone: "UTC", daily: [{ date: "2026-11-07", activeUsers: 4 }],
-  weekly: [{ week: "2026-11-02", activeUsers: 7 }],
+  firstCollectedDate: "2026-11-01", easternFromDate: "2026-11-05", timezone: "America/New_York",
+  daily: [{ date: "2026-11-04", timezone: "UTC", activeUsers: 3 }, { date: "2026-11-07", timezone: "America/New_York", activeUsers: 4 }],
+  weekly: [{ week: "2026-11-02", timezone: "America/New_York", activeUsers: 7 }],
   screens: [{ id: "posts", label: "Posts", views: 12, visibleMs: 120_000 }, { id: "pages", label: "Pages", views: 0, visibleMs: 0 }],
   actions: [{ id: "content.publish.request", label: "Content publish attempts", count: 3 }] });
 const mount = (load: UsageLoader) => render(<MemoryRouter><BoardwalkUsageSurface load={load} /></MemoryRouter>);
@@ -23,6 +24,16 @@ describe("Boardwalk usage Reports view", () => {
     expect(screen.getByRole("row", { name: "Posts 12 2.0" })).toBeInTheDocument();
     expect(screen.getByRole("row", { name: "Pages 0 0.0" })).toBeInTheDocument();
     expect(screen.getByText(/does not measure productivity/)).toBeInTheDocument();
+    expect(screen.getByRole("row", { name: "2026-11-04 (UTC) 3" })).toBeInTheDocument();
+    expect(screen.getByRole("row", { name: "2026-11-07 4" })).toBeInTheDocument();
+    expect(screen.getByText(/Rows marked UTC were collected before Eastern dates began on 2026-11-05/)).toBeInTheDocument();
+  });
+
+  it("explains UTC rows whenever any appear, even when collection began on the switch date", async () => {
+    mount(async () => ({ ...fixture(), firstCollectedDate: "2026-11-05", easternFromDate: "2026-11-05",
+      daily: [{ date: "2026-11-05", timezone: "UTC", activeUsers: 2 }, { date: "2026-11-05", timezone: "America/New_York", activeUsers: 1 }] }));
+    expect(await screen.findByRole("row", { name: "2026-11-05 (UTC) 2" })).toBeInTheDocument();
+    expect(screen.getByText(/A date or week can have both a UTC row and an Eastern row/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Back to problem reports" })).toHaveAttribute("href", "/reports");
     expect(screen.getByRole("link", { name: "What Boardwalk records and why" })).toHaveAttribute("href", "/guide/boardwalk-usage");
   });

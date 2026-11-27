@@ -52,16 +52,17 @@ export function BoardwalkUsageSurface({ load }: { load: UsageLoader }) {
           : <InlineMessage tone="warning">Existing activity totals are unavailable. Missing dates, an incomplete staff list or a service failure can prevent a complete count.</InlineMessage>}
       </section>
       {!visible.firstCollectedDate ? <EmptyState title="No new usage analytics collected" description="Time without analytics does not mean a tool is unused." /> : <>
-        <p>Usage analytics began {visible.firstCollectedDate}. Dates use UTC and include today so far. Counts cover only the destinations and actions listed below.</p>
+        <p>Usage analytics began {visible.firstCollectedDate}. Dates use Eastern time and include today so far. Counts cover only the destinations and actions listed below.</p>
+        {[...visible.daily, ...visible.weekly].some(row => row.timezone === "UTC") && <p>Rows marked UTC were collected before Eastern dates began{visible.easternFromDate ? ` on ${visible.easternFromDate}` : ""}. On those rows, work after 7 or 8 PM Eastern appears on the next day. A date or week can have both a UTC row and an Eastern row; a person can appear in each.</p>}
         <section aria-labelledby="usage-daily"><h3 id="usage-daily">Active staff per day</h3>
           <p>A staff account counts once per day. Agent and test accounts are excluded.</p>
-          <TableFrame><table className="data-table"><thead><tr><th scope="col">Date (UTC)</th><th scope="col">Active staff</th></tr></thead>
-            <tbody>{visible.daily.map(row => <tr key={row.date}><th scope="row">{row.date}</th><td>{row.activeUsers}</td></tr>)}</tbody></table></TableFrame>
+          <TableFrame><table className="data-table"><thead><tr><th scope="col">Date</th><th scope="col">Active staff</th></tr></thead>
+            <tbody>{visible.daily.map(row => <tr key={`${row.date}-${row.timezone}`}><th scope="row">{row.date}{row.timezone === "UTC" ? " (UTC)" : ""}</th><td>{row.activeUsers}</td></tr>)}</tbody></table></TableFrame>
         </section>
         <section aria-labelledby="usage-weekly"><h3 id="usage-weekly">Active staff per calendar week</h3>
-          <p>Each account counts once from Monday to Sunday (UTC). Only weeks starting within the selected period appear; this week is still in progress.</p>
+          <p>Each account counts once from Monday to Sunday. Only weeks starting within the selected period appear; this week is still in progress.</p>
           <TableFrame><table className="data-table"><thead><tr><th scope="col">Week starting</th><th scope="col">Active staff</th></tr></thead>
-            <tbody>{visible.weekly.map(row => <tr key={row.week}><th scope="row">{row.week}</th><td>{row.activeUsers}</td></tr>)}</tbody></table></TableFrame>
+            <tbody>{visible.weekly.map(row => <tr key={`${row.week}-${row.timezone}`}><th scope="row">{row.week}{row.timezone === "UTC" ? " (UTC)" : ""}</th><td>{row.activeUsers}</td></tr>)}</tbody></table></TableFrame>
         </section>
         <section aria-labelledby="usage-screens"><h3 id="usage-screens">Destinations, most to least used</h3>
           <p>Visible time excludes hidden tabs and may include idle time. It does not measure productivity or prove that someone was stuck. Browser closure and delivery failures can lose events.</p>

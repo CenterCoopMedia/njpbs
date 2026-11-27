@@ -14,9 +14,10 @@ export interface UsageReport {
   analyticsEnabled: boolean;
   generatedAt: string;
   firstCollectedDate: string | null;
-  timezone: "UTC";
-  daily: { date: string; activeUsers: number }[];
-  weekly: { week: string; activeUsers: number }[];
+  easternFromDate: string | null;
+  timezone: "America/New_York";
+  daily: { date: string; timezone: "UTC" | "America/New_York"; activeUsers: number }[];
+  weekly: { week: string; timezone: "UTC" | "America/New_York"; activeUsers: number }[];
   screens: { id: string; label: string; views: number; visibleMs: number }[];
   actions: { id: string; label: string; count: number }[];
   history: { status: "ready" | "unavailable"; start: string; end: string;
