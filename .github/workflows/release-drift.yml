@@ -123,6 +123,7 @@ jobs:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_SNIPPETS_READ_TOKEN: ${{ inputs.target != 'development' && secrets.CLOUDFLARE_SNIPPETS_READ_TOKEN || '' }}
           CMS_ADMIN_ACCESS_API_TOKEN: ${{ secrets.CMS_ADMIN_ACCESS_API_TOKEN }}
           CLOUDFLARE_DEV_WORKER_TOKEN: ${{ inputs.target == 'development' && secrets.CLOUDFLARE_DEV_WORKER_TOKEN || '' }}
           CLOUDFLARE_DEV_PAGES_TOKEN: ${{ inputs.target == 'development' && secrets.CLOUDFLARE_DEV_PAGES_TOKEN || '' }}
