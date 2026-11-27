@@ -1103,11 +1103,13 @@ const onSourceMediaUploadSweep = onSchedule({
   concurrency: 1,
   timeoutSeconds: 300,
   serviceAccount: FUNCTION_SERVICE_ACCOUNT,
-}, () => sweepAbandonedUploads({
-  firestore: db,
-  registry: runtimeRegistry(),
-  uploader: createS3MediaUploader(runtimeAwsConfig()),
-}));
+}, async () => {
+  await sweepAbandonedUploads({
+    firestore: db,
+    registry: runtimeRegistry(),
+    uploader: createS3MediaUploader(runtimeAwsConfig()),
+  });
+});
 
 module.exports = {
   COLLECTION,
