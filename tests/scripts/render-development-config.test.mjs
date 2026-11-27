@@ -22,7 +22,7 @@ async function fixture(run) {
   const directory = mkdtempSync(join(tmpdir(), "development-render-"));
   try {
     await copyImportClosure(root, directory, ["scripts/render-development-config.mjs", "site/scripts/cms-publication-runtime-guard.ts"], {
-      assets: [...files, ".gitignore", "site/package.json", "functions/lib/public-deployment-pointer.js"],
+      assets: [...files, ".gitignore", "site/package.json", "functions/lib/public-deployment-pointer.js", "functions/lib/operator-refusal.js"],
     });
     git(directory, "init", "-q"); git(directory, "add", ".");
     git(directory, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.org", "commit", "-qm", "Templates");

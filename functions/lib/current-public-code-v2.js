@@ -1,4 +1,5 @@
 "use strict";
+const { operatorRefusal } = require("./operator-refusal");
 
 const { createHash } = require("node:crypto");
 const p = require("./public-release-pair");
@@ -6,7 +7,7 @@ const code = require("./public-release-pair-code-reference");
 const { assertPublicationTarget } = require("./publication-target");
 const MAX_BYTES = 20 * 1024 * 1024;
 const WIRE_BYTES = Math.ceil(MAX_BYTES / 3) * 4 + 64 * 1024;
-function refuse() { throw Object.assign(new Error("Versioned current CODE is unavailable"), { status: 409 }); }
+function refuse() { throw operatorRefusal(Object.assign(new Error("Versioned current CODE is unavailable"), { status: 409 })); }
 function refreshing() { throw Object.assign(new Error("Paired editorial source is refreshing"), { code: "pair_editorial_context_refreshing" }); }
 const same = (a, b) => p.publicReleaseDigest(a) === p.publicReleaseDigest(b);
 const hash = value => createHash("sha256").update(value).digest("hex");

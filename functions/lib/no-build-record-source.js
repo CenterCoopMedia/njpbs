@@ -1,4 +1,5 @@
 "use strict";
+const { operatorRefusal } = require("./operator-refusal");
 
 const { pagePublicationTarget } = require("./no-build-page-target");
 const { assertPublicDeploymentPointer, assertMediaLifecycleFenceInTransaction } = require("./public-deployment-pointer");
@@ -13,7 +14,7 @@ const { readPublishedChrome, publicRichText } = require("../published-post-reade
 
 const MAX_RECORDS = 1000;
 function refuse(message) {
-  throw Object.assign(new Error(`Build-free record input: ${message}`), { status: 409 });
+  throw operatorRefusal(Object.assign(new Error(`Build-free record input: ${message}`), { status: 409 }));
 }
 async function getAll(transaction, refs) {
   const rows = [];

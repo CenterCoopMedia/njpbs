@@ -1,8 +1,9 @@
 "use strict";
+const { operatorRefusal } = require("./operator-refusal");
 
 const CURRENT_CODE_BYTES = 16 * 1024 * 1024;
 const validDigest = value => typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
-function refuse() { throw Object.assign(new Error("Private current CODE source is unavailable"), { status: 409 }); }
+function refuse() { throw operatorRefusal(Object.assign(new Error("Private current CODE source is unavailable"), { status: 409 })); }
 function fields(value, names, optional = []) {
   if (!value || typeof value !== "object" || Array.isArray(value) || Object.keys(value).some(key => !names.includes(key) && !optional.includes(key)) ||
       names.some(key => !Object.hasOwn(value, key))) refuse();

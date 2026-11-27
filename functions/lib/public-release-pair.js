@@ -1,4 +1,5 @@
 "use strict";
+const { operatorRefusal } = require("./operator-refusal");
 
 const { createHash } = require("node:crypto");
 const { assertPublicDeploymentPointer, isPublicDeploymentIdentifier, isCommitSha, timestampMillis } = require("./public-deployment-pointer");
@@ -15,6 +16,7 @@ class PublicReleaseProtocolError extends Error {
     super("The public release protocol record is invalid");
     this.name = "PublicReleaseProtocolError";
     this.status = 409;
+    operatorRefusal(this);
   }
 }
 

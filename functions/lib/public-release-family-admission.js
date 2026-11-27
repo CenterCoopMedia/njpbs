@@ -1,4 +1,5 @@
 "use strict";
+const { operatorRefusal } = require("./operator-refusal");
 // Schema-two source-owner adapters. Existing handlers do not select these
 // exports. Their caller keeps auth, source/history/media writes and transaction.
 const p = require("./public-release-pair");
@@ -39,7 +40,7 @@ async function preparePairContentPublication({ firestore, transaction, collectio
   kind, family, target, pageScheduleCapture, dependencyRefresh = false, electionResultsRefresh, videoReplacementRefresh }) {
   if (!/^[A-Za-z0-9]{20}$/.test(queueRef?.id ?? "") || queueRef.path !== `cmsPublishQueue/${queueRef.id}`) refuse();
   const visible = publiclyVisible(nextDocument), snapshot = nextDocument?.published;
-  if (kind === "page" && documentId === "home" && !visible) throw Object.assign(new Error("The homepage can't be unpublished."), { status: 409 });
+  if (kind === "page" && documentId === "home" && !visible) throw operatorRefusal(Object.assign(new Error("The homepage can't be unpublished."), { status: 409 }));
   const change = { kind, id: documentId, action: visible ? "publish" : "withdraw", sourceVersion: snapshot?.sourceVersion, snapshot };
   const source = a.publicationSource({ ...change, family });
   // A lost acceptance response is resolved before current selection, owner or
@@ -73,7 +74,7 @@ async function preparePairContentPublication({ firestore, transaction, collectio
     capability = await post.readNoBuildPostCapability({ firestore, transaction });
     if (owner.state?.mode === "static" || visible && (await post.listNoBuildPostOwners({ firestore, transaction }))
       .some(({ state }) => state.mode === "static" && state.visible))
-      throw Object.assign(new Error("A retained static Post requires its approved cutover before pair publication."), { status: 409 });
+      throw operatorRefusal(Object.assign(new Error("A retained static Post requires its approved cutover before pair publication."), { status: 409 }));
     if (visible && require("./no-build-post-publication").unsupportedSnapshotReason(nextDocument)) refuse();
     if (visible) {
       const read = await require("../published-post-reader").readPublishedPost({ firestore, transaction,

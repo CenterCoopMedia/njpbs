@@ -1,4 +1,5 @@
 "use strict";
+const { operatorRefusal } = require("./operator-refusal");
 
 // Inert one-time bootstrap for the public deployment coordinator. This module
 // validates already-fetched Cloudflare evidence and writes one Firestore
@@ -67,7 +68,7 @@ function evidenceError(message) {
 }
 
 function stateError(message) {
-  throw new PublicDeploymentStateError(message);
+  throw operatorRefusal(new PublicDeploymentStateError(message));
 }
 
 function plainObject(value) {

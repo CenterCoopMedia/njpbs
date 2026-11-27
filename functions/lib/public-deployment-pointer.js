@@ -1,4 +1,5 @@
 "use strict";
+const { operatorRefusal } = require("./operator-refusal");
 
 // Pure pointer contracts shared by Node writers and the private Worker. Keep
 // build/static-return dependencies in public-deployment.js, out of this graph.
@@ -149,9 +150,9 @@ function assertPublicDeploymentPointer(value) {
     (Object.prototype.hasOwnProperty.call(value, "updatedAt") &&
       timestampMillis(value.updatedAt) === null)
   ) {
-    throw new PublicDeploymentStateError(
+    throw operatorRefusal(new PublicDeploymentStateError(
       "The public deployment coordinator is invalid",
-    );
+    ));
   }
 
   if (
@@ -169,9 +170,9 @@ function assertPublicDeploymentPointer(value) {
       value.predecessorDeploymentId !== value.activeDeploymentId ||
       value.predecessorCommitSha !== value.activeCommitSha)
   ) {
-    throw new PublicDeploymentStateError(
+    throw operatorRefusal(new PublicDeploymentStateError(
       "The public deployment coordinator is invalid",
-    );
+    ));
   }
   if (
     value.state === "reconciling" &&
@@ -180,9 +181,9 @@ function assertPublicDeploymentPointer(value) {
         timestampMillis(value.leaseAcquiredAt) ||
       !DIGEST.test(value.cloudflareEvidenceDigest))
   ) {
-    throw new PublicDeploymentStateError(
+    throw operatorRefusal(new PublicDeploymentStateError(
       "The public deployment coordinator is invalid",
-    );
+    ));
   }
   if (value.runtime !== undefined) publicationRuntime(value.runtime);
   return value;

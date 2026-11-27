@@ -1,4 +1,5 @@
 "use strict";
+const { operatorRefusal } = require("./operator-refusal");
 
 const { createHash } = require("node:crypto");
 const { visibleLayoutBlocks } = require("./content-layout");
@@ -19,7 +20,7 @@ function approveElectionResults(document, actor, approvedAt) {
     const error = electionResultsError(block.data, true);
     if (error) throw Object.assign(new Error(error), { status: 400 });
     for (const race of block.data.races) {
-      if (Date.parse(race.asOf) > Date.parse(approvedAt)) throw Object.assign(new Error("The source's as-of time cannot be in the future."), { status: 400 });
+      if (Date.parse(race.asOf) > Date.parse(approvedAt)) throw operatorRefusal(Object.assign(new Error("The source's as-of time cannot be in the future."), { status: 400 }));
       const key = identity(block.id, race.id);
       const previous = prior.get(key);
       const nextDigest = digest(race);

@@ -1,4 +1,5 @@
 "use strict";
+const { operatorRefusal } = require("./operator-refusal");
 
 const { randomUUID } = require("node:crypto");
 const { FieldValue } = require("firebase-admin/firestore");
@@ -438,7 +439,7 @@ async function existingNoBuildPagePublication({ firestore, changes, retry = fals
       section: contentResourceSection({ collection: "cmsPages", documentId: state.pageId, stored: document }) };
     const allowed = state.visible ? canEditContent(actor.principal, resource) || can(actor.principal, "content.publish", resource)
       : can(actor.principal, "content.unpublish", resource) || can(actor.principal, "content.delete", resource);
-    if (!allowed) throw Object.assign(new Error("Publication access required."), { status: 403 });
+    if (!allowed) throw operatorRefusal(Object.assign(new Error("Publication access required."), { status: 403 }));
     if (changes.length !== 1 || change.id !== state.pageId || change.sourceVersion !== state.sourceVersion ||
         (change.operation === "withdraw") === state.visible || (retry && document?.version !== baseVersion)) {
       refuse("Publication changed. Reload its status before retrying.");

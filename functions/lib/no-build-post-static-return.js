@@ -1,4 +1,5 @@
 "use strict";
+const { operatorRefusal } = require("./operator-refusal");
 
 const { isDeepStrictEqual } = require("node:util");
 const { contentLink } = require("./content-link");
@@ -8,7 +9,7 @@ const { readPublicContextInTransaction, readPublicContextRevisionInTransaction, 
 
 const { MAX_FILES, MAX_FILE_BYTES, MAX_TOTAL_BYTES, projectStaticInput, projectStaticProof, staticProofInput } = require("./no-build-post-static-proof");
 function refuse(message = "The static Post return no longer matches its admitted publication.") {
-  throw Object.assign(new Error(message), { status: 409 });
+  throw operatorRefusal(Object.assign(new Error(message), { status: 409 }));
 }
 async function currentStaticPublication({ firestore, transaction, state }) {
   const document = (await transaction.get(firestore.doc(`cmsPosts/${state.postId}`))).data();

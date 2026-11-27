@@ -70,13 +70,28 @@ export function cloudReleaseHttpStatus(error: unknown): number | undefined {
   return status;
 }
 
+const { isOperatorRefusal } = require("../../functions/lib/operator-refusal");
+// Only an error that project code marked as a fixed refusal (operator-refusal.js)
+// may give its sentence to the failure record. Its identifiers are validated
+// project ids; a URL or a control character still drops the whole message.
+export function cloudReleaseRefusal(error: unknown): string | undefined {
+  try {
+    if (!isOperatorRefusal(error)) return undefined;
+    const message = Object.getOwnPropertyDescriptor(error, "message")?.value;
+    if (typeof message !== "string" || !/^[\x20-\x7e]{1,300}$/.test(message) || message.includes("://")) return undefined;
+    return message.replace(/\.$/, "");
+  } catch { return undefined; }
+}
+
 /** Only operator-owned text and a bounded HTTP status leave this boundary.
  * Provider bodies, arbitrary messages, headers and URLs are never copied. */
 export function cloudReleaseFailureReason(stage: CloudReleaseFailureStage, error?: unknown, exhausted = false): string {
   const status = cloudReleaseHttpStatus(error);
+  const refusal = cloudReleaseRefusal(error);
   const message = Object.hasOwn(failureMessages, stage) ? `${stage}: ${failureMessages[stage]}` : "release: The attempt did not complete";
-  return `${message}${status === undefined ? "" : ` (HTTP ${status})`}.${exhausted
-    ? " Automatic retry attempts exhausted; original release ownership is retained." : ""}`.slice(0, 300);
+  const suffix = exhausted ? " Automatic retry attempts exhausted; original release ownership is retained." : "";
+  const head = `${message}${status === undefined ? "" : ` (HTTP ${status})`}`;
+  return `${`${head}${refusal ? `: ${refusal}` : ""}`.slice(0, 299 - suffix.length)}.${suffix}`;
 }
 
 async function verifyRelease(directory: string, identity: CloudPublicationIdentity) {

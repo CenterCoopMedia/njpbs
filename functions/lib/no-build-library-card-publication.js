@@ -1,4 +1,5 @@
 "use strict";
+const { operatorRefusal } = require("./operator-refusal");
 
 const { preparePublicReleaseProducerInTransaction } = require("./public-release-producer");
 
@@ -14,7 +15,7 @@ const hash = value => createHash("sha256").update(JSON.stringify(value)).digest(
 const isLibraryCard = document => ["sponsor", "newsletter"].includes(document?.type);
 const operationIdFor = (id, version, action) => hash(["library-card-publication-v1", id, version, action]).slice(0, 20);
 const successorIdFor = identity => hash([identity.originalOperationId, identity.contextRevision, identity.rendererSha]).slice(0, 20);
-function refuse(message) { throw Object.assign(new Error(message), { status: 409, code: "library_card_publication_unavailable" }); }
+function refuse(message) { throw operatorRefusal(Object.assign(new Error(message), { status: 409, code: "library_card_publication_unavailable" })); }
 // Working workflow/version fields do not change an approved public card.
 const cardDigest = record => hash(record?.approvedLibraryVersion ?? null);
 
@@ -69,8 +70,8 @@ async function readLibraryCardPublication({ firestore, transaction, operationId,
   const laterApproval = events.some(row => row.action === "approve" && row.after?.version > identity.sourceVersion);
   if (stored?.type !== identity.kind || laterApproval ||
       cardDigest(shapeJoinedRecord(identity.recordId, stored, events)) !== identity.cardDigest) {
-    throw Object.assign(new Error("This card publication was replaced. Reload before publishing."),
-      { status: 409, code: "library_card_publication_replaced" });
+    throw operatorRefusal(Object.assign(new Error("This card publication was replaced. Reload before publishing."),
+      { status: 409, code: "library_card_publication_replaced" }));
   }
   return { ref, queue, publication: receipt };
 }

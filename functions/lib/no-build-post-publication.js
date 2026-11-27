@@ -1,4 +1,5 @@
 "use strict";
+const { operatorRefusal } = require("./operator-refusal");
 
 const { preparePublicReleaseProducerInTransaction, publicContentChange } = require("./public-release-producer");
 
@@ -31,9 +32,13 @@ const { prepareHomePostRefreshInTransaction } = require("./no-build-home-ownersh
 const STATE_PATH = "system/publicDeployment/noBuildPosts/current";
 const TRANSPORT = "post-no-build-v1";
 const digest = value => createHash("sha256").update(JSON.stringify(value)).digest("hex");
-function refuse(message = "This Post cannot use instant publication.", scheduleDeferred = false) {
-  throw Object.assign(new Error(message), { status: 409, code: "post_publication_unavailable",
+function refusal(message, scheduleDeferred) {
+  return Object.assign(new Error(message), { status: 409, code: "post_publication_unavailable",
     ...(scheduleDeferred ? { scheduleDeferred: true } : {}) });
+}
+// Callers pass literal text; a reason built from Post content uses refusal() unmarked.
+function refuse(message = "This Post cannot use instant publication.", scheduleDeferred = false) {
+  throw operatorRefusal(refusal(message, scheduleDeferred));
 }
 function noBuildPostStateRef(firestore) { return firestore.doc(STATE_PATH); }
 function normalizeAdmission(config) {
@@ -67,9 +72,9 @@ function supportedSnapshot(document) {
  * serializer while that transport is enabled; once it is off, the reason is the
  * answer staff see instead of a generic unavailability message. */
 async function refuseUnlessSerializerFallback({ firestore, transaction, owned, fallback, reason }) {
-  if (owned) refuse(reason);
+  if (owned) throw refusal(reason);
   if (fallback) fallback.reason = reason;
-  if (!(await readSerializerPublicationControlInTransaction({ firestore, transaction })).enabled) refuse(reason);
+  if (!(await readSerializerPublicationControlInTransaction({ firestore, transaction })).enabled) throw refusal(reason);
 }
 async function supportsPostMediaInTransaction(transaction, firestore, document, { accepting = false } = {}) {
   const { assetIds } = collectPublishedMediaUsage({ collection: "cmsPosts", snapshot: document.published });
@@ -585,9 +590,9 @@ async function assertNoBuildScheduleInTransaction({ firestore, transaction, coll
       const pointer = assertPublicDeploymentPointer((await transaction.get(firestore.doc("system/publicDeployment"))).data());
       if (pointer.state !== "idle") {
         // A lease is transient. Retain the due request for the next tick.
-        throw Object.assign(new Error("A public code release is in progress. Scheduled publication will retry."), {
+        throw operatorRefusal(Object.assign(new Error("A public code release is in progress. Scheduled publication will retry."), {
           status: 503, scheduleDeferred: true,
-        });
+        }));
       }
     }
     return;

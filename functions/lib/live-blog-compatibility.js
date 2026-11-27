@@ -1,4 +1,5 @@
 "use strict";
+const { operatorRefusal } = require("./operator-refusal");
 
 const { readNoBuildPostCapability } = require("./no-build-post-ownership");
 const { assertPublicDeploymentPointer } = require("./public-deployment");
@@ -64,14 +65,14 @@ function requiredLiveBlogContractVersion(liveBlog) {
 }
 async function assertLiveBlogFollowUpsRenderer({ firestore, transaction, liveBlog }) {
   if (containsLiveBlogFollowUps(liveBlog) && await readLiveBlogContractVersion({ firestore, transaction }) < 3) {
-    throw Object.assign(new Error("Follow-ups are not available until the updated live blog reader is live. Keep your draft and try again after the update."), { status: 409, code: "live_blog_follow_ups_unavailable", scheduleDeferred: true });
+    throw operatorRefusal(Object.assign(new Error("Follow-ups are not available until the updated live blog reader is live. Keep your draft and try again after the update."), { status: 409, code: "live_blog_follow_ups_unavailable", scheduleDeferred: true }));
   }
 }
 
 async function assertLiveBlogPresentationRenderer({ firestore, transaction, liveBlog }) {
   await assertLiveBlogFollowUpsRenderer({ firestore, transaction, liveBlog });
   if (liveBlog?.presentation !== undefined && await readLiveBlogContractVersion({ firestore, transaction }) < 2) {
-    throw Object.assign(new Error(PRESENTATION_PENDING), { status: 409, scheduleDeferred: true });
+    throw operatorRefusal(Object.assign(new Error(PRESENTATION_PENDING), { status: 409, scheduleDeferred: true }));
   }
 }
 
@@ -82,7 +83,7 @@ async function assertLiveBlogRenderer({ firestore, transaction, liveBlog }) {
   const pointer = assertPublicDeploymentPointer((await transaction.get(firestore.doc("system/publicDeployment"))).data());
   if (!supportsLiveBlog(capability) || capability.servingEnabled !== true ||
       pointer.state !== "idle" || capability.rendererSha !== pointer.activeCommitSha) {
-    throw Object.assign(new Error("The installed Post renderer does not support live blogs yet. Try again after its release is verified."), { status: 409, scheduleDeferred: true });
+    throw operatorRefusal(Object.assign(new Error("The installed Post renderer does not support live blogs yet. Try again after its release is verified."), { status: 409, scheduleDeferred: true }));
   }
 }
 

@@ -1,4 +1,5 @@
 "use strict";
+const { operatorRefusal } = require("./operator-refusal");
 
 const { assertNoBuildCandidateInTransaction } = require("./no-build-post-publication");
 const { assertNoBuildPageCandidateInTransaction } = require("./no-build-page-candidate");
@@ -43,9 +44,9 @@ function publicWorkerCandidateRef(firestore, buildBatchId) {
 function exactRetry(batch, { buildBatchId, commitSha }) {
   const reservation = projectPublicBuildReservation(batch, buildBatchId);
   if (reservation.commitSha !== commitSha) {
-    throw new PublicDeploymentStateError(
+    throw operatorRefusal(new PublicDeploymentStateError(
       "This public build batch belongs to a different commit",
-    );
+    ));
   }
   return reservation;
 }
@@ -53,22 +54,22 @@ function exactRetry(batch, { buildBatchId, commitSha }) {
 function exactLeaseBatch(batch, { buildBatchId, commitSha }) {
   const validated = assertPublicDeploymentLeaseBatch(batch, buildBatchId);
   if (validated.commitSha !== commitSha) {
-    throw new PublicDeploymentStateError(
+    throw operatorRefusal(new PublicDeploymentStateError(
       "This public build batch belongs to a different commit",
-    );
+    ));
   }
   return validated;
 }
 
 async function reservePublicBuildBatch({ firestore, buildBatchId, commitSha, staticPostQueueId, runtime, target }) {
   if (!firestore || typeof firestore.runTransaction !== "function") {
-    throw new PublicDeploymentStateError("firestore is required");
+    throw operatorRefusal(new PublicDeploymentStateError("firestore is required"));
   }
   if (!isPublicDeploymentIdentifier(buildBatchId)) {
-    throw new PublicDeploymentStateError("buildBatchId is invalid");
+    throw operatorRefusal(new PublicDeploymentStateError("buildBatchId is invalid"));
   }
   if (!isCommitSha(commitSha)) {
-    throw new PublicDeploymentStateError("commitSha is invalid");
+    throw operatorRefusal(new PublicDeploymentStateError("commitSha is invalid"));
   }
 
   const executor = runtime ?? { owner: "node-compute", release: commitSha };
@@ -88,7 +89,7 @@ async function reservePublicBuildBatch({ firestore, buildBatchId, commitSha, sta
     // A detached input has an earlier cutoff. Ordinary reservation must never
     // reuse its operation id; a separate promotion owns that exact identity.
     if (preparationSnapshot?.exists) {
-      throw new PublicDeploymentStateError("This operation id belongs to a detached release preparation");
+      throw operatorRefusal(new PublicDeploymentStateError("This operation id belongs to a detached release preparation"));
     }
     const pointer = pointerSnapshot.exists
       ? assertPublicDeploymentPointer(pointerSnapshot.data())
@@ -101,9 +102,9 @@ async function reservePublicBuildBatch({ firestore, buildBatchId, commitSha, sta
         commitSha,
       });
       if (pointer.lastReservedGeneration < reservation.generation) {
-        throw new PublicDeploymentStateError(
+        throw operatorRefusal(new PublicDeploymentStateError(
           "The public deployment generation counter regressed",
-        );
+        ));
       }
       return true;
     }
@@ -113,13 +114,13 @@ async function reservePublicBuildBatch({ firestore, buildBatchId, commitSha, sta
       });
     // Static input binds only to the exact queue's own build batch.
     if (staticInput && staticPostQueueId !== undefined && buildBatchId !== `cms-${staticPostQueueId}`) {
-      throw new PublicDeploymentStateError("The static Post reservation queue is invalid");
+      throw operatorRefusal(new PublicDeploymentStateError("The static Post reservation queue is invalid"));
     }
     const generation = pointer.lastReservedGeneration + 1;
     if (!Number.isSafeInteger(generation)) {
-      throw new PublicDeploymentStateError(
+      throw operatorRefusal(new PublicDeploymentStateError(
         "No public deployment generation is available",
-      );
+      ));
     }
     const timestamp = FieldValue.serverTimestamp();
     const batch = {
@@ -149,9 +150,9 @@ async function reservePublicBuildBatch({ firestore, buildBatchId, commitSha, sta
 
   const batchSnapshot = await batchRef.get();
   if (!batchSnapshot.exists) {
-    throw new PublicDeploymentStateError(
+    throw operatorRefusal(new PublicDeploymentStateError(
       "The public deployment reservation was not persisted",
-    );
+    ));
   }
   const batch = exactRetry(batchSnapshot.data(), {
     buildBatchId,
@@ -168,13 +169,13 @@ async function acquirePublicDeploymentLease({
   target,
 }) {
   if (!firestore || typeof firestore.runTransaction !== "function") {
-    throw new PublicDeploymentStateError("firestore is required");
+    throw operatorRefusal(new PublicDeploymentStateError("firestore is required"));
   }
   if (!isPublicDeploymentIdentifier(buildBatchId)) {
-    throw new PublicDeploymentStateError("buildBatchId is invalid");
+    throw operatorRefusal(new PublicDeploymentStateError("buildBatchId is invalid"));
   }
   if (!isCommitSha(commitSha)) {
-    throw new PublicDeploymentStateError("commitSha is invalid");
+    throw operatorRefusal(new PublicDeploymentStateError("commitSha is invalid"));
   }
 
   const executor = runtime ?? { owner: "node-compute", release: commitSha };
@@ -196,9 +197,9 @@ async function acquirePublicDeploymentLease({
         !pointerSnapshot.exists ||
         !batchSnapshot.exists
       ) {
-        throw new PublicDeploymentStateError(
+        throw operatorRefusal(new PublicDeploymentStateError(
           "The public deployment reservation does not exist",
-        );
+        ));
       }
 
       const pointer = assertPublicDeploymentPointer(pointerSnapshot.data());
@@ -207,9 +208,9 @@ async function acquirePublicDeploymentLease({
         commitSha,
       });
       if (!candidateSnapshot.exists) {
-        throw new PublicDeploymentStateError(
+        throw operatorRefusal(new PublicDeploymentStateError(
           "The prepared public Worker candidate does not exist",
-        );
+        ));
       }
       assertPublicationOwner(batch, executor);
       const candidate = assertPublicWorkerCandidateMatchesBatch(
@@ -278,9 +279,9 @@ async function acquirePublicDeploymentLease({
 
   const batchSnapshot = await batchRef.get();
   if (!batchSnapshot.exists) {
-    throw new PublicDeploymentStateError(
+    throw operatorRefusal(new PublicDeploymentStateError(
       "The public deployment lease result was not persisted",
-    );
+    ));
   }
   const batch = exactLeaseBatch(batchSnapshot.data(), {
     buildBatchId,

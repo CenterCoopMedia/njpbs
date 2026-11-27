@@ -1,4 +1,5 @@
 "use strict";
+const { operatorRefusal } = require("./operator-refusal");
 
 const { preparePublicReleaseProducerInTransaction, publicReleaseProducerOperation } = require("./public-release-producer");
 
@@ -110,7 +111,7 @@ const LEASE_BATCH_FIELDS = [
 ];
 
 function stateError(message) {
-  throw new PublicDeploymentStateError(message);
+  throw operatorRefusal(new PublicDeploymentStateError(message));
 }
 
 // Preserve the existing public error identity, but let callers distinguish a

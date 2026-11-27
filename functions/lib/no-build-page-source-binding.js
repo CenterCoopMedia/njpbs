@@ -1,8 +1,9 @@
 "use strict";
+const { operatorRefusal } = require("./operator-refusal");
 
 const { createHash } = require("node:crypto");
 const { recordSourceBindingPayload } = require("./no-build-page-source-payload");
-function refuse() { throw Object.assign(new Error("Rendered record source binding is unavailable"), { status: 409 }); }
+function refuse() { throw operatorRefusal(Object.assign(new Error("Rendered record source binding is unavailable"), { status: 409 })); }
 function recordSourceBindingDigest(context) {
   return createHash("sha256").update(recordSourceBindingPayload(context)).digest("hex");
 }

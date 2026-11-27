@@ -1,4 +1,5 @@
 "use strict";
+const { operatorRefusal } = require("./operator-refusal");
 
 const { isPostRouteSlug } = require("./post-slug-contract");
 const { validateState: validatePostState, validateCapability, effectiveNoBuildPostState, candidateNoBuildContract, candidateSupportsPost } = require("./no-build-post-state");
@@ -9,7 +10,7 @@ const CAPABILITY_PATH = "system/publicDeployment/noBuildPosts/capability";
 const isNoBuildPostId = value => typeof value === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(value);
 
 function refuse(message = "Instant Post ownership is unavailable.") {
-  throw Object.assign(new Error(message), { status: 409 });
+  throw operatorRefusal(Object.assign(new Error(message), { status: 409 }));
 }
 
 function validateState(value) {

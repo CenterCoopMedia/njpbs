@@ -1,4 +1,5 @@
 "use strict";
+const { operatorRefusal } = require("./operator-refusal");
 
 const { postRoutePath } = require("./post-slug-contract");
 const { createHash, randomUUID } = require("node:crypto");
@@ -373,14 +374,14 @@ async function existingNoBuildPostPublication({ firestore, changes, retry = fals
     if (!state) return null;
     if (changes.length !== 1 || changes[0].sourceVersion !== state.sourceVersion ||
         (changes[0].operation === "withdraw") === state.visible) {
-      throw Object.assign(new Error("This Post requires its existing instant publication operation."), { status: 409 });
+      throw operatorRefusal(Object.assign(new Error("This Post requires its existing instant publication operation."), { status: 409 }));
     }
     const ref = firestore.doc(`cmsPublishQueue/${state.operationId}`);
     const queue = (await transaction.get(ref)).data();
-    if (queue?.transport !== TRANSPORT) throw Object.assign(new Error("Instant publication ownership is unavailable."), { status: 409 });
+    if (queue?.transport !== TRANSPORT) throw operatorRefusal(Object.assign(new Error("Instant publication ownership is unavailable."), { status: 409 }));
     if (retry) await require("./public-release-legacy-queue-admission").assertLegacyPublicQueueAdmissionInTransaction({ firestore, transaction });
     if (retry && !state.visible && queue.homeFullBuild) {
-      if (!/^[A-Za-z0-9]{20}$/.test(queue.homeFullBuild.queueId)) throw Object.assign(new Error("Home publication ownership is unavailable."), { status: 409 });
+      if (!/^[A-Za-z0-9]{20}$/.test(queue.homeFullBuild.queueId)) throw operatorRefusal(Object.assign(new Error("Home publication ownership is unavailable."), { status: 409 }));
       const fullBuild = (await transaction.get(firestore.doc(`cmsPublishQueue/${queue.homeFullBuild.queueId}`))).data();
       if (fullBuild?.status !== "success") return { homeWithdrawalOperationId: state.operationId };
     }

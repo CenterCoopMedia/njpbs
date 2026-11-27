@@ -1,4 +1,5 @@
 "use strict";
+const { operatorRefusal } = require("./operator-refusal");
 
 const { readCmsPublicationRuntimeControlInTransaction } = require("./cms-publication-runtime-control");
 const { addressedPublishChanges } = require("./publish-build-state");
@@ -57,7 +58,7 @@ async function assertRequestedLibraryPublicationAvailable({ firestore, transacti
   const control = await readCmsPublicationRuntimeControlInTransaction({ firestore, transaction });
   for (const row of frozen) {
     const message = frozenLibraryPublicationMessage("cmsPosts", row.data(), control);
-    if (message) throw Object.assign(new Error(message), { status: 409, code: "library_publication_unavailable" });
+    if (message) throw operatorRefusal(Object.assign(new Error(message), { status: 409, code: "library_publication_unavailable" }));
   }
 }
 

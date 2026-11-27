@@ -1,4 +1,5 @@
 "use strict";
+const { operatorRefusal } = require("./operator-refusal");
 
 // Audited activation of uploaded media in public artifacts. The
 // caller must first verify the exact active Worker and the exact root
@@ -47,7 +48,7 @@ const PROOF_FIELDS = new Set([
 const RECEIPT_FIELDS = new Set([...PROOF_FIELDS, "activatedAt"]);
 
 function stateError(message) {
-  throw new PublicDeploymentStateError(message);
+  throw operatorRefusal(new PublicDeploymentStateError(message));
 }
 
 function plainObject(value) {

@@ -1,4 +1,5 @@
 "use strict";
+const { operatorRefusal } = require("./operator-refusal");
 
 const { preparePublicReleaseProducerInTransaction } = require("./public-release-producer");
 
@@ -28,8 +29,8 @@ const successorOperationId = identity => hash([identity.originalOperationId, ide
 const queueRef = (firestore, id, version) => firestore.doc(`cmsPublishQueue/${settingsOperationId(id, version)}`);
 const contextSuperseded = queue => queue.status === "cancelled" && queue.error === "public_context_superseded";
 function refuse(message, diagnosticCode) {
-  throw Object.assign(new Error(message), { status: 409, code: "settings_publication_unavailable",
-    ...(diagnosticCode ? { diagnosticCode } : {}) });
+  throw operatorRefusal(Object.assign(new Error(message), { status: 409, code: "settings_publication_unavailable",
+    ...(diagnosticCode ? { diagnosticCode } : {}) }));
 }
 
 function settingsPublicationReceipt(queue, now = Date.now()) {

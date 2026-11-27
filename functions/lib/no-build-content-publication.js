@@ -1,9 +1,10 @@
 "use strict";
+const { operatorRefusal } = require("./operator-refusal");
 const { isSpanishPostSlug } = require("./post-slug-contract");
 
 function assertSpanishPostTransport(input, prepared) {
   if (!prepared && isSpanishPostSlug(input.nextDocument?.published?.metadata?.slug)) {
-    throw Object.assign(new Error("Spanish editions need a public Post renderer that supports their routes."), { status: 409 });
+    throw operatorRefusal(Object.assign(new Error("Spanish editions need a public Post renderer that supports their routes."), { status: 409 }));
   }
 }
 
@@ -35,7 +36,7 @@ async function prepareSelectedPairContentPublication(input) {
   if (records.recordFamily(input.nextDocument)) return records.preparePairRecordPublication(input);
   if (input.collection === "cmsPosts" && input.nextDocument?.type === "post")
     return require("./no-build-post-publication").preparePairPostPublication(input);
-  throw Object.assign(new Error("This content has no pair publication owner."), { status: 409 });
+  throw operatorRefusal(Object.assign(new Error("This content has no pair publication owner."), { status: 409 }));
 }
 async function prepareNoBuildContentPublication(input) {
   await require("./content-link-directory").assertContentLinkCapacityInTransaction(input);
@@ -47,7 +48,7 @@ async function prepareNoBuildContentPublication(input) {
     // Page never falls through to the serializer or a different family owner.
     if (page) return page;
     if (require("./dataset-dependencies").figureBlocks(input.nextDocument?.published).length) {
-      throw Object.assign(new Error("Data figures require the compiled Page publication owner."), { status: 409 });
+      throw operatorRefusal(Object.assign(new Error("Data figures require the compiled Page publication owner."), { status: 409 }));
     }
   }
   const record = await require("./no-build-record-publication").prepareNoBuildRecordPublication(input);
@@ -55,7 +56,7 @@ async function prepareNoBuildContentPublication(input) {
   const post = await require("./no-build-post-publication").prepareNoBuildPostPublication(input);
   assertSpanishPostTransport(input, post);
   if (!post && require("./dataset-dependencies").figureBlocks(input.nextDocument?.published).length) {
-    throw Object.assign(new Error("Data figures require the compiled Post publication owner."), { status: 409 });
+    throw operatorRefusal(Object.assign(new Error("Data figures require the compiled Post publication owner."), { status: 409 }));
   }
   return post;
 }
