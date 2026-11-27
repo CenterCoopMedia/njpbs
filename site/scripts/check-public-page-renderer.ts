@@ -200,7 +200,7 @@ try {
   assert.ok(emptyNewsletterHtml.includes("Station news and programming updates, delivered to your inbox."));
   assert.ok(emptyNewsletterHtml.includes('src="/brand/newsletter/abstract-blue-folds.webp"'));
   assert.ok(emptyNewsletterHtml.includes(`href="${escapeHtml(newsletterSignupUrl)}"`));
-  assert.ok(emptyNewsletterHtml.includes("Sign up by email</a>"));
+  assert.ok(emptyNewsletterHtml.includes("Sign up by email<span class=\"sr-only\"> (opens in new tab)</span></a>"));
   const emptyContent = await projectPublishedPageRead(emptyNewsletterRead, "home", rendererSha, now, sources);
   assert.deepEqual(comparePostHtml(emptyNewsletterHtml, await compiled.renderPublishedPage(emptyContent)), []);
   if (process.argv.includes("--write-review")) {
