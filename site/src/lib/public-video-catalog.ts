@@ -1,7 +1,7 @@
 import { extractPartnerPlayerSrc, type AssetAvailabilityWindow } from "./media-manager-catalog.ts";
 
-export const MAX_CATALOG_VIDEOS = 2_000;
-export const MAX_CATALOG_BYTES = 4 * 1024 * 1024;
+// The catalog has no video count limit. Its serialized size bounds it: 3.7 MB for 6,102 videos on Nov. 27, 2026.
+export const MAX_CATALOG_BYTES = 16 * 1024 * 1024;
 
 export interface PublicVideo {
   slug: string;
@@ -156,12 +156,11 @@ export function readPublicVideoCatalog(value: unknown, now?: Date): PublicVideoC
   const invalid = () => new Error("Invalid public video catalog snapshot");
   const catalog = catalogRecord(value);
   if (!catalog || typeof catalog.checkedAt !== "string" || !Array.isArray(catalog.programs) ||
-      catalog.programs.length > MAX_CATALOG_VIDEOS) throw invalid();
+      new TextEncoder().encode(JSON.stringify(catalog)).byteLength > MAX_CATALOG_BYTES) throw invalid();
   const checked = new Date(catalog.checkedAt);
   if (!Number.isFinite(checked.getTime()) || checked.toISOString() !== catalog.checkedAt) throw invalid();
 
   const programSlugs = new Set<string>();
-  let count = 0;
   for (const rawProgram of catalog.programs as unknown[]) {
     const program = catalogRecord(rawProgram);
     if (!program || !catalogSlug(program.slug) || programSlugs.has(program.slug) || !text(program.title) ||
@@ -169,8 +168,6 @@ export function readPublicVideoCatalog(value: unknown, now?: Date): PublicVideoC
         (program.genre !== null && !text(program.genre)) ||
         !Array.isArray(program.episodes) || program.episodes.length === 0) throw invalid();
     programSlugs.add(program.slug);
-    count += program.episodes.length;
-    if (count > MAX_CATALOG_VIDEOS) throw invalid();
     const episodeSlugs = new Set<string>();
     for (const rawEpisode of program.episodes as unknown[]) {
       const episode = catalogRecord(rawEpisode);

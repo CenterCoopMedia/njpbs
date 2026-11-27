@@ -4,7 +4,7 @@ import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { fetchPublicVideoCatalog } from "../scripts/fetch-public-video-catalog";
 import { main } from "../scripts/sync-launch-content.mjs";
-import { mediaManagerWindowAt, readPublicVideoCatalog } from "../src/lib/public-video-catalog";
+import { MAX_CATALOG_BYTES, mediaManagerWindowAt, readPublicVideoCatalog } from "../src/lib/public-video-catalog";
 import { catalogAsset, coastShow, duplicateCoastShow, riverShow } from "./fixtures/public-video-catalog";
 
 const now = new Date("2026-11-20T12:00:00.000Z");
@@ -130,6 +130,31 @@ describe("public video catalog", () => {
     for (const image of invalidImages) {
       expect(() => readPublicVideoCatalog({ ...snapshot, programs: [{ ...program, image }] })).toThrow(/Invalid public video catalog/);
     }
+  });
+
+  it("publishes more than 2,000 videos and bounds the catalog by size", async () => {
+    const total = 2_050; // 41 asset pages of 50.
+    const assets = Array.from({ length: total }, (_, index) => catalogAsset(`river-${index}`));
+    const fetch = vi.fn(async (input: URL | string | Request) => {
+      const url = new URL(input.toString());
+      if (url.pathname.endsWith("/shows/")) return result([riverShow]);
+      const page = Number(url.searchParams.get("page") ?? 1);
+      const next = new URL(url);
+      next.searchParams.set("page", `${page + 1}`);
+      return result(assets.slice((page - 1) * 50, page * 50), page * 50 < total ? next.href : null);
+    });
+    const snapshot = await fetchPublicVideoCatalog(config, fetch, now);
+    expect(fetch).toHaveBeenCalledTimes(42);
+    expect(snapshot.programs[0].episodes).toHaveLength(total);
+    expect(readPublicVideoCatalog(snapshot)).toEqual(snapshot);
+
+    const [episode] = snapshot.programs[0].episodes;
+    const description = "x".repeat(2_000);
+    const episodes = Array.from({ length: Math.ceil(MAX_CATALOG_BYTES / description.length) },
+      (_, index) => ({ ...episode, slug: `oversized-${index}`, description }));
+    const oversized = { ...snapshot, programs: [{ ...snapshot.programs[0], episodes }] };
+    expect(Buffer.byteLength(JSON.stringify(oversized))).toBeGreaterThan(MAX_CATALOG_BYTES);
+    expect(() => readPublicVideoCatalog(oversized)).toThrow(/Invalid public video catalog/);
   });
 
   it("preserves the last valid catalog when a later asset page fails", async () => {
