@@ -42,6 +42,8 @@ import {
 } from "./BuildMilestoneStatus";
 import { PublishedVersionStatus } from "./PublishedVersionStatus";
 import { ContentRowThumbnail } from "./ContentRowThumbnail";
+import { HomeDrafts } from "./HomeDrafts";
+import type { BulkArchiveOutcome } from "../lib/functions";
 import "./NewsroomHome.css";
 
 export type NewsroomRecord = ContentRecordSummary;
@@ -57,6 +59,9 @@ interface NewsroomHomeProps {
   canViewPublishActivity: boolean;
   currentUserId: string;
   loadRecords: () => Promise<LibrarySelection>;
+  /** The person's own post drafts. Home shows the list only to people who can create posts. */
+  loadDrafts?: () => Promise<LibrarySelection>;
+  archiveDraft?: (draft: ContentRecordSummary & { version: number }) => Promise<BulkArchiveOutcome | undefined>;
   loadPublishActivity?: () => Promise<PublishActivitySummary>;
   loadAdminStatus?: () => Promise<AdminStatusManifest>;
   loadHomeSettings?: () => Promise<{
@@ -109,6 +114,8 @@ export function NewsroomHome({
   canViewPublishActivity,
   currentUserId,
   loadRecords,
+  loadDrafts,
+  archiveDraft,
   loadPublishActivity,
   loadAdminStatus = fetchAdminStatus,
   loadHomeSettings = loadDefaultHomeSettings,
@@ -426,6 +433,13 @@ export function NewsroomHome({
             </Panel>
 
             <div className="newsroom-side-stack">
+              {canCreate && loadDrafts ? (
+                <HomeDrafts
+                  loadDrafts={loadDrafts}
+                  archiveDraft={archiveDraft}
+                  onArchived={() => setAttempt((value) => value + 1)}
+                />
+              ) : null}
               <Panel className="newsroom-next-panel" tone="soft">
                 <h3>Your work</h3>
                 <ul className="newsroom-next-links">
