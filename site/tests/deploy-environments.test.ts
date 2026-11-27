@@ -16,9 +16,12 @@ const environmentsOf = (job: { environment?: string | { name?: string } }): (str
 
 // `inputs.target == 'development' && secrets.X` reads X in the development environment only.
 const DEVELOPMENT_ONLY = /inputs\.target == 'development' && secrets\.[A-Za-z_]\w*/g;
+// `inputs.target != 'development' && secrets.X` never reads X in the development environment.
+const PRODUCTION_ONLY = /inputs\.target != 'development' && secrets\.[A-Za-z_]\w*/g;
 function secretNames(value: unknown, environment?: string): string[] {
   const text = JSON.stringify(value);
-  const expressions = (environment === "development" ? text : text.replace(DEVELOPMENT_ONLY, "inputs.target == 'development' && ''"))
+  const expressions = (environment === "development" ? text.replace(PRODUCTION_ONLY, "inputs.target != 'development' && ''")
+    : text.replace(DEVELOPMENT_ONLY, "inputs.target == 'development' && ''"))
     .match(/\$\{\{[\s\S]*?\}\}/g) ?? [];
   const names = new Set<string>();
   for (const expression of expressions) {
