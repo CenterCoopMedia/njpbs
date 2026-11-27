@@ -1,3 +1,4 @@
+import { securityCheckMessage } from "../lib/app-check-failure";
 import { Fragment, useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { HttpError } from "../lib/functions";
@@ -279,7 +280,7 @@ export function TranscriptEditor({ pane = false, playbackSeconds, commentThreads
       const stale = error instanceof HttpError && error.status === 409;
       setConflict(stale);
       setError(stale ? "This transcript changed. Your edits are still here. Discard them and reload the saved transcript before editing again."
-        : "Transcript corrections could not be saved. Your edits are still here.");
+        : securityCheckMessage(error) ?? "Transcript corrections could not be saved. Your edits are still here.");
     } finally { if (mounted.current) setSaving(false); }
   }
   async function markReviewed() {
@@ -293,7 +294,7 @@ export function TranscriptEditor({ pane = false, playbackSeconds, commentThreads
       if (!mounted.current) return;
       const stale = error instanceof HttpError && error.status === 409;
       setConflict(stale);
-      setError(stale ? "This transcript changed. Reload the saved transcript and check it again before marking it reviewed." : "The review could not be confirmed. Reload the saved transcript to check its review status.");
+      setError(stale ? "This transcript changed. Reload the saved transcript and check it again before marking it reviewed." : securityCheckMessage(error) ?? "The review could not be confirmed. Reload the saved transcript to check its review status.");
     } finally { if (mounted.current) setSaving(false); }
   }
   async function startAlignment(retry = false) {
@@ -307,7 +308,7 @@ export function TranscriptEditor({ pane = false, playbackSeconds, commentThreads
     } catch (error) {
       if (!mounted.current) return;
       setAlignmentError(error instanceof HttpError && error.status < 500
-        ? error.message : "Word alignment could not be requested. Check the saved transcript status before trying again.");
+        ? error.message : securityCheckMessage(error) ?? "Word alignment could not be requested. Check the saved transcript status before trying again.");
     } finally { if (mounted.current) setAlignmentBusy(false); }
   }
   async function cancelAlignment() {
@@ -321,7 +322,7 @@ export function TranscriptEditor({ pane = false, playbackSeconds, commentThreads
     } catch (error) {
       if (!mounted.current) return;
       setAlignmentError(error instanceof HttpError && error.status < 500
-        ? error.message : "Word alignment cancellation could not be confirmed. Reload its saved status before trying again.");
+        ? error.message : securityCheckMessage(error) ?? "Word alignment cancellation could not be confirmed. Reload its saved status before trying again.");
     } finally { if (mounted.current) setAlignmentBusy(false); }
   }
   function top(nextPage = 0) {
