@@ -502,6 +502,29 @@ describe("cmsListContent handler", () => {
     expect(requirePrincipalFn).not.toHaveBeenCalled();
   });
 
+  it("counts publish-activity statuses from one status snapshot", async () => {
+    const statuses = ["reserved", "pending", "pending", "publishing", "failed", "failed", "failed", "public_unconfirmed"];
+    const firestore = {
+      collection(name) {
+        expect(name).toBe("cmsPublishQueue");
+        return {
+          select(field) {
+            expect(field).toBe("status");
+            return { get: async () => ({ docs: statuses.map((status) => ({ data: () => ({ status }) })) }) };
+          },
+        };
+      },
+    };
+    const res = makeRes();
+    const handler = createCmsListContentHandler({
+      firestore,
+      requirePrincipalFn: async () => ({ uid: "admin-1", principal: { id: "admin-1", grants: [{ role: "admin" }] } }),
+    });
+    await handler(makeReq({ body: { view: "publish_activity" } }), res);
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toEqual({ success: true, activeCount: 4, recoveryCount: 4 });
+  });
+
   it("validates the bounded query after authentication", async () => {
     const readRecordsFn = vi.fn();
     const handler = createCmsListContentHandler({
