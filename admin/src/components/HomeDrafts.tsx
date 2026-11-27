@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router";
 import type { LibrarySelection } from "../lib/content-library";
 import { DEFAULT_CONTENT_QUERY, type ContentQuery } from "../lib/content-query";
@@ -42,16 +42,17 @@ function editedLabel(days: number | null): string {
   return `Edited ${days} days ago`;
 }
 
-// Home archives only drafts with no public copy on the site: never published, or already
-// withdrawn. Archiving a draft whose earlier version is live also withdraws it, which Posts
-// explains before it happens.
-function hasNoLiveCopy(draft: ContentRecordSummary): boolean {
-  return !draft.liveSourceVersion && draft.publicUpdatePending !== true;
+// Home archives only drafts that were never published. The list summary cannot tell a
+// confirmed withdrawal from a public copy that is still served, and archiving a post with a
+// public copy also removes it from the site, which Posts explains before it happens.
+function neverPublished(draft: ContentRecordSummary): boolean {
+  return !draft.publishedSourceVersion && !draft.liveSourceVersion && draft.publicUpdatePending !== true;
 }
 
 interface ArchiveNotice {
-  // "warning" is announced politely; the archived row leaves the list, so the notice must be heard.
-  tone: "error" | "warning";
+  // "success" and "warning" are announced politely; the archived row leaves the list, so the
+  // result must be heard.
+  tone: "error" | "warning" | "success";
   message: string;
 }
 
@@ -59,7 +60,7 @@ function withWarnings(message: string, warnings: readonly string[] | undefined):
   return warnings?.length ? `${message} ${warnings.join(" ")}` : message;
 }
 
-// What the person needs to know after an archive request. A plain archive needs no message.
+// What the person needs to know after an archive request.
 function archiveNotice(outcome: BulkArchiveOutcome | undefined): ArchiveNotice | null {
   switch (outcome?.status) {
     case "archived":
@@ -74,7 +75,7 @@ function archiveNotice(outcome: BulkArchiveOutcome | undefined): ArchiveNotice |
           "The draft was archived. Its public copy stays on the site until the removal finishes.",
           outcome.publication.warnings) };
       }
-      return null;
+      return { tone: "success", message: "It is in Recycle bin." };
     case "conflict":
       return { tone: "error", message: "This draft changed since Home loaded. Open it to see the latest version." };
     case "missing":
@@ -99,6 +100,8 @@ export function HomeDrafts({ loadDrafts, archiveDraft, onArchived, now = Date.no
   const [attempt, setAttempt] = useState(0);
   const [archiving, setArchiving] = useState<string | null>(null);
   const [archiveResult, setArchiveResult] = useState<ArchiveNotice & { title: string } | null>(null);
+  // The archived row and its button leave the list, so focus moves to the stable panel heading.
+  const headingRef = useRef<HTMLHeadingElement>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -138,15 +141,17 @@ export function HomeDrafts({ loadDrafts, archiveDraft, onArchived, now = Date.no
       setAttempt((value) => value + 1);
       onArchived?.();
       setArchiving(null);
+      headingRef.current?.focus();
       return;
     }
     const notice = archiveNotice(outcome);
     if (notice) setArchiveResult({ ...notice, title: draft.title });
+    setArchiving(null);
     if (outcome?.status === "archived" || outcome?.status === "already_archived") {
       setAttempt((value) => value + 1);
       onArchived?.();
+      headingRef.current?.focus();
     }
-    setArchiving(null);
   }
 
   const nowMs = now();
@@ -158,7 +163,7 @@ export function HomeDrafts({ loadDrafts, archiveDraft, onArchived, now = Date.no
     <Panel className="home-drafts-panel" tone="soft" aria-label="My drafts">
       <div className="home-drafts-heading">
         <div>
-          <h3>My drafts</h3>
+          <h3 ref={headingRef} tabIndex={-1}>My drafts</h3>
           <p>Posts you last edited, oldest first</p>
         </div>
         {selection && selection.total > 0 ? (
@@ -190,7 +195,7 @@ export function HomeDrafts({ loadDrafts, archiveDraft, onArchived, now = Date.no
           {drafts.map((draft) => {
             const days = draftAgeDays(draft.updatedAt, nowMs);
             const version = draft.version;
-            const canArchive = archiveDraft !== undefined && days !== null && days >= STALE_DRAFT_DAYS && hasNoLiveCopy(draft) &&
+            const canArchive = archiveDraft !== undefined && days !== null && days >= STALE_DRAFT_DAYS && neverPublished(draft) &&
               typeof version === "number" && Number.isSafeInteger(version) && version > 0;
             return (
               <li key={draft.id}>

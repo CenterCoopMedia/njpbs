@@ -3,6 +3,6 @@
   "kind": "new",
   "order": 1795784400000,
   "title": "Find your drafts on Home",
-  "body": "Home lists the post drafts you last edited, oldest first, with how long ago you edited each one. Select a title to open it. People who can archive posts can archive a draft that is not live on the site and has not been edited for 30 days or more.",
+  "body": "Home lists the post drafts you last edited, oldest first, with how long ago you edited each one. Select a title to open it. People who can archive posts can archive a draft that was never published and has not been edited for 30 days or more.",
   "prs": []
 }

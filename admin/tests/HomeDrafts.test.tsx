@@ -60,17 +60,20 @@ describe("My drafts on Home", () => {
     expect(screen.queryByRole("button", { name: "Archive Transit fares" })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Archive School budget vote" }));
-    await waitFor(() => expect(screen.queryByText("School budget vote")).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole("link", { name: "School budget vote" })).not.toBeInTheDocument());
+    expect(screen.getByRole("status")).toHaveTextContent('"School budget vote" was archived');
+    expect(screen.getByRole("status")).toHaveTextContent("It is in Recycle bin.");
+    expect(screen.getByRole("heading", { name: "My drafts" })).toHaveFocus();
     expect(archiveDraft).toHaveBeenCalledWith(expect.objectContaining({ id: "old", version: 4 }));
     expect(loadDrafts).toHaveBeenCalledTimes(2);
     expect(onArchived).toHaveBeenCalledTimes(1);
   });
 
-  it("leaves Archive to Posts for an old draft whose earlier version is still live", async () => {
+  it("leaves Archive to Posts for an old draft that was ever published", async () => {
     renderDrafts({ archiveDraft: vi.fn(), loadDrafts: vi.fn(async () => selection([revisedLivePost, withdrawnPost, ...drafts])) });
     expect(await screen.findByRole("link", { name: "Election night results" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Archive Election night results" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Archive Storm recovery fund" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Archive Storm recovery fund" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Archive School budget vote" })).toBeInTheDocument();
   });
 
