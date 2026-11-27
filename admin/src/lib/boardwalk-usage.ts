@@ -142,13 +142,17 @@ export function startUsageAnalytics({ enabled, send, pathname, page = document, 
     else if (objectType && objectId && /^[a-zA-Z0-9_-]{1,128}$/.test(objectId)) add({ name, screen, objectType, objectId });
   };
   actionSink = sink;
-  // Count a search, never its text, when any search box's query reaches its first character.
-  // This does not depend on when a box applies its search, or on how it was cleared
-  // (Clear buttons and Escape reset controlled boxes without an input event).
-  // Backspacing a query down to one character counts again.
+  // Count a search, never its text, when a search box's query reaches its first character or is
+  // replaced (a paste, or new text after a Clear button or Escape reset the box without an input event).
+  // This does not depend on when a box applies its search. Backspacing to one character counts again.
+  const lastQuery = new WeakMap<HTMLInputElement, string>();
   function searched(event: Event) {
     const target = event.target;
-    if (target instanceof HTMLInputElement && target.type === "search" && target.value.trim().length === 1) sink("search");
+    if (!(target instanceof HTMLInputElement) || target.type !== "search") return;
+    const query = target.value.trim();
+    const last = lastQuery.get(target) ?? "";
+    lastQuery.set(target, query);
+    if (query.length === 1 || (query && !query.startsWith(last) && !last.startsWith(query))) sink("search");
   }
   page.addEventListener("input", searched, true);
   function visibilityChanged() {

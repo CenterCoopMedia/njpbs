@@ -125,11 +125,13 @@ describe("standard usage analytics (#4495)", () => {
     type(box, "p"); type(box, "private search text");
     // A Clear button resets a controlled box without an input event; the next query still counts.
     box.value = ""; type(box, "s"); type(box, "second");
+    // A query pasted into a box that was reset without an input event also counts.
+    box.value = ""; type(box, "pasted query");
     await tick(5_000);
     box.remove(); other.remove();
     expect(events()).toEqual([{ name: "screen.view", screen: "images" },
-      { name: "search", screen: "images" }, { name: "search", screen: "images" }]);
-    expect(JSON.stringify(batches)).not.toMatch(/private|second/);
+      { name: "search", screen: "images" }, { name: "search", screen: "images" }, { name: "search", screen: "images" }]);
+    expect(JSON.stringify(batches)).not.toMatch(/private|second|pasted/);
   });
 
   it("measures upload outcomes once per operation and endpoint actions at the Functions boundary", async () => {
