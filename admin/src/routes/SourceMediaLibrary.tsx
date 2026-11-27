@@ -15,7 +15,6 @@ import { VideoMeaningSearch } from "../components/VideoMeaningSearch";
 import { useSourceMediaBulkEditing } from "../components/SourceMediaBulkEditor";
 import { VideoUploadPanel } from "../components/VideoUploadPanel";
 import { VideoReplaceButton } from "../components/media/VideoReplaceButton";
-import { VideoOrientationExport, useVideoExportCompletion } from "../components/media/VideoOrientationExport";
 import { ComponentEditorDialog } from "../components/ComponentEditorDialog";
 import { Icon } from "../components/ui/Icon";
 import { Button, EmptyState, InlineMessage } from "../components/ui/Primitives";
@@ -146,7 +145,6 @@ export interface VideoPreviewProps {
   getIdToken: () => Promise<string>;
   canEditMetadata: boolean;
   canReplace?: boolean;
-  canExportOrientation?: boolean;
   canRequestProduction: boolean;
   canDelete: boolean;
   onDeleted: () => void;
@@ -154,7 +152,6 @@ export interface VideoPreviewProps {
   onSaveReceipt?: (receipt: VideoDetailsSaveReceipt) => void;
   onSaveSuccess?: (asset: SourceMediaAssetSummary) => void;
   onSearchContentChanged?: () => void;
-  onExportStatus?: Parameters<typeof VideoOrientationExport>[0]["onStatus"];
   onTranscriptRequested?: (assetId: string, settings: TranscriptSettings, ready: boolean) => void;
   onTranscriptObserved?: (assetId: string, settings: TranscriptSettings) => void;
   onTranscriptReady?: (assetId: string, settings: TranscriptSettings) => void;
@@ -192,7 +189,6 @@ export function VideoViewerBody({
   getIdToken,
   canEditMetadata,
   canReplace = false,
-  canExportOrientation = false,
   canRequestProduction,
   canDelete,
   onDeleted,
@@ -200,7 +196,6 @@ export function VideoViewerBody({
   onSaveReceipt,
   onSaveSuccess,
   onSearchContentChanged,
-  onExportStatus,
   onTranscriptRequested,
   onTranscriptObserved,
   onTranscriptReady,
@@ -807,8 +802,6 @@ export function VideoViewerBody({
           {canReplace && canEditMetadata && principal?.id ? <div hidden={contextView !== "details"}><VideoReplaceButton asset={asset} userId={principal.id}
             canReplace={canEditMetadata} disabled={dirty || detailsSaving || transcriptSaving || credentialsBusy || productionBusy || Boolean(downloading)}
             getIdToken={getIdToken} onUpdated={onUpdated} onBusyChange={setReplacementBusy} /></div> : null}
-          {canExportOrientation ? <div hidden={contextView !== "details"}><VideoOrientationExport asset={asset} getIdToken={getIdToken}
-            disabled={dirty || detailsSaving || replacementBusy} onStatus={onExportStatus} /></div> : null}
           <div className="video-viewer-production" data-viewer-keys="off">{production.actions}{production.content}</div>
         </div>
       </section>
@@ -1208,12 +1201,6 @@ export function SourceMediaLibrary({ principal, source, getIdToken, userId, onEx
   const viewerOrderRef = useRef(viewerOrder);
   viewerOrderRef.current = viewerOrder;
   const viewerNeedsReload = useRef(false);
-  const onExportStatus = useVideoExportCompletion(() => {
-    invalidateVideoSearchCorpus(source.id);
-    searchContentChanged.current = true;
-    viewerNeedsReload.current = true;
-    setMediaSourceCount(source.id, null);
-  });
   const viewerStepped = useRef(false);
   const viewerHasGridCard = useRef(false);
   const pendingViewerFocus = useRef<{ currentId: string; currentName: string; order: string[]; queryKey: string }>();
@@ -1933,14 +1920,13 @@ export function SourceMediaLibrary({ principal, source, getIdToken, userId, onEx
         invalidatePoster(quickLookAsset.sourceId, item.id, quickLookAsset.fileVersion);
         setQuickLookRead({ id: item.id, fileVersion: quickLookAsset.fileVersion, url: null });
       }} /> : null}
-    {selected ? <VideoPreview sourceLabel={source.label} initialSeek={initialSeek} initialConfirmDelete={confirmDeleteOnOpen} principal={principal} getIdToken={getIdToken} asset={selected} canEditMetadata={source.canEditMetadata} canReplace={source.canReplace === true} canExportOrientation={source.canExportOrientation === true} canRequestProduction={source.canRequestProduction} canDelete={source.canDelete === true}
+    {selected ? <VideoPreview sourceLabel={source.label} initialSeek={initialSeek} initialConfirmDelete={confirmDeleteOnOpen} principal={principal} getIdToken={getIdToken} asset={selected} canEditMetadata={source.canEditMetadata} canReplace={source.canReplace === true} canRequestProduction={source.canRequestProduction} canDelete={source.canDelete === true}
       preserveVideoSearchCache
       steppingOrder={viewerOrder} onStep={asset => { viewerStepped.current = true; setSelected(asset); writeVideoLocation(asset, 0, true); }}
       pageTags={pageVideoTags} recentTags={recentVideoTags} onTagsSaved={rememberVideoTags}
       onDeleted={() => { if (!pendingRouteNavigation.current) writeVideoLocation(undefined, 0, true); pendingTranscripts.current.delete(selected.id); searchContentChanged.current = false; invalidateVideoSearchCorpus(source.id); setSearchRevision(value => value + 1); setMediaSourceCount(source.id, null); bulk.removeAsset(selected.id); setDeletedName(selected.name); setSelected(undefined); resetPaging(); setAttempt(value => value + 1); requestAnimationFrame(() => document.getElementById("video-search")?.focus()); }}
       onSearchContentChanged={() => { invalidateVideoSearchCorpus(source.id); searchContentChanged.current = true; }}
       onClipRegistered={() => { viewerNeedsReload.current = true; searchContentChanged.current = true; }}
-      onExportStatus={onExportStatus}
       onTranscriptRequested={(assetId, settings, ready) => {
         if (ready) {
           pendingTranscripts.current.delete(assetId);

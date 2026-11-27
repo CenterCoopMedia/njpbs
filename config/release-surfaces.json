@@ -533,10 +533,6 @@
           "module": "functions/ugc-review-list.js"
         },
         {
-          "name": "cmsListVideoOrientationExports",
-          "module": "functions/video-orientation-exports.js"
-        },
-        {
           "name": "cmsListVideoTranscripts",
           "module": "functions/video-transcript-byok.js"
         },
@@ -647,10 +643,6 @@
         {
           "name": "cmsRequestVideoClip",
           "module": "functions/video-clips.js"
-        },
-        {
-          "name": "cmsRequestVideoOrientationExport",
-          "module": "functions/video-orientation-exports.js"
         },
         {
           "name": "cmsRequestVideoTranscript",
@@ -1153,7 +1145,7 @@
     {"id":"ema-private-audio","kind":"media","sources":["functions/lib/private-transcript-audio.js"],"states":["copying","ready","repair","failed","revoking","deleted"]},
     {"id":"ema-amazon-transcript","kind":"media","sources":["functions/lib/video-transcript-job.js","functions/lib/video-transcript-processor.js"],"states":["pending","starting","running","ready","failed","stale","needs_reconciliation"]},
     {"id":"ema-local-transcript","kind":"media","sources":["functions/lib/video-transcript-worker.js"],"states":["pending","running","ready","stale","needs_reconciliation","paid_pending"]},
-    {"id":"ema-worker-slot","kind":"deploy","sources":["functions/lib/video-transcript-alignment-job.js","functions/lib/video-transcript-worker.js"],"states":["idle","transcription","alignment","orientation"]},
+    {"id":"ema-worker-slot","kind":"deploy","sources":["functions/lib/video-transcript-alignment-job.js","functions/lib/video-transcript-worker.js"],"states":["idle","transcription","alignment"]},
     {"id":"ema-local-admission","kind":"media","sources":["functions/lib/video-transcript-local-queue.js"],"states":["uninitialized","initialized","full"]},
     {"id":"ema-transcript-budget","kind":"media","sources":["functions/lib/video-transcript-byok-job.js"],"states":["reserved","consumed","released"]},
     {"id":"ema-paid-fallback","kind":"media","sources":["functions/lib/video-transcript-paid-fallback.js"],"states":["pending","waiting","amazon","ready","needs_reconciliation","local_requeued"]},
@@ -1397,10 +1389,6 @@
     {"id":"prv-editorial-retention-job","kind":"release","sources":["functions/lib/no-build-cloud-work.js","site/scripts/cloud-editorial-preview-retention.ts","site/scripts/cms-preview-cloud-storage.ts"],"states":["absent","building","failed_retryable","verified","exhausted"]},
     {"id":"prv-editorial-seal","kind":"release","sources":["site/scripts/cms-preview-cloud-storage.ts","site/scripts/cms-preview-editorial-context.ts"],"states":["unmaterialized","object_verified","legacy_unsealed","sealed","current_sealed","refused","unavailable"]},
     {"id":"prv-listener-drain","kind":"release","sources":["functions/lib/cms-preview-serializer.js"],"states":["idle","draining","closing","closed_ok","closed_error"]},
-    {"id":"ema-orientation-export","kind":"media","sources":["functions/lib/video-orientation-export.js"],"states":["queued","running","stale","needs_reconciliation","failed","complete"]},
-    {"id":"ema-orientation-upload","kind":"media","sources":["functions/lib/video-orientation-export.js"],"states":["not_issued","capacity_wait","issued","deadline_due","settled_complete","settled_failed"]},
-    {"id":"ema-orientation-stray","kind":"media","sources":["functions/lib/video-orientation-export.js"],"states":["waiting","absent","recorded"]},
-    {"id":"ema-orientation-ui","kind":"ui","sources":["admin/src/components/media/VideoOrientationExport.tsx"],"states":["idle","requesting","active","complete","error","unmounted"]},
     {"id":"ema-usage-collector","kind":"ui","sources":["admin/src/lib/boardwalk-usage.ts"],"states":["disabled","collecting","sending","stopped"]},
     {"id":"data-usage-batch","kind":"app","sources":["functions/boardwalk-usage.js"],"states":["absent","collected","duplicate"]},
     {"id":"data-usage-report-cache","kind":"app","sources":["functions/boardwalk-usage.js"],"states":["missing","pending","ready","unavailable_history"]},

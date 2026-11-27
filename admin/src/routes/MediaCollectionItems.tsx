@@ -643,7 +643,6 @@ export function MediaCollectionItems({
           sourceLabel={source?.label} getIdToken={getIdToken}
           canEditMetadata={source?.canEditMetadata === true}
           canReplace={source?.canReplace === true}
-          canExportOrientation={source?.canExportOrientation === true}
           canRequestProduction={source?.canRequestProduction === true}
           canDelete={source?.canDelete === true} deleteConfirmationId={deleteConfirmationId}
           headerTarget={context.headerActionsTarget} factsTarget={context.headerFactsTarget}

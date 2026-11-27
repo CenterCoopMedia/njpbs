@@ -101,14 +101,6 @@ test("dry renders every runtime/config consumer, preserving target comparisons a
   for (const [filename, source] of before) assert.equal(readFileSync(join(directory, filename), "utf8"), source);
 }));
 
-test("keeps worker output hosts outside development render inputs", async () => {
-  const render = environment => fixture(directory => {
-    renderDevelopmentConfig(directory, environment);
-    return new Map(files.map(name => [name, readFileSync(join(directory, name), "utf8")]));
-  });
-  assert.deepEqual(await render({ ...inputs, BOARDWALK_OUTPUT_HOST: "objects.worker.test" }), await render(inputs));
-});
-
 test("uses the selected source manifest and explicitly preserves older untemplated sources", () => {
   const directory = mkdtempSync(join(tmpdir(), "retained-manifest-"));
   try {
@@ -238,8 +230,6 @@ test("production requires both persisted identities and preserves accepted owner
     retirementReceipt: { ...retained.retirementReceipt, originalOwner: "node-compute" } }));
   const transcriptSource = readFileSync(join(directory, "functions/lib/video-transcript-worker.js"), "utf8");
   assert.ok(transcriptSource.includes(`const WORKER_ID = "${env.CMS_GPU_WORKER_ID}";`));
-  assert.ok(readFileSync(join(directory, "functions/lib/video-orientation-export.js"), "utf8")
-    .includes(`"${env.CMS_GPU_WORKER_ID}-orientation"`));
   for (const filename of ["scripts/prepare-cloud-publisher.mjs", "scripts/prepare-preview-renderer.mjs"]) {
     assert.ok(readFileSync(join(root, filename), "utf8").includes("only: productionDeploymentInputs"));
   }

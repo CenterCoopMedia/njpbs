@@ -143,8 +143,6 @@ export const AUTHENTICATED_POST_FUNCTION_NAMES = Object.freeze([
   "cmsSaveVideoTranscript",
   "cmsRequestVideoTranscriptAlignment",
   "cmsCancelVideoTranscriptAlignment",
-  "cmsRequestVideoOrientationExport",
-  "cmsListVideoOrientationExports",
   "cmsListTranscriptionCredentials",
   "cmsSaveTranscriptionCredential",
   "cmsDisconnectTranscriptionCredential",

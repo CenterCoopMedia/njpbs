@@ -35,25 +35,3 @@ environment unchanged.
 ```
 
 Before installing the worker, supply `CMS_PRODUCTION_API_ORIGIN`, `CMS_LOCAL_PUBLICATION_OWNER` and `CMS_GPU_WORKER_ID`, then run `node scripts/render-development-config.mjs --production --root <disposable-checkout>` with the source tools. Keep the GPU ID equal to the recorded worker authentication and Windows vault user; this preserves the existing credential lookup and shared lease slot. Install only from that verified rendered checkout. The worker validates the resolved HTTPS broker at startup, before reading a token or making a request; an unrendered placeholder refuses. Focused tests use a synthetic broker.
-
-## Video exports
-
-With FFmpeg configured, the worker can export library videos in vertical or
-horizontal format. It keeps the source sharp over a blurred background and
-returns the result through the broker's bounded upload protocol.
-
-Supply BOARDWALK_OUTPUT_HOST with the permitted originals-storage hostname in
-the worker's process environment before enabling FFmpeg. An empty or invalid
-host refuses before credentials are read or jobs are claimed. Workers without
-FFmpeg do not need this input.
-
-In a Bash session in a disposable source checkout, with
-all three production inputs supplied, render the broker and worker identity before installation:
-
-```bash
-node scripts/render-development-config.mjs --production --root "$PWD"
-```
-
-Pass the installed FFmpeg executable with --ffmpeg. A worker without that option
-keeps handling transcription and alignment jobs. Run the adjacent orientation
-tests before installation. Deployment requires separate authorization.

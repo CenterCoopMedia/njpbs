@@ -221,18 +221,7 @@ async function releaseTranscriptSweep(firestore, sweep, after) {
   });
 }
 
-async function processTranscriptTick({ firestore = db, config = transcriptConfig(), processor, now = Date.now, paidFallback, uploader } = {}) {
-  if (config.bucket && config.accountId && config.controlRoleArn && config.source) {
-    try {
-      const uploads = require("./source-media-uploads");
-      await require("./lib/video-orientation-export").settleExpiredUploads({ firestore, source: config.source, clock: now,
-        uploader: uploader ?? require("./lib/s3-media-upload").createS3MediaUploader(runtimeAwsConfig()),
-        objectKeyFn: uploads.objectKey, completedAssetFn: uploads.completedAsset,
-        assertBillingEnabled: () => assertBillingEnabled(firestore) });
-    } catch {
-      logger.warn("Video export settlement deferred");
-    }
-  }
+async function processTranscriptTick({ firestore = db, config = transcriptConfig(), processor, now = Date.now, paidFallback } = {}) {
   if (!config.enabled) return { enabled: false };
   if (!configured(config)) throw new Error("transcript_configuration_incomplete");
   const sweep = await claimTranscriptSweep(firestore, now());

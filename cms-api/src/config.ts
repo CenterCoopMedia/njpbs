@@ -237,8 +237,6 @@ export const ENDPOINTS = Object.freeze({
   videoTranscriptWorkerFail: { contentType: "json", maxBytes: 8 * KIB, rateClass: "worker", auth: "worker" },
   cmsRequestVideoTranscriptAlignment: { contentType: "json", maxBytes: 8 * KIB, rateClass: "transcription" },
   cmsCancelVideoTranscriptAlignment: { contentType: "json", maxBytes: 8 * KIB, rateClass: "mutation" },
-  cmsRequestVideoOrientationExport: { contentType: "json", maxBytes: 4 * KIB, rateClass: "mutation" },
-  cmsListVideoOrientationExports: { contentType: "json", maxBytes: 4 * KIB, rateClass: "read" },
 } satisfies Record<string, EndpointPolicy>);
 
 export type CmsEndpoint = keyof typeof ENDPOINTS;

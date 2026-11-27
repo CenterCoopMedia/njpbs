@@ -218,7 +218,6 @@
   "tests/functions/video-backup.test.js",
   "tests/functions/video-caption-cues.test.js",
   "tests/functions/video-clips.test.js",
-  "tests/functions/video-orientation-export.test.js",
   "tests/functions/video-preview-processing.test.js",
   "tests/functions/video-preview-retry.test.js",
   "tests/functions/video-processing-status.test.js",

@@ -46,8 +46,8 @@ same configuration to compiled consumers and operator source checks.
 
 Keep the recorded local publication owner across queues, background work and
 retirement receipts. Keep the GPU identity across worker authentication,
-transcription/alignment/orientation leases, the shared slot and orientation
-capability check-in. A repository or host rename does not rename accepted work.
+transcription/alignment leases and the shared slot. A repository or host
+rename does not rename accepted work.
 Do not rewrite terminal receipts, clear leases or create another active slot.
 At the authorized handoff, drain the existing owners and read back auth identity,
 all accepted GPU jobs and the shared slot immediately before replacement. Retain

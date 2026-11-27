@@ -463,7 +463,7 @@ function createVideoTranscriptProcessor(config, dependencies = {}) {
     }
     return outputs;
   }
-  return { process, read, readAlignment, readBase, download, downloadLog, downloadSrt, downloadNle, edit, discardEdit, retireEdit, align, writeExports, signInput, signVideoInput,
+  return { process, read, readAlignment, readBase, download, downloadLog, downloadSrt, downloadNle, edit, discardEdit, retireEdit, align, writeExports, signInput,
     prepareLocalInputs, cleanupAudio };
 }
 

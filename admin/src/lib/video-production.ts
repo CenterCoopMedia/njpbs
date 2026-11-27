@@ -132,20 +132,6 @@ export function cancelVideoTranscriptAlignment(token: string, identity: VideoIde
   return postFunction<TranscriptAlignmentResponse>("cmsCancelVideoTranscriptAlignment", token,
     { ...identity, transcriptId, revision, requestId }, {}, { appCheck: true });
 }
-export type VideoOrientation = "vertical" | "horizontal";
-export interface VideoOrientationExport {
-  id: string; orientation: VideoOrientation;
-  state: "queued" | "processing" | "finishing_upload" | "complete" | "failed" | "stale" | "needs_reconciliation";
-  outputAssetId: string | null; errorCode: string | null; requestedAt: string; updatedAt: string;
-}
-export function requestVideoOrientationExport(token: string, identity: VideoIdentity, orientation: VideoOrientation) {
-  return postFunction<{ success: true; export: VideoOrientationExport; cached: boolean }>("cmsRequestVideoOrientationExport", token,
-    { ...identity, orientation }, {}, { appCheck: true });
-}
-export function listVideoOrientationExports(token: string, identity: VideoIdentity) {
-  return postFunction<{ success: true; exports: VideoOrientationExport[]; workerReady: boolean }>("cmsListVideoOrientationExports", token,
-    identity, {}, { appCheck: true });
-}
 export type TranscriptDownloadFormat = "txt" | "vtt" | "vtt-draft" | "srt" | "tsv" | "avid" | "premiere";
 export const avidFrameRates = ["24000/1001", "24/1", "25/1", "30000/1001", "30/1", "50/1", "60000/1001", "60/1"] as const;
 export type AvidFrameRate = typeof avidFrameRates[number];

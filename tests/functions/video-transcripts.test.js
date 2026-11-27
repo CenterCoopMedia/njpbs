@@ -195,20 +195,6 @@ describe('transcript identity, authorization and durable claims',()=>{
     });
   });
 
-  it('processes transcripts when the export settlement query fails',async()=>{
-    const store=await queued();
-    const firestore={...store.firestore,collection:name=>{
-      if(name==='mediaSourceOrientationExports')throw Object.assign(Error('index unavailable'),{code:9});
-      return store.firestore.collection(name);
-    }};
-    const calls=[];
-    await handlers.processTranscriptTick({firestore,config,processor:{process:async(job,save)=>{
-      calls.push(job.id);await save({phase:'ready',active:false});
-    }}});
-    expect(calls).toEqual([store.job.id]);
-    expect(store.rows.get(`${jobs.TRANSCRIPT_JOBS}/${store.job.id}`)).toMatchObject({phase:'ready',active:false});
-  });
-
   it('reconciles an expired local lease beyond five healthy jobs and checks one paid job per tick',async()=>{
     const store=await queued();const now=Date.now();store.rows.delete(`${jobs.TRANSCRIPT_JOBS}/${store.job.id}`);
     for(let i=0;i<7;i++)store.rows.set(`${jobs.TRANSCRIPT_JOBS}/a${i}`,{...store.job,id:`a${i}`,provider:'local',localQueuedAt:new Date(now).toISOString()});

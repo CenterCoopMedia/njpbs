@@ -143,7 +143,6 @@ function createCmsListMediaSourcesHandler(deps = {}) {
           if (source.id === "video-library") {
             summary.canReplace = summary.canEditMetadata &&
               (deps.replacementEnabledFn ?? (() => require("./lib/media-source-runtime").videoReplacementRuntimeConfig().enabled))();
-            summary.canExportOrientation = summary.canUpload === true;
             try {
               await authorizeFn({ firestore, actor, source, operation: "transcript", ...statusOption });
               summary.canRequestProduction = true;

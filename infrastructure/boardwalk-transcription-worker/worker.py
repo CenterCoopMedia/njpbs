@@ -10,7 +10,6 @@ import os
 from pathlib import Path
 import re
 import signal
-import subprocess
 import sys
 import tempfile
 import threading
@@ -23,10 +22,6 @@ ENGINE = 'faster-whisper-large-v3-pyannote-community-1-v1'
 ALIGNMENT_ADAPTER = 'qwen3-forced-aligner-adapter-v1'
 ALIGNMENT_REPOSITORY = 'Qwen/Qwen3-ForcedAligner-0.6B'
 ALIGNMENT_REVISION = 'c7cbfc2048c462b0d63a45797104fc9db3ad62b7'
-ORIENTATION_ENGINE = 'ffmpeg-orientation-v1'
-ORIENTATION_FRAMES = {'vertical': (1080, 1920), 'horizontal': (1920, 1080)}
-ORIENTATION_FAILURES = ('export_processing_failed', 'export_input_failed', 'export_upload_failed')
-OUTPUT_HOST = os.environ.get('BOARDWALK_OUTPUT_HOST', '')
 BROKER = 'https://api.example.org/'
 USER_AGENT = 'NJ-PBS-Boardwalk-Transcription-Worker/1.0'
 INPUT_HOST = os.environ.get('BOARDWALK_INPUT_HOST', '')
@@ -149,154 +144,6 @@ def validate_alignment_job(job, args):
     return job
 
 
-def validate_orientation_job(job, args):
-    frame = ORIENTATION_FRAMES.get(job.get('orientation'))
-    if job.get('kind') != 'orientation' or job.get('engine') != ORIENTATION_ENGINE or args.ffmpeg is None:
-        raise ValueError('export_processing_failed')
-    duration = job.get('durationSeconds')
-    limit = job.get('maxOutputBytes')
-    if (frame is None or (job.get('width'), job.get('height')) != frame
-            or not isinstance(duration, (int, float)) or not math.isfinite(duration) or not 0 < duration <= 3600
-            or type(limit) is not int or not 0 < limit <= 4_500_000_000):
-        raise ValueError('export_input_failed')
-    try:
-        validate_job({**job, 'engineRevision': ENGINE, 'languageCode': 'en-US', 'maxSpeakers': 2})
-    except ValueError:
-        raise ValueError('export_input_failed') from None
-    return job
-
-
-def orientation_filter(width, height):
-    # The source fills the frame width (vertical) or height (horizontal) at the
-    # center, over a cropped, zoomed, softly blurred copy of itself at 25 percent
-    # brightness, which matches 25 percent opacity over black.
-    return (f'[0:v]split=2[bg][fg];'
-            f'[bg]scale={width}:{height}:force_original_aspect_ratio=increase:force_divisible_by=2,'
-            f'crop={width}:{height},gblur=sigma=16,colorchannelmixer=rr=0.25:gg=0.25:bb=0.25[back];'
-            f'[fg]scale={width}:{height}:force_original_aspect_ratio=decrease:force_divisible_by=2[front];'
-            f'[back][front]overlay=(W-w)/2:(H-h)/2,setsar=1,format=yuv420p[v]')
-
-
-def orientation_command(ffmpeg, source, destination, width, height):
-    return [str(ffmpeg), '-nostdin', '-hide_banner', '-loglevel', 'error', '-y', '-i', str(source),
-            '-filter_complex', orientation_filter(width, height), '-map', '[v]', '-map', '0:a:0?',
-            '-c:v', 'libx264', '-preset', 'medium', '-crf', '20', '-maxrate', '8M', '-bufsize', '16M',
-            '-profile:v', 'high', '-level:v', '4.2', '-c:a', 'aac', '-b:a', '192k', '-ac', '2', '-ar', '48000',
-            '-movflags', '+faststart', '-map_metadata', '-1', str(destination)]
-
-
-def render_orientation(source, destination, job, lease, ffmpeg):
-    command = orientation_command(ffmpeg, source, destination, job['width'], job['height'])
-    process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                               stderr=subprocess.DEVNULL)
-    try:
-        while process.poll() is None:
-            lease.check()
-            time.sleep(1)
-    finally:
-        if process.poll() is None:
-            process.kill()
-            process.wait(timeout=10)
-    if process.returncode != 0:
-        raise ValueError('export_processing_failed')
-
-
-# The broker checks storage once, two hours after it issues the upload address
-# (UPLOAD_DEADLINE_MS). The worker stops sending well before that, so no upload
-# can store a file after the check.
-UPLOAD_SEND_SECONDS = 100 * 60
-
-
-class LeaseCheckedReader:
-    # http.client reads the body in blocks, so each block confirms the lease
-    # and the send deadline.
-    def __init__(self, handle, lease, deadline=None):
-        self.handle = handle
-        self.lease = lease
-        self.deadline = deadline
-
-    def read(self, size=-1):
-        self.lease.check()
-        if self.deadline is not None and time.monotonic() > self.deadline:
-            raise ValueError('export_upload_failed')
-        return self.handle.read(size)
-
-
-def validate_upload(upload, size):
-    url = urllib.parse.urlsplit(upload.get('url', '') if type(upload) is dict else '')
-    headers = upload.get('requiredHeaders') if type(upload) is dict else None
-    if (url.scheme != 'https' or url.hostname != OUTPUT_HOST or url.port not in (None, 443)
-            or url.username or url.password or url.fragment or not url.path.endswith('.mp4')
-            or type(headers) is not dict
-            or set(headers) != {'content-type', 'x-amz-checksum-sha256', 'x-amz-meta-boardwalk-session',
-                                'x-amz-meta-boardwalk-asset'}
-            or headers['content-type'] != 'video/mp4'
-            or not all(type(value) is str and value.isprintable() for value in headers.values())):
-        raise ValueError('export_upload_failed')
-    return {**headers, 'Content-Length': str(size)}
-
-
-def upload_output(path, upload, lease, send_seconds=UPLOAD_SEND_SECONDS):
-    headers = validate_upload(upload, path.stat().st_size)
-    deadline = time.monotonic() + send_seconds
-    opener = urllib.request.build_opener(NoRedirect())
-    with open(path, 'rb') as handle:
-        request = urllib.request.Request(upload['url'], data=LeaseCheckedReader(handle, lease, deadline),
-                                         headers=headers, method='PUT')
-        try:
-            with opener.open(request, timeout=120) as response:
-                if response.status != 200:
-                    raise ValueError('export_upload_failed')
-        except (urllib.error.URLError, OSError):
-            lease.check()
-            raise ValueError('export_upload_failed') from None
-
-
-def file_sha256(path, lease):
-    digest = hashlib.sha256()
-    with open(path, 'rb') as handle:
-        for block in iter(lambda: handle.read(1024 * 1024), b''):
-            lease.check()
-            digest.update(block)
-    return digest.hexdigest()
-
-
-def export_orientation(broker, job, directory, lease, args):
-    source = Path(directory) / 'input.mp4'
-    output = Path(directory) / 'output.mp4'
-    lease.checkpoint('downloading')
-    try:
-        download(job, source, lease)
-    except JobTimedOut:
-        raise
-    except ValueError:
-        raise ValueError('export_input_failed') from None
-    lease.checkpoint('rendering')
-    render_orientation(source, output, job, lease, args.ffmpeg)
-    size = output.stat().st_size
-    if not 0 < size <= job['maxOutputBytes']:
-        raise ValueError('export_processing_failed')
-    result = {'sizeBytes': size, 'sha256': file_sha256(output, lease)}
-    lease.checkpoint('uploading')
-    while True:
-        reserved = broker.call('Complete', {**lease.identity, 'engine': ORIENTATION_ENGINE,
-                                            'output': result, 'uploaded': False})
-        if reserved.get('completed') is True:
-            return None
-        if reserved.get('upload') is not None:
-            break
-        # The library's viewing-copy queue is full; keep the file and ask again.
-        wait = reserved.get('retryAfterSeconds')
-        if type(wait) is not int or not 1 <= wait <= 300:
-            raise ValueError('export_processing_failed')
-        for _ in range(wait):
-            lease.check()
-            time.sleep(1)
-    upload_output(output, reserved.get('upload'), lease)
-    lease.checkpoint('finalizing')
-    return {**lease.identity, 'engine': ORIENTATION_ENGINE, 'output': result, 'uploaded': True}
-
-
 def directory_sha256(directory):
     """Hash file names and bytes so a configured offline cache is exact."""
     digest = hashlib.sha256()
@@ -355,13 +202,6 @@ def record_completion_rejection(error, request_bytes):
         pass
 
 
-def configured_output_host(value):
-    if (not re.fullmatch(r'[a-z0-9]+(?:[.-][a-z0-9]+)*\.[a-z]{2,}', value)
-            or re.search(r'(^|\.)example\.(org|com|net)$', value)):
-        raise ValueError('worker_output_unconfigured')
-    return value
-
-
 def configured_broker_origin(value):
     parsed = urllib.parse.urlsplit(value)
     if (parsed.scheme != 'https' or not parsed.hostname or parsed.username or parsed.password or
@@ -410,7 +250,7 @@ class Lease:
     def __init__(self, broker, job, deadline=None):
         self.broker = broker
         self.identity = {'jobId': job['id'], 'leaseToken': job['leaseToken']}
-        if job.get('kind') in ('alignment', 'orientation'):
+        if job.get('kind') == 'alignment':
             self.identity['kind'] = job['kind']
         self.stage = 'downloading'
         # A hung model must not renew the lease forever.
@@ -858,10 +698,7 @@ def run_job(broker, job, args, deadline=None, attempt_state=None):
         completing = False
         try:
             alignment_job = job.get('kind') == 'alignment'
-            orientation_job = job.get('kind') == 'orientation'
-            if orientation_job:
-                validate_orientation_job(job, args)
-            elif alignment_job:
+            if alignment_job:
                 validate_alignment_job(job, args)
             else:
                 validate_job(job)
@@ -869,13 +706,6 @@ def run_job(broker, job, args, deadline=None, attempt_state=None):
                 lease.check()
                 raise ValueError(attempt_state["failure"])
             with tempfile.TemporaryDirectory(prefix='job-', dir=args.work_dir) as directory:
-                if orientation_job:
-                    completion = export_orientation(broker, job, directory, lease, args)
-                    if completion is not None:
-                        lease.check()
-                        completing = True
-                        broker.call('Complete', completion)
-                    return
                 source = Path(directory) / ('input.m4a' if job['input'].get('mimeType') == 'audio/x-m4a' else 'input.mp4')
                 lease.checkpoint('downloading')
                 download(job, source, lease)
@@ -891,8 +721,7 @@ def run_job(broker, job, args, deadline=None, attempt_state=None):
         except Exception as error:
             code = str(error) if isinstance(error, ValueError) else ''
             failures = (('alignment_processing_failed', 'alignment_model_unavailable', 'alignment_input_failed')
-                        if job.get('kind') == 'alignment' else ORIENTATION_FAILURES
-                        if job.get('kind') == 'orientation' else
+                        if job.get('kind') == 'alignment' else
                         ('local_processing_failed', 'local_model_unavailable', 'local_input_failed'))
             if code not in failures:
                 code = failures[0]
@@ -937,8 +766,7 @@ def poll_jobs(broker, args, once=False, stop=STOP):
     idle_delay = 30
     while not stop.is_set():
         try:
-            # Only a worker with FFmpeg configured asks for export jobs.
-            response = broker.call('Claim', {'capabilities': ['orientation']} if getattr(args, 'ffmpeg', None) else {})
+            response = broker.call('Claim', {})
             if response.get('job'):
                 idle_delay = 30
                 # A recovered lease retains its original watchdog budget, even
@@ -970,12 +798,9 @@ def main():
     parser.add_argument('--alignment-model-revision')
     parser.add_argument('--alignment-cache-sha256')
     parser.add_argument('--work-dir', type=Path)
-    parser.add_argument('--ffmpeg', type=Path)
     parser.add_argument('--once', action='store_true')
     args = parser.parse_args()
     configured_broker_origin(BROKER)
-    if args.ffmpeg is not None:
-        configured_output_host(OUTPUT_HOST)
     if args.configure_token:
         if os.name != "nt":
             raise ValueError("Windows Credential Manager required")
@@ -1001,8 +826,6 @@ def main():
                 len(args.alignment_cache_sha256) != 64 or
                 directory_sha256(args.alignment_model) != args.alignment_cache_sha256):
             raise ValueError('alignment_model_unavailable')
-    if args.ffmpeg is not None and not args.ffmpeg.is_file():
-        raise ValueError('export_processing_failed')
     args.work_dir.mkdir(parents=True, exist_ok=True)
     worker_lock = lock_worker(args.work_dir)
     broker = Broker(read_token(args.token_stdin))
