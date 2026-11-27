@@ -28,27 +28,27 @@ Videos, UGC and Audio.
 <p>Descriptive guide. The video has interface sounds, optional instrumental music, and no spoken narration.</p>
 <p><strong>Title</strong></p>
 <p>The NJ PBS logo and &quot;Find, upload, and organize shared videos&quot;. The opening includes a screen preview, duration and step count.</p>
-<p>Outcome: &quot;You find a private station video, check it, and save it to your favorites and a collection.&quot;</p>
+<p>Outcome: &quot;You find a private station video and check it.&quot;</p>
 <p><strong>Overview: Start from Home and the rail</strong></p>
 <p>Private station video lives inside Media library, which every approved staff account can open.</p>
 <p>The Boardwalk screen appears in a browser frame. Focus treatment identifies the named controls.</p>
 <ul>
 <li>A callout says &quot;Select Media library&quot; and &quot;Images, documents and video all live there.&quot; The pointer clicks it, and the next page opens.</li>
 </ul>
-<p><strong>Step 1 of 7: Choose Shared video library</strong></p>
+<p><strong>Step 1 of 5: Choose Shared video library</strong></p>
 <p>Video has its own source, separate from images and documents.</p>
 <p>The Boardwalk screen appears in a browser frame. Focus treatment identifies the named controls.</p>
 <ul>
 <li>A callout says &quot;Select Shared video library&quot;. The pointer clicks it.</li>
 </ul>
-<p><strong>Step 2 of 7: Search before you do anything else</strong></p>
+<p><strong>Step 2 of 5: Search before you do anything else</strong></p>
 <p>Searching first shows whether the video is already here, so nobody uploads a second copy.</p>
 <p>The Boardwalk screen appears in a browser frame. Focus treatment identifies the named controls.</p>
 <ul>
 <li>A callout says &quot;Type a name or subject&quot; and &quot;Start with the first words of its name.&quot; The pointer clicks it and types &quot;housing&quot;.</li>
 <li>A callout says &quot;Select Search videos&quot;. The pointer clicks it. The result callout says &quot;Matches appear here&quot; and &quot;No need to upload it again.&quot;</li>
 </ul>
-<p><strong>Step 3 of 7: Add a filter to narrow results</strong></p>
+<p><strong>Step 3 of 5: Add a filter to narrow results</strong></p>
 <p>Filters answer one question at a time: whose upload, which tag, or rights status.</p>
 <p>The Boardwalk screen appears in a browser frame. Focus treatment identifies the named controls.</p>
 <ul>
@@ -58,14 +58,14 @@ Videos, UGC and Audio.
 <ul>
 <li>Use one filter at a time</li>
 </ul>
-<p><strong>Step 4 of 7: Read the card before opening</strong></p>
+<p><strong>Step 4 of 5: Read the card before opening</strong></p>
 <p>The card tells you whether the video can play and who uploaded it.</p>
 <p>The Boardwalk screen appears in a browser frame. Focus treatment identifies the named controls.</p>
 <ul>
 <li>A callout says &quot;Preview ready means it can play&quot; and &quot;Other states mean the web copy is not ready.&quot;</li>
 <li>A callout says &quot;Who uploaded it&quot; and &quot;Select the name to list their uploads. Tags work the same way.&quot;</li>
 </ul>
-<p><strong>Step 5 of 7: Upload only when search finds nothing</strong></p>
+<p><strong>Step 5 of 5: Upload only when search finds nothing</strong></p>
 <p>The upload panel sits above search and creates a private library copy, never a public post.</p>
 <p>The Boardwalk screen appears in a browser frame. Focus treatment identifies the named controls.</p>
 <ul>
@@ -74,19 +74,6 @@ Videos, UGC and Audio.
 <p>Remember:</p>
 <ul>
 <li>Keep the tab open during transfer</li>
-</ul>
-<p><strong>Step 6 of 7: Save a favorite with the heart</strong></p>
-<p>A favorite saves the video to your own list without opening or publishing it.</p>
-<p>The Boardwalk screen appears in a browser frame. Focus treatment identifies the named controls.</p>
-<ul>
-<li>A callout says &quot;Heart beside the card&quot; and &quot;It saves without opening the video.&quot; The pointer clicks it. The result callout says &quot;Filled heart: saved to Favorites&quot;.</li>
-</ul>
-<p><strong>Step 7 of 7: Add videos to a collection</strong></p>
-<p>A collection groups videos for a project by saving links to them, not new copies.</p>
-<p>The Boardwalk screen appears in a browser frame. Focus treatment identifies the named controls.</p>
-<ul>
-<li>A callout says &quot;Check Select on each video&quot; and &quot;Selection carries across pages and filters.&quot; The pointer clicks it. The result callout says &quot;Your count&quot;.</li>
-<li>A callout says &quot;Then select Add to collection&quot; and &quot;Choose a private or all-staff collection.&quot;</li>
 </ul>
 <p><strong>Tip: A new upload needs rights review</strong></p>
 <p>Boardwalk sets every upload to Needs review until someone records its rights.</p>
@@ -103,8 +90,6 @@ Videos, UGC and Audio.
 <li>Filter one way at a time</li>
 <li>Check the preview state</li>
 <li>Upload only new videos</li>
-<li>Heart to save favorites</li>
-<li>Collect links, not copies</li>
 </ol>
 <p><strong>End</strong></p>
 <p>The NJ PBS logo and &quot;More help: open the Boardwalk guide from Home.&quot;</p>
@@ -136,13 +121,13 @@ Written steps: [Videos](/guide/shared-video-library#open-videos).
 <ul>
 <li>Then choose the Images and documents tab</li>
 </ul>
-<p><strong>Step 1 of 6: Search for the asset you need</strong></p>
+<p><strong>Step 1 of 5: Search for the asset you need</strong></p>
 <p>Search names, descriptions, alt text and tags before you think about uploading.</p>
 <p>The Boardwalk screen appears in a browser frame. Focus treatment identifies the named controls.</p>
 <ul>
 <li>A callout says &quot;Type a subject, program or filename&quot; and &quot;Results update as you type.&quot; The pointer clicks it and types &quot;spotlight&quot;. The result callout says &quot;The count confirms a match&quot;.</li>
 </ul>
-<p><strong>Step 2 of 6: Filter by type or category</strong></p>
+<p><strong>Step 2 of 5: Filter by type or category</strong></p>
 <p>Filters narrow a long list. Each one you add appears as a chip under the toolbar.</p>
 <p>The Boardwalk screen appears in a browser frame. Focus treatment identifies the named controls.</p>
 <ul>
@@ -154,13 +139,13 @@ Written steps: [Videos](/guide/shared-video-library#open-videos).
 <ul>
 <li>Select a chip's x to undo it</li>
 </ul>
-<p><strong>Step 3 of 6: Open the asset</strong></p>
+<p><strong>Step 3 of 5: Open the asset</strong></p>
 <p>Open the asset to see its preview, file facts and details before you use it.</p>
 <p>The Boardwalk screen appears in a browser frame. Focus treatment identifies the named controls.</p>
 <ul>
 <li>A callout says &quot;Select the card&quot; and &quot;Details open beside the results. Search and filters stay.&quot; The pointer clicks it. The result callout says &quot;Asset details open here&quot;.</li>
 </ul>
-<p><strong>Step 4 of 6: Check the license and credit</strong></p>
+<p><strong>Step 4 of 5: Check the license and credit</strong></p>
 <p>An image that looks right is not cleared until its license and credit say so.</p>
 <p>The Boardwalk screen appears in a browser frame. Focus treatment identifies the named controls.</p>
 <ul>
@@ -171,15 +156,7 @@ Written steps: [Videos](/guide/shared-video-library#open-videos).
 <ul>
 <li>Fix weak details, then Save details</li>
 </ul>
-<p><strong>Step 5 of 6: Save it for later</strong></p>
-<p>Hearts and collections keep useful assets close without copying or publishing them.</p>
-<p>The Boardwalk screen appears in a browser frame. Focus treatment identifies the named controls.</p>
-<ul>
-<li>A callout says &quot;Save it from the results&quot;.</li>
-<li>A callout says &quot;Select the heart&quot; and &quot;Saves it to Favorites.&quot; The pointer clicks it.</li>
-<li>A callout says &quot;Or select it for a collection&quot; and &quot;Then Add to collection saves a link, not a copy.&quot; The pointer clicks it.</li>
-</ul>
-<p><strong>Step 6 of 6: Upload only new files</strong></p>
+<p><strong>Step 5 of 5: Upload only new files</strong></p>
 <p>When search finds nothing, add the file with its rights and details ready.</p>
 <p>The Boardwalk screen appears in a browser frame. Focus treatment identifies the named controls.</p>
 <ul>
@@ -203,7 +180,6 @@ Written steps: [Videos](/guide/shared-video-library#open-videos).
 <li>Filter with chips</li>
 <li>Open the asset</li>
 <li>Check license and credit</li>
-<li>Heart or collect it</li>
 <li>Upload only new files</li>
 </ol>
 <p><strong>End</strong></p>

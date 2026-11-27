@@ -961,10 +961,10 @@ describe("MediaRoute", () => {
     fireEvent.submit(search.closest("form")!);
     await screen.findByText("No keyword matches");
 
-    await waitFor(() => expect(screen.getByRole("group", { name: "Collection selection" })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("group", { name: "Media selection" })).toBeInTheDocument());
     await waitFor(() => expect(screen.getByRole("checkbox", { name: "Select this page" })).toBeDisabled());
     fireEvent.click(screen.getByRole("button", { name: "Clear selection" }));
-    expect(screen.queryByRole("group", { name: "Collection selection" })).toBeNull();
+    expect(screen.queryByRole("group", { name: "Media selection" })).toBeNull();
     // The card that last had focus is gone, so focus falls back to search.
     await waitFor(() => expect(screen.getByRole("searchbox", { name: "Search media" })).toHaveFocus());
   });
@@ -3106,7 +3106,7 @@ describe("MediaRoute images page messages", () => {
   it("keeps Selection carries across media pages and filters. as the selection bar's info", async () => {
     renderRoute("/media/images");
     fireEvent.click(await screen.findByRole("checkbox", { name: "Select Studio control room" }));
-    const bar = screen.getByRole("group", { name: "Collection selection" });
+    const bar = screen.getByRole("group", { name: "Media selection" });
     expect(within(bar).getByRole("button", { name: "About selection" }))
       .toHaveAccessibleDescription("Selection carries across media pages and filters.");
   });
@@ -3195,7 +3195,7 @@ describe("MediaRoute images toolbar", () => {
     expect(screen.queryByRole("heading", { level: 2, name: "Media library" })).toBeNull();
     expect(screen.queryByText(/Selection carries across/)).toBeNull();
     expect(screen.queryByRole("button", { name: "Search" })).toBeNull();
-    expect(screen.queryByRole("group", { name: "Collection selection" })).toBeNull();
+    expect(screen.queryByRole("group", { name: "Media selection" })).toBeNull();
     const heading = screen.getByRole("heading", { level: 2, name: "Images" });
     expect(heading).toHaveClass("sr-only");
     expect(heading).toHaveAttribute("id", "media-library-heading");
@@ -3714,11 +3714,11 @@ describe("MediaRoute images toolbar", () => {
     expect(status).toHaveAttribute("role", "status");
     expect(status).toHaveClass("sr-only");
     expect(status).toHaveTextContent("");
-    expect(screen.queryByRole("group", { name: "Collection selection" })).toBeNull();
+    expect(screen.queryByRole("group", { name: "Media selection" })).toBeNull();
     expect(screen.queryByRole("checkbox", { name: "Select this page" })).toBeNull();
 
     fireEvent.click(screen.getByRole("checkbox", { name: "Select Studio control room" }));
-    const bar = screen.getByRole("group", { name: "Collection selection" });
+    const bar = screen.getByRole("group", { name: "Media selection" });
     expect(within(bar).getByRole("checkbox", { name: "Select this page" })).toBeChecked();
     expect(within(bar).getByText(/^1 selected/)).not.toHaveAttribute("role");
     // The note the old selection toolbar showed stays reachable from the bar.
@@ -3729,7 +3729,7 @@ describe("MediaRoute images toolbar", () => {
     expect(document.querySelector(".media-selection-status")).toBe(status);
 
     fireEvent.click(within(bar).getByRole("button", { name: "Clear selection" }));
-    expect(screen.queryByRole("group", { name: "Collection selection" })).toBeNull();
+    expect(screen.queryByRole("group", { name: "Media selection" })).toBeNull();
     expect(status).toHaveTextContent("No items selected");
     // Decision 3: back to the card that last had focus.
     await waitFor(() => expect(screen.getByRole("button", { name: /^Studio control room, image/ })).toHaveFocus());
@@ -3738,11 +3738,11 @@ describe("MediaRoute images toolbar", () => {
   it("Select this page from More selects the page and shows the bar", async () => {
     renderRoute("/media/images");
     await screen.findByRole("button", { name: /^Studio control room/ });
-    expect(screen.queryByRole("group", { name: "Collection selection" })).toBeNull();
+    expect(screen.queryByRole("group", { name: "Media selection" })).toBeNull();
     const more = within(screen.getByRole("toolbar", { name: "Library controls" })).getByRole("button", { name: "More actions" });
     fireEvent.click(more);
     fireEvent.click(screen.getByRole("menuitem", { name: "Select this page" }));
-    const bar = screen.getByRole("group", { name: "Collection selection" });
+    const bar = screen.getByRole("group", { name: "Media selection" });
     expect(within(bar).getByRole("checkbox", { name: "Select this page" })).toBeChecked();
     expect(screen.getByRole("checkbox", { name: "Select Studio control room" })).toBeChecked();
     expect(document.querySelector(".media-selection-status")).toHaveTextContent("1 selected");
@@ -3975,7 +3975,7 @@ describe("MediaRoute images grid", () => {
     const { router } = renderRoute("/media/images");
     await screen.findByRole("grid", { name: "Images" });
     fireEvent.click(screen.getByRole("checkbox", { name: "Select Studio control room" }));
-    expect(screen.getByRole("group", { name: "Collection selection" })).toHaveTextContent(/^1 selected/);
+    expect(screen.getByRole("group", { name: "Media selection" })).toHaveTextContent(/^1 selected/);
     expect(tile("Studio control room")).toHaveAttribute("data-selected", "true");
     expect(status()).toHaveTextContent("1 selected");
     expect(screen.queryByRole("button", { name: "Close details" })).toBeNull();
@@ -4366,7 +4366,7 @@ describe("MediaRoute images grid", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: "Select News desk" }));
     const before = mocks.list.mock.calls.length;
 
-    fireEvent.click(within(screen.getByRole("group", { name: "Collection selection" })).getByRole("button", { name: "Edit tags" }));
+    fireEvent.click(within(screen.getByRole("group", { name: "Media selection" })).getByRole("button", { name: "Edit tags" }));
     const inspector = await screen.findByRole("complementary", { name: "Edit selected" });
     const grid = screen.getByRole("grid", { name: "Images", hidden: true });
     expect(grid).toHaveAttribute("inert");
@@ -4377,7 +4377,7 @@ describe("MediaRoute images grid", () => {
     expect(within(inspector).getByRole("button", { name: "Review 2 changes" })).toBeDisabled();
     fireEvent.contextMenu(tile("Studio control room"));
     expect(screen.queryByRole("menuitem", { name: "Clear selection" })).toBeNull();
-    expect(screen.getByRole("group", { name: "Collection selection" })).toHaveTextContent("2 selected");
+    expect(screen.getByRole("group", { name: "Media selection" })).toHaveTextContent("2 selected");
     expect(mocks.list).toHaveBeenCalledTimes(before);
     expect(mocks.update).not.toHaveBeenCalled();
     fireEvent.click(within(inspector).getByRole("button", { name: "Cancel" }));
@@ -4413,7 +4413,7 @@ describe("MediaRoute images grid", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: "Select Studio control room" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "Select News desk" }));
     fireEvent.change(screen.getByRole("textbox", { name: "Name" }), { target: { value: "Unsaved name" } });
-    const edit = within(screen.getByRole("group", { name: "Collection selection" })).getByRole("button", { name: "Edit tags" });
+    const edit = within(screen.getByRole("group", { name: "Media selection" })).getByRole("button", { name: "Edit tags" });
     expect(edit).toBeEnabled();
     const before = mocks.list.mock.calls.length;
 
@@ -4435,7 +4435,7 @@ describe("MediaRoute images grid", () => {
     await screen.findByRole("grid", { name: "Images" });
     fireEvent.click(screen.getByRole("checkbox", { name: "Select Studio control room" }));
     const before = mocks.list.mock.calls.length;
-    fireEvent.click(within(screen.getByRole("group", { name: "Collection selection" })).getByRole("button", { name: "Edit tags" }));
+    fireEvent.click(within(screen.getByRole("group", { name: "Media selection" })).getByRole("button", { name: "Edit tags" }));
     fireEvent.click(screen.getByRole("button", { name: "Replace all tags or clear all tags" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "Clear all tags" }));
     fireEvent.click(screen.getByRole("button", { name: "Review 1 changes" }));
@@ -4447,14 +4447,14 @@ describe("MediaRoute images grid", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Back to library" }));
     await waitFor(() => expect(mocks.list).toHaveBeenCalledTimes(before + 1));
-    expect(screen.queryByRole("group", { name: "Collection selection" })).toBeNull();
+    expect(screen.queryByRole("group", { name: "Media selection" })).toBeNull();
   });
 
   it("does not report unsaved image changes after the batch finishes", async () => {
     const { router } = renderRoute("/media/images");
     await screen.findByRole("grid", { name: "Images" });
     fireEvent.click(screen.getByRole("checkbox", { name: "Select Studio control room" }));
-    fireEvent.click(within(screen.getByRole("group", { name: "Collection selection" })).getByRole("button", { name: "Edit tags" }));
+    fireEvent.click(within(screen.getByRole("group", { name: "Media selection" })).getByRole("button", { name: "Edit tags" }));
     fireEvent.click(screen.getByRole("button", { name: "Replace all tags or clear all tags" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "Clear all tags" }));
     fireEvent.click(screen.getByRole("button", { name: "Review 1 changes" }));
@@ -4470,7 +4470,7 @@ describe("MediaRoute images grid", () => {
     const { router } = renderRoute("/media/images");
     await screen.findByRole("grid", { name: "Images" });
     fireEvent.click(screen.getByRole("checkbox", { name: "Select Studio control room" }));
-    fireEvent.click(within(screen.getByRole("group", { name: "Collection selection" })).getByRole("button", { name: "Edit tags" }));
+    fireEvent.click(within(screen.getByRole("group", { name: "Media selection" })).getByRole("button", { name: "Edit tags" }));
     fireEvent.click(screen.getByRole("button", { name: "Replace all tags or clear all tags" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "Clear all tags" }));
     fireEvent.click(screen.getByRole("button", { name: "Review 1 changes" }));
@@ -4492,7 +4492,7 @@ describe("MediaRoute images grid", () => {
       const { router } = renderRoute("/media/images");
       await screen.findByRole("grid", { name: "Images" });
       fireEvent.click(screen.getByRole("checkbox", { name: "Select Studio control room" }));
-      fireEvent.click(within(screen.getByRole("group", { name: "Collection selection" })).getByRole("button", { name: "Edit tags" }));
+      fireEvent.click(within(screen.getByRole("group", { name: "Media selection" })).getByRole("button", { name: "Edit tags" }));
       fireEvent.click(screen.getByRole("button", { name: "Replace all tags or clear all tags" }));
       fireEvent.click(screen.getByRole("menuitem", { name: "Clear all tags" }));
       fireEvent.click(screen.getByRole("button", { name: "Review 1 changes" }));
@@ -4515,7 +4515,7 @@ describe("MediaRoute images grid", () => {
     const { router } = renderRoute("/media/images");
     await screen.findByRole("grid", { name: "Images" });
     fireEvent.click(screen.getByRole("checkbox", { name: "Select Studio control room" }));
-    fireEvent.click(within(screen.getByRole("group", { name: "Collection selection" })).getByRole("button", { name: "Edit tags" }));
+    fireEvent.click(within(screen.getByRole("group", { name: "Media selection" })).getByRole("button", { name: "Edit tags" }));
     fireEvent.click(screen.getByRole("button", { name: "Replace all tags or clear all tags" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "Clear all tags" }));
     fireEvent.click(screen.getByRole("button", { name: "Review 1 changes" }));
@@ -4538,7 +4538,7 @@ describe("MediaRoute images grid", () => {
     const { router } = renderRoute("/media/images");
     await screen.findByRole("grid", { name: "Images" });
     fireEvent.click(screen.getByRole("checkbox", { name: "Select Studio control room" }));
-    fireEvent.click(within(screen.getByRole("group", { name: "Collection selection" })).getByRole("button", { name: "Edit tags" }));
+    fireEvent.click(within(screen.getByRole("group", { name: "Media selection" })).getByRole("button", { name: "Edit tags" }));
     const related = await screen.findByRole("button", { name: "Open related media fixture" });
     expect(related).toBeDisabled();
     fireEvent.click(related);
@@ -4552,7 +4552,7 @@ describe("MediaRoute images grid", () => {
     const grid = await screen.findByRole("grid", { name: "Images" });
     // Query the label directly instead of computing all 101 checkbox names.
     fireEvent.click(within(grid).getByLabelText("Select Image 00"));
-    const bar = within(screen.getByRole("group", { name: "Collection selection" }));
+    const bar = within(screen.getByRole("group", { name: "Media selection" }));
     fireEvent.click(bar.getByRole("checkbox", { name: "Select this page" }));
     const edit = bar.getByRole("button", { name: "Edit tags" });
     expect(edit).toBeDisabled();
@@ -4585,7 +4585,7 @@ describe("MediaRoute images grid", () => {
     const first = openControl("Image 00");
     first.focus();
     fireEvent.keyDown(first, { key: "a", ctrlKey: true });
-    const bar = screen.getByRole("group", { name: "Collection selection" });
+    const bar = screen.getByRole("group", { name: "Media selection" });
     expect(bar).toHaveTextContent(/^30 selected/);
     expect(within(bar).getByRole("checkbox", { name: "Select this page" })).toBeChecked();
     expect(within(bar).getByRole("button", { name: "Edit tags" })).toBeEnabled();
@@ -4599,10 +4599,10 @@ describe("MediaRoute images grid", () => {
     const card = openControl("Studio control room");
     card.focus();
     fireEvent.keyDown(card, { key: " " });
-    expect(screen.getByRole("group", { name: "Collection selection" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Media selection" })).toBeInTheDocument();
 
     fireEvent.keyDown(card, { key: "Escape" });
-    expect(screen.queryByRole("group", { name: "Collection selection" })).toBeNull();
+    expect(screen.queryByRole("group", { name: "Media selection" })).toBeNull();
     expect(status()).toHaveTextContent("No items selected");
     expect(card).toHaveFocus();
     expect(params(router).get("selected")).toBe("asset-one");
@@ -4713,7 +4713,7 @@ describe("MediaRoute images grid", () => {
     fireEvent.keyDown(card, { key: " " });
     fireEvent.keyDown(card, { key: "a", ctrlKey: true });
     fireEvent.click(card, { metaKey: true });
-    expect(screen.queryByRole("group", { name: "Collection selection" })).toBeNull();
+    expect(screen.queryByRole("group", { name: "Media selection" })).toBeNull();
 
     fireEvent.contextMenu(other.querySelector(".media-tile-thumb") as HTMLElement);
     expect(within(screen.getByRole("menu", { name: "News desk" })).getAllByRole("menuitem").map((item) => item.textContent)).toEqual(["Open details"]);
@@ -4818,10 +4818,10 @@ describe("MediaRoute images list", () => {
     fireEvent.click(pageBox());
     expect(pageBox()).toBeChecked();
     expect(pageBox()).toHaveProperty("indeterminate", false);
-    expect(within(screen.getByRole("group", { name: "Collection selection" })).getByText(/^2 selected/)).toBeInTheDocument();
+    expect(within(screen.getByRole("group", { name: "Media selection" })).getByText(/^2 selected/)).toBeInTheDocument();
 
     fireEvent.click(pageBox());
-    expect(screen.queryByRole("group", { name: "Collection selection" })).toBeNull();
+    expect(screen.queryByRole("group", { name: "Media selection" })).toBeNull();
     expect(requestCounts()).toEqual(calls);
   });
 
@@ -4919,7 +4919,7 @@ describe("MediaRoute images list", () => {
     card.focus();
     fireEvent.keyDown(card, { key: " " });
     fireEvent.keyDown(card, { key: "a", ctrlKey: true });
-    expect(screen.queryByRole("group", { name: "Collection selection" })).toBeNull();
+    expect(screen.queryByRole("group", { name: "Media selection" })).toBeNull();
   });
 
   it("a heading click while details are unsaved asks to leave and keeps the sort", async () => {
@@ -4950,12 +4950,12 @@ describe("MediaRoute images list", () => {
     fireEvent.keyDown(screen.getByRole("dialog", { name: "Display" }), { key: "Escape" });
     expect(screen.getByRole("grid", { name: "Images" })).toHaveAttribute("data-layout", "list");
     expect(row("News desk")).toHaveAttribute("aria-selected", "true");
-    expect(within(screen.getByRole("group", { name: "Collection selection" })).getByText(/^1 selected/)).toBeInTheDocument();
+    expect(within(screen.getByRole("group", { name: "Media selection" })).getByText(/^1 selected/)).toBeInTheDocument();
     // The grid's one tab stop stays on the row that last had focus.
     expect(openControl("News desk")).not.toHaveAttribute("tabindex", "-1");
     expect(openControl("Studio control room")).toHaveAttribute("tabindex", "-1");
     // Clear selection returns focus to that row.
-    fireEvent.click(within(screen.getByRole("group", { name: "Collection selection" })).getByRole("button", { name: "Clear selection" }));
+    fireEvent.click(within(screen.getByRole("group", { name: "Media selection" })).getByRole("button", { name: "Clear selection" }));
     await waitFor(() => expect(openControl("News desk")).toHaveFocus());
   });
 });

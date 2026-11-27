@@ -1453,7 +1453,7 @@ export function MediaLibrarySurface({
             clearDisabled={selectionBusy}
             count={selectedImages.length}
             info="Selection carries across media pages and filters."
-            label="Collection selection"
+            label="Media selection"
             offPage={offPageCount(selectedImages, pageAssets)}
             onAction={selectionAction}
             onClear={clearImageSelection}

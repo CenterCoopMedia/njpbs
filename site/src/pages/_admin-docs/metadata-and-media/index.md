@@ -156,13 +156,13 @@ Changing media metadata does not publish a review or staff comment.
 <ul>
 <li>Then choose the Images and documents tab</li>
 </ul>
-<p><strong>Step 1 of 6: Search for the asset you need</strong></p>
+<p><strong>Step 1 of 5: Search for the asset you need</strong></p>
 <p>Search names, descriptions, alt text and tags before you think about uploading.</p>
 <p>The Boardwalk screen appears in a browser frame. Focus treatment identifies the named controls.</p>
 <ul>
 <li>A callout says &quot;Type a subject, program or filename&quot; and &quot;Results update as you type.&quot; The pointer clicks it and types &quot;spotlight&quot;. The result callout says &quot;The count confirms a match&quot;.</li>
 </ul>
-<p><strong>Step 2 of 6: Filter by type or category</strong></p>
+<p><strong>Step 2 of 5: Filter by type or category</strong></p>
 <p>Filters narrow a long list. Each one you add appears as a chip under the toolbar.</p>
 <p>The Boardwalk screen appears in a browser frame. Focus treatment identifies the named controls.</p>
 <ul>
@@ -174,13 +174,13 @@ Changing media metadata does not publish a review or staff comment.
 <ul>
 <li>Select a chip's x to undo it</li>
 </ul>
-<p><strong>Step 3 of 6: Open the asset</strong></p>
+<p><strong>Step 3 of 5: Open the asset</strong></p>
 <p>Open the asset to see its preview, file facts and details before you use it.</p>
 <p>The Boardwalk screen appears in a browser frame. Focus treatment identifies the named controls.</p>
 <ul>
 <li>A callout says &quot;Select the card&quot; and &quot;Details open beside the results. Search and filters stay.&quot; The pointer clicks it. The result callout says &quot;Asset details open here&quot;.</li>
 </ul>
-<p><strong>Step 4 of 6: Check the license and credit</strong></p>
+<p><strong>Step 4 of 5: Check the license and credit</strong></p>
 <p>An image that looks right is not cleared until its license and credit say so.</p>
 <p>The Boardwalk screen appears in a browser frame. Focus treatment identifies the named controls.</p>
 <ul>
@@ -191,15 +191,7 @@ Changing media metadata does not publish a review or staff comment.
 <ul>
 <li>Fix weak details, then Save details</li>
 </ul>
-<p><strong>Step 5 of 6: Save it for later</strong></p>
-<p>Hearts and collections keep useful assets close without copying or publishing them.</p>
-<p>The Boardwalk screen appears in a browser frame. Focus treatment identifies the named controls.</p>
-<ul>
-<li>A callout says &quot;Save it from the results&quot;.</li>
-<li>A callout says &quot;Select the heart&quot; and &quot;Saves it to Favorites.&quot; The pointer clicks it.</li>
-<li>A callout says &quot;Or select it for a collection&quot; and &quot;Then Add to collection saves a link, not a copy.&quot; The pointer clicks it.</li>
-</ul>
-<p><strong>Step 6 of 6: Upload only new files</strong></p>
+<p><strong>Step 5 of 5: Upload only new files</strong></p>
 <p>When search finds nothing, add the file with its rights and details ready.</p>
 <p>The Boardwalk screen appears in a browser frame. Focus treatment identifies the named controls.</p>
 <ul>
@@ -223,7 +215,6 @@ Changing media metadata does not publish a review or staff comment.
 <li>Filter with chips</li>
 <li>Open the asset</li>
 <li>Check license and credit</li>
-<li>Heart or collect it</li>
 <li>Upload only new files</li>
 </ol>
 <p><strong>End</strong></p>
