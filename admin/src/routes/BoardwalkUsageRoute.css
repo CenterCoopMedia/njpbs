@@ -4,3 +4,19 @@
 .boardwalk-usage-toolbar label { display: grid; gap: var(--space-2); }
 .boardwalk-usage-toolbar select { min-height: 44px; max-width: 100%; }
 .boardwalk-usage section { min-width: 0; }
+.boardwalk-usage h4 { margin-block: var(--space-4) var(--space-2); }
+.boardwalk-usage-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr)); gap: var(--space-3); }
+.boardwalk-usage-tile { display: grid; align-content: start; gap: var(--space-1); padding: var(--space-4); border: var(--border-width) solid var(--color-border); border-radius: var(--radius-surface); background: var(--color-surface); }
+.boardwalk-usage-tile h3 { font-size: var(--font-size-sm); margin: 0; }
+.boardwalk-usage-tile strong { font-size: var(--font-size-xl); font-variant-numeric: tabular-nums; }
+.boardwalk-usage-tile span { color: var(--color-ink-soft); font-size: var(--font-size-sm); }
+.boardwalk-usage-bars { display: flex; align-items: stretch; gap: 2px; block-size: 10rem; padding-block-start: var(--space-2); border-block-end: var(--border-width) solid var(--color-border-strong); }
+.boardwalk-usage-axis { display: flex; justify-content: space-between; gap: var(--space-2); margin-block: var(--space-1) var(--space-3); color: var(--color-ink-soft); font-size: var(--font-size-xs); }
+.boardwalk-usage-bars > span { flex: 1 1 0; min-inline-size: 0; display: flex; align-items: flex-end; }
+.boardwalk-usage-bars > .is-weekend { background: var(--color-surface-muted); }
+.boardwalk-usage-bars > span > span { inline-size: 100%; background: var(--color-brand); border-start-start-radius: 2px; border-start-end-radius: 2px; }
+.boardwalk-usage details { margin-block-end: var(--space-3); }
+.boardwalk-usage summary { cursor: pointer; min-block-size: 44px; display: flex; align-items: center; }
+.boardwalk-usage-heat td { --level: 0; text-align: center; font-variant-numeric: tabular-nums; font-size: var(--font-size-xs); background: color-mix(in srgb, var(--color-brand) calc(var(--level) * 1%), var(--color-surface)); }
+.boardwalk-usage-heat td.is-strong { color: var(--color-surface); }
+.boardwalk-usage-heat td:nth-last-child(-n + 2) { background: var(--color-surface); color: inherit; }

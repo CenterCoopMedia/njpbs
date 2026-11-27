@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-27",
+  "kind": "improved",
+  "order": 1795809250343,
+  "title": "Usage analytics shows teams, hours and friction",
+  "body": "Boardwalk usage analytics now splits counts between the newsroom and the product team and adds people per destination, activity by role, an hour-by-weekday view, friction such as repeated publish attempts, content flow and problem reports. It still shows counts only. See What Boardwalk records and why in the guide.",
+  "prs": []
+}
