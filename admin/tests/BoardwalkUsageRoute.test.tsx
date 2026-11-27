@@ -33,10 +33,10 @@ const fixture = (days = 30): UsageReport => ({ days, analyticsEnabled: false, ge
       publish: { items: 4, repeats: 2, repeatedItems: 1 } }, product: zeroFriction() },
     prior: { newsroom: zeroFriction(), product: zeroFriction() },
     jobs: { status: "ready", current: { newsroom: { ...zeroJobs(), previews: 10, failed: 1, stuckUploads: 2 }, product: zeroJobs() },
-      prior: { newsroom: zeroJobs(), product: zeroJobs() } } },
-  contentFlow: { status: "ready", medianHoursToFirstPublish: 3.5, publishedWeeks: [{ week: "2026-11-02", newsroom: 6, product: 1, other: 2 }],
-    openDrafts: [{ bucket: "day", newsroom: 1, product: 0, other: 0 }, { bucket: "week", newsroom: 0, product: 0, other: 0 },
-      { bucket: "month", newsroom: 0, product: 0, other: 0 }, { bucket: "older", newsroom: 2, product: 0, other: 1 }] },
+      prior: { newsroom: zeroJobs(), product: zeroJobs() }, previewCoverage: { current: { status: "full" }, prior: { status: "full" } } } },
+  contentFlow: { status: "ready", teams: "ready", medianHoursToFirstPublish: 3.5, publishedWeeks: [{ week: "2026-11-02", total: 9, newsroom: 6, product: 1, other: 2 }],
+    openDrafts: [{ bucket: "day", total: 1, newsroom: 1, product: 0, other: 0 }, { bucket: "week", total: 0, newsroom: 0, product: 0, other: 0 },
+      { bucket: "month", total: 0, newsroom: 0, product: 0, other: 0 }, { bucket: "older", total: 3, newsroom: 2, product: 0, other: 1 }] },
   problemReports: { status: "ready", open: 3, resolved: 2, medianDaysToResolve: 1.5, filed: 4, topPages: [{ page: "/content/post", count: 3 }] },
   excludedAccounts: 2 });
 const mount = (load: UsageLoader) => render(<MemoryRouter><BoardwalkUsageSurface load={load} /></MemoryRouter>);
@@ -73,8 +73,8 @@ describe("Boardwalk usage Reports view", () => {
     expect(screen.getByRole("row", { name: "Uploads started in the period and still active after a day 2 0 0 0" })).toBeInTheDocument();
     expect(screen.getByText("Newsroom: Post editor and Posts list (3)")).toBeInTheDocument();
     expect(screen.getByText(/first publishing it, for posts first published in this period: 3.5 hours/)).toBeInTheDocument();
-    expect(screen.getByRole("row", { name: "2026-11-02 6 1 2" })).toBeInTheDocument();
-    expect(screen.getByRole("row", { name: "30 days or more 2 0 1" })).toBeInTheDocument();
+    expect(screen.getByRole("row", { name: "2026-11-02 9 6 1 2" })).toBeInTheDocument();
+    expect(screen.getByRole("row", { name: "30 days or more 3 2 0 1" })).toBeInTheDocument();
     expect(screen.getByText(/3 open. 4 filed in this period. Median time to resolve for the 2 resolved in this period: 1.5 days/)).toBeInTheDocument();
     expect(screen.getByRole("row", { name: "/content/post 3" })).toBeInTheDocument();
     expect(screen.getByText("2 agent, test or vendor accounts are excluded.")).toBeInTheDocument();
@@ -100,6 +100,23 @@ describe("Boardwalk usage Reports view", () => {
     expect(screen.getByRole("link", { name: "What Boardwalk records and why" })).toHaveAttribute("href", "/guide/boardwalk-usage");
   });
 
+  it("discloses Preview record coverage and hides team splits without a roster", async () => {
+    const base = fixture();
+    const { jobs } = base.friction;
+    const flow = base.contentFlow;
+    if (jobs.status !== "ready" || flow.status !== "ready") throw new Error("fixture");
+    mount(async () => ({ ...base,
+      friction: { ...base.friction, jobs: { ...jobs, previewCoverage: { current: { status: "partial", from: "2026-10-08" }, prior: { status: "unavailable" } } } },
+      contentFlow: { ...flow, teams: "unavailable",
+        publishedWeeks: [{ week: "2026-11-02", total: 9, newsroom: null, product: null, other: null }],
+        openDrafts: flow.openDrafts.map(row => ({ ...row, newsroom: null, product: null, other: null })) } }));
+    expect(await screen.findByRole("row", { name: "Preview jobs that failed 10% (1 of 10) since 2026-10-08 Unavailable None since 2026-10-08 Unavailable" })).toBeInTheDocument();
+    expect(screen.getByText(/Preview job records are kept for 30 days/)).toBeInTheDocument();
+    expect(screen.getByText(/posts are not split by team/)).toBeInTheDocument();
+    expect(screen.getByRole("row", { name: "2026-11-02 9" })).toBeInTheDocument();
+    expect(screen.getByRole("row", { name: "30 days or more 3" })).toBeInTheDocument();
+  });
+
   it("clears an old window immediately and ignores stale responses", async () => {
     let resolveOld!: (value: UsageReport) => void;
     const load: UsageLoader = days => days === 30 ? new Promise(resolve => { resolveOld = resolve; }) : Promise.resolve(fixture(days));
@@ -120,6 +137,12 @@ describe("Boardwalk usage Reports view", () => {
     expect(screen.queryByText(/private server/)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
     expect(await screen.findByText("No new usage analytics collected")).toBeInTheDocument();
+    // Content flow and problem reports do not depend on usage collection.
+    expect(screen.getByRole("heading", { name: "Content flow" })).toBeInTheDocument();
+    expect(screen.getByRole("row", { name: "2026-11-02 9 6 1 2" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Problem reports" })).toBeInTheDocument();
+    expect(screen.getByRole("row", { name: "/content/post 3" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Friction" })).not.toBeInTheDocument();
     expect(screen.getByText("Time without analytics does not mean a tool is unused.")).toBeInTheDocument();
   });
 

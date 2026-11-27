@@ -42,6 +42,7 @@ const roleOf = profile => typeof profile?.accessTier === "string" && ROLE.test(p
 const SESSION_GAP_MS = 30 * 60_000;
 const REPEAT_MS = 10 * 60_000;
 const REPEAT_ACTIONS = { "content.publish.request": "publish", "preview.request": "preview" };
+const PREVIEW_RETENTION_MS = 30 * DAY_MS;
 const OPEN_REPORT_STATUSES = ["open", "acknowledged", "in_progress", "blocked"];
 // Open draft age buckets in days: under 1, under 7, under 30, then older.
 const DRAFT_AGES = [["day", 1], ["week", 7], ["month", 30], ["older", Infinity]];
@@ -106,8 +107,10 @@ async function collectBatch(firestore, actor, profile, body, now) {
     const markers = new Map(ids.map((id, index) => [id, found[index].exists ? found[index].data() : null]));
     const created = new Set();
     const counts = {};
-    const bump = (path, value = 1) => {
-      let node = counts;
+    // Hour counters belong to the Eastern date of the event, which can be before the collection date.
+    const eventDays = new Map();
+    const bump = (path, value = 1, tree = counts) => {
+      let node = tree;
       for (const key of path.slice(0, -1)) node = node[key] ??= {};
       node[path.at(-1)] = (node[path.at(-1)] ?? 0) + value;
     };
@@ -115,7 +118,9 @@ async function collectBatch(firestore, actor, profile, body, now) {
     const previous = dailyPresence.data() ?? {};
     const lastAt = Number.isFinite(previous.lastAt) ? previous.lastAt : null;
     let recent = Array.isArray(previous.screens) ? previous.screens.filter(screen => own(config.screens, screen)).slice(-2) : [];
-    if (!dailyPresence.exists) { bump([...mine, "activeUsers"]); bump(["roles", role, "activeUsers"]); }
+    // A day marker without lastAt was written before team and role counts; count this person for them once.
+    const teamCounted = dailyPresence.exists && lastAt !== null;
+    if (!teamCounted) { bump([...mine, "activeUsers"]); bump(["roles", role, "activeUsers"]); }
     // A batch starts a new session on a person's first batch of the day or 30 minutes after their last event.
     if (lastAt === null || events[0].at - lastAt >= SESSION_GAP_MS) { bump([...mine, "sessions"]); bump(["roles", role, "sessions"]); }
     for (const item of events) {
@@ -134,7 +139,9 @@ async function collectBatch(firestore, actor, profile, body, now) {
         if (last !== event.screen) recent = [...recent, event.screen].slice(-2);
       } else if (event.name === "screen.duration") {
         bump(["visibleMs", event.screen], event.durationMs); bump([...mine, "visibleMs", event.screen], event.durationMs);
-        bump([...mine, "hourMs", easternHour.format(at)], event.durationMs);
+        const eventDay = `${EASTERN_PREFIX}${dayOf(at)}`;
+        if (eventDay !== day && !eventDays.has(eventDay)) eventDays.set(eventDay, {});
+        bump([...mine, "hourMs", easternHour.format(at)], event.durationMs, eventDay === day ? counts : eventDays.get(eventDay));
         bump(["roles", role, "visibleMs"], event.durationMs);
       } else {
         bump(["actions", event.name]); bump([...mine, "actions", event.name]);
@@ -167,13 +174,15 @@ async function collectBatch(firestore, actor, profile, body, now) {
       collectedAt: Timestamp.fromMillis(now), purgeAt, events: body.events });
     tx.set(firestore.collection("cmsUsageDaily").doc(day),
       { activeUsers: FieldValue.increment(dailyPresence.exists ? 0 : 1), ...increments(counts) }, { merge: true });
+    for (const [eventDay, tree] of eventDays) tx.set(firestore.collection("cmsUsageDaily").doc(eventDay), increments(tree), { merge: true });
     tx.set(dayPerson, { purgeAt, lastAt: Math.max(lastAt ?? 0, events.at(-1).at), screens: recent });
-    if (!dailyPresence.exists) tx.set(presence.doc(`person_${person}`), { lastDay: today, group, role, purgeAt });
+    if (!teamCounted) tx.set(presence.doc(`person_${person}`), { lastDay: today, group, role, purgeAt });
     for (const id of created) tx.create(presence.doc(id), { purgeAt });
     for (const id of ids.filter(id => id.startsWith("repeat_"))) tx.set(presence.doc(id), { purgeAt, ...markers.get(id) });
-    if (!weeklyPresence.exists) {
-      tx.create(weekPerson, { purgeAt });
-      tx.set(firestore.collection("cmsUsageWeekly").doc(week), { activeUsers: FieldValue.increment(1),
+    // A week marker without grouped was written before team and role counts; count this person for them once.
+    if (weeklyPresence.data()?.grouped !== true) {
+      tx.set(weekPerson, { purgeAt, grouped: true }, { merge: true });
+      tx.set(firestore.collection("cmsUsageWeekly").doc(week), { ...(weeklyPresence.exists ? {} : { activeUsers: FieldValue.increment(1) }),
         groups: { [group]: { activeUsers: FieldValue.increment(1) } }, roles: { [role]: { activeUsers: FieldValue.increment(1) } } }, { merge: true });
     }
   });
@@ -221,7 +230,7 @@ async function readReport(firestore, days, now) {
     staff ? readActivityHistory(firestore, [...staff.groups.keys()], start, end) : { status: "unavailable", start, end, actions: [] },
     optional(() => readActivePeople(firestore, dates[0])),
     optional(() => readProblemReports(firestore, start)),
-    optional(() => readContentFlow(firestore, groupOfUid, start, now)),
+    optional(() => readContentFlow(firestore, staff ? groupOfUid : null, start, now)),
     staff ? optional(() => readJobs(firestore, groupOfUid, Date.parse(priorStart), Date.parse(start), now)) : { status: "unavailable" },
   ]);
   const easternFromDate = firstEastern.docs[0]?.id.startsWith(EASTERN_PREFIX) ? firstEastern.docs[0].id.slice(EASTERN_PREFIX.length) : null;
@@ -421,7 +430,9 @@ async function readContentFlow(firestore, groupOfUid, start, now) {
     posts.where("status", "==", "draft").select("type", "createdAt", "createdBy", "deleted").limit(5001).get(),
   ]);
   if (published.size > 5000 || drafts.size > 5000) throw new Error("Too many posts to summarize");
+  // Without the staff roster, accounts cannot be assigned to teams; only totals are returned.
   const label = uid => groupOfUid(uid) ?? "other";
+  const blank = () => ({ total: 0, ...(groupOfUid ? { newsroom: 0, product: 0, other: 0 } : { newsroom: null, product: null, other: null }) });
   const weeks = new Map();
   const hours = [];
   for (const row of published.docs) {
@@ -429,27 +440,34 @@ async function readContentFlow(firestore, groupOfUid, start, now) {
     const at = millis(post.firstPublishedAt);
     if (post.type !== "post" || !Number.isFinite(at)) continue;
     const week = mondayOf(dayOf(at));
-    const counts = weeks.get(week) ?? { week, newsroom: 0, product: 0, other: 0 };
-    counts[label(post.firstPublishedBy)] += 1;
+    const counts = weeks.get(week) ?? { week, ...blank() };
+    counts.total += 1;
+    if (groupOfUid) counts[label(post.firstPublishedBy)] += 1;
     weeks.set(week, counts);
     const hoursToPublish = (at - millis(post.createdAt)) / 3_600_000;
     if (Number.isFinite(hoursToPublish) && hoursToPublish >= 0) hours.push(hoursToPublish);
   }
-  const ages = Object.fromEntries(DRAFT_AGES.map(([bucket]) => [bucket, { newsroom: 0, product: 0, other: 0 }]));
+  const ages = Object.fromEntries(DRAFT_AGES.map(([bucket]) => [bucket, blank()]));
   for (const row of drafts.docs) {
     const post = row.data();
     const age = (now - millis(post.createdAt)) / DAY_MS;
     if (post.type !== "post" || post.deleted === true || !Number.isFinite(age)) continue;
-    ages[DRAFT_AGES.find(([, limit]) => age < limit)[0]][label(post.createdBy)] += 1;
+    const bucket = ages[DRAFT_AGES.find(([, limit]) => age < limit)[0]];
+    bucket.total += 1;
+    if (groupOfUid) bucket[label(post.createdBy)] += 1;
   }
-  return { publishedWeeks: [...weeks.values()].sort((a, b) => a.week.localeCompare(b.week)),
+  return { teams: groupOfUid ? "ready" : "unavailable", publishedWeeks: [...weeks.values()].sort((a, b) => a.week.localeCompare(b.week)),
     medianHoursToFirstPublish: round1(median(hours)), openDrafts: DRAFT_AGES.map(([bucket]) => ({ bucket, ...ages[bucket] })) };
 }
 
 // Preview job outcomes and uploads left active over a day, for staff accounts in this and the prior window.
 async function readJobs(firestore, groupOfUid, priorStart, start, now) {
+  // Preview queue records expire 30 days after the request, so only the last 30 days are counted.
+  const previewFrom = now - PREVIEW_RETENTION_MS;
+  const coverage = (from, to) => to <= previewFrom ? { status: "unavailable" }
+    : from < previewFrom ? { status: "partial", from: dayOf(previewFrom) } : { status: "full" };
   const [previews, uploads] = await Promise.all([
-    firestore.collection("cmsPreviewQueue").where("requestedAt", ">=", Timestamp.fromMillis(priorStart))
+    firestore.collection("cmsPreviewQueue").where("requestedAt", ">=", Timestamp.fromMillis(Math.max(priorStart, previewFrom)))
       .select("status", "requestedAt", "requestedBy").limit(5001).get(),
     firestore.collection("mediaSourceUploads").where("status", "==", "active").select("createdAt", "actorUid").limit(1001).get(),
   ]);
@@ -473,7 +491,7 @@ async function readJobs(firestore, groupOfUid, priorStart, start, now) {
     const period = periodOf(at);
     if (group && period && now - at > DAY_MS) period[group].stuckUploads += 1;
   }
-  return periods;
+  return { ...periods, previewCoverage: { current: coverage(start, now), prior: coverage(priorStart, start) } };
 }
 
 async function readActivityHistory(firestore, staffIds, start, end) {

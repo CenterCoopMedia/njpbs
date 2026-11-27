@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
 import { Timestamp } from "firebase-admin/firestore";
 import { isolatedFirestore, clearEmulatorFirestore } from "../helpers/emulator-firestore.js";
@@ -56,7 +56,7 @@ describe("Boardwalk usage privacy and persistence contract (#4495)", () => {
     expect(markers.docs.map(row => row.id.split("_")[0]).sort()).toEqual(["action", "day", "person", "repeat", "screen", "week"]);
     for (const row of markers.docs) {
       expect(row.data().purgeAt).toEqual(raw.purgeAt);
-      expect(Object.keys(row.data()).every(key => ["purgeAt", "lastAt", "screens", "lastDay", "group", "role", "repeated"].includes(key))).toBe(true);
+      expect(Object.keys(row.data()).every(key => ["purgeAt", "lastAt", "screens", "lastDay", "group", "role", "repeated", "grouped"].includes(key))).toBe(true);
       expect(`${row.id} ${JSON.stringify(row.data())}`).not.toMatch(/staff-1|post-123/);
     }
   });
@@ -395,11 +395,71 @@ describe("Boardwalk usage privacy and persistence contract (#4495)", () => {
     const body = (await invoke(handlers().report, { days: 7 })).body;
     expect(body.problemReports).toEqual({ status: "ready", open: 2, resolved: 2, medianDaysToResolve: 4.5, filed: 4,
       topPages: [{ page: "/content/post", count: 2 }, { page: "/reports", count: 1 }, { page: "Not from a Boardwalk page", count: 1 }] });
-    expect(body.contentFlow).toEqual({ status: "ready", medianHoursToFirstPublish: 14,
-      publishedWeeks: [{ week: "2026-10-26", newsroom: 1, product: 0, other: 0 }, { week: "2026-11-02", newsroom: 0, product: 0, other: 1 }],
-      openDrafts: [{ bucket: "day", newsroom: 0, product: 0, other: 1 }, { bucket: "week", newsroom: 0, product: 0, other: 0 },
-        { bucket: "month", newsroom: 1, product: 0, other: 0 }, { bucket: "older", newsroom: 0, product: 0, other: 0 }] });
+    expect(body.contentFlow).toEqual({ status: "ready", teams: "ready", medianHoursToFirstPublish: 14,
+      publishedWeeks: [{ week: "2026-10-26", total: 1, newsroom: 1, product: 0, other: 0 }, { week: "2026-11-02", total: 1, newsroom: 0, product: 0, other: 1 }],
+      openDrafts: [{ bucket: "day", total: 1, newsroom: 0, product: 0, other: 1 }, { bucket: "week", total: 0, newsroom: 0, product: 0, other: 0 },
+        { bucket: "month", total: 1, newsroom: 1, product: 0, other: 0 }, { bucket: "older", total: 0, newsroom: 0, product: 0, other: 0 }] });
     expect(JSON.stringify(body)).not.toMatch(/AbC123|abc-def|private|Private|staff-1|agent-x/);
+  });
+
+  it("counts people for teams and roles once when their day and week markers predate team counts", async () => {
+    const person = createHash("sha256").update("staff-1").digest("hex");
+    const presence = firestore.collection("cmsUsagePresence");
+    await presence.doc(`day_et-2026-11-02_${person}`).set({ purgeAt: Timestamp.fromMillis(start) });
+    await presence.doc(`week_et-2026-11-02_${person}`).set({ purgeAt: Timestamp.fromMillis(start) });
+    await firestore.collection("cmsUsageDaily").doc("et-2026-11-02").set({ activeUsers: 1 });
+    await firestore.collection("cmsUsageWeekly").doc("et-2026-11-02").set({ activeUsers: 1 });
+    const { collect, report } = handlers();
+    await invoke(collect, batch());
+    await invoke(collect, batch());
+    const body = (await invoke(report, { days: 7 })).body;
+    expect(body.daily.at(-1)).toEqual({ date: "2026-11-02", timezone: "America/New_York", activeUsers: 1, newsroom: 1, product: 0 });
+    expect(body.weekly).toEqual([{ week: "2026-11-02", timezone: "America/New_York", activeUsers: 1, newsroom: 1, product: 0, byRole: [{ role: "none", activeUsers: 1 }] }]);
+    expect(body.activePeople).toEqual({ status: "ready", newsroom: 1, product: 0 });
+    expect((await presence.doc(`week_et-2026-11-02_${person}`).get()).data().grouped).toBe(true);
+  });
+
+  it("puts visible time in the hour and weekday of the event when its batch arrives after midnight", async () => {
+    time = Date.parse("2026-11-03T05:00:30Z"); // Tuesday 12:00:30 AM EST
+    await invoke(handlers().collect, batch([{ name: "screen.duration", screen: "posts-list", durationMs: 4_000, offsetMs: 60_000 },
+      { name: "screen.duration", screen: "posts-list", durationMs: 1_000 }]));
+    const grid = (await invoke(handlers().report, { days: 7 })).body.hourMs.newsroom;
+    expect(grid[0][23]).toBe(4_000); // Monday 11 PM
+    expect(grid[1][0]).toBe(1_000); // Tuesday midnight
+    expect(grid.flat().reduce((sum, value) => sum + value, 0)).toBe(5_000);
+  });
+
+  it("counts Preview jobs only within their 30-day retention and reports the coverage", async () => {
+    await firestore.collection("users").doc("staff-1").set({ accessTier: "editor" });
+    const queue = firestore.collection("cmsPreviewQueue");
+    await queue.add({ requestedBy: "staff-1", status: "failed", requestedAt: Timestamp.fromMillis(start - 10 * 86_400_000) });
+    await queue.add({ requestedBy: "staff-1", status: "ready", requestedAt: Timestamp.fromMillis(start - 5 * 86_400_000) });
+    await queue.add({ requestedBy: "staff-1", status: "failed", requestedAt: Timestamp.fromMillis(start - 40 * 86_400_000) });
+    const jobs = async days => (await invoke(handlers().report, { days })).body.friction.jobs;
+    const ninety = await jobs(90);
+    expect(ninety.previewCoverage).toEqual({ current: { status: "partial", from: "2026-10-03" }, prior: { status: "unavailable" } });
+    expect(ninety.current.newsroom).toMatchObject({ previews: 2, failed: 1 });
+    const thirty = await jobs(30);
+    expect(thirty.previewCoverage).toEqual({ current: { status: "full" }, prior: { status: "partial", from: "2026-10-03" } });
+    // The 40-day-old job is in the prior window but outside retention, so it is not counted.
+    expect(thirty.prior.newsroom).toMatchObject({ previews: 0, failed: 0 });
+    expect((await jobs(7)).previewCoverage).toEqual({ current: { status: "full" }, prior: { status: "full" } });
+  });
+
+  it("keeps content totals and the median but no team split when the roster is unavailable", async () => {
+    for (let offset = 0; offset < 501; offset += 250) {
+      const write = firestore.batch();
+      for (let index = offset; index < Math.min(501, offset + 250); index += 1) write.set(firestore.collection("users").doc(`user-${index}`), { accessTier: "editor" });
+      await write.commit();
+    }
+    const posts = firestore.collection("cmsPosts");
+    await posts.add({ type: "post", status: "published", createdAt: "2026-10-28T10:00:00.000Z", firstPublishedAt: "2026-10-28T13:00:00.000Z", firstPublishedBy: "user-1" });
+    await posts.add({ type: "post", status: "draft", createdAt: "2026-10-20T12:00:00.000Z", createdBy: "user-1" });
+    const body = (await invoke(handlers().report, { days: 7 })).body;
+    expect(body.contentFlow).toEqual({ status: "ready", teams: "unavailable", medianHoursToFirstPublish: 3,
+      publishedWeeks: [{ week: "2026-10-26", total: 1, newsroom: null, product: null, other: null }],
+      openDrafts: [{ bucket: "day", total: 0, newsroom: null, product: null, other: null }, { bucket: "week", total: 0, newsroom: null, product: null, other: null },
+        { bucket: "month", total: 1, newsroom: null, product: null, other: null }, { bucket: "older", total: 0, newsroom: null, product: null, other: null }] });
   });
 
   it.each([null, "2026-11-02T12:00:00.000Z", 1793620800000])("refuses null and non-native audit timestamps (%#)", async timestamp => {

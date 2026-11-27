@@ -65,9 +65,9 @@ for (const width of [390, 1280]) {
           actions:[{id:'content.publish.request',label:'Content publish attempts',count:60,personDays:22,lastUsed:'2026-11-07',newsroom:{count:52,personDays:19},product:{count:8,personDays:3}},
             {id:'preview.request',label:'Saved Preview attempts',count:143,personDays:40,lastUsed:'2026-11-07',newsroom:{count:120,personDays:34},product:{count:23,personDays:6}},
             {id:'media.clip.request',label:'Clip requests',count:0,personDays:0,lastUsed:null,newsroom:{count:0,personDays:0},product:{count:0,personDays:0}}],
-          friction:{current:{newsroom:friction(2),product:friction(1)},prior:{newsroom:friction(1),product:friction(0)},jobs:{status:'ready',current:{newsroom:jobs(2),product:jobs(1)},prior:{newsroom:jobs(1),product:jobs(0)}}},
-          contentFlow:{status:'ready',medianHoursToFirstPublish:2.5,publishedWeeks:[{week:'2026-10-26',newsroom:21,product:2,other:4},{week:'2026-11-02',newsroom:14,product:1,other:3}],
-            openDrafts:[{bucket:'day',newsroom:3,product:1,other:0},{bucket:'week',newsroom:5,product:0,other:1},{bucket:'month',newsroom:4,product:1,other:2},{bucket:'older',newsroom:11,product:2,other:6}]},
+          friction:{current:{newsroom:friction(2),product:friction(1)},prior:{newsroom:friction(1),product:friction(0)},jobs:{status:'ready',current:{newsroom:jobs(2),product:jobs(1)},prior:{newsroom:jobs(1),product:jobs(0)},previewCoverage:{current:{status:'full'},prior:{status:'full'}}}},
+          contentFlow:{status:'ready',teams:'ready',medianHoursToFirstPublish:2.5,publishedWeeks:[{week:'2026-10-26',total:27,newsroom:21,product:2,other:4},{week:'2026-11-02',total:18,newsroom:14,product:1,other:3}],
+            openDrafts:[{bucket:'day',total:4,newsroom:3,product:1,other:0},{bucket:'week',total:6,newsroom:5,product:0,other:1},{bucket:'month',total:7,newsroom:4,product:1,other:2},{bucket:'older',total:19,newsroom:11,product:2,other:6}]},
           problemReports:{status:'ready',open:6,resolved:9,medianDaysToResolve:1.5,filed:11,topPages:[{page:'/content/post',count:5},{page:'/media/videos',count:3},{page:'/reports',count:2}]},
           excludedAccounts:4};
       }

@@ -16,7 +16,10 @@ type Repeat = { items: number; repeats: number; repeatedItems: number };
 export type UsageFriction = { transitions: number; backForth: number; pairs: { screens: string[]; count: number }[];
   publish: Repeat; preview: Repeat };
 export type UsageJobs = { previews: number; failed: number; expired: number; stuckUploads: number };
-type ByCreator = { newsroom: number; product: number; other: number };
+// Team splits are null when the staff roster could not be read (teams: "unavailable").
+type ByCreator = { total: number; newsroom: number | null; product: number | null; other: number | null };
+// Preview queue records are kept 30 days; older windows are partial or unavailable.
+export type PreviewCoverage = { status: "full" } | { status: "partial"; from: string } | { status: "unavailable" };
 type Unavailable = { status: "unavailable" };
 export interface UsageReport {
   days: number;
@@ -41,8 +44,9 @@ export interface UsageReport {
   actions: ({ id: string; label: string; count: number; personDays: number; lastUsed: string | null }
     & Split<{ count: number; personDays: number }>)[];
   friction: { current: Split<UsageFriction>; prior: Split<UsageFriction>;
-    jobs: ({ status: "ready"; current: Split<UsageJobs>; prior: Split<UsageJobs> }) | Unavailable };
-  contentFlow: ({ status: "ready"; publishedWeeks: ({ week: string } & ByCreator)[]; medianHoursToFirstPublish: number | null;
+    jobs: ({ status: "ready"; current: Split<UsageJobs>; prior: Split<UsageJobs>;
+      previewCoverage: { current: PreviewCoverage; prior: PreviewCoverage } }) | Unavailable };
+  contentFlow: ({ status: "ready"; teams: "ready" | "unavailable"; publishedWeeks: ({ week: string } & ByCreator)[]; medianHoursToFirstPublish: number | null;
     openDrafts: ({ bucket: "day" | "week" | "month" | "older" } & ByCreator)[] }) | Unavailable;
   problemReports: ({ status: "ready"; open: number; resolved: number; medianDaysToResolve: number | null; filed: number;
     topPages: { page: string; count: number }[] }) | Unavailable;

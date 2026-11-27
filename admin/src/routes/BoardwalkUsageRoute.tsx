@@ -2,7 +2,7 @@ import { Fragment, useCallback, useEffect, useState, type CSSProperties, type Re
 import { Link } from "react-router";
 import { Button, EmptyState, InlineMessage, TableFrame } from "../components/ui/Primitives";
 import { LoadingIndicator } from "../components/ui/LoadingIndicator";
-import type { UsageFriction, UsageJobs, UsageReport } from "../lib/boardwalk-usage";
+import type { PreviewCoverage, UsageFriction, UsageJobs, UsageReport } from "../lib/boardwalk-usage";
 import { postFunction } from "../lib/functions";
 import { ROUTE_PATHS } from "../lib/routes";
 import { useShell } from "./ShellContext";
@@ -56,6 +56,7 @@ export function BoardwalkUsageSurface({ load }: { load: UsageLoader }) {
         {[...visible.daily, ...visible.weekly].some(row => row.timezone === "UTC") && <p>Rows marked UTC were collected before Eastern dates began{visible.easternFromDate ? ` on ${visible.easternFromDate}` : ""}. On those rows, work after 7 or 8 PM Eastern appears on the next day. A date or week can have both a UTC row and an Eastern row; a person can appear in each.</p>}
         <UsageSections report={visible} />
       </>}
+      <ContentAndProblemSections report={visible} />
     </>}
     <p>Start with the destinations with the most visible time and the busiest actions when deciding where to focus improvements. Review low-use features only after checking access, availability and enough collection time; these counts alone do not justify removing a feature.</p>
     <p><Link to={`${ROUTE_PATHS.guide}/boardwalk-usage`}>What Boardwalk records and why</Link></p>
@@ -88,13 +89,17 @@ function UsageSections({ report }: { report: UsageReport }) {
   const peak = Math.max(1, highest);
   const heatPeak = Math.max(1, ...report.hourMs.newsroom.flat());
   const { current, prior, jobs } = report.friction;
-  const frictionRows: [string, (friction: UsageFriction, jobs: UsageJobs | null) => string][] = [
+  const previewRate = (part: keyof UsageJobs) => (_: UsageFriction, job: UsageJobs | null, coverage: PreviewCoverage | null) =>
+    !job || !coverage || coverage.status === "unavailable" ? "Unavailable"
+      : coverage.status === "partial" ? `${rate(job[part], job.previews)} since ${coverage.from}` : rate(job[part], job.previews);
+  const coverage = jobs.status === "ready" ? jobs.previewCoverage : null;
+  const frictionRows: [string, (friction: UsageFriction, jobs: UsageJobs | null, coverage: PreviewCoverage | null) => string][] = [
     ["Publish attempts repeated within 10 minutes on the same item", friction => String(friction.publish.repeats)],
     ["Items with a repeated publish attempt", friction => `${friction.publish.repeatedItems} of ${friction.publish.items}`],
     ["Preview attempts repeated within 10 minutes on the same item", friction => String(friction.preview.repeats)],
     ["Items with a repeated Preview attempt", friction => `${friction.preview.repeatedItems} of ${friction.preview.items}`],
-    ["Preview jobs that failed", (_, job) => job ? rate(job.failed, job.previews) : "Unavailable"],
-    ["Preview jobs that expired before building", (_, job) => job ? rate(job.expired, job.previews) : "Unavailable"],
+    ["Preview jobs that failed", previewRate("failed")],
+    ["Preview jobs that expired before building", previewRate("expired")],
     ["Moves straight back to the screen before last", friction => rate(friction.backForth, friction.transitions)],
     ["Uploads started in the period and still active after a day", (_, job) => job ? String(job.stuckUploads) : "Unavailable"],
   ];
@@ -179,24 +184,43 @@ function UsageSections({ report }: { report: UsageReport }) {
         <tr><th scope="col">Measure</th>{GROUPS.map(([group]) => <Fragment key={group}><th scope="col">This period</th><th scope="col">Prior period</th></Fragment>)}</tr></thead>
         <tbody>{frictionRows.map(([label, read]) => <tr key={label}><th scope="row">{label}</th>
           {GROUPS.map(([group]) => <Fragment key={group}>
-            <td>{read(current[group], jobs.status === "ready" ? jobs.current[group] : null)}</td>
-            <td>{read(prior[group], jobs.status === "ready" ? jobs.prior[group] : null)}</td></Fragment>)}</tr>)}</tbody></table></TableFrame>
+            <td>{read(current[group], jobs.status === "ready" ? jobs.current[group] : null, coverage?.current ?? null)}</td>
+            <td>{read(prior[group], jobs.status === "ready" ? jobs.prior[group] : null, coverage?.prior ?? null)}</td></Fragment>)}</tr>)}</tbody></table></TableFrame>
       {jobs.status !== "ready" && <Unavailable what="Preview job and upload records" />}
       <h4>Most frequent back-and-forth pairs this period</h4>
       {GROUPS.map(([group, label]) => <p key={group}>{label}: {current[group].pairs.length
         ? current[group].pairs.map(pair => `${pair.screens.join(" and ")} (${pair.count})`).join("; ") : "None"}</p>)}
     </Section>
 
+    <Section id="notes" title="Data notes">
+      <ul>
+        <li>Usage analytics began {report.firstCollectedDate}{report.easternFromDate ? `; Eastern dates began ${report.easternFromDate}` : ""}.</li>
+        <li>{report.excludedAccounts === null ? "The number of excluded accounts is unavailable." : `${report.excludedAccounts} agent, test or vendor accounts are excluded.`}</li>
+        <li>Team, role, person-day, session, hour and friction counts began with this version of the report. Earlier rows show Not recorded or zero for them.</li>
+        {coverage && (coverage.current.status !== "full" || coverage.prior.status !== "full") && <li>Preview job records are kept for 30 days, so Preview rates count only jobs from the last 30 days. A rate marked since a date covers part of its period; a period entirely older than 30 days is unavailable.</li>}
+        <li>Minutes per session is an average. A median needs individual sessions, which this report does not keep.</li>
+        <li>Not tracked: whether a publish finished, whether a Preview was viewed, screens outside the listed destinations, time in hidden tabs, typing, field values and search text.</li>
+      </ul>
+    </Section>
+  </>;
+}
+
+// Content flow and problem reports read their own records, so they appear before any usage is collected.
+function ContentAndProblemSections({ report }: { report: UsageReport }) {
+  const teams = report.contentFlow.status === "ready" && report.contentFlow.teams === "ready";
+  const teamHeaders = <><th scope="col">Newsroom</th><th scope="col">Product team</th><th scope="col">Other accounts</th></>;
+  return <>
     <Section id="content" title="Content flow">
       {report.contentFlow.status === "ready" ? <>
         <p>Median time from creating a post to first publishing it, for posts first published in this period: {report.contentFlow.medianHoursToFirstPublish === null ? "no posts" : `${report.contentFlow.medianHoursToFirstPublish} hours`}. Other accounts are agents, imports and former staff.</p>
+        {!teams && <InlineMessage tone="warning">The staff roster could not be read completely, so posts are not split by team.</InlineMessage>}
         <h4>Posts first published per week</h4>
-        <TableFrame><table className="data-table"><thead><tr><th scope="col">Week starting</th><th scope="col">Newsroom</th><th scope="col">Product team</th><th scope="col">Other accounts</th></tr></thead>
-          <tbody>{report.contentFlow.publishedWeeks.length ? report.contentFlow.publishedWeeks.map(row => <tr key={row.week}><th scope="row">{row.week}</th><td>{row.newsroom}</td><td>{row.product}</td><td>{row.other}</td></tr>)
-            : <tr><td colSpan={4}>No posts were first published in this period.</td></tr>}</tbody></table></TableFrame>
+        <TableFrame><table className="data-table"><thead><tr><th scope="col">Week starting</th><th scope="col">All posts</th>{teams && teamHeaders}</tr></thead>
+          <tbody>{report.contentFlow.publishedWeeks.length ? report.contentFlow.publishedWeeks.map(row => <tr key={row.week}><th scope="row">{row.week}</th><td>{row.total}</td>{teams && <><td>{row.newsroom}</td><td>{row.product}</td><td>{row.other}</td></>}</tr>)
+            : <tr><td colSpan={teams ? 5 : 2}>No posts were first published in this period.</td></tr>}</tbody></table></TableFrame>
         <h4>Open post drafts by age</h4>
-        <TableFrame><table className="data-table"><thead><tr><th scope="col">Age</th><th scope="col">Newsroom</th><th scope="col">Product team</th><th scope="col">Other accounts</th></tr></thead>
-          <tbody>{report.contentFlow.openDrafts.map(row => <tr key={row.bucket}><th scope="row">{DRAFT_AGES[row.bucket]}</th><td>{row.newsroom}</td><td>{row.product}</td><td>{row.other}</td></tr>)}</tbody></table></TableFrame>
+        <TableFrame><table className="data-table"><thead><tr><th scope="col">Age</th><th scope="col">All drafts</th>{teams && teamHeaders}</tr></thead>
+          <tbody>{report.contentFlow.openDrafts.map(row => <tr key={row.bucket}><th scope="row">{DRAFT_AGES[row.bucket]}</th><td>{row.total}</td>{teams && <><td>{row.newsroom}</td><td>{row.product}</td><td>{row.other}</td></>}</tr>)}</tbody></table></TableFrame>
       </> : <Unavailable what="Post records" />}
     </Section>
 
@@ -207,16 +231,6 @@ function UsageSections({ report }: { report: UsageReport }) {
           <tbody>{report.problemReports.topPages.length ? report.problemReports.topPages.map(row => <tr key={row.page}><th scope="row">{row.page}</th><td>{row.count}</td></tr>)
             : <tr><td colSpan={2}>No reports were filed in this period.</td></tr>}</tbody></table></TableFrame>
       </> : <Unavailable what="Problem reports" />}
-    </Section>
-
-    <Section id="notes" title="Data notes">
-      <ul>
-        <li>Usage analytics began {report.firstCollectedDate}{report.easternFromDate ? `; Eastern dates began ${report.easternFromDate}` : ""}.</li>
-        <li>{report.excludedAccounts === null ? "The number of excluded accounts is unavailable." : `${report.excludedAccounts} agent, test or vendor accounts are excluded.`}</li>
-        <li>Team, role, person-day, session, hour and friction counts began with this version of the report. Earlier rows show Not recorded or zero for them.</li>
-        <li>Minutes per session is an average. A median needs individual sessions, which this report does not keep.</li>
-        <li>Not tracked: whether a publish finished, whether a Preview was viewed, screens outside the listed destinations, time in hidden tabs, typing, field values and search text.</li>
-      </ul>
     </Section>
   </>;
 }
