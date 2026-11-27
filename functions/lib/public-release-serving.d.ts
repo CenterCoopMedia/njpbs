@@ -9,6 +9,7 @@ export type PairRouteReceipt = Readonly<{ kind: "serve" | "gone" | "redirect"; f
 export type PairServingDecision = Readonly<{ kind: "decision"; epoch: number; pairId: string; contentHead: PublicReleaseSelector["contentHead"];
   locator: PairViewLocator; composition?: Readonly<{ artifactPath: string; proofLocator?: PairViewLocator | null; expectedBodyDigest: string | null; absent: boolean; witnessDigest: string }> | null;
   targetProof: Readonly<{ digest: string; key: string; bytes: number }> | null;
+  archiveLocator?: PairViewLocator;
   route: PairRouteReceipt; path: string; authorityDigest: string }>;
 export function readPublicReleaseSelector(input: { firestore: Firestore; environment: "production" | "development"; now?: () => number }): Promise<SelectorReceipt>;
 export function readPublicReleaseDecision(input: { firestore: Firestore; environment: "production" | "development"; pair: PublicReleasePair;

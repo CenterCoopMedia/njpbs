@@ -97,6 +97,49 @@ it("accepts canonical Unicode artifact paths and refuses private compiled graph 
   await expect(serving.readPublicReleaseDecision(request("/_pair-compiled/entry.js"))).rejects.toThrow();
   await expect(serving.readPublicReleaseDecision(request("/assets/cafe\u0301.svg"))).rejects.toThrow();
 });
+async function seedStagedCodePack() {
+  const h = protocol.publicReleaseDigest, pairDigest = h(pair), inputManifestDigest = "3".repeat(64);
+  const scope = { kind: "qualification", sourceOperationId: `baseline-codepack-${"1".repeat(64)}`, sourceVersion: 1,
+    snapshotDigest: "4".repeat(64), contextSequence: 0 };
+  const codeIdentity = { schemaVersion: 2, pair: pairReference(), ...scope, inputManifestDigest };
+  const taskId = h(codeIdentity), codeClaim = "5".repeat(64), viewManifestDigest = "6".repeat(64), readbackDigest = "7".repeat(64);
+  const codePackManifestDigest = "8".repeat(64), receipt = { schemaVersion: 2, taskId, identity: codeIdentity, manifestDigest: viewManifestDigest, claimDigest: codeClaim };
+  const batch = db.batch();
+  batch.set(db.doc(`${base}/codePacks/stagedBaseline`), { schemaVersion: 1, kind: "pair-code-pack-staged-baseline", status: "staged", pairDigest,
+    taskId, identity: codeIdentity, claimDigest: codeClaim, viewManifestDigest, inputManifestDigest, codePackManifestDigest,
+    codeAssetManifestDigest: pair.codeAssetManifestDigest, cursor, memberCount: 1, memberBytes: 10, readbackDigest });
+  batch.set(db.doc(`${base}/codePacks/baseline`), { schemaVersion: 1, kind: "pair-code-pack-baseline", pairDigest, commitSha: pair.commitSha,
+    codeAssetManifestDigest: pair.codeAssetManifestDigest, inputManifestDigest, codePackManifestDigest, cursor });
+  batch.set(db.doc(`${base}/inputs/${inputManifestDigest}`), { schemaVersion: 2, status: "captured", pairDigest, source: { kind: "inventory", id: "baseline" },
+    scope, inputManifestDigest, manifestKey: `release-pair-inputs/v2/${pair.pairId}/manifests/${inputManifestDigest}.json`, manifestBytes: 100,
+    cursor, fileCount: 1, inputBytes: 10, readbackDigest });
+  batch.set(db.doc(`${base}/views/${viewManifestDigest}`), { schemaVersion: 2, status: "staged", pairDigest, taskId, identity: codeIdentity,
+    claimDigest: codeClaim, cursor, manifestDigest: viewManifestDigest, readbackDigest, outputCount: 1, outputBytes: 10, manifestBytes: 300,
+    manifestKey: `release-pairs/${pair.pairId}/${taskId}/claims/${codeClaim}/views/${viewManifestDigest}.json` });
+  batch.set(db.doc(`${base}/work/${taskId}`), { identity: codeIdentity, status: "complete", attempts: 1, claimDigest: null, leaseUntil: null,
+    nextAttemptAt: null, acceptedDueAt: null, receiptDigest: h(receipt), lastFailure: null });
+  batch.set(db.doc(`${base}/receipts/${taskId}`), receipt);
+  await batch.commit();
+  return { pairDigest, identity: codeIdentity, claimDigest: codeClaim, manifestDigest: viewManifestDigest, manifestBytes: 300 };
+}
+it("accepts normalized encoded archive paths at the pair authority boundary", async () => {
+  await expect(serving.readPublicReleaseDecision(request("/blog-post/caf%C3%A9/"))).rejects.toThrow();
+  const archiveLocator = await seedStagedCodePack();
+  const result = await serving.readPublicReleaseDecision(request("/blog-post/caf%C3%A9/"));
+  expect(result).toMatchObject({ kind: "decision", path: "/blog-post/caf%C3%A9/", route: { kind: "unowned" }, archiveLocator });
+  expect(result.kind === "decision" && result.locator.manifestDigest).toBe(releaseSelector().contentHead.manifestDigest);
+  // The slot also sends slashless and decoded forms of an archive path.
+  for (const path of ["/blog-post/old-story/", "/blog-post/old-story", "/blog-post/caf\u00e9", "/2012/02/old-transit"]) {
+    expect(await serving.readPublicReleaseDecision(request(path))).toMatchObject({ kind: "decision", path, archiveLocator });
+  }
+  const contact = await serving.readPublicReleaseDecision(request());
+  expect(contact.kind === "decision" && "archiveLocator" in contact).toBe(false);
+  await expect(serving.readPublicReleaseDecision(request("/blog-post/caf%c3%a9/"))).rejects.toThrow();
+  await expect(serving.readPublicReleaseDecision(request("/blog-post/not%2Fa-slug/"))).rejects.toThrow();
+  // The code-pack locator is trusted only with its completed owner receipt.
+  await db.doc(`${base}/receipts/${protocol.publicReleaseDigest(archiveLocator.identity)}`).delete();
+  await expect(serving.readPublicReleaseDecision(request("/blog-post/caf%C3%A9/"))).rejects.toThrow();
+});
 it("uses a bounded indexed route lookup for unknown record slugs", async () => {
   let scanned = false;
   const collection = db.collection.bind(db);
