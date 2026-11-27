@@ -399,14 +399,14 @@ describe("cmsGetContent", () => {
   it("lets a contributor read their own record after it has left draft", async () => {
     // The draft-only rule on own-content authority (#380) bounds what a
     // contributor may change, not what they may see, so the record they
-    // submitted stays visible to them once it is in review.
+    // created stays visible to them once it is approved.
     const { res } = await call(
       siteWide("contributor", "user-2"),
       { collection: "cmsPosts", id: "p-1" },
-      { "cmsPosts/p-1": { ...storedPage, status: "in_review" } },
+      { "cmsPosts/p-1": { ...storedPage, status: "approved" } },
     );
     expect(res.statusCode).toBe(200);
-    expect(res.body.document.status).toBe("in_review");
+    expect(res.body.document.status).toBe("approved");
   });
 
   it("answers with the addressed id over one the document carries", async () => {

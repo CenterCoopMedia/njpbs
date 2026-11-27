@@ -24,10 +24,6 @@ const publishMocks = vi.hoisted(() => ({
 vi.mock("../src/lib/publish-activity", () => ({ loadPublishActivitySummary: publishMocks.loadPublishActivitySummary }));
 vi.mock("../src/lib/site-update-retry", () => ({ retrySiteUpdate: publishMocks.retrySiteUpdate }));
 
-const reviewMocks = vi.hoisted(() => ({
-  cmsListReviewQueue: vi.fn(),
-}));
-
 const firestoreMocks = vi.hoisted(() => {
   const testDb = { name: "test-db" };
   const collection = vi.fn((database: unknown, path: string) => ({
@@ -59,13 +55,6 @@ vi.mock("../src/context/AuthContext", () => ({
 vi.mock("../src/routes/ShellContext", () => ({
   useShell: () => ({ principal: shellMocks.principal }),
 }));
-
-vi.mock("../src/lib/review-queue", async (importOriginal) => {
-  const original = await importOriginal<
-    typeof import("../src/lib/review-queue")
-  >();
-  return { ...original, cmsListReviewQueue: reviewMocks.cmsListReviewQueue };
-});
 
 vi.mock("firebase/firestore", () => ({
   documentId: () => "__name__",
@@ -101,13 +90,6 @@ function renderQueue() {
   );
 }
 
-function emptyReviewQueue() {
-  reviewMocks.cmsListReviewQueue.mockResolvedValue({
-    success: true,
-    requests: [],
-  });
-}
-
 function emptyPublishQueue() {
   firestoreMocks.onSnapshot.mockImplementation((_queueQuery, next) => {
     next({ docs: [] });
@@ -115,23 +97,8 @@ function emptyPublishQueue() {
   });
 }
 
-const transitRequest = {
-  requestId: "review-1",
-  collection: "cmsPosts" as const,
-  recordId: "record-1",
-  contentType: "post" as const,
-  title: "Transit funding vote",
-  state: "in_review" as const,
-  sourceVersion: 7,
-  requestedByLabel: "Avery Author",
-  requestedAt: "2026-08-20T16:00:00.000Z",
-  assigneeLabel: "You",
-  recovered: false,
-};
-
 afterEach(() => {
   vi.clearAllMocks();
-  reviewMocks.cmsListReviewQueue.mockReset();
   publishMocks.loadPublishActivitySummary.mockReset();
   publishMocks.loadPublishActivitySummary.mockResolvedValue({ activeCount: 0, recoveryCount: 0, postProofRecoveryIds: [], postProofRecoveryTruncated: false });
   publishMocks.getDocs.mockReset();
@@ -145,7 +112,6 @@ afterEach(() => {
 
 describe("QueueTab", () => {
   it.each(["success", "failed"])("bounds large %s histories and keeps older pending and failed jobs visible", async status => {
-    emptyReviewQueue();
     const rows = [
       ...Array.from({ length: 1000 }, (_, index) => ({ id: `done-${index}`,
         status, triggeredAt: new Date(100_000 + index * 1000) })),
@@ -172,7 +138,6 @@ describe("QueueTab", () => {
   });
 
   it("refuses an oversized attention list instead of hiding active jobs", async () => {
-    emptyReviewQueue();
     firestoreMocks.onSnapshot.mockImplementation((_request, next) => {
       next({ docs: Array.from({ length: 501 }, (_, index) => ({ id: `active-${index}`,
         data: () => ({ status: "pending" }) })) });
@@ -183,97 +148,21 @@ describe("QueueTab", () => {
   });
 
 
-  it("shows editorial requests to a scoped editor without exposing deployment activity", async () => {
-    shellMocks.principal = {
-      id: "editor",
-      grants: [{ role: "editor", sections: ["news"] }],
-    };
-    reviewMocks.cmsListReviewQueue.mockResolvedValue({
-      success: true,
-      requests: [transitRequest],
-    });
-
+  it("announces a pending publish activity refresh and guards repeated activation", async () => {
+    firestoreMocks.onSnapshot.mockImplementation(() => firestoreMocks.unsubscribe);
     renderQueue();
-
-    expect(
-      await screen.findByRole("heading", { name: "Editorial queue" }),
-    ).toBeVisible();
-    expect(screen.getByText("Transit funding vote")).toBeVisible();
-    expect(screen.getByText("Avery Author")).toBeVisible();
-    expect(screen.getByText("You")).toBeVisible();
-    expect(
-      screen.getByRole("columnheader", { name: "Waiting" }),
-    ).toBeVisible();
-    expect(screen.queryByText("In review")).not.toBeInTheDocument();
-    expect(screen.getByText("7")).toBeVisible();
-    expect(
-      screen.getByRole("link", { name: "Transit funding vote" }),
-    ).toHaveAttribute("href", "/content/post/record-1/edit");
-    expect(screen.getByRole("link", { name: "Open draft: Transit funding vote" }))
-      .toHaveAttribute("href", "/content/post/record-1/edit");
-    expect(reviewMocks.cmsListReviewQueue).toHaveBeenCalledWith("id-token");
-    expect(firestoreMocks.onSnapshot).not.toHaveBeenCalled();
-    expect(screen.queryByText("Publish activity")).not.toBeInTheDocument();
-    expect(
-      screen.queryByText("Editorial approval and deployment are different"),
-    ).not.toBeInTheDocument();
-  });
-
-  it("refreshes a successful review list on demand", async () => {
-    shellMocks.principal = { id: "editor", grants: [{ role: "editor" }] };
-    reviewMocks.cmsListReviewQueue
-      .mockResolvedValueOnce({
-        success: true,
-        requests: [transitRequest],
-      })
-      .mockResolvedValueOnce({
-        success: true,
-        requests: [
-          transitRequest,
-          {
-            ...transitRequest,
-            requestId: "review-2",
-            recordId: "record-2",
-            title: "School funding update",
-            sourceVersion: 3,
-            requestedByLabel: "Another staff member",
-            assigneeLabel: null,
-          },
-        ],
-      });
-
-    renderQueue();
-    expect(await screen.findByText("Transit funding vote")).toBeVisible();
-
-    fireEvent.click(
-      screen.getByRole("button", { name: "Refresh review requests" }),
-    );
-
-    expect(await screen.findByText("School funding update")).toBeVisible();
-    expect(reviewMocks.cmsListReviewQueue).toHaveBeenCalledTimes(2);
-    expect(
-      screen.getByText("2 requests awaiting review"),
-    ).toBeVisible();
-  });
-
-  it("announces a pending review refresh and guards repeated activation", async () => {
-    shellMocks.principal = { id: "editor", grants: [{ role: "editor" }] };
-    reviewMocks.cmsListReviewQueue.mockImplementation(() => new Promise(() => {}));
-    renderQueue();
-    const refresh = await screen.findByRole("button", { name: "Refresh review requests: Refreshing review requests" });
-    await waitFor(() => expect(reviewMocks.cmsListReviewQueue).toHaveBeenCalledTimes(1));
+    const refresh = await screen.findByRole("button", { name: "Refresh publish activity: Refreshing publish activity" });
+    await waitFor(() => expect(firestoreMocks.onSnapshot).toHaveBeenCalledTimes(3));
     expect(refresh).toHaveAttribute("aria-busy", "true");
     expect(refresh).toHaveAttribute("aria-disabled", "true");
-    expect(screen.getByRole("status", { name: "Loading editorial queue" })).toBeVisible();
+    expect(screen.getByRole("status", { name: "Loading publish activity" })).toBeVisible();
     fireEvent.click(refresh);
     fireEvent.click(refresh);
-    expect(reviewMocks.cmsListReviewQueue).toHaveBeenCalledTimes(1);
-    expect(firestoreMocks.onSnapshot).not.toHaveBeenCalled();
+    expect(firestoreMocks.onSnapshot).toHaveBeenCalledTimes(3);
   });
 
   it("subscribes administrators to publish activity separately", async () => {
     const triggeredAt = timestamp("2026-07-07T16:00:00.000Z");
-    emptyReviewQueue();
     firestoreMocks.onSnapshot.mockImplementation((_queueQuery, next) => {
       next({
         docs: [
@@ -324,7 +213,7 @@ describe("QueueTab", () => {
         "desc",
       );
     });
-    expect(screen.getByText("Publish activity")).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Publish activity" })).toBeVisible();
     expect(
       screen.getAllByText(triggeredAt.date.toLocaleString()),
     ).toHaveLength(3);
@@ -340,13 +229,12 @@ describe("QueueTab", () => {
     expect(screen.getByText("2026-07-07T16:02:00.000Z")).toBeVisible();
     expect(screen.getByText("serializer")).toBeVisible();
     expect(
-      screen.getByText("Editorial approval and deployment are different"),
+      screen.getByText("Check live versions on the content record"),
     ).toBeVisible();
   });
 
   it("renders no deployment timestamp when triggeredAt is missing", async () => {
     const createdAt = timestamp("2026-07-06T16:00:00.000Z");
-    emptyReviewQueue();
     firestoreMocks.onSnapshot.mockImplementation((_queueQuery, next) => {
       next({
         docs: [
@@ -372,40 +260,7 @@ describe("QueueTab", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("retries a failed review request without changing content", async () => {
-    emptyPublishQueue();
-    reviewMocks.cmsListReviewQueue
-      .mockRejectedValueOnce(new Error("offline"))
-      .mockResolvedValueOnce({ success: true, requests: [] });
-
-    renderQueue();
-
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Editorial queue could not be loaded",
-    );
-    fireEvent.click(
-      screen.getByRole("button", {
-        name: "Try loading the editorial queue again",
-      }),
-    );
-
-    await waitFor(() =>
-      expect(reviewMocks.cmsListReviewQueue).toHaveBeenCalledTimes(2),
-    );
-    expect(
-      await screen.findByText(/No content is waiting for review\. Submitted drafts appear here\./),
-    ).toBeVisible();
-    const browseDrafts = screen.getByRole("link", { name: "Browse drafts" });
-    browseDrafts.focus();
-    expect(browseDrafts).toHaveFocus();
-    expect(browseDrafts).toHaveAttribute(
-      "href",
-      "/content/library?status=draft&v=1",
-    );
-  });
-
   it("restarts a failed publish subscription for an administrator", async () => {
-    emptyReviewQueue();
     const failures: Array<(error: Error) => void> = [];
     firestoreMocks.onSnapshot.mockImplementation((_queueQuery, next, error) => {
       failures.push(error);
@@ -436,7 +291,6 @@ describe("QueueTab", () => {
 
 
 it("loads activity with 151 historical superseded failed proofs and no current recovery, without rescanning on snapshots", async () => {
-  emptyReviewQueue();
   const history = Array.from({ length: 151 }, (_, index) => ({
     id: `H${String(index).padStart(19, "0")}`, status: "success", transport: "post-no-build-v1",
     postProof: { status: "failed", attempts: 4, nextAttemptAt: null }, triggeredAt: new Date(1000 + index),
@@ -461,8 +315,7 @@ it("loads activity with 151 historical superseded failed proofs and no current r
   fireEvent.click(screen.getByRole("button", { name: "Refresh publish activity" }));
   await waitFor(() => expect(publishMocks.loadPublishActivitySummary).toHaveBeenCalledTimes(2));
 });
-it("loads an older current failed proof by the bounded server-selected identity", async () => {
-  emptyReviewQueue(); emptyPublishQueue();
+it("loads an older current failed proof by the bounded server-selected identity", async () => { emptyPublishQueue();
   const id = "P".repeat(20);
   publishMocks.loadPublishActivitySummary.mockResolvedValue({ activeCount: 0, recoveryCount: 1,
     postProofRecoveryIds: [id], postProofRecoveryTruncated: false });
@@ -477,7 +330,6 @@ it("loads an older current failed proof by the bounded server-selected identity"
 });
 
 it("offers a record check when its confirmation window expires without a fresh read", async () => {
-  emptyReviewQueue();
   vi.useFakeTimers();
   try {
     const id = "R".repeat(20);
@@ -502,7 +354,6 @@ it("offers a record check when its confirmation window expires without a fresh r
 });
 
 it("tracks a settings check without a triggered timestamp through its deadline and confirmation", async () => {
-  emptyReviewQueue();
   vi.useFakeTimers();
   try {
     const id = "S".repeat(20);
@@ -534,7 +385,6 @@ it("tracks a settings check without a triggered timestamp through its deadline a
 });
 
 it.each(["summary", "documents"])("keeps live activity available when the additional proof %s read fails, with a working retry", async source => {
-  emptyReviewQueue();
   firestoreMocks.onSnapshot.mockImplementation((_request, next) => {
     next({ docs: [{ id: "failed-page", data: () => ({ status: "failed", transport: "page-no-build-v1",
       changes: [{ collection: "cmsPages", id: "contact", title: "Failed page request" }] }) }] });
@@ -561,7 +411,6 @@ it.each(["summary", "documents"])("keeps live activity available when the additi
 });
 
 it("shows live requests while the additional proof summary never resolves", async () => {
-  emptyReviewQueue();
   publishMocks.loadPublishActivitySummary.mockImplementation(() => new Promise(() => {}));
   firestoreMocks.onSnapshot.mockImplementation((_request, next) => {
     next({ docs: [{ id: "failed-page", data: () => ({ status: "failed", transport: "page-no-build-v1",
@@ -583,7 +432,6 @@ it("shows live requests while the additional proof summary never resolves", asyn
 });
 
 it("retries the current generic update without extra reads and clears accepted feedback on explicit refresh", async () => {
-  emptyReviewQueue();
   const callbacks: Array<(snapshot: { docs: [] }) => void> = [];
   firestoreMocks.onSnapshot.mockImplementation((_request, next) => {
     callbacks.push(next); next({ docs: [] }); return firestoreMocks.unsubscribe;
@@ -614,7 +462,6 @@ it("retries the current generic update without extra reads and clears accepted f
 });
 
 it.each(["success", "failed"])("preserves newer live %s and moved focus when the retry response arrives later", async status => {
-  emptyReviewQueue();
   const callbacks: Array<(snapshot: { docs: Array<{ id: string; data: () => Record<string, unknown> }> }) => void> = [];
   firestoreMocks.onSnapshot.mockImplementation((_request, next) => {
     callbacks.push(next); next({ docs: [] }); return firestoreMocks.unsubscribe;
@@ -630,7 +477,7 @@ it.each(["success", "failed"])("preserves newer live %s and moved focus when the
   await waitFor(() => expect(publishMocks.retrySiteUpdate).toHaveBeenCalledTimes(1));
   act(() => callbacks[0]({ docs: [{ id, data: () => ({ status, transport: "public-context-no-build-v1",
     triggeredAt: new Date(), changes: [] }) }] }));
-  const refresh = screen.getByRole("button", { name: "Refresh review requests" });
+  const refresh = screen.getByRole("button", { name: "Refresh publish activity" });
   refresh.focus();
   await act(async () => resolve({ success: true, queueId: id, status: "pending", message: "Retrying the accepted site update." }));
   expect(await screen.findByText(status === "success" ? "Completed" : "Site update failed")).toBeVisible();

@@ -69,7 +69,7 @@ describe("cmsListAudit emulator wiring", () => {
       action: "cms.save",
       target: "cmsPages/home",
       before: { status: "draft" },
-      after: { status: "in_review" },
+      after: { status: "approved" },
       source: "emulator-test",
       at: "2026-08-12T20:15:00.000Z",
     });

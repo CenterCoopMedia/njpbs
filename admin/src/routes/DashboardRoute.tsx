@@ -11,14 +11,12 @@ import {
   canAccessMediaWorkspace,
   canUseContentStudio,
   canViewAudit,
-  canViewEditorialQueue,
   canViewPublishActivity,
 } from "../lib/access";
 import { fetchAdminStatus } from "../lib/admin-status";
 import { DEFAULT_CONTENT_QUERY, encodeContentQuery } from "../lib/content-query";
 import { cmsGetNewsroomBanner, cmsListContent } from "../lib/functions";
 import { loadPublishActivitySummary } from "../lib/publish-activity";
-import { cmsCountReviewQueue } from "../lib/review-queue";
 import { useShell } from "./ShellContext";
 
 // The signed-in landing page is an editorial work surface, not an account/capability report.
@@ -31,13 +29,6 @@ export function DashboardRoute() {
     // Page one supplies the bounded recent-work rows. The same response carries
     // authoritative status, mine, and assignment counts across every visible record.
     return cmsListContent(idToken, encodeContentQuery(DEFAULT_CONTENT_QUERY));
-  }, [getIdToken]);
-  // The queue is the authoritative in-review projection and is already scoped to this reviewer's
-  // grants on the server, so the count the card shows is the number of rows they will actually
-  // see after following it.
-  const loadReviewRequestCount = useCallback(async () => {
-    const idToken = await getIdToken();
-    return cmsCountReviewQueue(idToken);
   }, [getIdToken]);
   const loadHomeSettings = useCallback(async () => {
     const idToken = await getIdToken();
@@ -67,11 +58,9 @@ export function DashboardRoute() {
       canCreate={canBrowseRecords && canSaveContent(principal)}
       canUseMediaLibrary={canAccessMediaWorkspace(principal)}
       canViewActivity={canViewAudit(principal)}
-      canViewEditorialQueue={canViewEditorialQueue(principal)}
       canViewPublishActivity={canViewPublishActivity(principal)}
       currentUserId={user.uid}
       loadRecords={loadRecords}
-      loadReviewRequestCount={loadReviewRequestCount}
       loadPublishActivity={async () => loadPublishActivitySummary(await getIdToken())}
       loadHomeSettings={loadHomeSettings}
       loadAdminStatus={loadAdminStatus}

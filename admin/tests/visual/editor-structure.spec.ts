@@ -173,7 +173,7 @@ test("the validation state identifies the incomplete field and permits a correct
 
 test("the read-only page exposes no usable editing, insertion or save actions", async ({ page }) => {
   await openEditor(page, "editor-structure-readonly", 320, "icons");
-  await expect(page.getByText("Select Edit before changing reviewed content.", { exact: true })).toBeVisible();
+  await expect(page.getByText("Select Edit before changing approved content.", { exact: true })).toBeVisible();
   // Inert descendants have no computed accessible name. Inspect the retained
   // native controls directly, then verify keyboard exclusion below.
   const boundary = page.locator(".block-editor > fieldset.editor-readonly-boundary");

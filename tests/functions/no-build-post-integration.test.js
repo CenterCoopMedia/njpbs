@@ -185,7 +185,8 @@ describe("embed publication admission (#4994)", () => {
       expect(response.body.error).toBe(message);
       expect(await current()).toEqual(before);
     }
-    await db.doc(`cmsPosts/${config.postId}`).update({ status: "in_review" });
+    // Approval is admitted for a Spanish edition, so it reaches the same embed refusal.
+    await db.doc(`cmsPosts/${config.postId}`).update({ status: "draft", editionOf: "original-post" });
     const transition = lifecycle.createCmsTransitionContentHandler({ firestore: db, requirePrincipalFn: async () => actor,
       noBuildConfig: config, log: quiet });
     const response = await invoke(transition, { collection: "cmsPosts", id: config.postId, baseVersion: before.version, action: "approve" });

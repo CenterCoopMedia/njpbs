@@ -1212,10 +1212,7 @@ export function cmsRestoreRevision(
 
 export type LifecycleAction =
   | "edit"
-  | "submit"
-  | "sendBack"
   | "approve"
-  | "reopen"
   | "revise"
   | "unschedule"
   | "unpublish"
@@ -1227,7 +1224,6 @@ export interface TransitionContentRequest {
   id: string;
   action: LifecycleAction;
   baseVersion: number;
-  comment?: string;
 }
 
 export interface HomeAffectedSection {
@@ -1253,7 +1249,7 @@ export interface TransitionContentResponse {
 }
 
 // Move content through the dedicated optimistic lifecycle boundary. Ordinary
-// saves cannot replace an explicit review or publication decision.
+// saves cannot replace an explicit approval or publication decision.
 export function cmsTransitionContent(
   idToken: string,
   body: TransitionContentRequest,
@@ -1321,16 +1317,16 @@ export interface SaveContentRequest {
   // registered editing group; built-in Pages use their fixed public-page area and omit it.
   // Not the page-builder section id.
   section?: string;
-  // Freeze and publish the exact approved stored version. The document overlay
-  // must be empty and baseVersion must identify that version; reviewed content
-  // is reopened before any further edit.
+  // Freeze and publish the exact saved draft or approved version. The document
+  // overlay must be empty and baseVersion must identify that version; approved
+  // content returns to draft through Edit before any further edit.
   publish?: boolean;
   // With publish, publish only these live blog entries and coverage state on a
   // published live blog Post. Editor access is enough; the document must hold
-  // only liveBlog, and any other Post change still needs review and approval.
+  // only liveBlog, and any other Post change still needs a normal Publish.
   liveBlogUpdate?: boolean;
-  // Schedule the exact approved stored version at this UTC instant. The document
-  // overlay must be empty; the server rejects past times and review bypasses.
+  // Schedule the exact saved draft or approved version at this UTC instant. The
+  // document overlay must be empty; the server rejects past times.
   scheduleAt?: string;
   // The content fields to persist. Omitted fields keep their stored value; `blocks` is
   // validated and id-minted server-side, so the client sends its working blocks and adopts

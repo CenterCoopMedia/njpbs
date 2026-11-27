@@ -113,7 +113,6 @@ describe("freezing a program snapshot", () => {
         createdBy: "uid-someone",
         updatedBy: "uid-someone",
         assignedTo: "uid-someone",
-        reviewRequest: { note: "internal" },
       }),
     );
     for (const field of [
@@ -121,7 +120,6 @@ describe("freezing a program snapshot", () => {
       "createdBy",
       "updatedBy",
       "assignedTo",
-      "reviewRequest",
     ]) {
       expect(field in frozen.metadata, field).toBe(false);
     }

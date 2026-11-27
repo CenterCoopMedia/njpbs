@@ -5,7 +5,6 @@
 // without importing the Firebase runtime.
 const CONTENT_STATUSES = new Set([
   "draft",
-  "in_review",
   "approved",
   "scheduled",
   "published",

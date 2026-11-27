@@ -79,7 +79,7 @@ const summaries = [
     id: "a-2",
     kind: "article",
     title: "Trenton tonight",
-    status: "in_review",
+    status: "approved",
     updatedAt: "2026-07-20T13:00:00.000Z",
     updatedBy: "editor-1",
     assignee: "editor-1",
@@ -288,7 +288,7 @@ describe("content-library server domain", () => {
     });
   });
 
-  it.each(["draft", "in_review", "approved"])(
+  it.each(["draft", "approved"])(
     "projects the live snapshot beside a %s working revision",
     (status) => {
       expect(
@@ -354,7 +354,7 @@ describe("content-library server domain", () => {
 
   it("returns one filtered page with neighboring status and global quick-view counts", () => {
     const query = parseContentQuery(
-      "type=article&status=in_review&owner=me&q=Trenton&v=1",
+      "type=article&status=approved&owner=me&q=Trenton&v=1",
     );
     const result = selectContentLibrary(summaries, query, "editor-1", 1);
 
@@ -366,7 +366,7 @@ describe("content-library server domain", () => {
       assignedCount: 2,
       page: 1,
       pageCount: 1,
-      statusCounts: { draft: 0, in_review: 1, published: 0 },
+      statusCounts: { draft: 0, approved: 1, published: 0 },
     });
   });
 
@@ -776,7 +776,7 @@ describe("cmsListContent handler", () => {
       total: 2,
       assignedCount: 0,
       mineCount: 0,
-      statusCounts: { draft: 1, in_review: 1, published: 0 },
+      statusCounts: { draft: 1, approved: 1, published: 0 },
     });
     expect(res.body.records.map((record) => record.id)).toEqual(["a-1", "a-2"]);
     expect(res.body.records.every((record) => !("createdBy" in record))).toBe(
@@ -809,7 +809,7 @@ describe("cmsListContent handler", () => {
       mineCount: 0,
       statusCounts: {
         draft: 0,
-        in_review: 0,
+        approved: 0,
         scheduled: 0,
         published: 0,
         archived: 0,

@@ -101,7 +101,7 @@ const newsletterSources = {
     assignedCount: 0,
     page: 1,
     pageCount: 1,
-    statusCounts: { draft: 0, in_review: 0, approved: 1, scheduled: 0, published: 0, archived: 0 },
+    statusCounts: { draft: 0, approved: 1, scheduled: 0, published: 0, archived: 0 },
   })),
   loadRecord: vi.fn(async (kind: string, recordId: string) => kind === "newsletter" && recordId === newsletter.id
     ? { status: "ready" as const, record: newsletter }

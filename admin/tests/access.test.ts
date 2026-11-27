@@ -19,9 +19,7 @@ import {
   canPublishContent,
   canSaveContent,
   canViewAudit,
-  canViewEditorialQueue,
   canViewPublishActivity,
-  canViewQueue,
   canViewUsers,
   canUploadMedia,
   canViewReports,
@@ -197,17 +195,8 @@ describe("admin access helpers", () => {
 
     expect(canViewUsers(admin)).toBe(true);
     expect(canViewUsers(editor)).toBe(false);
-    expect(canViewEditorialQueue(admin)).toBe(true);
-    expect(canViewEditorialQueue(editor)).toBe(true);
-    expect(
-      canViewEditorialQueue({
-        id: "contributor",
-        grants: [{ role: "contributor" }],
-      }),
-    ).toBe(false);
     expect(canViewPublishActivity(admin)).toBe(true);
     expect(canViewPublishActivity(editor)).toBe(false);
-    expect(canViewQueue(editor)).toBe(true);
     expect(canViewAudit(admin)).toBe(true);
     expect(canViewAudit(editor)).toBe(false);
     expect(canManageRoles(superAdmin)).toBe(true);

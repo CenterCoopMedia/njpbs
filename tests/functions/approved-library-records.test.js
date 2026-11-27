@@ -8,10 +8,10 @@ const row = (action, version, fields = {}) => ({ collection: "cmsPosts", documen
   after: { type: "sponsor", status: action === "approve" ? "approved" : "draft", version, name: "Approved sponsor", ...fields } });
 
 describe("approved library history", () => {
-  it("uses the latest approval, preserving its exact fields through reopen, draft saves and send-back", () => {
+  it("uses the latest approval, preserving its exact fields through edit, revise and draft saves", () => {
     const first = row("approve", 3, { name: "First approval" });
     const latest = row("approve", 8, { href: "https://approved.example.test/" });
-    expect(approvedLibraryVersion(record, [row("sendBack", 12), first, row("reopen", 9), latest, row("save", 10)]))
+    expect(approvedLibraryVersion(record, [row("edit", 12), first, row("revise", 9), latest, row("save", 10)]))
       .toEqual({ id: "sponsor", type: "sponsor", status: "approved", version: 8,
         name: "Approved sponsor", href: "https://approved.example.test/" });
   });
@@ -34,7 +34,7 @@ describe("approved library history", () => {
   });
 
   it.each([
-    { status: "in_review" }, { type: "newsletter" }, { version: 0 }, { version: 13 }, { deleted: true },
+    { status: "draft" }, { type: "newsletter" }, { version: 0 }, { version: 13 }, { deleted: true },
   ])("does not fall back to an older approval when the latest is invalid: %j", fields => {
     expect(approvedLibraryVersion(record, [row("approve", 3), row("approve", 8, fields)])).toBeNull();
   });

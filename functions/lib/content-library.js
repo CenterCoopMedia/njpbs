@@ -53,7 +53,6 @@ const RECORD_KINDS = Object.freeze([
 ]);
 const CONTENT_STATUSES = Object.freeze([
   "draft",
-  "in_review",
   "approved",
   "scheduled",
   "published",

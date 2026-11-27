@@ -18,11 +18,11 @@ describe("parseContentQuery", () => {
 
   it("parses a full valid query", () => {
     const parsed = parseContentQuery(
-      "type=post&type=program&status=draft&status=in_review&owner=me&assigned=me&q=Trenton&sort=title&dir=asc&page=3&v=1",
+      "type=post&type=program&status=draft&status=approved&owner=me&assigned=me&q=Trenton&sort=title&dir=asc&page=3&v=1",
     );
     expect(parsed).toEqual({
       types: ["program", "post"],
-      statuses: ["draft", "in_review"],
+      statuses: ["draft", "approved"],
       ownerMode: "me",
       ownerUid: null,
       assignmentMode: "me",

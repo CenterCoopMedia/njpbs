@@ -14,7 +14,7 @@
 // status", and one removed from the core but left here stays writable after the
 // rest of the app has stopped modelling it. Nothing else catches the added-status
 // direction at all. Existing save tests send draft, scheduled, and published and
-// expect 200, so dropping one of those three also fails there; in_review and
+// expect 200, so dropping one of those three also fails there; approved and
 // archived have only this pin.
 
 import { createRequire } from "node:module";

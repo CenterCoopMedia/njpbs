@@ -63,37 +63,6 @@ test("phone Finder and Help retain keyboard dismissal while the command bar wrap
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
 });
 
-for (const width of [768, 1024]) {
-  test(`Review queue headers and long facts fit their own columns at ${width}px`, async ({ page }) => {
-    await page.setViewportSize({ width, height: 900 });
-    await page.goto('/gallery.html?embed=browsing-family-shell&family=queue&presentation=text&guide=1');
-    const table = page.locator('.review-queue-table');
-    await expect(table).toBeVisible();
-    await waitForFonts(page);
-    const headerFactsFit = () => table.locator('th:not(.content-index-actions-cell)').evaluateAll(cells => cells.every(cell => {
-      const box = cell.getBoundingClientRect(), style = getComputedStyle(cell);
-      const range = document.createRange(); range.selectNodeContents(cell);
-      return [...range.getClientRects()].every(text => text.left >= box.left + parseFloat(style.paddingLeft) - 1
-        && text.right <= box.right - parseFloat(style.paddingRight) + 1);
-    }));
-    await expect.poll(headerFactsFit).toBe(true);
-    await page.getByRole('button', { name: 'Collapse primary navigation', exact: true }).click();
-    await expect.poll(headerFactsFit).toBe(true);
-    // Plausible unbroken values exercise wrapping in the original fact cells.
-    await table.locator('tbody tr').first().evaluate(row => {
-      row.querySelector('td[data-label="Version"]')!.textContent = '12345';
-      row.querySelector('td[data-label="Assigned to"]')!.textContent = 'AlexandriaMontgomeryPatterson';
-    });
-    const facts = table.locator('tbody tr').first().locator('td[data-label="Version"], td[data-label="Assigned to"]');
-    await expect.poll(() => facts.evaluateAll(cells => cells.every(cell => {
-      const box = cell.getBoundingClientRect(), style = getComputedStyle(cell);
-      const range = document.createRange(); range.selectNodeContents(cell);
-      return [...range.getClientRects()].every(text => text.left >= box.left + parseFloat(style.paddingLeft) - 1
-        && text.right <= box.right - parseFloat(style.paddingRight) + 1);
-    }))).toBe(true);
-  });
-}
-
 test("narrow library titles retain readable space and metadata clears the thumbnail", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 900 });
   await page.goto("/gallery.html?embed=browsing-family-shell&family=library&presentation=icons&guide=1");
@@ -502,7 +471,7 @@ for (const touch of [false, true]) {
 for (const coarse of [false, true]) {
   test.describe(coarse ? "coarse browse row actions" : "fine browse row actions", () => {
     test.use({ hasTouch: coarse });
-    test("queue keeps a compact native Open draft action and leaves immutable jobs alone", async ({ page }) => {
+    test("publish activity leaves immutable jobs without an Open draft action", async ({ page }) => {
       // Desktop table and the minimum-width phone card; keep both pointer modes.
       for (const width of [1440, 320]) {
         const goto = page.goto.bind(page);
@@ -510,18 +479,9 @@ for (const coarse of [false, true]) {
         try {
           await openSpecimen(page, { id: "browsing-family-shell", title: "Queue", width, presentation: "icons" }, { normalizeGeneratedIds: false });
         } finally { page.goto = goto; }
-        const table = page.getByRole("table", { name: "Review requests", exact: true });
-        const title = table.locator("td.content-title a").first();
-        const row = title.locator("xpath=ancestor::tr");
-        const draft = row.locator(".browse-row-edit");
-        await expect(draft).toHaveText("Open draft");
-        await expect(draft).toHaveAttribute("href", (await title.getAttribute("href"))!);
-        const box = (await draft.boundingBox())!;
-        const frame = (await table.locator('xpath=ancestor::div[contains(@class,"table-frame")][1]').boundingBox())!;
-        expect(box.height).toBe(coarse ? 44 : 32);
-        expect(box.x).toBeGreaterThanOrEqual(frame.x);
-        expect(box.x + box.width).toBeLessThanOrEqual(frame.x + frame.width);
-        await expect(page.getByRole("table", { name: "Publish activity", exact: true }).locator(".browse-row-edit")).toHaveCount(0);
+        const table = page.getByRole("table", { name: "Publish activity", exact: true });
+        await expect(table).toBeVisible();
+        await expect(table.locator(".browse-row-edit")).toHaveCount(0);
       }
     });
     test("saved-view delete stays attached with its own named target", async ({ page }) => {
@@ -530,9 +490,9 @@ for (const coarse of [false, true]) {
       try {
         await openSpecimen(page, { id: "browsing-family-shell", title: "Library", width: 1440, presentation: "icons" }, { normalizeGeneratedIds: false });
       } finally { page.goto = goto; }
-      const remove = page.getByRole("button", { name: "Delete saved view Review queue", exact: true });
+      const remove = page.getByRole("button", { name: "Delete saved view Approved work", exact: true });
       await remove.scrollIntoViewIfNeeded();
-      const view = remove.locator("xpath=parent::*").getByRole("button", { name: "Review queue", exact: true });
+      const view = remove.locator("xpath=parent::*").getByRole("button", { name: "Approved work", exact: true });
       const target = (await remove.boundingBox())!;
       const tab = (await view.boundingBox())!;
       expect(target.height).toBe(coarse ? 44 : 32);

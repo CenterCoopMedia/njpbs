@@ -346,16 +346,10 @@ function createCmsRestoreRevisionHandler(deps = {}) {
         if (current.version !== baseVersion) {
           throw new RestoreRevisionRejection(409, CONFLICT_MESSAGE);
         }
-        if (current.status === "in_review") {
-          throw new RestoreRevisionRejection(
-            400,
-            "Select Edit before restoring a revision.",
-          );
-        }
         if (current.status === "approved") {
           throw new RestoreRevisionRejection(
             400,
-            "Reopen approved content before restoring a revision.",
+            "Select Edit before restoring a revision to approved content.",
           );
         }
         if (current.status === "scheduled") {

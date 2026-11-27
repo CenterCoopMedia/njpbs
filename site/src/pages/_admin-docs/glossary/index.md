@@ -37,7 +37,7 @@ limit access to named areas.
 
 ### Workspace
 
-One destination's working screen, such as Pages or the editorial queue.
+One destination's working screen, such as Pages or Publish activity.
 
 ## Editorial records
 
@@ -150,18 +150,14 @@ may not yet be saved.
 
 ### Approval
 
-An authorized editorial decision that a saved draft may proceed to its next
-lifecycle stage.
-
-### Editorial queue
-
-The workspace for submitted items, review tasks, and publication activity
-available to your role.
+A recorded decision that a saved draft of manual election results, a Spanish
+edition, or a sponsor or newsletter card may be published. Approved content is
+read-only until someone selects **Edit**, which returns it to draft.
 
 ### Lifecycle
 
-The record's editorial and public state, such as draft, submitted, scheduled,
-published, or archived.
+The record's editorial and public state: draft, approved, scheduled, published,
+or archived.
 
 ### Preview
 
@@ -170,16 +166,18 @@ public site.
 
 ### Publish
 
-The authorized action that begins releasing an approved saved version to the
-public site.
+The authorized action that begins releasing a saved version to the public
+site.
+
+### Publish activity
+
+The workspace that lists publish job history, with **Retry site update** and
+**Check again** for jobs that need recovery. Staff with settings access can open
+it.
 
 ### Schedule
 
-An instruction to release approved content at a specified date and time.
-
-### Submit
-
-The action that moves a saved draft to editorial review.
+An instruction to release a saved version at a specified date and time.
 
 ### Unpublish
 

@@ -251,25 +251,6 @@ describe("server content document contract", () => {
     ).toEqual(["title"]);
   });
 
-  it("treats the review request envelope as server-managed rather than client-owned", () => {
-    const reviewRequest = {
-      requestId: "review_0123456789abcdef",
-      collection: "cmsPosts",
-      recordId: "story-1",
-      state: "in_review",
-      sourceVersion: 4,
-      requestedBy: "author-1",
-      requestedAt: "2026-08-21T14:00:00.000Z",
-    };
-    expect(SERVER_MANAGED_CONTENT_FIELDS).toContain("reviewRequest");
-    expect(
-      unsupportedContentFields("cmsPosts", "post", {
-        type: "post",
-        reviewRequest,
-      }),
-    ).toEqual([]);
-  });
-
   it("treats the scoped-grant section as server-managed rather than an unknown field", () => {
     // A stored document round-trips through this check, so a server-owned field must not
     // read as unsupported. save.js strips it from the client overlay separately, which is

@@ -281,7 +281,7 @@ describe("unassigned post drafts", () => {
     expect(authorizeContentWrite(scoped("editor", ["watch"], "other"), action).allowed).toBe(false);
     expect(authorizeContentWrite(scoped("editor", []), action).allowed).toBe(false);
     expect(authorizeContentWrite(scoped("editor", ["watch"]), { ...action, publishing: true }).allowed).toBe(false);
-    expect(authorizeContentWrite(siteWide("admin"), { ...action, nextStatus: "in_review" }).allowed).toBe(false);
+    expect(authorizeContentWrite(siteWide("admin"), { ...action, nextStatus: "approved" }).allowed).toBe(false);
   });
   it("does not turn legacy, assigned, or published records into owner-only drafts", () => {
     for (const stored of [

@@ -59,7 +59,7 @@ describe("saved content views", () => {
   it("applies one add or delete without replacing unrelated views", () => {
     const current = [
       { id: "drafts", name: "Drafts", query: "status=draft&v=1" },
-      { id: "review", name: "Review", query: "status=in_review&v=1" },
+      { id: "approved", name: "Approved", query: "status=approved&v=1" },
     ];
 
     expect(

@@ -615,20 +615,6 @@ describe("cmsRestoreRevision", () => {
     ]);
   });
 
-  it("requires Edit before restoring a revision during review", async () => {
-    await seedTarget(db, {
-      current: currentPage({ status: "in_review" }),
-    });
-
-    const res = await restore(db);
-
-    expect(res.statusCode).toBe(400);
-    expect(res.body.error).toBe("Select Edit before restoring a revision.");
-    expect((await db.collection("cmsPages").doc("home").get()).data())
-      .toMatchObject({ status: "in_review", version: 8 });
-    expect(await rows(db, "admin_logs")).toHaveLength(0);
-  });
-
   it("refuses a bounded scheduled-publish failure receipt marked as nonrestorable", async () => {
     const current = currentPage({ version: 9 });
     await Promise.all([
@@ -762,7 +748,7 @@ describe("cmsRestoreRevision", () => {
       expect(res.statusCode).toBe(400);
       expect(res.body.error).toMatch(
         status === "approved"
-          ? /reopen approved/i
+          ? /^Select Edit before restoring a revision to approved content\.$/
           : status === "scheduled"
             ? /cancel scheduled/i
             : /start a revision/i,

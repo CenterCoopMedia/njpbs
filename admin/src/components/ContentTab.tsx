@@ -338,7 +338,7 @@ export function ContentTab({
   const storedPageBlocks = useRef(new Map<PublicPageId, StoredPageContent>());
   // A successful content read admits this editor. Preview keeps the same coarse
   // capabilities; the server checks stored ownership and area on each request.
-  // Own-content readers retain preview access after submitting for review.
+  // Own-content readers retain preview access after their draft leaves draft status.
   const previewEnabled = previewConfigured &&
     (["content.create", "content.edit.any", "content.edit.own"] as const).some(
       capability => hasCapability(principal, capability),

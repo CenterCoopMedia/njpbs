@@ -5,11 +5,6 @@
 // derives safe summaries, authoritative counts, ordering, and one 25-row addressed page
 // for the combined library, typed record lists, and the newsroom home (#1066, #1138). The
 // previous bounded unpaged request stays accepted for one staged Admin rollout.
-//
-// The same boundary owns the editorial review projection. A review request is
-// the in-review content document plus its server-owned reviewRequest envelope,
-// never an independently writable queue row. Authorization is applied before
-// every derived value and before staff labels are resolved.
 
 const { cmsOnRequest } = require("./lib/cms-edge");
 const logger = require("firebase-functions/logger");
@@ -38,14 +33,6 @@ const {
   readMediaAssetSummariesByIds,
   visibleMediaSummaries,
 } = require("./list-media");
-const {
-  MAX_REVIEW_REQUESTS,
-  presentReviewRequests,
-  readInReviewRecords,
-  readStaffDirectory,
-  sortReviewRequests,
-  visibleReviewRequests,
-} = require("./lib/review-queue");
 
 const MAX_QUERY_LENGTH = 4096;
 // A deployed Admin can call the new function before its own addressed-page build is live. Keep
@@ -215,11 +202,8 @@ async function attachThumbnailUrls(
 }
 
 const LIBRARY_VIEW = "library";
-const REVIEW_QUEUE_VIEW = "review_queue";
 const PUBLISH_ACTIVITY_VIEW = "publish_activity";
 const FORBIDDEN_MESSAGE = "You do not have permission to list content.";
-const REVIEW_FORBIDDEN_MESSAGE =
-  "You do not have permission to review content.";
 
 function summarizeContentDocument(document) {
   const stored = document.data();
@@ -376,7 +360,6 @@ function visibleContentSummaries(principal, storedRecords) {
 function requestView(body) {
   const view = body?.view ?? LIBRARY_VIEW;
   return view === LIBRARY_VIEW
-    || view === REVIEW_QUEUE_VIEW
     || view === PUBLISH_ACTIVITY_VIEW
     || view === "pages"
     || view === "data-hub-reporting"
@@ -433,13 +416,6 @@ async function readPublishActivitySummary(firestore, includePostProofRecovery = 
     ...(contextRechecks.length ? { contextRecheckIds: contextRechecks } : {}) } : {}) };
 }
 
-function reviewUserIds(requests) {
-  return requests.flatMap((request) => [
-    request.requestedByUid,
-    request.assigneeUid,
-  ]);
-}
-
 function createCmsListContentHandler(deps = {}) {
   const {
     firestore = db,
@@ -447,8 +423,6 @@ function createCmsListContentHandler(deps = {}) {
     readRecordsFn,
     readAddressedRecordsFn = readAddressedContentSummaries,
     readMediaRecordsByIdsFn = readMediaAssetSummariesByIds,
-    readReviewRecordsFn = readInReviewRecords,
-    readStaffDirectoryFn = readStaffDirectory,
     log = logger,
   } = deps;
 
@@ -502,41 +476,6 @@ function createCmsListContentHandler(deps = {}) {
         }
         const summary = await readPublishActivitySummary(firestore, req.body?.includePostProofRecovery === true);
         res.status(200).json({ success: true, ...summary });
-        return;
-      }
-
-      if (view === REVIEW_QUEUE_VIEW) {
-        // Shared content readers can see the queue. Legacy reviewers retain
-        // their section scope; legacy contributors are refused before a read.
-        if (!hasCapability(user.principal, "content.view") && !hasCapability(user.principal, "content.edit.any")) {
-          log.warn("cmsListContent refused a non-reviewer queue read", {
-            uid: user.uid,
-          });
-          throw new ListRejection(403, REVIEW_FORBIDDEN_MESSAGE);
-        }
-
-        const storedRecords = await readReviewRecordsFn(
-          firestore,
-          user.principal,
-        );
-        const visible = sortReviewRequests(
-          visibleReviewRequests(user.principal, storedRecords),
-        ).slice(0, MAX_REVIEW_REQUESTS);
-        if (req.body?.countOnly === true) {
-          res.status(200).json({ success: true, count: visible.length });
-          return;
-        }
-        // Resolve names only after resource filtering, so a caller cannot learn
-        // staff participation on requests outside their desks.
-        const directory = await readStaffDirectoryFn(
-          firestore,
-          reviewUserIds(visible),
-        );
-        const requests = presentReviewRequests(visible, {
-          viewerUid: user.uid,
-          directory,
-        });
-        res.status(200).json({ success: true, requests });
         return;
       }
 
@@ -634,8 +573,6 @@ module.exports = {
   ListRejection,
   MAX_QUERY_LENGTH,
   MAX_UNPAGED_RECORDS,
-  REVIEW_FORBIDDEN_MESSAGE,
-  REVIEW_QUEUE_VIEW,
   SUMMARY_FIELDS,
   UNPAGED_LIMIT_MESSAGE,
   attachThumbnailUrls,
@@ -644,6 +581,5 @@ module.exports = {
   readAddressedContentSummaries,
   thumbnailAssetIds,
   requestView,
-  reviewUserIds,
   visibleContentSummaries,
 };

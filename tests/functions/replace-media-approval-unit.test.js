@@ -156,9 +156,10 @@ describe("image replacement approval integrity", () => {
 
   it("waits to approve an image until its replacement commits", async () => {
     const { firestore, records, use } = database();
-    use("watch", "in_review", "cmsPages");
-    records.set("cmsPages/watch", {
-      ...records.get("cmsPages/watch"), id: "watch", template: "watch", title: "Watch NJ PBS",
+    use("spanish-post", "draft");
+    records.set("cmsPosts/spanish-post", {
+      ...records.get("cmsPosts/spanish-post"), id: "spanish-post", type: "post", title: "Noticias locales",
+      editionOf: "original-post", locale: "es", section: "watch", tags: [],
       blocks: [], social: { imageAssetId: assetId }, createdBy: actor.uid,
     });
     const options = await ready(firestore);
@@ -170,7 +171,7 @@ describe("image replacement approval integrity", () => {
       res.status = code => { res.statusCode = code; return res; };
       res.json = body => { res.body = body; return res; };
       await handler({ method: "POST", headers: {}, body: {
-        collection: "cmsPages", id: "watch", baseVersion: 4, action: "approve",
+        collection: "cmsPosts", id: "spanish-post", baseVersion: 4, action: "approve",
       } }, res);
       return res;
     };
@@ -178,11 +179,11 @@ describe("image replacement approval integrity", () => {
     const refused = await approve();
     expect(refused.statusCode).toBe(409);
     expect(refused.body.error).toMatch(/replacement is in progress/);
-    expect(records.get("cmsPages/watch").status).toBe("in_review");
+    expect(records.get("cmsPosts/spanish-post").status).toBe("draft");
 
     await commitReplacement(options);
     expect((await approve()).statusCode).toBe(200);
-    expect(records.get("cmsPages/watch").status).toBe("approved");
+    expect(records.get("cmsPosts/spanish-post").status).toBe("approved");
     expect(records.get(`media_assets/${assetId}`).contentHash).toBe(newHash);
   });
 });

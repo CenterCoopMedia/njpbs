@@ -48,7 +48,7 @@ const records = [
     id: "article-2",
     kind: "article",
     title: "Trenton tonight",
-    status: "in_review",
+    status: "approved",
     updatedAt: "2026-07-20T13:00:00.000Z",
     updatedBy: "editor-1",
     assignee: "editor-1",

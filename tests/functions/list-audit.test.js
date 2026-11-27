@@ -133,7 +133,7 @@ const entry = (number) =>
     action: "cms.save",
     target: `cmsPages/page-${number}`,
     before: { status: "draft", count: number - 1 },
-    after: { status: "in_review", count: number },
+    after: { status: "approved", count: number },
     source: "203.0.113.9",
     at: new Date(Date.UTC(2026, 7, 12, 20, number % 60)).toISOString(),
   });

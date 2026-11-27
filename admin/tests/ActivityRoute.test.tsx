@@ -52,7 +52,7 @@ const entries = [
     action: "cms.save",
     target: "cmsPages/home",
     before: { status: "draft" },
-    after: { status: "in_review" },
+    after: { status: "approved" },
     source: "203.0.113.9",
     at: "2026-08-12T20:15:00.000Z",
   },

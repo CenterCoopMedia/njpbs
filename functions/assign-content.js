@@ -25,7 +25,6 @@ const {
   isAssignableContentStatus,
   retiredRecordKindError,
 } = require("./lib/content-library");
-const { advanceReviewRequest } = require("./lib/review-queue");
 
 const MAX_DOCUMENT_ID_BYTES = 1_500;
 
@@ -182,14 +181,6 @@ function createCmsAssignContentHandler(deps = {}) {
           version: stored.version + 1,
           contentVersion: contentVersion(stored),
         };
-        if (stored.status === "in_review") {
-          const advancedRequest = advanceReviewRequest(stored.reviewRequest, {
-            collection: "cmsPosts",
-            id,
-            sourceVersion: assigned.version,
-          });
-          if (advancedRequest) assigned.reviewRequest = advancedRequest;
-        }
         tx.set(recordRef, assigned);
         tx.set(
           firestore.collection(AUDIT_COLLECTIONS.versionHistory).doc(),

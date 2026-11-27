@@ -131,7 +131,7 @@ describe("Public homepage banner settings", () => {
           { id: "story", kind: "post", title: "Election story", status: "published", liveSourceVersion: 2 },
           { id: "draft", kind: "post", title: "Draft story", status: "draft" },
         ], page: 1, pageCount: 1, total: 2, allCount: 2, mineCount: 0, assignedCount: 0,
-          statusCounts: { scheduled: 0, draft: 1, in_review: 0, approved: 0, published: 1, archived: 0 } }),
+          statusCounts: { scheduled: 0, draft: 1, approved: 0, published: 1, archived: 0 } }),
         loadRecord: async () => ({ status: "ready", record: { type: "post", title: "Working story", slug: "draft-story", publiclyVisible: true,
           publicSourceVersion: 2, published: { sourceVersion: 2, metadata: { title: "Election story", slug: "election-story" } } } }),
       },

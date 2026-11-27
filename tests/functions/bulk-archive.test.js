@@ -19,14 +19,12 @@ import {
 } from "firebase/auth";
 import bulkArchive from "../../functions/bulk-archive.js";
 import audit from "../../functions/lib/audit.js";
-import reviewQueue from "../../functions/lib/review-queue.js";
 
 const {
   createCmsBulkArchiveHandler,
   validateBulkArchiveItems,
 } = bulkArchive;
 const { adminLogEntry } = audit;
-const { reviewRequestId } = reviewQueue;
 
 const admin = adminPkg;
 const PROJECT = "demo-njpbs";
@@ -510,64 +508,6 @@ describe("cmsBulkArchiveContent", () => {
       assetIds: [],
       occurrenceCount: 0,
     });
-  });
-
-  // The reviewRequest envelope is server-owned lifecycle state that only exists while a record is
-  // in review, and archiving ends the review. cmsTransitionContent already drops it on the way
-  // out; bulk archive spreads the stored document, so without this it carries a request past the
-  // review it belongs to. A later restore starts from `archived`, so nothing downstream would
-  // ever clear it.
-  it("clears the review request envelope when it archives an in-review record", async () => {
-    await db
-      .collection("cmsPosts")
-      .doc("submitted")
-      .set({
-        id: "submitted",
-        type: "article",
-        title: "Submitted article",
-        status: "in_review",
-        publiclyVisible: false,
-        version: 3,
-        reviewRequest: {
-          requestId: reviewRequestId("cmsPosts", "submitted"),
-          collection: "cmsPosts",
-          recordId: "submitted",
-          state: "in_review",
-          sourceVersion: 3,
-          requestedBy: "editor-1",
-          requestedAt: "2026-07-21T12:00:00.000Z",
-        },
-      });
-    const handler = createCmsBulkArchiveHandler({
-      firestore: db,
-      requireAdminFn: async () => ({ uid: "admin-1", email: "admin@example.com" }),
-      now: () => "2026-07-22T22:00:00.000Z",
-    });
-    const res = makeRes();
-
-    await handler(
-      makeReq({ body: { items: [{ id: "submitted", baseVersion: 3 }] } }),
-      res,
-    );
-
-    expect(res.statusCode).toBe(200);
-    expect(res.body.outcomes).toEqual([
-      { id: "submitted", status: "archived", version: 4 },
-    ]);
-    const stored = (
-      await db.collection("cmsPosts").doc("submitted").get()
-    ).data();
-    expect(stored.status).toBe("archived");
-    expect(stored.version).toBe(4);
-    expect(stored.reviewRequest).toBeUndefined();
-    // The audit trail keeps the evidence the record no longer carries: the before snapshot still
-    // shows the request that was open when the archive happened.
-    const [history] = await docsIn(db, "cmsVersionHistory");
-    expect(history.before.reviewRequest).toMatchObject({
-      requestedBy: "editor-1",
-      sourceVersion: 3,
-    });
-    expect(history.after.reviewRequest).toBeUndefined();
   });
 
   it("isolates an unexpected per-record failure and continues the remaining transactions", async () => {

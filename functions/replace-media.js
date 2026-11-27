@@ -124,7 +124,7 @@ async function assertNoProtectedWorkingUsage(firestore, transaction, assetId) {
     if (status === "approved" || status === "scheduled") {
       throw new MediaReplacementRejection(
         409,
-        "This image is used by approved or scheduled content. Upload a new image, or reopen the affected content as drafts before replacing this file.",
+        "This image is used by approved or scheduled content. Upload a new image, or select Edit on the affected content to return it to draft before replacing this file.",
       );
     }
   }

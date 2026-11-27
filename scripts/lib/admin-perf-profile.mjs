@@ -92,8 +92,8 @@ export const ADMIN_PERF_PROFILE = Object.freeze({
     }),
     Object.freeze({
       id: "publish-queue",
-      label: "Editorial queue",
-      heading: "Editorial queue",
+      label: "Publish activity",
+      heading: "Publish activity",
       path: "/publish-queue",
       route: "queue",
       kind: "read",

@@ -445,7 +445,6 @@ describe("cmsListContent", () => {
       pageCount: 1,
       statusCounts: {
         draft: 0,
-        in_review: 0,
         scheduled: 0,
         published: 0,
         archived: 0,

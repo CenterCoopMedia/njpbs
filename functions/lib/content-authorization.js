@@ -36,8 +36,8 @@ const CONTENT_WRITE_CAPABILITIES = Object.freeze([
 ]);
 
 // The status a record must be in for own-content authority to allow an edit
-// (#380). A contributor is "draft and propose only": they may work and submit
-// their own draft, and lose edit authority once it leaves draft for review.
+// (#380). A contributor is "draft only": they may work on their own draft, and
+// lose edit authority once it leaves draft.
 const OWN_EDIT_STATUS = "draft";
 
 // A single denial shape, so the endpoint maps every refusal the same way. The
@@ -111,7 +111,7 @@ function authorizeContentWrite(principal, action) {
     }
   }
 
-  // Editing and publishing are separate grants. Owners may submit drafts, but
+  // Editing and publishing are separate grants. Owners may save drafts, but
   // only a publisher for this section can make a saved version public. The one
   // exception is a direct live blog update to an existing published Post: Editor
   // access (content.edit.any) may publish its entries and coverage state. The save
@@ -210,8 +210,8 @@ function mayAnswerAbsentRecordRead(principal) {
  *
  *   - No lifecycle gate. The draft-only rule on own-content authority (#380)
  *     bounds what a contributor may change, not what they may see. A contributor
- *     whose own record has moved on to review keeps the read and loses the
- *     write, so the thing they submitted stays visible to them.
+ *     whose own record has left draft keeps the read and loses the write, so
+ *     the thing they wrote stays visible to them.
  *   - An absent record is authorized as a create. A never-saved page opens an
  *     empty editor whose first save creates it, so the person who may create it
  *     is the person who may open it.

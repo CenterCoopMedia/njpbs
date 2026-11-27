@@ -34,7 +34,6 @@ function postPage(): RecordListPage {
 describe("expandable Pages and Posts rows", () => {
   it.each([
     ["draft", "Draft"],
-    ["in_review", "In review"],
     ["approved", "Approved"],
   ])(
     "separates a %s working revision from its older live Post snapshot",

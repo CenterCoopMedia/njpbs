@@ -259,12 +259,6 @@ function createCmsBulkArchiveHandler(deps = {}) {
               archived.publishBuildPending = true;
               archived.publishBuildQueueId = null;
             }
-            // Archiving ends a review, so the server-owned request envelope goes with it. The
-            // spread above would otherwise carry a stale request onto the archived document, and
-            // a later restore starts from `archived`, so no other path would ever clear it. The
-            // version-history snapshot below still records the request that was open.
-            if (stored.status === "in_review") delete archived.reviewRequest;
-
             const noBuildFallback = {};
             const cardPublication = await require("./lib/no-build-library-card-publication").prepareLibraryCardPublication({
               firestore, transaction: tx, collection: "cmsPosts", documentId: item.id,

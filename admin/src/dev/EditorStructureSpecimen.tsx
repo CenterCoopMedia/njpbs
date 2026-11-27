@@ -234,7 +234,7 @@ function StructureDocument({ kind, state }: Required<EditorStructureSpecimenProp
         readOnly={frozen}
         canSave={!frozen}
         readOnlyNotice={frozen ? readOnlyNotice({
-          status: "in_review", restoring: false, changingLifecycle: false, noun: kind,
+          status: "approved", restoring: false, changingLifecycle: false, noun: kind,
         }) : null}
       />
     </div>

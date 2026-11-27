@@ -24,7 +24,7 @@ const sources = {
   loadPages: async () => [{ id: "contact", title: "PRIVATE draft", path: "/contact/", published: true, livePath: "/contact/", liveTitle: "Connect with NJ PBS", liveSourceVersion: 1 }],
   loadLibrarySelection: async () => ({ records: cards.filter(card => card.source === "cms_posts").map(card => ({ id: card.id, kind: "post" as const, title: card.title, status: "published", liveSourceVersion: 1 })),
     page: 1, pageCount: 1, total: 3, allCount: 3, mineCount: 0, assignedCount: 0,
-    statusCounts: { draft: 0, scheduled: 0, in_review: 0, approved: 0, published: 3, archived: 0 } }),
+    statusCounts: { draft: 0, scheduled: 0, approved: 0, published: 3, archived: 0 } }),
   loadRecord: async (_kind: string, id: string) => {
     const card = cards.find(card => card.id === id)!;
     return { status: "ready" as const, record: { title: "PRIVATE draft", publiclyVisible: true, version: 2, publicSourceVersion: 1,

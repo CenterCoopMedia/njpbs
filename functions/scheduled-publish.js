@@ -947,7 +947,7 @@ function createScheduledPublishRunner(deps = {}) {
               after: {
                 status: "published",
                 version: after.version,
-                ...editorialNotice(candidate.collection, candidate.ref.id, "publish", before, after),
+                ...editorialNotice(candidate.collection, candidate.ref.id, "publish", after),
               },
               source: "scheduler",
             }),

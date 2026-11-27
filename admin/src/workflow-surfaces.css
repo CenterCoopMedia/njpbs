@@ -1,4 +1,4 @@
-/* Activity and editorial workflow surfaces. These rules use the Admin theme's
+/* Activity and publish activity surfaces. These rules use the Admin theme's
    canonical roles and stay with the routes that own this markup. */
 
 .activity-surface,
@@ -28,7 +28,6 @@
 
 .activity-surface .surface-intro p,
 .queue-surface .surface-intro p,
-.queue-section-heading p,
 .activity-results-meta {
   color: var(--cms-ink-muted);
 }
@@ -384,38 +383,9 @@
   align-items: center;
 }
 
-.queue-section-heading h3 {
-  color: var(--cms-ink);
-  font-size: var(--cms-font-lg);
-}
-
-.queue-section-heading p {
-  font-size: var(--cms-font-sm);
-}
-
 .queue-section-heading .status-badge,
 .queue-summary-badges .status-badge,
 .queue-table .status-badge {
-  white-space: nowrap;
-}
-
-.review-queue-empty {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--cms-space-2) var(--cms-space-4);
-  margin: 0;
-  border: 1px solid var(--cms-line);
-  padding: var(--cms-space-3) var(--cms-space-4);
-  background: var(--cms-surface);
-  color: var(--cms-ink-secondary);
-  font-size: var(--cms-font-sm);
-}
-.review-queue-empty a {
-  display: inline-flex;
-  min-height: var(--target-comfortable);
-  align-items: center;
-  gap: var(--cms-space-1);
   white-space: nowrap;
 }
 

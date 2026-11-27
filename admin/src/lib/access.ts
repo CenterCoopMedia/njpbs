@@ -51,22 +51,9 @@ export function canManageRoles(principal: Principal): boolean {
   return hasCapability(principal, "roles.grant");
 }
 
-// Review work follows the same scoped edit-any capability the server uses for
-// queue rows and decisions. A section-scoped editor reaches the destination and
-// sees only the requests in their desks.
-export function canViewEditorialQueue(principal: Principal): boolean {
-  return hasCapability(principal, "content.view") || hasCapability(principal, "content.edit.any");
-}
-
 // Deployment recovery exposes infrastructure state and remains administrator-only.
 export function canViewPublishActivity(principal: Principal): boolean {
   return hasCapability(principal, "settings.manage");
-}
-
-// Compatibility alias for call sites outside the route shell. New code should
-// name the editorial queue or publish activity boundary explicitly.
-export function canViewQueue(principal: Principal): boolean {
-  return canViewEditorialQueue(principal);
 }
 
 export function canManageSettings(principal: Principal): boolean {

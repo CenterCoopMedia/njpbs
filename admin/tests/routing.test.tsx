@@ -76,10 +76,6 @@ const functionMocks = vi.hoisted(() => ({
   cmsSaveSettings: vi.fn(),
 }));
 
-const reviewMocks = vi.hoisted(() => ({
-  cmsListReviewQueue: vi.fn(),
-}));
-
 // Firestore reads made by newsroom record lists and the content editor's page hydration.
 // Empty snapshots keep the work surface honest and hydrate the editor empty in tests.
 const firestoreMocks = vi.hoisted(() => ({
@@ -137,11 +133,6 @@ vi.mock("../src/lib/functions", async (importOriginal) => ({
   cmsSaveContent: functionMocks.cmsSaveContent,
   cmsUpdateMediaMetadata: functionMocks.cmsUpdateMediaMetadata,
   cmsSaveSettings: functionMocks.cmsSaveSettings,
-}));
-
-vi.mock("../src/lib/review-queue", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../src/lib/review-queue")>()),
-  cmsListReviewQueue: reviewMocks.cmsListReviewQueue,
 }));
 
 function shellFor(
@@ -260,10 +251,6 @@ beforeAll(() => adminRoutePreloaders.content());
 
 beforeEach(() => {
   vi.clearAllMocks();
-  reviewMocks.cmsListReviewQueue.mockResolvedValue({
-    success: true,
-    requests: [],
-  });
   localStorage.clear();
   sessionStorage.clear();
   authMocks.getIdToken.mockResolvedValue("id-token");
@@ -295,7 +282,6 @@ beforeEach(() => {
     pageCount: 1,
     statusCounts: {
       draft: 0,
-      in_review: 0,
       scheduled: 0,
       published: 0,
       archived: 0,
@@ -411,7 +397,6 @@ describe("admin routing shell", () => {
       pageCount: 3,
       statusCounts: {
         draft: 9,
-        in_review: 0,
         scheduled: 0,
         published: 0,
         archived: 0,
@@ -476,7 +461,7 @@ describe("admin routing shell", () => {
       within(nav).queryByRole("link", { name: "Home page" }),
     ).not.toBeInTheDocument();
     expect(
-      within(nav).queryByRole("link", { name: "Editorial queue" }),
+      within(nav).queryByRole("link", { name: "Publish activity" }),
     ).not.toBeInTheDocument();
     expect(
       within(nav).queryByRole("link", { name: "Staff access" }),
@@ -596,7 +581,7 @@ describe("admin routing shell", () => {
     renderRouted(shellFor(adminPrincipal), ["/dashboard"]);
     const nav = screen.getByRole("navigation", { name: "Primary" });
     expect(
-      within(nav).getByRole("link", { name: "Editorial queue" }),
+      within(nav).getByRole("link", { name: "Publish activity" }),
     ).toBeInTheDocument();
     expect(
       within(nav).getByRole("link", { name: "Staff access" }),
@@ -665,8 +650,8 @@ describe("admin routing shell", () => {
       within(nav).getByRole("link", { name: "Media library" }),
     ).toBeInTheDocument();
     expect(
-      within(nav).getByRole("link", { name: "Editorial queue" }),
-    ).toBeInTheDocument();
+      within(nav).queryByRole("link", { name: "Publish activity" }),
+    ).not.toBeInTheDocument();
     expect(
       within(nav).queryByRole("link", { name: "Staff access" }),
     ).not.toBeInTheDocument();
@@ -1211,7 +1196,7 @@ describe("admin routing shell", () => {
     renderRouted(shellFor(adminPrincipal), ["/publish-queue"]);
     const nav = screen.getByRole("navigation", { name: "Primary" });
     expect(
-      within(nav).getByRole("link", { name: "Editorial queue" }),
+      within(nav).getByRole("link", { name: "Publish activity" }),
     ).toHaveAttribute("aria-current", "page");
   });
 
@@ -1362,13 +1347,16 @@ describe("capability-gated routes", () => {
     ).toBeInTheDocument();
   });
 
-  it("redirects a contributor off the editorial queue to newsroom home with a notice", async () => {
-    renderRouted(shellFor(contributorPrincipal), ["/publish-queue"]);
+  it.each([
+    ["contributor", contributorPrincipal],
+    ["site-wide editor", siteWideEditorPrincipal],
+  ])("redirects a %s off publish activity to newsroom home with a notice", async (_name, principal) => {
+    renderRouted(shellFor(principal), ["/publish-queue"]);
     expect(
       await screen.findByRole("heading", { level: 1, name: "Home" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByText("The editorial queue is available to staff who can review content."),
+      screen.getByText("Publish activity is available to site administrators."),
     ).toBeInTheDocument();
   });
 
@@ -1870,7 +1858,6 @@ describe("navigation protection", () => {
       pageCount: 1,
       statusCounts: {
         draft: 0,
-        in_review: 0,
         scheduled: 0,
         published: 1,
         archived: 0,
@@ -1953,7 +1940,6 @@ describe("navigation protection", () => {
       pageCount: 1,
       statusCounts: {
         draft: 0,
-        in_review: 0,
         scheduled: 0,
         published: 1,
         archived: 0,
@@ -3221,24 +3207,22 @@ describe("the canonical editorial task flow (#1036)", () => {
     createdBy: "user",
   };
 
-  const queuedPost = {
-    requestId: `review_${"a".repeat(64)}`,
-    recordId: "post-1",
-    title: "Garden State update",
-    state: "in_review",
-    collection: "cmsPosts",
-    contentType: "post",
-    sourceVersion: 2,
-    requestedByLabel: "Blake Sutton",
-    requestedAt: "2026-08-18T12:00:00.000Z",
-    assigneeLabel: null,
-    recovered: false,
-  };
-
-  function queueWith(request: Record<string, unknown>) {
-    reviewMocks.cmsListReviewQueue.mockResolvedValue({
+  function homeWith(record: Record<string, unknown>) {
+    functionMocks.cmsListContent.mockResolvedValue({
       success: true,
-      requests: [request],
+      records: [record],
+      total: 1,
+      allCount: 1,
+      mineCount: 0,
+      assignedCount: 0,
+      page: 1,
+      pageCount: 1,
+      statusCounts: {
+        draft: 1,
+        scheduled: 0,
+        published: 0,
+        archived: 0,
+      },
     });
   }
 
@@ -3266,10 +3250,16 @@ describe("the canonical editorial task flow (#1036)", () => {
     });
   });
 
-  it("walks open, edit, media, save and return from the editorial queue inside its budget", async () => {
-    queueWith(queuedPost);
+  it("walks open, edit, media, save and return from newsroom home inside its budget", async () => {
+    homeWith({
+      id: "post-1",
+      kind: "post",
+      title: "Garden State update",
+      status: "draft",
+      updatedAt: "2026-08-11T12:00:00.000Z",
+    });
     const router = createMemoryRouter(buildRoutes(), {
-      initialEntries: ["/publish-queue"],
+      initialEntries: ["/"],
     });
     render(
       <ShellProvider value={shellFor(adminPrincipal)}>
@@ -3289,8 +3279,8 @@ describe("the canonical editorial task flow (#1036)", () => {
     let mark = 0;
     const spentSinceMark = () => activations - mark;
 
-    // Open. The queue row's own title is the control, so the record opens from the list the
-    // reviewer is reading rather than from a separate action column.
+    // Open. The recent work row's own title is the control, so the record opens from the list the
+    // person is reading rather than from a separate action column.
     mark = activations;
     const open = await screen.findByRole(
       "link",
@@ -3360,67 +3350,20 @@ describe("the canonical editorial task flow (#1036)", () => {
     );
     expect(saved.document.leadMedia).toEqual({ kind: "image", data: { assetId: mediaAsset.id, alt: "Monitors and switchers in the control room" } });
 
-    // Return to the originating list. One activation, and it lands on the queue the reviewer was
-    // working -- not on a content list they never opened and would have to navigate back out of.
+    // Return to the originating list. One activation, and it lands on the home the person was
+    // working from -- not on a content list they never opened and would have to navigate back out of.
     mark = activations;
     const back = await within(documentBar).findByRole("link", {
-      name: "Back to editorial queue",
+      name: "Back to newsroom home",
     });
     spend(() => fireEvent.click(back));
     await waitFor(() =>
-      expect(router.state.location.pathname).toBe("/publish-queue"),
+      expect(router.state.location.pathname).toBe("/"),
     );
     expect(spentSinceMark()).toBe(taskFlowStage("return").activationBudget);
 
     expect(activations).toBeLessThanOrEqual(taskFlowActivationBudget());
     expect(activations).toBe(8);
-  }, 30_000);
-
-  it("returns a page opened from the editorial queue to the queue", async () => {
-    queueWith({
-      ...queuedPost,
-      requestId: `review_${"b".repeat(64)}`,
-      recordId: "home",
-      title: "Homepage",
-      collection: "cmsPages",
-      contentType: "page",
-    });
-    functionMocks.cmsGetContent.mockResolvedValue({
-      success: true,
-      found: true,
-      document: {
-        id: "home",
-        template: "home",
-        title: "Homepage",
-        blocks: [],
-        status: "in_review",
-        version: 2,
-        createdBy: "user",
-      },
-    });
-    const router = createMemoryRouter(buildRoutes(), {
-      initialEntries: ["/publish-queue"],
-    });
-    render(
-      <ShellProvider value={shellFor(adminPrincipal)}>
-        <RouterProvider router={router} />
-      </ShellProvider>,
-    );
-
-    fireEvent.click(
-      await screen.findByRole("link", { name: "Homepage" }, { timeout: 10_000 }),
-    );
-    await waitFor(() =>
-      expect(router.state.location.pathname).toBe("/content/pages/home/edit"),
-    );
-
-    expect(
-      await screen.findByRole(
-        "link",
-        { name: "Back to editorial queue" },
-        { timeout: 10_000 },
-      ),
-    ).toHaveAttribute("href", "/publish-queue");
   }, 30_000);
 
   it("returns work opened from newsroom home to newsroom home", async () => {
@@ -3443,7 +3386,6 @@ describe("the canonical editorial task flow (#1036)", () => {
       pageCount: 1,
       statusCounts: {
         draft: 1,
-        in_review: 0,
         scheduled: 0,
         published: 0,
         archived: 0,

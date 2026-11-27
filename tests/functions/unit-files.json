@@ -55,7 +55,6 @@
   "tests/functions/list-audit.test.js",
   "tests/functions/list-media-usage.test.js",
   "tests/functions/list-media.test.js",
-  "tests/functions/list-review-queue.test.js",
   "tests/functions/live-production-update-unit.test.ts",
   "tests/functions/login-audit.test.js",
   "tests/functions/mailchimp-analytics.test.js",

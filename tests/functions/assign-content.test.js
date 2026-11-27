@@ -16,14 +16,12 @@ import {
   signOut,
 } from "firebase/auth";
 import assignment from "../../functions/assign-content.js";
-import reviewQueue from "../../functions/lib/review-queue.js";
 
 const {
   createCmsAssignContentHandler,
   isAssignableUser,
   validateAssignmentRequest,
 } = assignment;
-const { createReviewRequest } = reviewQueue;
 
 const admin = adminPkg;
 const PROJECT = "demo-njpbs";
@@ -250,17 +248,10 @@ describe("cmsAssignContent", () => {
       id: "record",
       type: "program",
       title: "Garden State",
-      status: "in_review",
+      status: "approved",
       assignee: "editor-1",
       updatedBy: "editor-before",
       version: 5,
-      reviewRequest: createReviewRequest({
-        collection: "cmsPosts",
-        id: "record",
-        sourceVersion: 5,
-        requestedBy: "author-1",
-        requestedAt: "2026-07-23T13:00:00.000Z",
-      }),
     });
     const handler = createCmsAssignContentHandler({
       firestore: db,
@@ -278,11 +269,6 @@ describe("cmsAssignContent", () => {
       assignee: null,
       updatedBy: "admin-1",
       version: 6,
-      reviewRequest: {
-        sourceVersion: 6,
-        requestedBy: "author-1",
-        requestedAt: "2026-07-23T13:00:00.000Z",
-      },
     });
   });
 

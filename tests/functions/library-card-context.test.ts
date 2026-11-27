@@ -17,7 +17,7 @@ const fields = {
 };
 const asset = { lifecycle: "active", source: "site_seed", category: "general", mimeType: "image/png",
   url: "https://media.njpbs.org/cms-media/card.png", width: 640, height: 360, altText: null };
-const records = (kind: keyof typeof fields) => ({ id: kind, type: kind, ...fields[kind], status: "in_review", version: 2 });
+const records = (kind: keyof typeof fields) => ({ id: kind, type: kind, ...fields[kind], status: "draft", version: 2 });
 beforeAll(() => {
   if (!/^127\.0\.0\.1:\d+$/.test(process.env.FIRESTORE_EMULATOR_HOST ?? "") ||
       !/^demo-njpbs(?:-[a-z0-9-]+)?$/.test(process.env.GCLOUD_PROJECT ?? "")) throw new Error("Use a local demo Firestore emulator.");
@@ -57,7 +57,7 @@ describe("approved library context preparation", () => {
     expect((await db.collection("cmsPosts").get()).empty).toBe(true);
   });
 
-  it.each(["save", "reopen", "submit", "sendBack", "restore", "revise"])("does not accept working %s as public context", async action => {
+  it.each(["save", "edit", "restore", "revise"])("does not accept working %s as public context", async action => {
     expect(await prepare("newsletter", action)).toBeNull();
   });
 

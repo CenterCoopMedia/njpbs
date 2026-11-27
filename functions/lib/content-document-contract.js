@@ -41,10 +41,6 @@ const SERVER_MANAGED_CONTENT_FIELDS = Object.freeze([
   "updatedAt",
   "updatedBy",
   "assignee",
-  // Immutable submit attribution plus the current reviewable version. Lifecycle,
-  // save, and assignment boundaries own this envelope; the browser may not
-  // manufacture or rewrite a review request.
-  "reviewRequest",
   "electionResultsApprovals",
   // The scoped-grant desk (#619). Server-managed for the same reason as createdBy: it is
   // an authorization fact, so a client that could write it through the document overlay

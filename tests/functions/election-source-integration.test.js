@@ -80,9 +80,7 @@ async function transition(collection, current, action, actor = actors.editor) {
   return call("transition", { collection, id: current.id, baseVersion: current.version, action }, actor);
 }
 async function approve(collection, current) {
-  const submitted = await transition(collection, current, "submit");
-  expect(submitted.status, submitted.body.error).toBe(200);
-  const approved = await transition(collection, submitted.body.document, "approve");
+  const approved = await transition(collection, current, "approve");
   expect(approved.status, approved.body.error).toBe(200);
   return approved.body.document;
 }

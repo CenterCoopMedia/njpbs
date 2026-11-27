@@ -64,7 +64,7 @@ const storyCtaSources = {
     assignedCount: 0,
     page: 1,
     pageCount: 1,
-    statusCounts: { draft: 0, in_review: 0, approved: 1, scheduled: 0, published: 0, archived: 0 },
+    statusCounts: { draft: 0, approved: 1, scheduled: 0, published: 0, archived: 0 },
   }),
   loadRecord: async (kind: string, id: string) => kind === "newsletter" && id === newsletterRecord.id
     ? { status: "ready" as const, record: newsletterRecord }

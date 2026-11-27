@@ -138,7 +138,7 @@ describe("rail destinations prefetch their own module after intent", () => {
   it("downloads nothing when the pointer crosses the rail without stopping", () => {
     renderShell();
 
-    for (const label of ["Media library", "Activity", "Editorial queue"]) {
+    for (const label of ["Media library", "Activity", "Publish activity"]) {
       const link = railLink(label);
       pointerEnter(link);
       pointerLeave(link);
@@ -173,7 +173,7 @@ describe("rail destinations prefetch their own module after intent", () => {
 
   it("keeps a keyboard intent alive when the pointer slides off the focused row", () => {
     renderShell();
-    const link = railLink("Editorial queue");
+    const link = railLink("Publish activity");
 
     focusRow(link);
     pointerLeave(link);
@@ -186,7 +186,7 @@ describe("rail destinations prefetch their own module after intent", () => {
 
   it("drops the intent when the keyboard moves on and no pointer is holding it", () => {
     renderShell();
-    const link = railLink("Editorial queue");
+    const link = railLink("Publish activity");
 
     focusRow(link);
     blurRow(link);

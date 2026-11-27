@@ -17,7 +17,6 @@ import {
   signOut,
 } from "firebase/auth";
 import lifecycleTransition from "../../functions/lifecycle-transition.js";
-import reviewQueue from "../../functions/lib/review-queue.js";
 import editorialNotifications from "../../functions/editorial-notification.js";
 
 const {
@@ -134,6 +133,20 @@ function storedArticle(overrides = {}) {
   });
 }
 
+// Approval is admitted for a Spanish edition Post, so approval validation runs on it.
+function spanishEditionDraft(overrides = {}) {
+  return publishedRecord({
+    status: "draft",
+    title: "Informe de la costa",
+    editionOf: "original-post",
+    tags: [],
+    slug: "informe-de-la-costa",
+    previousSlugs: [],
+    locale: "es",
+    ...overrides,
+  });
+}
+
 const liveMediaUsage = (sourceVersion) => ({
   state: "published",
   sourceVersion,
@@ -226,131 +239,42 @@ describe("cmsTransitionContent", () => {
       baseVersion: 1,
       action: "unpublish",
     })).toBeNull();
-    expect(validateTransitionRequest({
-      collection: "cmsPages",
-      id: "watch",
-      baseVersion: 1,
-      action: "submit",
-    })).toBeNull();
+    for (const action of ["submit", "sendBack", "reopen"]) {
+      expect(validateTransitionRequest({
+        collection: "cmsPages",
+        id: "watch",
+        baseVersion: 1,
+        action,
+      })).toBe("action must be an admitted lifecycle action");
+    }
   });
 
-  it("moves a draft through review and approval, then reopens it explicitly", async () => {
-    await db.collection("cmsPages").doc("watch").set(publishedPage({
-      status: "draft",
-      version: 4,
-    }));
-
-    const submitted = await transition(db, {
-      collection: "cmsPages",
-      id: "watch",
-      baseVersion: 4,
-      action: "submit",
-    });
-    expect(submitted.statusCode).toBe(200);
-    expect(submitted.body.document).toMatchObject({
-      status: "in_review",
-      version: 5,
-      reviewRequest: {
-        collection: "cmsPages",
-        recordId: "watch",
-        state: "in_review",
-        sourceVersion: 5,
-        requestedBy: "editor-1",
-        requestedAt: "2026-08-13T04:00:00.000Z",
-      },
-    });
-    expect(submitted.body.reviewRequest).toEqual(
-      submitted.body.document.reviewRequest,
-    );
-    expect(submitted.body.reviewRequest.requestId).toMatch(
-      /^review_[a-f0-9]{64}$/,
-    );
+  it("refuses approval for an ordinary draft and refuses the retired review actions", async () => {
+    const before = publishedPage({ status: "draft", version: 4 });
+    await db.collection("cmsPages").doc("watch").set(before);
 
     const approved = await transition(db, {
       collection: "cmsPages",
       id: "watch",
-      baseVersion: 5,
+      baseVersion: 4,
       action: "approve",
     });
-    expect(approved.statusCode).toBe(200);
-    expect(approved.body.document).toMatchObject({ status: "approved", version: 6 });
-    expect(approved.body.document.reviewRequest).toBeUndefined();
-    expect(approved.body.document).not.toHaveProperty("translationApproval");
-    await db.collection("cmsPages").doc("watch").update({
-      scheduledPublishFailure: {
-        failedAt: "2026-08-13T18:30:00.000Z",
-        failedBy: "system:scheduler",
-        reason: "The scheduled publication failed.",
-      },
-    });
-
-    const reopened = await transition(db, {
-      collection: "cmsPages",
-      id: "watch",
-      baseVersion: 6,
-      action: "reopen",
-    });
-    expect(reopened.statusCode).toBe(200);
-    expect(reopened.body.document).toMatchObject({ status: "draft", version: 7 });
-    expect(reopened.body.document.scheduledPublishFailure).toBeUndefined();
-    const historyActions = (await rows(db, "cmsVersionHistory"))
-      .map((row) => row.action);
-    expect(historyActions).toHaveLength(3);
-    expect(historyActions).toEqual(
-      expect.arrayContaining(["submit", "approve", "reopen"]),
-    );
-  });
-
-  it("makes a lost submit response safe to retry without duplicating an active request", async () => {
-    await db.collection("cmsPages").doc("watch").set(
-      publishedPage({ status: "draft", version: 4 }),
+    expect(approved.statusCode).toBe(400);
+    expect(approved.body.error).toBe(
+      "Approval is only for election results, Spanish editions, and library cards. Publish this draft directly.",
     );
 
-    const submitted = await transition(db, {
-      collection: "cmsPages",
-      id: "watch",
-      baseVersion: 4,
-      action: "submit",
-    });
-    expect(submitted.statusCode).toBe(200);
-    const firstRequest = submitted.body.document.reviewRequest;
-
-    const replay = await transition(db, {
-      collection: "cmsPages",
-      id: "watch",
-      baseVersion: 5,
-      action: "submit",
-    });
-    expect(replay.statusCode).toBe(409);
-    const stored = (
-      await db.collection("cmsPages").doc("watch").get()
-    ).data();
-    expect(stored).toMatchObject({
-      status: "in_review",
-      version: 5,
-      reviewRequest: firstRequest,
-    });
-    expect(await rows(db, "cmsVersionHistory")).toHaveLength(1);
-    expect(await rows(db, "admin_logs")).toHaveLength(1);
-  });
-
-  it("cannot leave review state behind when a submit transaction fails", async () => {
-    const before = publishedPage({ status: "draft", version: 4 });
-    await db.collection("cmsPages").doc("watch").set(before);
-
-    const staleSubmit = await transition(db, {
-      collection: "cmsPages",
-      id: "watch",
-      baseVersion: 3,
-      action: "submit",
-    });
-
-    expect(staleSubmit.statusCode).toBe(409);
-    const stored = (
-      await db.collection("cmsPages").doc("watch").get()
-    ).data();
-    expect(stored).toEqual(before);
-    expect(stored.reviewRequest).toBeUndefined();
+    for (const action of ["submit", "sendBack", "reopen"]) {
+      const refused = await transition(db, {
+        collection: "cmsPages",
+        id: "watch",
+        baseVersion: 4,
+        action,
+      });
+      expect(refused.statusCode, action).toBe(400);
+      expect(refused.body.error, action).toBe("action must be an admitted lifecycle action");
+    }
+    expect((await db.collection("cmsPages").doc("watch").get()).data()).toEqual(before);
     expect(await rows(db, "cmsVersionHistory")).toHaveLength(0);
     expect(await rows(db, "admin_logs")).toHaveLength(0);
   });
@@ -387,7 +311,7 @@ describe("cmsTransitionContent", () => {
       .toEqual(liveMediaUsage(4));
   });
 
-  it.each(["in_review", "approved", "scheduled", "published"])(
+  it.each(["approved", "scheduled", "published"])(
     "opens %s content with one edit action",
     async (status) => {
       const before = publishedPage({
@@ -416,7 +340,7 @@ describe("cmsTransitionContent", () => {
   );
 
   it.each([
-    ["draft", "submit"], ["in_review", "edit"], ["approved", "edit"],
+    ["draft", "approve"], ["approved", "edit"],
     ["scheduled", "edit"], ["published", "edit"],
   ])("refuses a Writer's %s Home transition without changing its schedule or version", async (status, action) => {
     const before = publishedPage({ id: "home", template: "home", status, createdBy: "writer-1" });
@@ -468,34 +392,28 @@ describe("cmsTransitionContent", () => {
   });
 
   it.each([
-    [publishedPage({ status: "in_review", blocks: [{ id: "bad", type: "unknown", order: 0, visible: true, data: {} }] }), /block/i],
-    [publishedPage({ status: "in_review", social: { imageAssetId: 42 } }), /social\.imageAssetId/i],
-  ])("refuses approval when the reviewed content is not publishable", async (current, message) => {
-    await db.collection("cmsPages").doc("watch").set(current);
+    [spanishEditionDraft({ blocks: [{ id: "bad", type: "unknown", order: 0, visible: true, data: {} }] }), /block/i],
+    [spanishEditionDraft({ social: { imageAssetId: 42 } }), /social\.imageAssetId/i],
+  ])("refuses approval when the Spanish edition is not publishable", async (current, message) => {
+    await db.collection("cmsPosts").doc("record-1").set(current);
 
     const res = await transition(db, {
-      collection: "cmsPages",
-      id: "watch",
+      collection: "cmsPosts",
+      id: "record-1",
       baseVersion: current.version,
       action: "approve",
     });
 
     expect(res.statusCode).toBe(400);
     expect(res.body.error).toMatch(message);
-    expect((await db.collection("cmsPages").doc("watch").get()).data())
+    expect((await db.collection("cmsPosts").doc("record-1").get()).data())
       .toEqual(current);
     expect(await rows(db, "cmsVersionHistory")).toHaveLength(0);
     expect(await rows(db, "admin_logs")).toHaveLength(0);
   });
 
-  it("refuses approval when an Interactive/Data Lab Post has no interactive content", async () => {
-    const current = publishedRecord({
-      status: "in_review",
-      tags: ["format:interactive"],
-      slug: "shore-report",
-      previousSlugs: [],
-      locale: "en",
-    });
+  it("refuses approval when an Interactive/Data Lab Spanish edition has no interactive content", async () => {
+    const current = spanishEditionDraft({ tags: ["format:interactive"] });
     await db.collection("cmsPosts").doc("record-1").set(current);
 
     const res = await transition(db, {
@@ -520,10 +438,7 @@ describe("cmsTransitionContent", () => {
   // approval gate alone was not enough: restore in particular would move an archived
   // Article back to draft, contradicting the retirement it was archived under.
   it.each([
-    ["submit", "draft", "in_review"],
-    ["sendBack", "in_review", "draft"],
-    ["approve", "in_review", "approved"],
-    ["reopen", "approved", "draft"],
+    ["approve", "draft", "approved"],
     ["revise", "published", "draft"],
     ["unschedule", "scheduled", "draft"],
     ["unpublish", "published", "draft"],
@@ -539,7 +454,6 @@ describe("cmsTransitionContent", () => {
         id: "record-1",
         baseVersion: 3,
         action,
-        ...(action === "sendBack" ? { comment: "Needs another pass." } : {}),
       },
       { requirePrincipalFn: adminUser },
     );
@@ -593,15 +507,8 @@ describe("cmsTransitionContent", () => {
     );
   });
 
-  it("accepts a legacy post date when approving retained content", async () => {
-    const current = publishedRecord({
-      status: "in_review",
-      date: "2026-08-11T15:30:00.000Z",
-      tags: [],
-      slug: "shore-report",
-      previousSlugs: [],
-      locale: "en",
-    });
+  it("accepts a legacy post date when approving a retained Spanish edition", async () => {
+    const current = spanishEditionDraft({ date: "2026-08-11T15:30:00.000Z" });
     await db.collection("cmsPosts").doc("record-1").set(current);
 
     const res = await transition(db, {
@@ -619,41 +526,29 @@ describe("cmsTransitionContent", () => {
     });
   });
 
-  it("records the required send-back note with the transition evidence", async () => {
-    await db.collection("cmsPosts").doc("record-1").set(publishedRecord({
-      status: "in_review",
-      version: 3,
-    }));
+  it("commits the approval before delivering its editorial notice", async () => {
+    await db.collection("cmsPosts").doc("record-1").set(spanishEditionDraft());
 
-    const missing = await transition(db, {
+    const approved = await transition(db, {
       collection: "cmsPosts",
       id: "record-1",
       baseVersion: 3,
-      action: "sendBack",
+      action: "approve",
     });
-    expect(missing.statusCode).toBe(400);
-
-    const sentBack = await transition(db, {
-      collection: "cmsPosts",
-      id: "record-1",
-      baseVersion: 3,
-      action: "sendBack",
-      comment: "  Add a second source.  ",
-    });
-    expect(sentBack.statusCode).toBe(200);
-    expect(sentBack.body.document).toMatchObject({ status: "draft", version: 4 });
+    expect(approved.statusCode).toBe(200);
+    expect(approved.body.document).toMatchObject({ status: "approved", version: 4 });
     expect(await rows(db, "cmsVersionHistory")).toEqual([
-      expect.objectContaining({ action: "sendBack", comment: "Add a second source." }),
+      expect.objectContaining({ action: "approve" }),
     ]);
     const auditRows = await rows(db, "admin_logs");
     expect(auditRows).toEqual([
       expect.objectContaining({
-        action: "cms.sendBack",
+        action: "cms.approve",
         after: {
-          status: "draft", version: 4, comment: "Add a second source.",
+          status: "approved", version: 4,
           editorialNotice: {
-            collection: "cmsPosts", id: "record-1", action: "sendBack", ownerId: "author-1",
-            requester: null, assignee: null, section: null,
+            collection: "cmsPosts", id: "record-1", action: "approve", ownerId: "author-1",
+            assignee: null, section: null,
           },
         },
       }),
@@ -673,18 +568,19 @@ describe("cmsTransitionContent", () => {
       firestore: db, authClient, sendEmail, adminOrigin: "https://boardwalk.example.org",
     })).resolves.toEqual([{ state: "unknown" }]);
     expect(sendEmail).toHaveBeenCalledOnce();
-    expect(committedAtDelivery).toMatchObject({ document: { status: "draft", version: 4 }, audit: auditRows });
-    expect((await db.doc("cmsPosts/record-1").get()).data()).toMatchObject({ status: "draft", version: 4 });
+    expect(committedAtDelivery).toMatchObject({ document: { status: "approved", version: 4 }, audit: auditRows });
+    expect((await db.doc("cmsPosts/record-1").get()).data()).toMatchObject({ status: "approved", version: 4 });
     expect(await rows(db, "admin_logs")).toEqual(auditRows);
   });
 
-  it("lets an owner submit a draft but does not let that contributor approve it", async () => {
-    await db.collection("cmsPosts").doc("record-1").set(publishedRecord({
+  it("refuses approval of an ordinary Post draft and refuses a contributor before the scope check", async () => {
+    const before = publishedRecord({
       status: "draft",
       tags: [],
       createdBy: "contributor-1",
       version: 3,
-    }));
+    });
+    await db.collection("cmsPosts").doc("record-1").set(before);
     const contributor = async () => ({
       uid: "contributor-1",
       principal: {
@@ -692,45 +588,41 @@ describe("cmsTransitionContent", () => {
         grants: [{ role: "contributor" }],
       },
     });
-
-    const submitted = await transition(db, {
+    const request = {
       collection: "cmsPosts",
       id: "record-1",
       baseVersion: 3,
-      action: "submit",
-    }, { requirePrincipalFn: contributor });
-    expect(submitted.statusCode).toBe(200);
-
-    const refused = await transition(db, {
-      collection: "cmsPosts",
-      id: "record-1",
-      baseVersion: 4,
       action: "approve",
-    }, { requirePrincipalFn: contributor });
+    };
+
+    const refused = await transition(db, request, { requirePrincipalFn: contributor });
     expect(refused.statusCode).toBe(403);
-    expect((await db.collection("cmsPosts").doc("record-1").get()).data())
-      .toMatchObject({ status: "in_review", version: 4 });
-    expect(await rows(db, "cmsVersionHistory")).toHaveLength(1);
+
+    const outOfScope = await transition(db, request, { requirePrincipalFn: adminUser });
+    expect(outOfScope.statusCode).toBe(400);
+    expect(outOfScope.body.error).toBe(
+      "Approval is only for election results, Spanish editions, and library cards. Publish this draft directly.",
+    );
+    expect((await db.collection("cmsPosts").doc("record-1").get()).data()).toEqual(before);
+    expect(await rows(db, "cmsVersionHistory")).toHaveLength(0);
+    expect(await rows(db, "admin_logs")).toHaveLength(0);
   });
 
-  it("records Spanish translation approval for the exact saved revision and clears it on reopening", async () => {
+  it("records Spanish translation approval for the exact saved revision and clears it on edit", async () => {
     const ref = db.doc("cmsPosts/spanish-post");
-    await ref.set({
+    const draft = {
       type: "post", title: "Noticias locales", locale: "es", editionOf: "original-post",
       section: "watch", createdBy: "translator-1", blocks: [], tags: [],
       status: "draft", version: 7, contentVersion: 3,
-    });
+    };
+    await ref.set(draft);
     const target = { collection: "cmsPosts", id: "spanish-post" };
     const submitter = () => editor({
       uid: "translator-1",
       principal: { id: "translator-1", grants: [{ role: "contributor", sections: ["watch"] }] },
     });
-    const submitted = await transition(db, { ...target, action: "submit", baseVersion: 7 }, { requirePrincipalFn: submitter });
-    expect(submitted.statusCode).toBe(200);
-    expect(submitted.body.document).toMatchObject({ status: "in_review", version: 8, contentVersion: 3 });
-    expect(submitted.body.document).not.toHaveProperty("translationApproval");
 
-    const request = { ...target, action: "approve", baseVersion: 8 };
+    const request = { ...target, action: "approve", baseVersion: 7 };
     const scopedEditor = (section) => () => editor({
       principal: { id: "editor-1", grants: [{ role: "editor", sections: [section] }] },
     });
@@ -738,23 +630,23 @@ describe("cmsTransitionContent", () => {
     expect((await transition(db, request, { requirePrincipalFn: submitter })).statusCode).toBe(403);
     expect((await transition(db, request, { requirePrincipalFn: scopedEditor("support") })).statusCode).toBe(403);
     expect((await transition(db, request, { ...reviewer, readAutomationAccountFn: async () => true })).statusCode).toBe(403);
-    expect((await transition(db, { ...request, baseVersion: 7 }, reviewer)).statusCode).toBe(409);
-    expect((await ref.get()).data()).toEqual(submitted.body.document);
+    expect((await transition(db, { ...request, baseVersion: 6 }, reviewer)).statusCode).toBe(409);
+    expect((await ref.get()).data()).toEqual(draft);
 
     const receipt = {
-      reviewedVersion: 8, contentVersion: 3, approvedBy: "editor-1", approvedAt: "2026-08-13T04:00:00.000Z",
+      reviewedVersion: 7, contentVersion: 3, approvedBy: "editor-1", approvedAt: "2026-08-13T04:00:00.000Z",
     };
     const approved = await transition(db, request, reviewer);
     expect(approved.statusCode).toBe(200);
     const stored = (await ref.get()).data();
-    expect(stored).toMatchObject({ status: "approved", version: 9, contentVersion: 3, translationApproval: receipt });
+    expect(stored).toMatchObject({ status: "approved", version: 8, contentVersion: 3, translationApproval: receipt });
     expect(stored).not.toHaveProperty("published");
     expect(await rows(db, "cmsVersionHistory")).toEqual(expect.arrayContaining([
       expect.objectContaining({ action: "approve", after: expect.objectContaining({ translationApproval: receipt }) }),
     ]));
 
-    const reopened = await transition(db, { ...target, action: "edit", baseVersion: 9 }, { requirePrincipalFn: submitter });
-    expect(reopened.statusCode).toBe(200);
+    const edited = await transition(db, { ...target, action: "edit", baseVersion: 8 }, { requirePrincipalFn: submitter });
+    expect(edited.statusCode).toBe(200);
     expect((await ref.get()).data()).not.toHaveProperty("translationApproval");
   });
 
@@ -956,14 +848,8 @@ describe("cmsTransitionContent", () => {
     ]);
   });
 
-  it.each(["draft", "in_review", "approved", "scheduled"])("withdraws an older public snapshot from working %s", async (status) => {
-    const reviewRequest = reviewQueue.createReviewRequest({
-      collection: "cmsPages", id: "watch",
-      sourceVersion: 4, requestedBy: "original-writer",
-      requestedAt: "2026-08-01T12:00:00.000Z",
-    });
+  it.each(["draft", "approved", "scheduled"])("withdraws an older public snapshot from working %s", async (status) => {
     const before = publishedPage({ status, publiclyVisible: true, title: "New working title",
-      ...(status === "in_review" ? { reviewRequest } : {}),
       ...(status === "scheduled" ? { publishAt: "2030-01-01T00:00:00.000Z" } : {}),
     });
     await db.collection("cmsPages").doc("watch").set(before);
@@ -971,9 +857,6 @@ describe("cmsTransitionContent", () => {
     expect(res.statusCode).toBe(200);
     expect(res.body.document).toMatchObject({ status: status === "scheduled" ? "draft" : status, publiclyVisible: false,
       version: 5, title: "New working title", published: before.published });
-    if (status === "in_review") {
-      expect(res.body.document.reviewRequest).toEqual({ ...reviewRequest, sourceVersion: 5 });
-    }
     expect(res.body.document.publishAt).toBeUndefined();
     expect(res.body.publication.status).toBe("queued");
   });
@@ -1055,20 +938,10 @@ describe("cmsTransitionContent", () => {
     expect(history.before.legacyPayload).toBeUndefined();
   });
 
-  it.each(["draft", "in_review", "approved"])(
+  it.each(["draft", "approved"])(
     "archives saved %s content",
     async (status) => {
-      const reviewRequest = reviewQueue.createReviewRequest({
-        collection: "cmsPosts",
-        id: "record-1",
-        sourceVersion: 3,
-        requestedBy: "original-writer",
-        requestedAt: "2026-08-01T12:00:00.000Z",
-      });
-      await db.collection("cmsPosts").doc("record-1").set(publishedRecord({
-        status,
-        ...(status === "in_review" ? { reviewRequest } : {}),
-      }));
+      await db.collection("cmsPosts").doc("record-1").set(publishedRecord({ status }));
 
       const archived = await transition(db, {
         collection: "cmsPosts",
@@ -1083,7 +956,6 @@ describe("cmsTransitionContent", () => {
         toStatus: "archived",
         document: { status: "archived", version: 4 },
       });
-      expect(archived.body.document.reviewRequest).toBeUndefined();
     },
   );
 

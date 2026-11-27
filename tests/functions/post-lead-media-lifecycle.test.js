@@ -10,10 +10,12 @@ function response() {
     set() { return this; }, status(code) { this.statusCode = code; return this; }, json(body) { this.body = body; this.headersSent = true; return this; } };
 }
 
-describe("Post lead media review lifecycle", () => {
-  it.each(["submit", "approve"])("uses the new lead media for a Multimedia %s decision", async action => {
-    const current = { type: "post", title: "Coastal voices", section: "watch", version: 1,
-      status: action === "submit" ? "draft" : "in_review", createdBy: "lead-author", tags: ["format:multimedia"], blocks: [], leadMedia: lead };
+describe("Post lead media approval lifecycle", () => {
+  // Approval is admitted for a Spanish edition, so its lead media is checked at approval.
+  it("uses the new lead media for a Multimedia Spanish edition approval", async () => {
+    const action = "approve";
+    const current = { type: "post", title: "Voces costeras", section: "watch", version: 1, editionOf: "original-post", locale: "es",
+      status: "draft", createdBy: "lead-author", tags: ["format:multimedia"], blocks: [], leadMedia: lead };
     await db.doc(path).set(current);
     const handler = lifecycle.createCmsTransitionContentHandler({ firestore: db,
       requirePrincipalFn: async () => ({ uid: "lead-editor", principal: { id: "lead-editor", grants: [{ role: "editor" }] } }),
@@ -22,11 +24,12 @@ describe("Post lead media review lifecycle", () => {
     const res = response();
     await handler({ method: "POST", body, headers: { "content-type": "application/json" }, rawBody: Buffer.from(JSON.stringify(body)) }, res);
     expect(res.statusCode, JSON.stringify(res.body)).toBe(200);
-    expect(res.body.document.status).toBe(action === "submit" ? "in_review" : "approved");
+    expect(res.body.document.status).toBe("approved");
   });
-  it.each(["submit", "approve"])("does not revive a cleared lead from legacy heroImage during %s", async action => {
-    await db.doc(path).set({ type: "post", title: "Coastal voices", section: "watch", version: 1,
-      status: action === "submit" ? "draft" : "in_review", createdBy: "lead-author", tags: ["format:multimedia"], blocks: [],
+  it("does not revive a cleared lead from legacy heroImage during approval", async () => {
+    const action = "approve";
+    await db.doc(path).set({ type: "post", title: "Voces costeras", section: "watch", version: 1, editionOf: "original-post", locale: "es",
+      status: "draft", createdBy: "lead-author", tags: ["format:multimedia"], blocks: [],
       leadMedia: null, heroImage: "old-photo", heroImageAlt: "Old photo" });
     const handler = lifecycle.createCmsTransitionContentHandler({ firestore: db,
       requirePrincipalFn: async () => ({ uid: "lead-editor", principal: { id: "lead-editor", grants: [{ role: "editor" }] } }) });

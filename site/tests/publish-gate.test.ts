@@ -23,9 +23,9 @@ describe("isPublishable", () => {
     expect(isPublishable(base(), NOW)).toBe(true);
   });
 
-  it("keeps the prior snapshot public while a visible working revision is reviewed", () => {
+  it("keeps the prior snapshot public while a visible working revision is approved", () => {
     expect(isPublishable({
-      ...base({ status: "in_review", publishAt: FUTURE }),
+      ...base({ status: "approved", publishAt: FUTURE }),
       publiclyVisible: true,
       published: { publishedAt: PAST },
     }, NOW)).toBe(true);

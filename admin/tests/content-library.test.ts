@@ -26,7 +26,7 @@ const records: ContentRecordSummary[] = [
     id: "a-2",
     kind: "article",
     title: "Trenton tonight",
-    status: "in_review",
+    status: "approved",
     updatedAt: "2026-07-20T13:00:00.000Z",
     updatedBy: "editor-1",
     assignee: "editor-1",
@@ -40,7 +40,7 @@ describe("selectLibraryRecords", () => {
       {
         ...DEFAULT_CONTENT_QUERY,
         types: ["article"],
-        statuses: ["in_review"],
+        statuses: ["approved"],
         ownerMode: "me",
         q: "Trenton",
       },
@@ -61,7 +61,7 @@ describe("selectLibraryRecords", () => {
     );
 
     expect(result.records.map((record) => record.id)).toEqual(["a-1"]);
-    expect(result.statusCounts).toMatchObject({ draft: 1, in_review: 1, published: 1 });
+    expect(result.statusCounts).toMatchObject({ draft: 1, approved: 1, published: 1 });
   });
 
   it("excludes archived records by default and selects them explicitly", () => {

@@ -235,9 +235,9 @@ export function buildRoutes(): RouteObject[] {
               lazy: lazyQueueRoute,
               hydrateFallbackElement: <RouteLoading />,
               handle: {
-                title: "Editorial queue",
+                title: "Publish activity",
                 description:
-                  "Review submitted content; administrators can also inspect deployment activity.",
+                  "Inspect publish jobs, retry site updates, and check public confirmations.",
               } satisfies RouteHandle,
             },
             {

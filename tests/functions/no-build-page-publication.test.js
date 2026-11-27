@@ -795,16 +795,10 @@ describe("Data Hub Page composition", () => {
     const saved = (await db.doc("cmsPages/data-hub").get()).data();
     return invoke(saveHandler(), { collection: "cmsPages", id: "data-hub", baseVersion: saved.version, publish: true, document: {} });
   }
-  it("uses the standard draft, review, approval and build-free Page publication flow", async () => {
+  it("uses the standard draft and build-free Page publication flow", async () => {
     offlineBuild.mockClear();
     const saved = await draft();
     expect(saved.blocks).toHaveLength(25);
-    const transition = lifecycle.createCmsTransitionContentHandler({ firestore, requirePrincipalFn: async () => pageActor,
-      now: () => instant, log: quiet });
-    const submitted = await invoke(transition, { collection: "cmsPages", id: "data-hub", baseVersion: 1, action: "submit" });
-    expect(submitted.code, JSON.stringify(submitted.body)).toBe(200);
-    const approved = await invoke(transition, { collection: "cmsPages", id: "data-hub", baseVersion: 2, action: "approve" });
-    expect(approved.code, JSON.stringify(approved.body)).toBe(200);
     const result = await publish();
     expect(result.code, JSON.stringify(result.body)).toBe(200);
     expect(result.body.publication.transport).toBe("page-no-build-v1");

@@ -54,7 +54,7 @@ it.each(["program", "event", "sponsor", "newsletter"])("refuses a %s publish ret
   expect((await db.collection("cmsPublishQueue").get()).size).toBe(0);
 });
 it.each(["sponsor", "newsletter"])("refuses %s card approval without active code and preserves history/context", async type => {
-  const before = { ...await seed(type, "in_review"), id: type, version: 3, name: "Private reviewed copy",
+  const before = { ...await seed(type, "draft"), id: type, version: 3, name: "Private draft copy",
     ...(type === "sponsor" ? { href: "https://example.test/sponsor" }
       : { body: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "Newsletter summary" }] }] }, signupUrl: "https://example.test/join" }) };
   await db.doc(`cmsPosts/${type}`).set(before);

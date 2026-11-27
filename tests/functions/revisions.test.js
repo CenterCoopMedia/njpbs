@@ -145,7 +145,7 @@ const row = (number) =>
     },
     after: {
       title: "New title",
-      status: "in_review",
+      status: "approved",
       version: number + 1,
       blocks: [
         {
@@ -252,7 +252,7 @@ describe("cmsListRevisions", () => {
       beforeVersion: 1,
       version: 2,
       beforeStatus: "draft",
-      status: "in_review",
+      status: "approved",
       beforeBlockCount: 1,
       blockCount: 1,
       mediaReferenceCount: 1,
@@ -299,11 +299,11 @@ describe("cmsListRevisions", () => {
     });
   });
 
-  it("lets a contributor inspect their own submitted record", async () => {
+  it("lets a contributor inspect their own approved record", async () => {
     const { res } = await callList({
       user: userFor("contributor", "owner-1"),
       content: {
-        "cmsPages/home": { ...currentPage, status: "in_review" },
+        "cmsPages/home": { ...currentPage, status: "approved" },
       },
       revisions: [row(1)],
     });

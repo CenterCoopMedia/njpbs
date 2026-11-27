@@ -30,7 +30,7 @@ const sponsor = {
   },
 };
 const newsletter = {
-  id: "news-one", type: "newsletter", status: "in_review", publiclyVisible: false, deleted: false, version: 9,
+  id: "news-one", type: "newsletter", status: "draft", publiclyVisible: false, deleted: false, version: 9,
   title: "Draft newsletter", signupUrl: "https://draft.example.test/join",
   approvedLibraryVersion: {
     status: "approved", type: "newsletter", deleted: false, version: 4, title: "Approved newsletter",

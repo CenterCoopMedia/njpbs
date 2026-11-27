@@ -567,8 +567,8 @@ Common personal shortcuts can include:
 - **Assigned to me**, for records whose current assignment names you.
 - Saved combinations of search, type, status, or other filters.
 
-Give a saved view a name that describes the result, not the moment. “Posts
-assigned to me and awaiting review” remains useful; “Editor test Thursday” does
+Give a saved view a name that describes the result, not the moment. “Draft posts
+assigned to me” remains useful; “Editor test Thursday” does
 not.
 
 Delete temporary test views when the task is complete.

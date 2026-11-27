@@ -174,10 +174,10 @@ describe("projectCmsPage", () => {
     expect(page?.blocks.map((block) => block.id)).toEqual(["first", "second"]);
   });
 
-  it("keeps the immutable snapshot public while a new working revision is reviewed", () => {
+  it("keeps the immutable snapshot public while a new working revision is approved", () => {
     const page = projectCmsPage(
       publishedPage({
-        status: "in_review",
+        status: "approved",
         publiclyVisible: true,
         publishAt: "2026-08-20T12:00:00.000Z",
         title: "Unreviewed working title",
@@ -216,7 +216,7 @@ describe("projectCmsPage", () => {
   it("projects exactly one draft page from its mutable working copy", () => {
     const page = projectCmsPage(
       publishedPage({
-        status: "in_review",
+        status: "draft",
         title: "Review title",
         description: "Review description",
         homeHeroTitle: "Review hero title",

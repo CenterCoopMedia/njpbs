@@ -603,7 +603,7 @@ describe("cmsPages loader against the Firestore emulator", () => {
   it("loads exactly the requested mutable page for a strict draft build", async () => {
     await db.collection("cmsPages").doc("contact").set(
       cmsPage({
-        status: "in_review",
+        status: "draft",
         title: "Draft contact",
         description: "Reviewer copy",
         blocks: [
@@ -638,7 +638,7 @@ describe("cmsPages loader against the Firestore emulator", () => {
 
   it("loads the queued revision even when the working page changes later", async () => {
     const requested = cmsPage({
-      status: "in_review",
+      status: "draft",
       title: "Captured draft",
       description: "The reviewer-requested revision.",
       version: 7,

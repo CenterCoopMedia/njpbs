@@ -140,7 +140,6 @@ const FIREBASE_SITE_LOADER_PATHS = new Set([
   "site/src/lib/cms-programs-loader.ts",
   "site/src/lib/public-artifact-inventory.ts",
   "site/src/lib/public-worker-artifact.ts",
-  "site/src/lib/workflow-projection.ts",
   "site/scripts/upload-public-worker-candidate.ts",
   "site/vitest.e2e.config.ts",
 ]);
