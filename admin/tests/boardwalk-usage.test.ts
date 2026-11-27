@@ -127,10 +127,21 @@ describe("standard usage analytics (#4495)", () => {
     box.value = ""; type(box, "s"); type(box, "second");
     // A query pasted into a box that was reset without an input event also counts.
     box.value = ""; type(box, "pasted query");
+    // A browser fires beforeinput with the box's real value before each edit.
+    const paste = (input: HTMLInputElement, value: string) => {
+      input.dispatchEvent(new Event("beforeinput", { bubbles: true })); type(input, value);
+    };
+    // A multi-character paste into a new, empty box counts.
+    const fresh = document.body.appendChild(Object.assign(document.createElement("input"), { type: "search" }));
+    paste(fresh, "first pasted query");
+    // After Clear resets the box without an input event, pasting the same query again counts.
+    fresh.value = ""; paste(fresh, "first pasted query");
+    // Typing more of the same query does not count again.
+    paste(fresh, "first pasted query more");
     await tick(5_000);
-    box.remove(); other.remove();
+    box.remove(); other.remove(); fresh.remove();
     expect(events()).toEqual([{ name: "screen.view", screen: "images" },
-      { name: "search", screen: "images" }, { name: "search", screen: "images" }, { name: "search", screen: "images" }]);
+      ...Array.from({ length: 5 }, () => ({ name: "search", screen: "images" }))]);
     expect(JSON.stringify(batches)).not.toMatch(/private|second|pasted/);
   });
 

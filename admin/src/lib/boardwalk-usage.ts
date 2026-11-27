@@ -142,18 +142,29 @@ export function startUsageAnalytics({ enabled, send, pathname, page = document, 
     else if (objectType && objectId && /^[a-zA-Z0-9_-]{1,128}$/.test(objectId)) add({ name, screen, objectType, objectId });
   };
   actionSink = sink;
-  // Count a search, never its text, when a search box's query reaches its first character or is
-  // replaced (a paste, or new text after a Clear button or Escape reset the box without an input event).
-  // This does not depend on when a box applies its search. Backspacing to one character counts again.
+  // Count a search, never its text, when a search box goes from empty to a query (typed or pasted)
+  // or its query is replaced. This does not depend on when a box applies its search.
+  // Backspacing to one character counts again. A Clear button or Escape can reset a controlled box
+  // without an input event, so beforeinput records the box's real value just before each edit.
   const lastQuery = new WeakMap<HTMLInputElement, string>();
-  function searched(event: Event) {
+  function searchBox(event: Event) {
     const target = event.target;
-    if (!(target instanceof HTMLInputElement) || target.type !== "search") return;
-    const query = target.value.trim();
-    const last = lastQuery.get(target) ?? "";
-    lastQuery.set(target, query);
-    if (query.length === 1 || (query && !query.startsWith(last) && !last.startsWith(query))) sink("search");
+    return target instanceof HTMLInputElement && target.type === "search" ? target : null;
   }
+  function beforeSearch(event: Event) {
+    const box = searchBox(event);
+    if (box) lastQuery.set(box, box.value.trim());
+  }
+  function searched(event: Event) {
+    const box = searchBox(event);
+    if (!box) return;
+    const query = box.value.trim();
+    const last = lastQuery.get(box) ?? "";
+    lastQuery.set(box, query);
+    const replaced = !query.startsWith(last) && !last.startsWith(query);
+    if (query && (!last || query.length === 1 || replaced)) sink("search");
+  }
+  page.addEventListener("beforeinput", beforeSearch, true);
   page.addEventListener("input", searched, true);
   function visibilityChanged() {
     duration();
@@ -178,6 +189,7 @@ export function startUsageAnalytics({ enabled, send, pathname, page = document, 
       clearTimeout(flushTimer);
       clearInterval(timer);
       page.removeEventListener("visibilitychange", visibilityChanged);
+      page.removeEventListener("beforeinput", beforeSearch, true);
       page.removeEventListener("input", searched, true);
       if (actionSink === sink) actionSink = null;
     },
