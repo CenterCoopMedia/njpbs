@@ -10,6 +10,8 @@ import {
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { buildRoutes } from "../src/routes/buildRoutes";
+import { MY_DRAFTS_QUERY } from "../src/components/HomeDrafts";
+import { encodeContentQuery } from "../src/lib/content-query";
 import { adminRoutePreloaders } from "../src/routes/routeModules";
 import {
   taskFlowActivationBudget,
@@ -386,7 +388,7 @@ describe("admin routing shell", () => {
       status: "draft",
       updatedAt: "2026-08-11T12:00:00.000Z",
     };
-    functionMocks.cmsListContent.mockResolvedValue({
+    const recentPage = {
       success: true,
       records: [record],
       total: 1,
@@ -401,7 +403,11 @@ describe("admin routing shell", () => {
         published: 0,
         archived: 0,
       },
-    });
+    };
+    const draftsQuery = encodeContentQuery(MY_DRAFTS_QUERY);
+    const ownDraft = { ...record, id: "post-2", title: "My oldest draft", updatedBy: "uid-1" };
+    functionMocks.cmsListContent.mockImplementation(async (_idToken: string, query: string) =>
+      query === draftsQuery ? { ...recentPage, records: [ownDraft], total: 1, pageCount: 1 } : recentPage);
 
     renderRouted(shellFor(adminPrincipal), ["/"]);
 
@@ -413,11 +419,14 @@ describe("admin routing shell", () => {
       },
       { timeout: 10_000 },
     );
-    expect(functionMocks.cmsListContent).toHaveBeenCalledTimes(1);
+    expect(functionMocks.cmsListContent).toHaveBeenCalledTimes(2);
     expect(functionMocks.cmsListContent).toHaveBeenCalledWith(
       "id-token",
       "v=1",
     );
+    expect(functionMocks.cmsListContent).toHaveBeenCalledWith("id-token", draftsQuery);
+    expect(await within(screen.getByRole("region", { name: "My drafts" }))
+      .findByRole("link", { name: "My oldest draft" })).toBeVisible();
     expect(screen.getByTestId("draft-count")).toHaveTextContent("9");
     expect(screen.getByRole("link", { name: "My recent edits (6)" })).toBeVisible();
     expect(screen.getByRole("link", { name: "Assigned to me (4)" })).toBeVisible();

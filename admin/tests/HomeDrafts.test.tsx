@@ -16,6 +16,8 @@ const drafts: ContentRecordSummary[] = [
   { id: "recent", kind: "post", status: "draft", title: "Transit fares", version: 7,
     updatedAt: "2026-11-26T14:00:00.000Z", updatedBy: "user-1" },
 ];
+const revisedLivePost: ContentRecordSummary = { id: "live", kind: "post", status: "draft", title: "Election night results",
+  version: 9, publishedSourceVersion: 6, liveSourceVersion: 6, updatedAt: "2026-09-01T15:00:00.000Z", updatedBy: "user-1" };
 
 function selection(records: ContentRecordSummary[]): LibrarySelection {
   return selectLibraryRecords(records, MY_DRAFTS_QUERY, "user-1");
@@ -62,6 +64,38 @@ describe("My drafts on Home", () => {
     expect(onArchived).toHaveBeenCalledTimes(1);
   });
 
+  it("leaves Archive to Posts for an old draft whose earlier version is live", async () => {
+    renderDrafts({ archiveDraft: vi.fn(), loadDrafts: vi.fn(async () => selection([revisedLivePost, ...drafts])) });
+    expect(await screen.findByRole("link", { name: "Election night results" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Archive Election night results" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Archive School budget vote" })).toBeInTheDocument();
+  });
+
+  it("reports a withdrawal that failed after the archive", async () => {
+    const archiveDraft = vi.fn(async () => ({ id: "old", status: "archived" as const, version: 5,
+      publication: { status: "failed" as const, queueId: null } }));
+    const onArchived = vi.fn();
+    renderDrafts({ archiveDraft, onArchived });
+    fireEvent.click(await screen.findByRole("button", { name: "Archive School budget vote" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "The draft was archived, but its public copy was not withdrawn. Open Posts to retry the withdrawal.");
+    expect(onArchived).toHaveBeenCalledTimes(1);
+  });
+
+  it("reloads when the archive response is lost", async () => {
+    const archiveDraft = vi.fn(async () => { throw new Error("network down"); });
+    const loadDrafts = vi.fn()
+      .mockResolvedValueOnce(selection(drafts))
+      .mockResolvedValueOnce(selection(drafts.slice(1)));
+    const onArchived = vi.fn();
+    renderDrafts({ archiveDraft, loadDrafts, onArchived });
+    fireEvent.click(await screen.findByRole("button", { name: "Archive School budget vote" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Boardwalk could not confirm the archive.");
+    await waitFor(() => expect(screen.queryByRole("link", { name: "School budget vote" })).not.toBeInTheDocument());
+    expect(loadDrafts).toHaveBeenCalledTimes(2);
+    expect(onArchived).toHaveBeenCalledTimes(1);
+  });
+
   it("keeps a draft that changed since Home loaded and says why", async () => {
     const archiveDraft = vi.fn(async () => ({ id: "old", status: "conflict" as const }));
     const onArchived = vi.fn();
@@ -69,7 +103,7 @@ describe("My drafts on Home", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "Archive School budget vote" }));
     const alert = await screen.findByRole("alert");
-    expect(alert).toHaveTextContent('"School budget vote" was not archived');
+    expect(alert).toHaveTextContent('Archiving "School budget vote" needs attention');
     expect(alert).toHaveTextContent("This draft changed since Home loaded. Open it to see the latest version.");
     expect(screen.getByRole("link", { name: "School budget vote" })).toBeInTheDocument();
     expect(onArchived).not.toHaveBeenCalled();

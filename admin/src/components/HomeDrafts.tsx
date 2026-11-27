@@ -42,11 +42,19 @@ function editedLabel(days: number | null): string {
   return `Edited ${days} days ago`;
 }
 
+// Home archives only drafts that never had a public copy. Archiving a draft whose earlier
+// version is live also withdraws it from the site, which Posts explains before it happens.
+function neverPublished(draft: ContentRecordSummary): boolean {
+  return !draft.publishedSourceVersion && !draft.liveSourceVersion && draft.publicUpdatePending !== true;
+}
+
 function archiveFailure(outcome: BulkArchiveOutcome | undefined): string | null {
   switch (outcome?.status) {
     case "archived":
     case "already_archived":
-      return null;
+      return outcome.publication?.status === "failed"
+        ? "The draft was archived, but its public copy was not withdrawn. Open Posts to retry the withdrawal."
+        : null;
     case "conflict":
       return "This draft changed since Home loaded. Open it to see the latest version.";
     case "missing":
@@ -96,22 +104,28 @@ export function HomeDrafts({ loadDrafts, archiveDraft, onArchived, now = Date.no
     if (!archiveDraft) return;
     setArchiving(draft.id);
     setArchiveError(null);
+    let outcome: BulkArchiveOutcome | undefined;
     try {
-      const failure = archiveFailure(await archiveDraft(draft));
-      if (failure) {
-        setArchiveError({ title: draft.title, message: failure });
-      } else {
-        setAttempt((value) => value + 1);
-        onArchived?.();
-      }
-    } catch (error) {
+      outcome = await archiveDraft(draft);
+    } catch {
+      // The archive may have committed before the response was lost, so read the
+      // current state again instead of asserting that nothing changed.
       setArchiveError({
         title: draft.title,
-        message: error instanceof Error ? error.message : "The draft could not be archived.",
+        message: "Boardwalk could not confirm the archive. The list was reloaded; check whether the draft is still here.",
       });
-    } finally {
+      setAttempt((value) => value + 1);
+      onArchived?.();
       setArchiving(null);
+      return;
     }
+    const failure = archiveFailure(outcome);
+    if (failure) setArchiveError({ title: draft.title, message: failure });
+    if (outcome?.status === "archived" || outcome?.status === "already_archived") {
+      setAttempt((value) => value + 1);
+      onArchived?.();
+    }
+    setArchiving(null);
   }
 
   const nowMs = now();
@@ -138,7 +152,7 @@ export function HomeDrafts({ loadDrafts, archiveDraft, onArchived, now = Date.no
         </InlineMessage>
       ) : null}
       {archiveError ? (
-        <InlineMessage tone="error" title={`"${archiveError.title}" was not archived`}>
+        <InlineMessage tone="error" title={`Archiving "${archiveError.title}" needs attention`}>
           {archiveError.message}
         </InlineMessage>
       ) : null}
@@ -150,7 +164,7 @@ export function HomeDrafts({ loadDrafts, archiveDraft, onArchived, now = Date.no
           {drafts.map((draft) => {
             const days = draftAgeDays(draft.updatedAt, nowMs);
             const version = draft.version;
-            const canArchive = archiveDraft !== undefined && days !== null && days >= STALE_DRAFT_DAYS &&
+            const canArchive = archiveDraft !== undefined && days !== null && days >= STALE_DRAFT_DAYS && neverPublished(draft) &&
               typeof version === "number" && Number.isSafeInteger(version) && version > 0;
             return (
               <li key={draft.id}>
