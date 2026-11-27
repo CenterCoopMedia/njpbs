@@ -48,7 +48,11 @@ describe("Boardwalk single published Newsletter bar", () => {
     expect(renderBand).toHaveBeenCalledWith(renderHomeNewsletter(block, undefined));
     const band = screen.getByTestId("phone-band");
     expect(within(band).getByRole("heading", { name: "Get the NJ PBS email newsletter" })).toBeVisible();
-    expect(within(band).getByRole("link", { name: "Sign up by email" })).toHaveAttribute("href", "https://njpbs.bluelena.io/f/1");
+    const signup = within(band).getByRole("link", { name: /^Sign up by email ?\(opens in new tab\)$/ });
+    expect(signup).toHaveAttribute("href", "https://njpbs.bluelena.io/f/1");
+    // The outside signup page opens in a new tab, as the header link does, so readers keep the site.
+    expect(signup).toHaveAttribute("target", "_blank");
+    expect(signup).toHaveAttribute("rel", "noopener");
     expect(within(band).queryByText("The standard newsletter band appears until a newsletter is chosen.")).not.toBeInTheDocument();
     expect(screen.getByText("The standard newsletter band appears until a newsletter is chosen.")).toBeVisible();
     expect(load).not.toHaveBeenCalled();

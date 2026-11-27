@@ -4,6 +4,12 @@ import { resolveHomeNewsletter, type HomeEditorialCatalog } from "./home-source-
 import { homeBandBackground, type HomeBandAssets } from "./home-band-background.ts";
 import { newsletterSignupUrl } from "./launch-fallback.ts";
 
+/** An outside signup page opens in a new tab, as the header newsletter link does, so readers keep the site open. */
+function signupLink(href: string, label: string): string {
+  const external = /^https?:\/\//i.test(href);
+  return `<a class="btn newsletter-band__signup" href="${escapeHtml(href)}"${external ? ' rel="noopener" target="_blank"' : ""}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 6 9 7 9-7" /></svg>${escapeHtml(label)}${external ? '<span class="sr-only"> (opens in new tab)</span>' : ""}</a>`;
+}
+
 /** Today's standard band, shared by the template and empty saved Home sections. */
 export function renderStandardHomeNewsletter(blockId?: string, backgroundUrl = "/brand/newsletter/abstract-blue-folds.webp"): string {
   const headingId = blockId ? `${blockId}-heading` : "newsletter-band-heading";
@@ -12,7 +18,7 @@ export function renderStandardHomeNewsletter(blockId?: string, backgroundUrl = "
     <div class="newsletter-band__inner"><div class="newsletter-band__copy"><span class="newsletter-band__eyebrow">Stay connected</span>
       <h2 id="${escapeHtml(headingId)}">Get the NJ PBS email newsletter</h2>
       <p>Station news and programming updates, delivered to your inbox.</p></div>
-      <a class="btn newsletter-band__signup" href="${escapeHtml(newsletterSignupUrl)}"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 6 9 7 9-7" /></svg>Sign up by email</a>
+      ${signupLink(newsletterSignupUrl, "Sign up by email")}
     </div></section>`;
 }
 
@@ -52,6 +58,6 @@ export function renderHomeNewsletter(block: NewsletterSignupBlock, catalog: Home
     <div class="newsletter-band__inner"><div class="newsletter-band__copy"><span class="newsletter-band__eyebrow">Stay connected</span>
       <h2 id="${escapeHtml(headingId)}">${escapeHtml(source.heading ?? card.title)}</h2>
       ${source.intro ?? card.summary ? `<p>${escapeHtml(source.intro ?? card.summary ?? "")}</p>` : ""}</div>
-      <a class="btn newsletter-band__signup" href="${escapeHtml(card.signupHref)}"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 6 9 7 9-7" /></svg>${escapeHtml(card.actionLabel)}</a>
+      ${signupLink(card.signupHref, card.actionLabel)}
     </div></section>`;
 }

@@ -44,7 +44,9 @@ describe("one saved published Home Newsletter bar", () => {
     expect(html).toContain(`<h2 id="saved-newsletter-heading">${copy.title}</h2>`);
     expect(html).toContain(copy.summary);
     expect(html).toContain('class="newsletter-band__inner"');
-    expect(html).toContain('Sign up by email</a>');
+    // An outside signup page opens in a new tab, as the header newsletter link does.
+    expect(html).toContain('rel="noopener" target="_blank"');
+    expect(html).toContain('Sign up by email<span class="sr-only"> (opens in new tab)</span></a>');
     expect(html).toContain(copy.signupUrl.replaceAll("&", "&amp;"));
     const value = bar(); value.data.heading = '<script>alert("x")</script>'; value.data.intro = "<b>Summary</b>";
     expect(renderHomeNewsletter(value, catalog())).toContain("&lt;script&gt;");

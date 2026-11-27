@@ -541,7 +541,8 @@ const expectedCmsAnchorEmitters: Readonly<Record<string, number>> = {
   // Fixed local Support navigation, not a donation-form sink. The executable
   // exemption below rejects a stored donation target in both render modes.
   "home-donor-section.ts": 1,
-  "home-newsletter-section.ts": 2,
+  // One shared signup-link helper serves the standard and the selected bar.
+  "home-newsletter-section.ts": 1,
   // Closed PBS episode/program + local Live destinations; executable refusal below.
   "home-newscast-section.ts": 5,
   "home-rail-render.ts": 6,

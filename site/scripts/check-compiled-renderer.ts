@@ -455,7 +455,7 @@ assert.ok(emptyNewsletterPreview.includes('id="newsletter-saved-heading">Get the
 assert.ok(emptyNewsletterPreview.includes("Station news and programming updates, delivered to your inbox."));
 assert.ok(emptyNewsletterPreview.includes('src="/brand/newsletter/abstract-blue-folds.webp"'));
 assert.ok(emptyNewsletterPreview.includes(`href="${escapeHtml(newsletterSignupUrl)}"`));
-assert.ok(emptyNewsletterPreview.includes("Sign up by email</a>"));
+assert.ok(emptyNewsletterPreview.includes("Sign up by email<span class=\"sr-only\"> (opens in new tab)</span></a>"));
 assert.doesNotMatch(emptyNewsletterPreview, /Choose a newsletter for this block|standard newsletter band appears|data-cms-draft-placeholder/);
 assert.doesNotMatch(emptyNewsletterPreview, /id="newsletter-band-heading"/);
 const emptyNewsletterPublicContent = { ...emptyNewsletterContent,
