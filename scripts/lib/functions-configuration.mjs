@@ -26,9 +26,9 @@ export function validateConfigurationTable(table) {
       if (!/^[A-Z][A-Z0-9_]+$/.test(name)) configurationFailure("Invalid Functions configuration table binding");
       knownKeys(row, allowed);
       if (section === "inputs" && (typeof row.default !== "string" || !["string", "boolean", "json"].includes(row.type))) configurationFailure("Invalid input type/default in Functions table");
-      // requiredWhen names the boolean feature flag that cannot work without this input.
-      if (section === "inputs" && row.requiredWhen !== undefined &&
-          (table.inputs[row.requiredWhen]?.type !== "boolean" || row.default !== "")) configurationFailure("Invalid requiredWhen flag in Functions table");
+      // requiredWhen names the boolean feature flags that cannot work without this input.
+      if (section === "inputs" && row.requiredWhen !== undefined && (!Array.isArray(row.requiredWhen) || !row.requiredWhen.length ||
+          row.requiredWhen.some(flag => table.inputs[flag]?.type !== "boolean") || row.default !== "")) configurationFailure("Invalid requiredWhen flag in Functions table");
       if (section === "parameters" && (!["parameter", "environment"].includes(row.binding) ||
           (row.format && !["r2", "studio", "admin-map", "discovery"].includes(row.format)) ||
           (row.encoding !== undefined && (row.encoding !== "firebase-list" || row.binding !== "parameter")) ||
@@ -136,9 +136,13 @@ export function runtimeParameters(input, discovery = {}, target = cmsTarget()) {
     values[key] = value;
   }
   for (const [key, row] of Object.entries(CONFIGURATION_INPUTS)) {
-    if (row.requiredWhen && values[row.requiredWhen] === "true" && !values[key]) {
-      configurationFailure(`Invalid Functions configuration: ${key} is required when ${row.requiredWhen} is true`);
-    }
+    const flag = row.requiredWhen?.find(name => values[name] === "true");
+    if (flag && !values[key]) configurationFailure(`Invalid Functions configuration: ${key} is required when ${flag} is true`);
+  }
+  // Original status and restore serve only sources whose bucket is in this list (functions/lib/source-originals.js).
+  if (values.CMS_MEDIA_AWS_VIDEO_ENABLED === "true" &&
+      !values.CMS_MEDIA_ORIGINAL_BUCKETS.split(",").includes(values.CMS_MEDIA_AWS_VIDEO_BUCKET)) {
+    configurationFailure("Invalid Functions configuration: CMS_MEDIA_ORIGINAL_BUCKETS must include CMS_MEDIA_AWS_VIDEO_BUCKET");
   }
   // Production publishes through the serializer only; dev through GitHub only.
   if ((values.CMS_PUBLISH_TRANSPORT === "github") !== (target.environment === "development")) configurationFailure("Invalid Functions configuration: CMS_PUBLISH_TRANSPORT");
