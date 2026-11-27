@@ -1,7 +1,7 @@
 import { COVERAGE_LABELS_SETTINGS_ID } from "../../../packages/content-core/src/cms-settings";
 import { withoutPublicVideoData } from "../../../packages/content-core/src/video-block";
 import { STORY_CTAS_SETTINGS_ID } from "../../../packages/content-core/src/cms-settings";
-import { usageActionCollector } from "./boardwalk-usage";
+import { measureEndpointUsage, usageActionCollector } from "./boardwalk-usage";
 import { projectCoverageLabels, type CoverageLabelsBuildData } from "../../../packages/content-core/src/coverage-labels";
 import { invalidateMediaLists, markMediaTabCountsStale } from "./media-session-cache";
 import {
@@ -291,19 +291,31 @@ function reportRequestNow(): number {
 // the endpoint's operation category, the outcome, the status class, and the CMS edge's own
 // `X-NJPBS-Request-ID` when it sent one -- never the endpoint's body, the server's message,
 // the id token, or any record identity. No second trace id is minted here (#973).
-export async function postFunction<T>(
+type PostFunctionOptions = {
+  // "unless-automation" is only for the transcript and video search reads (#4950): when no
+  // App Check token can be had, the read goes without one and only a server-marked
+  // automation account is admitted. Everyone else sees the same refusal as before.
+  appCheck?: boolean | "unless-automation";
+  signal?: AbortSignal;
+  operation?: OperationCategory;
+};
+
+export function postFunction<T>(
   endpoint: string,
   idToken: string | null,
   body: unknown,
   requestHeaders: Record<string, string> = {},
-  options: {
-    // "unless-automation" is only for the transcript and video search reads (#4950): when no
-    // App Check token can be had, the read goes without one and only a server-marked
-    // automation account is admitted. Everyone else sees the same refusal as before.
-    appCheck?: boolean | "unless-automation";
-    signal?: AbortSignal;
-    operation?: OperationCategory;
-  } = {},
+  options: PostFunctionOptions = {},
+): Promise<T> {
+  return measureEndpointUsage(endpoint, options.signal, () => sendFunction<T>(endpoint, idToken, body, requestHeaders, options));
+}
+
+async function sendFunction<T>(
+  endpoint: string,
+  idToken: string | null,
+  body: unknown,
+  requestHeaders: Record<string, string>,
+  options: PostFunctionOptions,
 ): Promise<T> {
   if (!baseUrl) {
     throw new Error("Functions base URL is not configured");
@@ -1827,7 +1839,7 @@ export function cmsUploadMedia(
   metadata: UploadMediaMetadata,
   signal?: AbortSignal,
 ): Promise<UploadMediaResponse> {
-  return postMediaFile("cmsUploadMedia", idToken, file, { ...metadata }, {}, signal);
+  return measureEndpointUsage("cmsUploadMedia", signal, () => postMediaFile("cmsUploadMedia", idToken, file, { ...metadata }, {}, signal));
 }
 
 export interface ReplaceMediaResponse {

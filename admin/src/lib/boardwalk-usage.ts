@@ -4,10 +4,12 @@ import { parseContentPath, routeCategoryForPath, ROUTE_PATHS } from "./routes";
 export { config as boardwalkUsageConfig };
 export type UsageScreen = keyof typeof config.screens;
 export type UsageAction = keyof typeof config.actions;
-export type UsageEvent = { screen: UsageScreen } & (
+type UsageObjectType = "record" | "page";
+// offsetMs: how long before its batch was sent the event happened.
+export type UsageEvent = { screen: UsageScreen; offsetMs?: number } & (
   | { name: "screen.view" }
   | { name: "screen.duration"; durationMs: number }
-  | { name: UsageAction; objectType: "record" | "page"; objectId: string }
+  | { name: UsageAction; objectType?: UsageObjectType; objectId?: string }
 );
 export interface UsageReport {
   days: number;
@@ -24,10 +26,17 @@ export interface UsageReport {
     actions: { id: string; label: string; count: number }[] };
 }
 
+const under = (pathname: string, root: string) => pathname === root || pathname.startsWith(`${root}/`);
+
 export function usageScreen(pathname: string): UsageScreen | null {
   const content = parseContentPath(pathname);
-  if (content.kind === "page-list" || content.kind === "edit-page") return "pages";
-  if ((content.kind === "record-list" || content.kind === "edit-record" || content.kind === "create-record") && content.type === "post") return "posts";
+  if (content.kind === "page-list") return "pages";
+  if (content.kind === "edit-page") return "pages-editor";
+  if (content.kind === "record-list" && content.type === "post") return "posts";
+  if ((content.kind === "edit-record" || content.kind === "create-record") && content.type === "post") return "posts-editor";
+  if (under(pathname, ROUTE_PATHS.mediaFavorites)) return "media-favorites";
+  if (under(pathname, ROUTE_PATHS.mediaCollections)) return "media-collections";
+  if (under(pathname, ROUTE_PATHS.mediaSubmissions)) return "media-submissions";
   if (pathname === ROUTE_PATHS.mediaImages) return "images";
   if (pathname === ROUTE_PATHS.mediaVideos || pathname.startsWith(`${ROUTE_PATHS.mediaVideos}/`)) return "videos";
   if (pathname === ROUTE_PATHS.mediaVoiceovers) return "voiceovers";
@@ -35,14 +44,42 @@ export function usageScreen(pathname: string): UsageScreen | null {
   return Object.hasOwn(config.screens, category) ? category as UsageScreen : null;
 }
 
-let actionSink: ((name: UsageAction, objectType: "record" | "page", objectId: string) => void) | null = null;
+type ActionSink = (name: UsageAction, objectType?: UsageObjectType, objectId?: string) => void;
+let actionSink: ActionSink | null = null;
 
 // Capture the current analytics scope; a late call cannot attach to a later sign-in.
-export function usageActionCollector() {
+export function usageActionCollector(): ActionSink {
   const sink = actionSink;
-  return (name: UsageAction, objectType: "record" | "page", objectId: string) => {
+  return (name, objectType, objectId) => {
     try { sink?.(name, objectType, objectId); } catch { /* Best-effort measurement. */ }
   };
+}
+
+// Actions measured at the shared Functions transport, so every caller of these endpoints is counted.
+const ENDPOINT_ACTIONS: Partial<Record<string, { sent?: UsageAction; ok?: UsageAction; failed?: UsageAction }>> = {
+  cmsUploadMedia: { sent: "media.upload.start", ok: "media.upload.finish", failed: "media.upload.failure" },
+  cmsStartSourceMediaUpload: { sent: "media.upload.start", failed: "media.upload.failure" },
+  cmsCompleteSourceMediaUpload: { ok: "media.upload.finish", failed: "media.upload.failure" },
+  cmsSaveContent: { failed: "content.save.failure" },
+  cmsRequestVideoTranscript: { sent: "media.transcript.request" },
+  cmsRequestByokVideoTranscript: { sent: "media.transcript.request" },
+  cmsRequestVideoClip: { sent: "media.clip.request" },
+};
+
+export async function measureEndpointUsage<T>(endpoint: string, signal: AbortSignal | undefined, run: () => Promise<T>): Promise<T> {
+  const actions = ENDPOINT_ACTIONS[endpoint];
+  if (!actions) return run();
+  const record = usageActionCollector();
+  if (actions.sent) record(actions.sent);
+  try {
+    const result = await run();
+    if (actions.ok) record(actions.ok);
+    return result;
+  } catch (error) {
+    // A cancelled request is the person's choice, not a failure.
+    if (actions.failed && !signal?.aborted) record(actions.failed);
+    throw error;
+  }
 }
 
 export function startUsageAnalytics({ enabled, send, pathname, page = document, now = () => performance.now() }: {
@@ -57,7 +94,7 @@ export function startUsageAnalytics({ enabled, send, pathname, page = document, 
   let last = now();
   let visible = page.visibilityState === "visible";
   let viewed = visible;
-  let queue: UsageEvent[] = [];
+  let queue: { event: UsageEvent; at: number }[] = [];
   let pending = false;
   let stopped = false;
   let lastSentAt = -Infinity;
@@ -70,17 +107,17 @@ export function startUsageAnalytics({ enabled, send, pathname, page = document, 
     if (pending) { queue = []; return; }
     const remaining = 5_000 - (now() - lastSentAt);
     if (remaining > 0) { flushTimer = setTimeout(flush, remaining); return; }
-    const events = queue;
-    queue = [];
     pending = true;
     lastSentAt = now();
+    const events = queue.map(({ event, at }) => ({ ...event, offsetMs: Math.min(600_000, Math.max(0, Math.round(lastSentAt - at))) }));
+    queue = [];
     // Token acquisition, App Check and network errors all drop this batch.
     void Promise.resolve().then(() => send({ batchId: crypto.randomUUID(), events }, controller.signal))
       .catch(() => undefined).finally(() => { pending = false; });
   }
   function add(event: UsageEvent) {
     if (stopped || queue.length >= 20) return;
-    queue.push(event);
+    queue.push({ event, at: now() });
     flushTimer ??= setTimeout(flush, 5_000);
   }
   function duration() {
@@ -89,10 +126,18 @@ export function startUsageAnalytics({ enabled, send, pathname, page = document, 
     if (screen && visible && durationMs > 0) add({ name: "screen.duration", screen, durationMs });
     last = current;
   }
-  const sink: NonNullable<typeof actionSink> = (name, objectType, objectId) => {
-    if (screen && /^[a-zA-Z0-9_-]{1,128}$/.test(objectId)) add({ name, screen, objectType, objectId });
+  const sink: ActionSink = (name, objectType, objectId) => {
+    if (!screen) return;
+    if (objectType === undefined && objectId === undefined) add({ name, screen });
+    else if (objectType && objectId && /^[a-zA-Z0-9_-]{1,128}$/.test(objectId)) add({ name, screen, objectType, objectId });
   };
   actionSink = sink;
+  // Count that a search was made, never its text, from any search box in Boardwalk.
+  function searched(event: Event) {
+    const target = event.target;
+    if (target instanceof HTMLInputElement && target.type === "search" && target.value.trim()) sink("search");
+  }
+  page.addEventListener("change", searched, true);
   function visibilityChanged() {
     duration();
     visible = page.visibilityState === "visible";
@@ -116,6 +161,7 @@ export function startUsageAnalytics({ enabled, send, pathname, page = document, 
       clearTimeout(flushTimer);
       clearInterval(timer);
       page.removeEventListener("visibilitychange", visibilityChanged);
+      page.removeEventListener("change", searched, true);
       if (actionSink === sink) actionSink = null;
     },
   };

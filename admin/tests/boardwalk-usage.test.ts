@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { startUsageAnalytics, usageActionCollector, usageScreen, type UsageEvent } from "../src/lib/boardwalk-usage";
+import { measureEndpointUsage, startUsageAnalytics, usageActionCollector, usageScreen, type UsageEvent } from "../src/lib/boardwalk-usage";
 
 let visible = true;
 let time = 0;
@@ -11,7 +11,8 @@ beforeEach(() => {
 });
 afterEach(() => { active?.stop(); active = undefined; vi.useRealTimers(); vi.restoreAllMocks(); });
 const send = async (batch: { batchId: string; events: UsageEvent[] }) => { batches.push(batch); };
-const events = () => batches.flatMap(batch => batch.events);
+// Offsets are checked in their own test; other tests compare the rest of each event.
+const events = () => batches.flatMap(batch => batch.events).map(({ offsetMs: _offset, ...event }) => event);
 const tick = async (ms: number) => { time += ms; await vi.advanceTimersByTimeAsync(ms); };
 
 describe("standard usage analytics (#4495)", () => {
@@ -26,7 +27,12 @@ describe("standard usage analytics (#4495)", () => {
   });
 
   it("classifies destinations without retaining addresses, queries or source IDs", () => {
-    expect(usageScreen("/content/post/record-123/edit")).toBe("posts");
+    expect(usageScreen("/content/post/record-123/edit")).toBe("posts-editor");
+    expect(usageScreen("/content/post")).toBe("posts");
+    expect(usageScreen("/media/favorites")).toBe("media-favorites");
+    expect(usageScreen("/media/collections/private-collection")).toBe("media-collections");
+    expect(usageScreen("/media/submissions")).toBe("media-submissions");
+    expect(usageScreen("/media")).toBe("media");
     expect(usageScreen("/media/videos/custom-private-source")).toBe("videos");
     expect(usageScreen("/media/images")).toBe("images");
     expect(usageScreen("/unrecognized/private-data")).toBeNull();
@@ -99,5 +105,40 @@ describe("standard usage analytics (#4495)", () => {
     oldAction("content.publish.request", "record", "private-old-user-record");
     await tick(5_000);
     expect(events()).toEqual([{ name: "screen.view", screen: "images" }]);
+  });
+
+  it("stamps each event with its age when the batch is sent", async () => {
+    active = startUsageAnalytics({ enabled: true, send, pathname: "/content/post", now: () => time });
+    time += 3_000;
+    usageActionCollector()("preview.request", "page", "page-1");
+    await tick(5_000);
+    expect(batches[0].events.map(event => [event.name, event.offsetMs])).toEqual([["screen.view", 8_000], ["preview.request", 5_000]]);
+  });
+
+  it("counts searches from any search box without their text", async () => {
+    active = startUsageAnalytics({ enabled: true, send, pathname: "/media/images", now: () => time });
+    const box = document.body.appendChild(Object.assign(document.createElement("input"), { type: "search" }));
+    const other = document.body.appendChild(Object.assign(document.createElement("input"), { type: "text", value: "x" }));
+    box.value = "   "; box.dispatchEvent(new Event("change", { bubbles: true }));
+    other.dispatchEvent(new Event("change", { bubbles: true }));
+    box.value = "private search text"; box.dispatchEvent(new Event("change", { bubbles: true }));
+    await tick(5_000);
+    box.remove(); other.remove();
+    expect(events()).toEqual([{ name: "screen.view", screen: "images" }, { name: "search", screen: "images" }]);
+  });
+
+  it("measures upload, transcript, clip and save outcomes at the Functions boundary", async () => {
+    active = startUsageAnalytics({ enabled: true, send, pathname: "/media/videos", now: () => time });
+    await measureEndpointUsage("cmsStartSourceMediaUpload", undefined, async () => "ok");
+    await measureEndpointUsage("cmsCompleteSourceMediaUpload", undefined, async () => "ok");
+    await expect(measureEndpointUsage("cmsUploadMedia", undefined, async () => { throw new Error("refused"); })).rejects.toThrow("refused");
+    await measureEndpointUsage("cmsRequestVideoClip", undefined, async () => "ok");
+    await expect(measureEndpointUsage("cmsSaveContent", undefined, async () => { throw new Error("conflict"); })).rejects.toThrow();
+    const cancelled = new AbortController(); cancelled.abort();
+    await expect(measureEndpointUsage("cmsSaveContent", cancelled.signal, async () => { throw new Error("aborted"); })).rejects.toThrow();
+    await measureEndpointUsage("cmsListContent", undefined, async () => "ok");
+    await tick(5_000);
+    expect(events().slice(1).map(event => event.name)).toEqual(["media.upload.start", "media.upload.finish",
+      "media.upload.start", "media.upload.failure", "media.clip.request", "content.save.failure"]);
   });
 });

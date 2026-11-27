@@ -17,3 +17,22 @@ Account changes and deployment require separate authority.
 Daily and weekly aggregates and presence markers are keyed by Eastern date
 with the `et-` prefix. Rows collected before that change keep their UTC date
 keys and are reported as UTC rows. The first `et-` daily row is the change date.
+
+## What Boardwalk records
+
+Each usage event names a screen from `functions/lib/boardwalk-usage-config.json`
+and may carry `offsetMs`, the time from the event to its batch being sent
+(0 to 600,000). Events are `screen.view`, `screen.duration` and the configured
+actions. An action carries `objectType` and `objectId` only when it acts on a
+saved page or record.
+
+- `content.publish.request`, `content.schedule.request` and `preview.request`
+  are recorded where staff start them.
+- Upload start, finish and failure, failed content saves, transcript requests
+  and clip requests are recorded at the shared Functions transport
+  (`measureEndpointUsage` in `admin/src/lib/boardwalk-usage.ts`). A cancelled
+  request is not a failure.
+- `search` is recorded when any `input[type="search"]` changes to a nonblank
+  value. The text is never sent.
+
+The staff explanation is the Boardwalk guide page `boardwalk-usage`.

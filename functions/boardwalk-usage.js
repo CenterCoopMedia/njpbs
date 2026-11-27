@@ -41,15 +41,20 @@ function easternMidnight(day) {
 }
 
 function validEvent(event) {
-  if (!only(event, ["name", "screen", "durationMs", "objectType", "objectId"]) ||
+  if (!only(event, ["name", "screen", "durationMs", "objectType", "objectId", "offsetMs"]) ||
       typeof event.name !== "string" || typeof event.screen !== "string" ||
       !own(config.screens, event.screen)) return false;
-  if (event.name === "screen.view") return Object.keys(event).length === 2;
-  if (event.name === "screen.duration") return Object.keys(event).length === 3 &&
+  // offsetMs: milliseconds between the event and its batch being sent (optional).
+  if (own(event, "offsetMs") && !(Number.isInteger(event.offsetMs) && event.offsetMs >= 0 && event.offsetMs <= 600_000)) return false;
+  const size = Object.keys(event).length - (own(event, "offsetMs") ? 1 : 0);
+  if (event.name === "screen.view") return size === 2;
+  if (event.name === "screen.duration") return size === 3 &&
     Number.isInteger(event.durationMs) && event.durationMs > 0 && event.durationMs <= 60_000;
-  if (!own(config.actions, event.name) || Object.keys(event).length !== 4 ||
-      typeof event.objectType !== "string" || typeof event.objectId !== "string" || !ID.test(event.objectId)) return false;
-  return ["page", "record"].includes(event.objectType);
+  if (!own(config.actions, event.name) || own(event, "durationMs")) return false;
+  // An action names its object only when it has one; both fields or neither.
+  if (size === 2) return true;
+  return size === 4 && ["page", "record"].includes(event.objectType) &&
+    typeof event.objectId === "string" && ID.test(event.objectId);
 }
 
 async function collectBatch(firestore, actor, body, now) {

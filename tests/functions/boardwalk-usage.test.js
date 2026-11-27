@@ -158,6 +158,22 @@ describe("Boardwalk usage privacy and persistence contract (#4495)", () => {
     expect(res.body.actions.find(row => row.id === "content.publish.request").count).toBe(1);
   });
 
+  it("accepts event offsets, object-free actions and split editor and media screens", async () => {
+    const events = [{ name: "screen.view", screen: "posts-editor", offsetMs: 4_000 },
+      { name: "screen.duration", screen: "media-collections", durationMs: 1_000, offsetMs: 0 },
+      { name: "media.upload.start", screen: "images", offsetMs: 600_000 },
+      { name: "search", screen: "media-submissions" },
+      { name: "content.schedule.request", screen: "pages-editor", objectType: "page", objectId: "page-1", offsetMs: 10 }];
+    expect((await invoke(handlers().collect, batch(events))).statusCode).toBe(200);
+    expect((await firestore.collection("cmsUsageEvents").get()).docs[0].data().events).toEqual(events);
+    const res = (await invoke(handlers().report, { days: 7 })).body;
+    expect(res.screens.find(row => row.id === "posts-editor").views).toBe(1);
+    expect(res.screens.find(row => row.id === "media-collections").visibleMs).toBe(1_000);
+    for (const id of ["media.upload.start", "search", "content.schedule.request"]) {
+      expect(res.actions.find(row => row.id === id).count).toBe(1);
+    }
+  });
+
   it.each([
     batch([view], { uid: "another-user" }),
     batch([{ ...view, title: "private title" }]),
@@ -171,6 +187,13 @@ describe("Boardwalk usage privacy and persistence contract (#4495)", () => {
     batch([{ name: "screen.duration", screen: "posts", durationMs: -1 }]),
     batch([{ name: "content.publish.request", screen: "posts", objectType: "invalid", objectId: "id" }]),
     batch([{ name: "media.upload", screen: "images", objectType: "media", objectId: "private field value" }]),
+    batch([{ ...view, offsetMs: -1 }]),
+    batch([{ ...view, offsetMs: 600_001 }]),
+    batch([{ ...view, offsetMs: "5" }]),
+    batch([{ name: "search", screen: "images", query: "private search text" }]),
+    batch([{ name: "media.upload.start", screen: "images", objectType: "record" }]),
+    batch([{ name: "media.upload.start", screen: "images", objectId: "id" }]),
+    batch([{ name: "media.upload.start", screen: "images", durationMs: 5 }]),
     batch(Array.from({ length: 21 }, () => view)),
     batch([], { batchId: "bad" }),
   ])("rejects content capture, spoofed identity and invalid event schemas (%#)", async body => {
