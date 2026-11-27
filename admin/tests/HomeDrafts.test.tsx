@@ -81,7 +81,7 @@ describe("My drafts on Home", () => {
     renderDrafts({ archiveDraft, onArchived });
     fireEvent.click(await screen.findByRole("button", { name: "Archive School budget vote" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "The draft was archived, but its public copy was not withdrawn. Open Posts to retry the withdrawal.");
+      "The draft was archived, but its public copy was not withdrawn. Open the record in Recycle bin and retry removal.");
     expect(onArchived).toHaveBeenCalledTimes(1);
   });
 
@@ -90,7 +90,8 @@ describe("My drafts on Home", () => {
       publication: { status: "queued" as const, queueId: "queue-1", warnings: ["The homepage updates after the next build."] } }));
     renderDrafts({ archiveDraft });
     fireEvent.click(await screen.findByRole("button", { name: "Archive School budget vote" }));
-    const notice = await screen.findByText(/Its public copy stays on the site until the removal finishes\./);
+    const notice = await screen.findByRole("status");
+    expect(notice).toHaveTextContent("Its public copy stays on the site until the removal finishes.");
     expect(notice).toHaveTextContent("The homepage updates after the next build.");
     expect(screen.getByText('"School budget vote" was archived')).toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();

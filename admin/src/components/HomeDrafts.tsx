@@ -50,7 +50,8 @@ function hasNoLiveCopy(draft: ContentRecordSummary): boolean {
 }
 
 interface ArchiveNotice {
-  tone: "error" | "info";
+  // "warning" is announced politely; the archived row leaves the list, so the notice must be heard.
+  tone: "error" | "warning";
   message: string;
 }
 
@@ -65,11 +66,11 @@ function archiveNotice(outcome: BulkArchiveOutcome | undefined): ArchiveNotice |
     case "already_archived":
       if (outcome.publication?.status === "failed") {
         return { tone: "error", message: withWarnings(
-          "The draft was archived, but its public copy was not withdrawn. Open Posts to retry the withdrawal.",
+          "The draft was archived, but its public copy was not withdrawn. Open the record in Recycle bin and retry removal.",
           outcome.publication.warnings) };
       }
       if (outcome.publication?.status === "queued") {
-        return { tone: "info", message: withWarnings(
+        return { tone: "warning", message: withWarnings(
           "The draft was archived. Its public copy stays on the site until the removal finishes.",
           outcome.publication.warnings) };
       }
