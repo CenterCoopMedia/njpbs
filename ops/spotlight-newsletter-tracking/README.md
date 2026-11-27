@@ -1,11 +1,34 @@
-# Spotlight newsletter privacy
+# Spotlight privacy choices
 
-This WordPress package loads Wisepops and ActiveCampaign only after an explicit
-newsletter consent choice. It adds a footer settings button, a consent panel,
-and a newsletter privacy section on the configured native privacy page.
+This WordPress package loads Google Analytics, Wisepops and ActiveCampaign only
+after an explicit consent choice. Analytics and newsletter tools are two
+separate choices with separate cookies: a grant for one never loads the other.
+It adds a footer Privacy settings button, a consent panel, and analytics and
+newsletter privacy sections on the configured native privacy page.
+
+A first visit with any undecided choice shows a short bottom bar: "We use
+analytics and newsletter tools only if you allow them." Allow all grants both
+choices, Allow none denies both, and Choices opens the two-section panel.
+Allow all and Allow none have equal visual weight. GPC and excluded pages hide
+the bar. A grant never overrides GPC.
+
+## Analytics
+
+The analytics choice uses the `spotlight-analytics-consent` cookie with the
+same format, versioning and 180-day life as the newsletter cookie. With a grant
+on an eligible page, the client sets all Google consent types to denied, then
+grants `analytics_storage` only, and loads `gtag.js` once with one `config`
+call (`send_page_view: true`, Google signals and ad personalization off). It
+uses no Tag Manager container. The measurement ID comes from the
+`NJSPOTLIGHT_GA4_MEASUREMENT_ID` server setting; an invalid value keeps the
+whole package inactive. The operator record holds the live stream mapping.
+GA counts only readers who allow analytics, so
+its numbers are not comparable with the earlier all-visitor WNET container.
+Withdrawal, GPC and a player that appears later stop analytics the same way
+they stop newsletter tools.
 
 The package stays inactive without complete configuration for the selected
-production installation. `.env.example` lists the required names and example
+production installation, including the GA4 measurement ID. `.env.example` lists the required names and example
 values. It is documentation; PHP does not load it. The account owner supplies
 the tracking account and property after enabling the intended live domain and
 checking campaign targeting. The operator supplies the production blog ID,
@@ -33,6 +56,10 @@ opened player once only when newsletter tools were running;
 it does not repeatedly reload or record another tracking visit. New code that
 can insert a player still needs the eligibility review described below.
 Readers who have not loaded the tools keep their video document without a reload.
+If the browser saves one choice and refuses another while a withdrawn tool
+needs that reload, the `spotlight_privacy_notice` query parameter carries the
+error through it. The client removes the parameter on load, shows the error
+and moves focus to it.
 
 Admin, authenticated, preview, private, password-protected, Kids and descendant,
 child-directed, search, feed, REST, embedded, non-GET, and nonproduction requests
@@ -74,7 +101,7 @@ and campaign activation remain separately authorized steps.
 After that authorization, the operator installs the PHP file directly in
 `wp-content/mu-plugins/` and the JavaScript and CSS in its sibling directory
 `wp-content/mu-plugins/spotlight-newsletter-tracking/`. Preserve existing files
-and capture their hashes and backups before a replacement. Set the six named
+and capture their hashes and backups before a replacement. Set the seven named
 environment settings before PHP starts. The existing site cache and privacy
 bypass rules remain unchanged.
 

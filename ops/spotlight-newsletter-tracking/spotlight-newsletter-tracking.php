@@ -1,7 +1,7 @@
 <?php
 /**
- * Plugin Name: Spotlight newsletter privacy
- * Description: Consent-gated newsletter tools on public pages without embedded media.
+ * Plugin Name: Spotlight privacy choices
+ * Description: Consent-gated analytics and newsletter tools on public pages without embedded media.
  */
 namespace NJSpotlightNewsletter;
 
@@ -17,13 +17,15 @@ function configuration() {
     $origin = (string) getenv('NJSPOTLIGHT_TRACKING_ORIGIN');
     $account = (string) getenv('NJSPOTLIGHT_ACTIVE_CAMPAIGN_ACCOUNT');
     $property = (string) getenv('NJSPOTLIGHT_WISEPOPS_PROPERTY');
+    $measurement = (string) getenv('NJSPOTLIGHT_GA4_MEASUREMENT_ID');
     $parts = wp_parse_url($origin);
     if (getenv('NJSPOTLIGHT_CONTEXT') !== 'production' || !$blog || !$privacy
         || get_current_blog_id() !== $blog || rtrim(home_url('/'), '/') !== $origin
         || !is_array($parts) || ($parts['scheme'] ?? '') !== 'https' || empty($parts['host'])
         || count(array_diff(array_keys($parts), array('scheme', 'host'))) !== 0
         || preg_match('/\A[1-9][0-9]{0,19}\z/', $account) !== 1
-        || preg_match('/\A[A-Za-z0-9]{6,32}\z/', $property) !== 1) {
+        || preg_match('/\A[A-Za-z0-9]{6,32}\z/', $property) !== 1
+        || preg_match('/\AG-[A-Z0-9]{6,16}\z/', $measurement) !== 1) {
         return null;
     }
     $page = get_post($privacy);
@@ -35,8 +37,8 @@ function configuration() {
     if (strpos($policy_url, $origin . '/') !== 0) {
         return null;
     }
-    return array('account' => $account, 'property' => $property,
-        'privacy' => $privacy, 'policyUrl' => $policy_url . '#newsletter-privacy');
+    return array('account' => $account, 'property' => $property, 'measurement' => $measurement,
+        'privacy' => $privacy, 'policyUrl' => $policy_url . '#analytics-privacy');
 }
 
 function public_request() {
@@ -112,7 +114,13 @@ function eligible_document($html) {
 }
 
 function privacy_text() {
-    return '<section id="newsletter-privacy"><h2>Newsletter tools and your choice</h2>'
+    // Joe approved this analytics wording on Nov. 26, 2026.
+    return '<section id="analytics-privacy"><h2>Analytics and your choice</h2>'
+        . '<p>With your permission, NJ Spotlight News uses Google Analytics to count visits and see which stories '
+        . 'readers use; its advertising features stay off. It loads only after you allow analytics, and a denial '
+        . 'or a Global Privacy Control signal keeps it off. You can change your choice at any time with the '
+        . 'Privacy settings button at the bottom of the page.</p></section>'
+        . '<section id="newsletter-privacy"><h2>Newsletter tools and your choice</h2>'
         . '<p>NJ Spotlight uses Wisepops for newsletter signup messages and ActiveCampaign for newsletter marketing. '
         . 'These tools load only after you allow newsletter tools. Wisepops may use cookies to remember your interactions. '
         . 'ActiveCampaign records page visits and IP addresses and may associate visits with an existing contact record. '
@@ -120,7 +128,7 @@ function privacy_text() {
         . 'Information you enter in a newsletter form is sent to its provider.</p>'
         . '<p>The site saves your choice in the first-party spotlight-newsletter-consent cookie for 180 days. '
         . 'A denial or Global Privacy Control signal keeps these tools off. They stay off pages containing video '
-        . 'and other excluded pages. Newsletter privacy settings lets you change your choice. '
+        . 'and other excluded pages. Privacy settings lets you change your choice. '
         . 'Changing to Do not allow reloads the page to stop running vendor code. '
         . 'This cannot recall information already sent.</p>'
         . '<p>If a page starts to display video while newsletter tools are running, it reloads once to stop the tools. '
@@ -133,23 +141,34 @@ function privacy_text() {
 
 function footer_markup($config) {
     $assets = plugins_url('spotlight-newsletter-tracking/', __FILE__);
+    $choice = static function ($category, $title, $text, $data) {
+        return '<section data-category="' . $category . '" data-newsletter-choice ' . $data . '>'
+            . '<h3>' . $title . '</h3><p>' . $text . '</p><p data-current></p><p role="status" data-status></p>'
+            . '<div class="spotlight-newsletter-actions">'
+            . '<button type="button" data-deny>Do not allow ' . strtolower($title) . '</button>'
+            . '<button type="button" data-allow>Allow ' . strtolower($title) . '</button></div></section>';
+    };
     return '<link rel="stylesheet" href="' . esc_url($assets . 'consent.css') . '">'
-        . '<p class="spotlight-newsletter-information"><a href="' . esc_url($config['policyUrl']) . '">Newsletter privacy information</a></p>'
-        . '<button type="button" class="spotlight-newsletter-settings" data-newsletter-open hidden>Newsletter privacy settings</button>'
-        . '<aside id="spotlight-newsletter-choice" class="spotlight-newsletter-choice" aria-labelledby="spotlight-newsletter-title" hidden '
-        . 'data-account="' . esc_attr($config['account']) . '" data-property="' . esc_attr($config['property']) . '">'
-        . '<h2 id="spotlight-newsletter-title">Allow newsletter tools?</h2>'
-        . '<div data-newsletter-choice><p>With your permission, Wisepops can show newsletter forms and use cookies '
-        . 'to remember your interactions. ActiveCampaign can record page visits and your IP address for newsletter '
-        . 'marketing and link visits to an existing contact record. You can change your choice at any time '
-        . 'in Newsletter privacy settings.</p></div>'
-        . '<p data-newsletter-gpc hidden>Your browser sent a Global Privacy Control signal. Newsletter tools stay off.</p>'
-        . '<p data-newsletter-media hidden>Newsletter tools stay off on this page because it can display video.</p>'
+        . '<p class="spotlight-newsletter-information"><a href="' . esc_url($config['policyUrl']) . '">Privacy information</a></p>'
+        . '<button type="button" class="spotlight-newsletter-settings" data-newsletter-open hidden>Privacy settings</button>'
+        . '<div class="spotlight-privacy-bar" data-privacy-bar role="region" aria-label="Privacy choices" hidden>'
+        . '<p>We use analytics and newsletter tools only if you allow them.</p><div class="spotlight-privacy-bar-actions">'
+        . '<button type="button" data-allow-all>Allow all</button><button type="button" data-allow-none>Allow none</button>'
+        . '<button type="button" data-choices>Choices</button></div></div>'
+        . '<aside id="spotlight-newsletter-choice" class="spotlight-newsletter-choice" aria-labelledby="spotlight-newsletter-title" hidden>'
+        . '<h2 id="spotlight-newsletter-title">Your privacy choices</h2>'
+        . '<p data-newsletter-gpc hidden>Your browser sent a Global Privacy Control signal. Analytics and newsletter tools stay off.</p>'
+        . '<p data-newsletter-media hidden>Analytics and newsletter tools stay off on this page because it can display video.</p>'
         . '<p><a href="' . esc_url($config['policyUrl']) . '">Read the privacy policy</a></p>'
-        . '<p role="status" data-newsletter-status></p><div class="spotlight-newsletter-actions" data-newsletter-choice>'
-        . '<button type="button" data-newsletter-deny>Do not allow</button>'
-        . '<button type="button" data-newsletter-allow>Allow newsletter tools</button></div>'
-        . '<button type="button" data-newsletter-close hidden>Close</button></aside>'
+        . $choice('analytics', 'Analytics', 'With your permission, Google Analytics counts visits and shows which stories '
+            . 'readers use. It sets cookies to recognize return visits. Its advertising features stay off.',
+            'data-measurement-id="' . esc_attr($config['measurement']) . '"')
+        . $choice('newsletter', 'Newsletter tools', 'With your permission, Wisepops can show newsletter forms and use cookies '
+            . 'to remember your interactions. ActiveCampaign can record page visits and your IP address for newsletter '
+            . 'marketing and link visits to an existing contact record.',
+            'data-account="' . esc_attr($config['account']) . '" data-property="' . esc_attr($config['property']) . '"')
+        . '<p>You can change your choices at any time in Privacy settings.</p>'
+        . '<button type="button" data-newsletter-close>Close</button></aside>'
         . '<script type="module" src="' . esc_url($assets . 'consent.js') . '"></script>';
 }
 

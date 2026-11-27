@@ -17,14 +17,36 @@
     font-size: 1rem;
     line-height: 1.5;
 }
+.spotlight-privacy-bar {
+    position: fixed;
+    z-index: 10000;
+    inset: auto 0 0;
+    box-sizing: border-box;
+    max-height: 50dvh;
+    padding: 0.75rem 1rem;
+    overflow-y: auto;
+    overflow-wrap: anywhere;
+    color: #151515;
+    background: #fff;
+    border-top: 2px solid #2638c4;
+    box-shadow: 0 -0.25rem 1rem #0002;
+    font: 1rem/1.5 Inter, Arial, sans-serif;
+}
+.spotlight-privacy-bar p { max-width: 55rem; margin: 0 auto 0.5rem; }
+.spotlight-privacy-bar-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; max-width: 55rem; margin: 0 auto; }
+.spotlight-privacy-bar-actions button { flex: 1 1 6rem; }
+.spotlight-privacy-bar[hidden],
 .spotlight-newsletter-choice [hidden],
 .spotlight-newsletter-choice[hidden],
 .spotlight-newsletter-settings[hidden] { display: none !important; }
 .spotlight-newsletter-choice h2 { margin: 0 0 0.75rem; font: 700 1.3rem/1.3 Inter, Arial, sans-serif; }
 .spotlight-newsletter-choice p { margin: 0 0 0.75rem; }
+.spotlight-newsletter-choice h3 { margin: 1rem 0 0.5rem; font: 700 1.1rem/1.3 Inter, Arial, sans-serif; }
+.spotlight-newsletter-choice section { margin-bottom: 1rem; }
 .spotlight-newsletter-choice a { color: #2638c4; text-decoration: underline; }
 .spotlight-newsletter-actions { display: flex; flex-wrap: wrap; gap: 0.75rem; }
 .spotlight-newsletter-choice button,
+.spotlight-privacy-bar button,
 .spotlight-newsletter-settings {
     min-height: 44px;
     padding: 0.65rem 1rem;
@@ -41,4 +63,5 @@
 .spotlight-newsletter-settings { overflow-wrap: anywhere; }
 .spotlight-newsletter-information { margin: 1rem; text-align: center; }
 .spotlight-newsletter-choice :focus-visible,
+.spotlight-privacy-bar :focus-visible,
 .spotlight-newsletter-settings:focus-visible { outline: 3px solid #151515; outline-offset: 3px; }
