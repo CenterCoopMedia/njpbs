@@ -56,13 +56,13 @@ describe("My drafts on Home", () => {
     renderDrafts({ archiveDraft, loadDrafts, onArchived });
 
     await screen.findByRole("button", { name: "Archive School budget vote" });
+    expect(screen.getByRole("status")).toBeEmptyDOMElement();
     expect(screen.getByRole("button", { name: "Archive Shore erosion" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Archive Transit fares" })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Archive School budget vote" }));
     await waitFor(() => expect(screen.queryByRole("link", { name: "School budget vote" })).not.toBeInTheDocument());
-    expect(screen.getByRole("status")).toHaveTextContent('"School budget vote" was archived');
-    expect(screen.getByRole("status")).toHaveTextContent("It is in Recycle bin.");
+    expect(screen.getByRole("status")).toHaveTextContent('"School budget vote" was archived. It is in Recycle bin.');
     expect(screen.getByRole("heading", { name: "My drafts" })).toHaveFocus();
     expect(archiveDraft).toHaveBeenCalledWith(expect.objectContaining({ id: "old", version: 4 }));
     expect(loadDrafts).toHaveBeenCalledTimes(2);

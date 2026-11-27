@@ -154,6 +154,11 @@ export function HomeDrafts({ loadDrafts, archiveDraft, onArchived, now = Date.no
     }
   }
 
+  const resultTitle = archiveResult
+    ? archiveResult.tone === "error"
+      ? `Archiving "${archiveResult.title}" needs attention`
+      : `"${archiveResult.title}" was archived`
+    : "";
   const nowMs = now();
   const selection = state.status === "ready" ? state.selection : null;
   const drafts = selection?.records.slice(0, SHOWN_DRAFTS) ?? [];
@@ -177,12 +182,16 @@ export function HomeDrafts({ loadDrafts, archiveDraft, onArchived, now = Date.no
           <Button onClick={() => setAttempt((value) => value + 1)}>Try loading drafts again</Button>
         </InlineMessage>
       ) : null}
+      {/* Mounted before any result, so screen readers announce the text written into it. */}
+      <p aria-atomic="true" className="sr-only" role="status">
+        {archiveResult && archiveResult.tone !== "error" ? `${resultTitle}. ${archiveResult.message}` : ""}
+      </p>
       {archiveResult ? (
         <InlineMessage
           tone={archiveResult.tone}
-          title={archiveResult.tone === "error"
-            ? `Archiving "${archiveResult.title}" needs attention`
-            : `"${archiveResult.title}" was archived`}
+          title={resultTitle}
+          // Errors interrupt as alerts; other results are announced by the status region above.
+          role={archiveResult.tone === "error" ? "alert" : undefined}
         >
           {archiveResult.message}
         </InlineMessage>
