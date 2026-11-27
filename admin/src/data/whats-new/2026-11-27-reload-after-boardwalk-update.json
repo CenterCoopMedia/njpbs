@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-27",
+  "kind": "fixed",
+  "title": "Pages reload after a Boardwalk update",
+  "body": "If Boardwalk was updated while a page was open, opening another page now reloads to the latest version once instead of showing an error.",
+  "prs": []
+}
