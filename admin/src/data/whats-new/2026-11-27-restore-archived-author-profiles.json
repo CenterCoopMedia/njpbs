@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-27",
+  "kind": "fixed",
+  "title": "Restore an archived author profile",
+  "body": "Admins can now restore an archived author profile in Author profiles. If your own profile is archived, Your profile explains why and shows your access instead of an error.",
+  "prs": []
+}

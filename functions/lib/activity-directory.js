@@ -166,6 +166,7 @@ const ACTIVITY_ACTION_LABELS = Object.freeze({
   "author_profile.account_link": "Author profile linked to a CMS account",
   "author_profile.admin_update": "Author profile updated by an administrator",
   "author_profile.archive": "Author profile archived",
+  "author_profile.restore": "Author profile restored",
   "author_profile.backfill": "Author profile backfilled",
   "author_profile.create": "Author profile created",
   "author_profile.delete_draft": "Author profile draft deleted",
