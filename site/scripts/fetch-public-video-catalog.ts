@@ -1,7 +1,7 @@
 import { buildProgram, type AssetAttributes, type EpisodeAttributes, type MediaManagerRecord,
   type RawShow, type SeasonAttributes, type ShowAttributes } from "../src/lib/media-manager-catalog.ts";
 import { reportMediaCoverage } from "../src/lib/media-manager-coverage.ts";
-import { catalogCaptionLanguage, catalogDate, catalogRecord, catalogSlug, isCatalogImage, MAX_CATALOG_BYTES, MAX_PROGRAM_VIDEOS,
+import { catalogCaptionLanguage, catalogDate, catalogRecord, catalogSlug, fitCatalogPages, isCatalogImage, MAX_CATALOG_BYTES,
   mediaManagerWindowAt, readPublicVideoCatalog, type PublicVideo, type PublicVideoCatalog } from "../src/lib/public-video-catalog.ts";
 
 const MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
@@ -107,13 +107,6 @@ function uniqueSlugs<T extends { slug: string }>(rows: T[]): T[] {
   return rows.filter(({ slug }) => slugs.get(slug) === 1).sort((a, b) => a.slug.localeCompare(b.slug, "en"));
 }
 
-/** Keep the newest videos by premiere date, ties by id, in slug order. Undated videos sort last. */
-function newestVideos<T extends { id: string; slug: string; premieredOn: string | null }>(rows: T[]): T[] {
-  const date = (row: T) => catalogDate(row.premieredOn) ? row.premieredOn! : "";
-  return [...rows].sort((a, b) => date(b).localeCompare(date(a)) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
-    .slice(0, MAX_PROGRAM_VIDEOS).sort((a, b) => a.slug.localeCompare(b.slug, "en"));
-}
-
 function catalogImage(attributes: Record<string, unknown>, profile: RegExp): string | undefined {
   const images: unknown[] = Array.isArray(attributes.images) ? attributes.images : [];
   for (const value of images) {
@@ -205,12 +198,16 @@ export async function fetchPublicVideoCatalog(config: { url: URL; authorization:
     }
   }
 
+  const built = [...sources.values()].flatMap(({ raw, videos }) => {
+    const program = buildProgram(raw);
+    const episodes = uniqueSlugs(program.episodes.filter(({ playback }) => playback.partnerPlayerSrc !== null));
+    return episodes.length ? [{ raw, videos, program, episodes }] : [];
+  });
+  const fitted = fitCatalogPages(built, video => video.id);
+  if (!fitted) throw new PublicVideoCatalogError("Media Manager catalog page limit exceeded");
   const coverage = [];
   const programs = [];
-  for (const { raw, videos } of sources.values()) {
-    const program = buildProgram(raw);
-    const episodes = newestVideos(uniqueSlugs(program.episodes.filter(({ playback }) => playback.partnerPlayerSrc !== null)));
-    if (!episodes.length) continue;
+  for (const { raw, videos, program, episodes } of fitted) {
     coverage.push({ ...program, episodes });
     programs.push({ slug: program.slug, title: program.title, description: program.description,
       image: raw.show.image, genre: program.genre,

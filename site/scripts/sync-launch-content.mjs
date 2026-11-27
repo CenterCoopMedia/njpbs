@@ -8,6 +8,8 @@ import { fetchPublicVideoCatalog, PublicVideoCatalogError } from "./fetch-public
 import { readPublicVideoCatalog } from "../src/lib/public-video-catalog.ts";
 
 const DEFAULT_BASE_URL = "https://media.services.pbs.org/api/v1/";
+// The cloud external refresh accepts each input file up to this size.
+export const MAX_EXTERNAL_INPUT_BYTES = 16 * 1024 * 1024;
 const DEFAULT_OUTPUT_PATH = "src/data/launch-media-manager.json";
 const DEFAULT_WATCH_BASE_URL = "https://watch.njpbs.org";
 
@@ -217,7 +219,7 @@ export async function readCommittedLaunchContent(config, readImpl = readFile) {
   }
 }
 
-export async function writeLaunchContent(config, payload, outage = false, newscast, videoCatalog) {
+export async function writeLaunchContent(config, payload, outage = false, newscast, videoCatalog, retainedCatalog) {
   const output = {
     // An outage write never carries Media Manager data, so labeling it
     // "media-manager" would let the next outage run mistake an empty synthetic
@@ -233,20 +235,30 @@ export async function writeLaunchContent(config, payload, outage = false, newsca
     ...(newscast ? { newscast } : {}),
     ...(videoCatalog ? { videoCatalog } : {}),
   };
-  await writeLaunchContentFile(config, output);
-  return output;
+  return writeLaunchContentFile(config, output, retainedCatalog);
 }
 
-async function writeLaunchContentFile(config, output) {
+async function writeLaunchContentFile(config, output, retainedCatalog) {
+  if (output.videoCatalog && retainedCatalog && Buffer.byteLength(launchFileText(output)) > MAX_EXTERNAL_INPUT_BYTES) {
+    console.warn("Media Manager video catalog refresh failed (launch file limit exceeded). Retaining the last valid catalog when available.");
+    const { videoCatalog: _rejected, ...rest } = output;
+    const previous = await retainedCatalog();
+    output = previous ? { ...rest, videoCatalog: previous } : rest;
+  }
   const outputPath = path.resolve(config.outputPath);
   await mkdir(path.dirname(outputPath), { recursive: true });
   const pending = `${outputPath}.${randomUUID()}.tmp`;
   try {
-    await writeFile(pending, `${JSON.stringify(output, null, 2)}\n`, { encoding: "utf8", flag: "wx" });
+    await writeFile(pending, launchFileText(output), { encoding: "utf8", flag: "wx" });
     await rename(pending, outputPath);
   } finally {
     await rm(pending, { force: true });
   }
+  return output;
+}
+
+function launchFileText(output) {
+  return `${JSON.stringify(output, null, 2)}\n`;
 }
 
 async function videoCatalogForSync(config, fetchImpl, { now, readRetainedVideoCatalog }, outage) {
@@ -258,6 +270,10 @@ async function videoCatalogForSync(config, fetchImpl, { now, readRetainedVideoCa
       console.warn(`Media Manager video catalog refresh failed (${reason}). Retaining the last valid catalog when available.`);
     }
   }
+  return retainedVideoCatalog(config, { now, readRetainedVideoCatalog });
+}
+
+async function retainedVideoCatalog(config, { now, readRetainedVideoCatalog }) {
   if (readRetainedVideoCatalog) return readPublicVideoCatalog(await readRetainedVideoCatalog(), now);
   try {
     const previous = JSON.parse(await readFile(path.resolve(config.outputPath), "utf8"));
@@ -277,9 +293,11 @@ export async function main(env = process.env, fetchImpl = fetch, sleepImpl = def
   if (env.REQUIRE_FRESH_CONTENT === "1" && selectLaunchCards(normalizeShowsToCards(payload)).length === 0) {
     throw new Error("scheduled refresh requires usable Media Manager data");
   }
+  const now = options.now ?? new Date();
+  const retained = () => retainedVideoCatalog(config, { ...options, now });
   const [newscast, videoCatalog] = await Promise.all([
     homeNewscastForSync(config, fetchImpl),
-    videoCatalogForSync(config, fetchImpl, { ...options, now: options.now ?? new Date() }, outage),
+    videoCatalogForSync(config, fetchImpl, { ...options, now }, outage),
   ]);
   if (outage) {
     const committed = await readCommittedLaunchContent(config);
@@ -287,8 +305,8 @@ export async function main(env = process.env, fetchImpl = fetch, sleepImpl = def
       // Write the re-filtered list back rather than leaving the file untouched:
       // the build reads the file raw, so a committed card that today's selection
       // rules exclude must not survive on disk just because the keep path ran.
-      const { videoCatalog: _previous, ...retained } = committed;
-      await writeLaunchContentFile(config, { ...retained, newscast, ...(videoCatalog ? { videoCatalog } : {}) });
+      const { videoCatalog: _previous, ...kept } = committed;
+      await writeLaunchContentFile(config, { ...kept, newscast, ...(videoCatalog ? { videoCatalog } : {}) }, retained);
       const noun = committed.cards.length === 1 ? "card" : "cards";
       console.log(
         `Launch content sync kept ${committed.cards.length} committed ${noun} (checked ${committed.checkedAt}) through the Media Manager outage`,
@@ -296,7 +314,7 @@ export async function main(env = process.env, fetchImpl = fetch, sleepImpl = def
       return;
     }
   }
-  const output = await writeLaunchContent(config, payload, outage, newscast, videoCatalog);
+  const output = await writeLaunchContent(config, payload, outage, newscast, videoCatalog, retained);
   console.log(
     `Launch content sync wrote ${output.cards.length} cards from ${output.source}`,
   );

@@ -4,7 +4,7 @@ import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { fetchPublicVideoCatalog } from "../scripts/fetch-public-video-catalog";
 import { main } from "../scripts/sync-launch-content.mjs";
-import { MAX_CATALOG_BYTES, mediaManagerWindowAt, readPublicVideoCatalog } from "../src/lib/public-video-catalog";
+import { MAX_CATALOG_BYTES, MAX_CATALOG_PAGES, mediaManagerWindowAt, readPublicVideoCatalog } from "../src/lib/public-video-catalog";
 import { catalogAsset, coastShow, duplicateCoastShow, riverShow } from "./fixtures/public-video-catalog";
 
 const now = new Date("2026-11-20T12:00:00.000Z");
@@ -153,15 +153,29 @@ describe("public video catalog", () => {
     expect(readPublicVideoCatalog(snapshot)).toEqual(snapshot);
 
     const [program] = snapshot.programs;
-    const eleven = [...program.episodes, { ...program.episodes[0], slug: "river-extra" }];
-    expect(() => readPublicVideoCatalog({ ...snapshot, programs: [{ ...program, episodes: eleven }] }))
-      .toThrow(/Invalid public video catalog/);
     const description = "x".repeat(2_000);
     const programs = Array.from({ length: Math.ceil(MAX_CATALOG_BYTES / (description.length * 10)) }, (_, index) => ({
       ...program, slug: `program-${index}`, episodes: program.episodes.map(video => ({ ...video, description })) }));
     const oversized = { ...snapshot, programs };
     expect(Buffer.byteLength(JSON.stringify(oversized))).toBeGreaterThan(MAX_CATALOG_BYTES);
     expect(() => readPublicVideoCatalog(oversized)).toThrow(/Invalid public video catalog/);
+  });
+
+  it("publishes a retained catalog within the page limit by lowering the videos kept per program", async () => {
+    const fetch = async (input: URL | string | Request) => new URL(input.toString()).pathname.endsWith("/shows/")
+      ? result([riverShow]) : result([catalogAsset("river-episode")]);
+    const [video] = (await fetchPublicVideoCatalog(config, fetch, now)).programs[0].episodes;
+    // 200 programs of 12: limit 10 needs 2,201 pages, 7 needs 1,601, 6 needs 1,401 (MAX_CATALOG_PAGES is 1,460).
+    expect(MAX_CATALOG_PAGES).toBe(1_460);
+    const retained = { checkedAt: now.toISOString(), programs: Array.from({ length: 200 }, (_, program) => ({
+      slug: `program-${program}`, title: "Program", description: "Program description.", genre: null,
+      episodes: Array.from({ length: 12 }, (_, index) => ({ ...video, slug: `video-${index}`,
+        premieredOn: `2026-01-${String(index + 1).padStart(2, "0")}` })),
+    })) };
+    const published = readPublicVideoCatalog(retained, now)!;
+    expect(published.programs).toHaveLength(200);
+    expect(published.programs.every(({ episodes }) =>
+      episodes.map(({ slug }) => slug).join() === "video-10,video-11,video-6,video-7,video-8,video-9")).toBe(true);
   });
 
   it("preserves the last valid catalog when a later asset page fails", async () => {

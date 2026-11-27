@@ -6,7 +6,7 @@ import { createRequire } from "node:module";
 import { isDeepStrictEqual } from "node:util";
 import type { App } from "firebase-admin/app";
 import type { CollectionReference, Firestore, Timestamp } from "firebase-admin/firestore";
-import { main as syncLaunchContent } from "./sync-launch-content.mjs";
+import { main as syncLaunchContent, MAX_EXTERNAL_INPUT_BYTES } from "./sync-launch-content.mjs";
 import { main as syncSpotlightNews } from "./sync-spotlight-news.mjs";
 import { createSpotlightImageStorage } from "./spotlight-image-cache.mjs";
 import { main as syncSchedule, writeScheduleData } from "./sync-schedule.mjs";
@@ -66,7 +66,7 @@ function assertExternalInputs(value: CloudExternalInputs) {
   for (const name of EXTERNAL_INPUT_FILES) {
     const file = value.files[name];
     if (!file || file.key !== `post-background-v1/external-inputs/${value.operationId}/${name}` ||
-        !/^[a-f0-9]{64}$/.test(file.digest) || !Number.isSafeInteger(file.size) || file.size < 1 || file.size > 16 * 1024 * 1024) {
+        !/^[a-f0-9]{64}$/.test(file.digest) || !Number.isSafeInteger(file.size) || file.size < 1 || file.size > MAX_EXTERNAL_INPUT_BYTES) {
       throw new Error("Invalid frozen external input receipt");
     }
   }
@@ -267,7 +267,7 @@ export function cloudExternalRefresh({ firestore, firebaseApp, runtime, backgrou
       const files: Record<string, Buffer> = {};
       for (const name of EXTERNAL_INPUT_FILES) {
         const bytes = await readFile(path.join(directory, name));
-        if (bytes.length < 1 || bytes.length > 16 * 1024 * 1024) throw new Error("External input exceeds its bound");
+        if (bytes.length < 1 || bytes.length > MAX_EXTERNAL_INPUT_BYTES) throw new Error("External input exceeds its bound");
         files[name] = bytes;
       }
       const contentDigest = externalInputContentDigest(files);

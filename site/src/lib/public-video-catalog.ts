@@ -3,9 +3,31 @@ import { extractPartnerPlayerSrc, type AssetAvailabilityWindow } from "./media-m
 // Its serialized size bounds the catalog: 0.8 MB for 1,105 videos on Nov. 27, 2026.
 // The launch file stores it pretty-printed under a 16 MiB input bound, so the compact catalog keeps half of that.
 export const MAX_CATALOG_BYTES = 8 * 1024 * 1024;
-// Every video is its own page in the videoCatalog publication family (4,096 files, 64 MB). Pages are about 34 KB.
-// The newest 10 per program measured 1,425 files and 49 MB on Nov. 27, 2026 (73% of the byte limit); 11 exceeds 75%.
+// Each program publishes only its newest videos, by product decision (Nov. 27, 2026), not every available video.
+// Every video is its own page in the videoCatalog publication family (4,096 files, 64 MB), about 34.4 KB each.
+// The newest 10 per program measured 1,425 pages and 49.05 MB on Nov. 27, 2026. A higher limit needs a higher byte cap.
 export const MAX_PROGRAM_VIDEOS = 10;
+// 75% of the family byte cap at 34.4 KB per page. More programs lower the per-program limit below 10.
+export const MAX_CATALOG_PAGES = 1_460;
+
+type CatalogVideo = { slug: string; premieredOn: string | null };
+
+/**
+ * Keep the newest videos per program (premiere date, then `tie`), using the largest per-program limit that keeps
+ * the index, program and video pages within MAX_CATALOG_PAGES. Undefined when one video per program does not fit.
+ */
+export function fitCatalogPages<V extends CatalogVideo, P extends { episodes: V[] }>(programs: P[],
+    tie: (video: V) => string = video => video.slug): P[] | undefined {
+  const date = (video: V) => catalogDate(video.premieredOn) ? video.premieredOn : "";
+  for (let limit = MAX_PROGRAM_VIDEOS; limit > 0; limit -= 1) {
+    const pages = 1 + programs.reduce((sum, program) => sum + 1 + Math.min(program.episodes.length, limit), 0);
+    if (pages > MAX_CATALOG_PAGES) continue;
+    return programs.map(program => ({ ...program, episodes: [...program.episodes]
+      .sort((a, b) => date(b).localeCompare(date(a)) || (tie(a) < tie(b) ? -1 : tie(a) > tie(b) ? 1 : 0))
+      .slice(0, limit).sort((a, b) => a.slug.localeCompare(b.slug, "en")) }));
+  }
+  return undefined;
+}
 
 export interface PublicVideo {
   slug: string;
@@ -170,8 +192,7 @@ export function readPublicVideoCatalog(value: unknown, now?: Date): PublicVideoC
     if (!program || !catalogSlug(program.slug) || programSlugs.has(program.slug) || !text(program.title) ||
         !text(program.description) || (program.image !== undefined && !isCatalogImage(program.image)) ||
         (program.genre !== null && !text(program.genre)) ||
-        !Array.isArray(program.episodes) || program.episodes.length === 0 ||
-        program.episodes.length > MAX_PROGRAM_VIDEOS) throw invalid();
+        !Array.isArray(program.episodes) || program.episodes.length === 0) throw invalid();
     programSlugs.add(program.slug);
     const episodeSlugs = new Set<string>();
     for (const rawEpisode of program.episodes as unknown[]) {
@@ -191,11 +212,11 @@ export function readPublicVideoCatalog(value: unknown, now?: Date): PublicVideoC
   }
   const snapshot = value as PublicVideoCatalog;
   if (!now) return snapshot;
-  return {
-    checkedAt: snapshot.checkedAt,
-    programs: snapshot.programs.flatMap(program => {
-      const episodes = program.episodes.filter(episode => mediaManagerWindowAt(episode.window, now) === "open");
-      return episodes.length ? [{ ...program, episodes }] : [];
-    }),
-  };
+  // A retained catalog may predate the page limits; publish only what fits.
+  const programs = fitCatalogPages(snapshot.programs.flatMap(program => {
+    const episodes = program.episodes.filter(episode => mediaManagerWindowAt(episode.window, now) === "open");
+    return episodes.length ? [{ ...program, episodes }] : [];
+  }));
+  if (!programs) throw invalid();
+  return { checkedAt: snapshot.checkedAt, programs };
 }
