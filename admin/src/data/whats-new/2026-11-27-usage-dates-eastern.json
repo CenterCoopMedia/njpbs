@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-27",
+  "kind": "fixed",
+  "order": 1795808198856,
+  "title": "Usage analytics days follow Eastern time",
+  "body": "The Boardwalk usage analytics report now counts each day and week in Eastern time, so evening work stays on the day it happened. Days collected before this change keep their earlier dates, and the report shows when the switch began.",
+  "prs": []
+}

@@ -42,8 +42,11 @@ actions. This first version does not display anyone's individual activity.
 
 The tables include only the instrumented destinations and actions. A zero
 means no collected use in the selected period; time before usage analytics began is
-not evidence that a tool is unused. Dates use UTC and today is incomplete.
-Weekly counts cover Monday to Sunday; a person counts once in each week.
+not evidence that a tool is unused. Dates use Eastern time and today is
+incomplete. Days collected before the switch to Eastern time stay keyed by UTC
+date, so work after 7 or 8 PM on those days appears on the next day. The report
+marks those rows UTC and shows the switch date. Weekly counts cover Monday to Sunday; a person counts
+once in each week.
 
 Visible time can include idle time. Hidden tabs do not add time. Browser closure,
 an interrupted connection or a dropped background delivery can lose events.

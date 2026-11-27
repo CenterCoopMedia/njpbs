@@ -23,13 +23,21 @@ const own = (object, key) => Object.hasOwn(object, key);
 const plain = value => value && typeof value === "object" && !Array.isArray(value);
 const only = (value, keys) => plain(value) && Object.keys(value).every(key => keys.includes(key));
 const hash = value => createHash("sha256").update(value).digest("hex");
-const date = ms => new Date(ms).toISOString().slice(0, 10);
+const TIMEZONE = "America/New_York";
+// Day and week keys are newsroom (Eastern) calendar dates, so evening work stays on its own day.
+const easternDate = new Intl.DateTimeFormat("en-CA", { timeZone: TIMEZONE, year: "numeric", month: "2-digit", day: "2-digit" });
+const easternOffset = new Intl.DateTimeFormat("en-US", { timeZone: TIMEZONE, timeZoneName: "longOffset" });
+const dayOf = ms => easternDate.format(ms);
+const calendarDay = ms => new Date(ms).toISOString().slice(0, 10);
+const shiftDay = (day, days) => calendarDay(Date.parse(`${day}T00:00:00Z`) + days * DAY_MS);
+const mondayOf = day => shiftDay(day, -((new Date(`${day}T00:00:00Z`).getUTCDay() + 6) % 7));
+// Eastern aggregates and presence markers use their own keys; earlier UTC-keyed rows stay as stored.
+const EASTERN_PREFIX = "et-";
 
-function weekStart(ms) {
-  const day = new Date(ms);
-  day.setUTCHours(0, 0, 0, 0);
-  day.setUTCDate(day.getUTCDate() - ((day.getUTCDay() + 6) % 7));
-  return day.getTime();
+// Eastern midnight as an instant. 05:00 UTC is before the 2 AM local DST switch, so its offset is midnight's.
+function easternMidnight(day) {
+  const offset = easternOffset.formatToParts(Date.parse(`${day}T05:00:00Z`)).find(part => part.type === "timeZoneName").value;
+  return new Date(`${day}T00:00:00${offset.slice(3) || "Z"}`).toISOString();
 }
 
 function validEvent(event) {
@@ -45,8 +53,8 @@ function validEvent(event) {
 }
 
 async function collectBatch(firestore, actor, body, now) {
-  const day = date(now);
-  const week = date(weekStart(now));
+  const day = `${EASTERN_PREFIX}${dayOf(now)}`;
+  const week = `${EASTERN_PREFIX}${mondayOf(dayOf(now))}`;
   const raw = firestore.collection("cmsUsageEvents").doc(hash(`${actor.uid}:${body.batchId}`));
   const presence = firestore.collection("cmsUsagePresence");
   const dayPerson = presence.doc(`day_${day}_${hash(actor.uid)}`);
@@ -80,32 +88,45 @@ async function collectBatch(firestore, actor, body, now) {
 }
 
 async function readReport(firestore, days, now) {
-  const today = Date.parse(`${date(now)}T00:00:00Z`);
-  const dates = Array.from({ length: days }, (_, index) => date(today - (days - index - 1) * DAY_MS));
+  const today = dayOf(now);
+  const dates = Array.from({ length: days }, (_, index) => shiftDay(today, index - days + 1));
   // Include calendar weeks that start within the chosen window; the current week is partial.
-  const weeks = dates.filter(value => weekStart(Date.parse(`${value}T00:00:00Z`)) === Date.parse(`${value}T00:00:00Z`));
-  const [dailyRows, weeklyRows, first, history] = await Promise.all([
-    firestore.getAll(...dates.map(value => firestore.collection("cmsUsageDaily").doc(value))),
-    firestore.getAll(...weeks.map(value => firestore.collection("cmsUsageWeekly").doc(value))),
-    firestore.collection("cmsUsageDaily").orderBy("__name__").limit(1).get(),
-    readActivityHistory(firestore, `${dates[0]}T00:00:00.000Z`, new Date(now).toISOString()),
+  const weeks = dates.filter(value => mondayOf(value) === value);
+  const daily = firestore.collection("cmsUsageDaily");
+  const weekly = firestore.collection("cmsUsageWeekly");
+  const both = keys => keys.flatMap(key => [key, `${EASTERN_PREFIX}${key}`]);
+  const [dailyRows, weeklyRows, first, firstEastern, history] = await Promise.all([
+    firestore.getAll(...both(dates).map(key => daily.doc(key))),
+    firestore.getAll(...both(weeks).map(key => weekly.doc(key))),
+    daily.orderBy("__name__").limit(1).get(),
+    daily.where("__name__", ">=", daily.doc(EASTERN_PREFIX)).orderBy("__name__").limit(1).get(),
+    readActivityHistory(firestore, easternMidnight(dates[0]), new Date(now).toISOString()),
   ]);
+  const easternFromDate = firstEastern.docs[0]?.id.startsWith(EASTERN_PREFIX) ? firstEastern.docs[0].id.slice(EASTERN_PREFIX.length) : null;
   const screens = Object.entries(config.screens).map(([id, label]) => ({ id, label, views: 0, visibleMs: 0 }));
   const actions = Object.entries(config.actions).map(([id, label]) => ({ id, label, count: 0 }));
   // Project known numeric fields explicitly: stored raw or person data cannot enter this response.
   const count = value => Number.isSafeInteger(value) && value >= 0 ? value : 0;
-  const daily = dailyRows.map((row, index) => {
+  // Each event is in exactly one UTC or Eastern row, so totals add both.
+  for (const row of dailyRows) {
     const data = row.data() ?? {};
     for (const screen of screens) {
       screen.views += count(data.views?.[screen.id]);
       screen.visibleMs += count(data.visibleMs?.[screen.id]);
     }
     for (const action of actions) action.count += count(data.actions?.[action.id]);
-    return { date: dates[index], activeUsers: count(data.activeUsers) };
+  }
+  // Distinct people cannot be added across conventions: a row shows its Eastern count from the switch on, UTC before.
+  const people = (rows, keys, eastern) => keys.map((key, index) => {
+    const timezone = eastern(key) ? TIMEZONE : "UTC";
+    return { key, timezone, activeUsers: count(rows[index * 2 + (timezone === "UTC" ? 0 : 1)].data()?.activeUsers) };
   });
+  const switched = value => easternFromDate !== null && value >= easternFromDate;
   return { days, analyticsEnabled: config.analyticsEnabled, generatedAt: new Date(now).toISOString(),
-    firstCollectedDate: first.docs[0]?.id ?? null, timezone: "UTC", daily,
-    weekly: weeklyRows.map((row, index) => ({ week: weeks[index], activeUsers: count(row.data()?.activeUsers) })),
+    firstCollectedDate: first.docs[0]?.id.replace(EASTERN_PREFIX, "") ?? null, easternFromDate, timezone: TIMEZONE,
+    daily: people(dailyRows, dates, switched).map(({ key, ...row }) => ({ date: key, ...row })),
+    weekly: people(weeklyRows, weeks, value => easternFromDate !== null && value >= mondayOf(easternFromDate))
+      .map(({ key, ...row }) => ({ week: key, ...row })),
     history,
     screens: screens.sort((a, b) => b.views - a.views || a.label.localeCompare(b.label)),
     actions: actions.sort((a, b) => b.count - a.count || a.label.localeCompare(b.label)) };

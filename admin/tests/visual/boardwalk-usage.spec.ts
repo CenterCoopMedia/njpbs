@@ -28,14 +28,14 @@ for (const width of [390, 1280]) {
         if(endpoint!=='cmsGetBoardwalkUsage')throw new Error('Unexpected endpoint');
         if(window.__usageFail)throw new Error('Private service detail');
         const populated=window.__usagePopulated===true;
-        return {days,analyticsEnabled:false,generatedAt:'2026-11-07T15:00:00Z',firstCollectedDate:populated?'2026-11-01':null,timezone:'UTC',
+        return {days,analyticsEnabled:false,generatedAt:'2026-11-07T15:00:00Z',firstCollectedDate:populated?'2026-11-01':null,easternFromDate:populated?'2026-11-01':null,timezone:'America/New_York',
           history:{status:'ready',start:'2026-10-09T00:00:00Z',end:'2026-11-07T15:00:00Z',actions:[
             {id:'auth.login',label:'Accepted sign-ins',count:84},
             {id:'cms.publish',label:'Publish requests (all content)',count:56},
             {id:'cms.preview.request',label:'Preview jobs requested',count:120},
             {id:'media.upload',label:'Media items added (includes approved submissions)',count:42},
             {id:'bug_report.create',label:'Problem reports filed',count:8}]},
-          daily:[{date:'2026-11-07',activeUsers:12}],weekly:[{week:'2026-11-02',activeUsers:19}],
+          daily:[{date:'2026-11-07',timezone:'America/New_York',activeUsers:12}],weekly:[{week:'2026-11-02',timezone:'America/New_York',activeUsers:19}],
           screens:[{id:'posts',label:'Posts',views:120,visibleMs:7200000},{id:'pages',label:'Pages',views:32,visibleMs:1200000},{id:'post-templates',label:'Post templates',views:0,visibleMs:0}],
           actions:[{id:'content.publish.request',label:'Content publish attempts',count:60},{id:'preview.request',label:'Saved Preview attempts',count:143}]};
       }
