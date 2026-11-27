@@ -1,5 +1,6 @@
 import type { Principal } from "../../../packages/content-core/src/rbac";
 import { canUploadMedia } from "./access";
+import { IMAGE_UPLOAD_ACTIONS, measureUsage } from "./boardwalk-usage";
 import {
   cmsListMedia,
   cmsUploadMedia,
@@ -148,7 +149,17 @@ export const HIDDEN_DUPLICATE_MESSAGE =
  * instead of failing. A duplicate the caller may not see still fails, with a
  * message that says who can help.
  */
-export async function uploadMediaReusingDuplicates(
+export function uploadMediaReusingDuplicates(
+  idToken: string,
+  file: File,
+  metadata: UploadMediaMetadata,
+  signal: AbortSignal,
+  onRateLimitWait?: (seconds: number) => void,
+): Promise<UploadMediaResponse> {
+  return measureUsage(IMAGE_UPLOAD_ACTIONS, signal, () => uploadOnce(idToken, file, metadata, signal, onRateLimitWait));
+}
+
+async function uploadOnce(
   idToken: string,
   file: File,
   metadata: UploadMediaMetadata,

@@ -30,9 +30,9 @@ const under = (pathname: string, root: string) => pathname === root || pathname.
 
 export function usageScreen(pathname: string): UsageScreen | null {
   const content = parseContentPath(pathname);
-  if (content.kind === "page-list") return "pages";
+  if (content.kind === "page-list") return "pages-list";
   if (content.kind === "edit-page") return "pages-editor";
-  if (content.kind === "record-list" && content.type === "post") return "posts";
+  if (content.kind === "record-list" && content.type === "post") return "posts-list";
   if ((content.kind === "edit-record" || content.kind === "create-record") && content.type === "post") return "posts-editor";
   if (under(pathname, ROUTE_PATHS.mediaFavorites)) return "media-favorites";
   if (under(pathname, ROUTE_PATHS.mediaCollections)) return "media-collections";
@@ -41,7 +41,8 @@ export function usageScreen(pathname: string): UsageScreen | null {
   if (pathname === ROUTE_PATHS.mediaVideos || pathname.startsWith(`${ROUTE_PATHS.mediaVideos}/`)) return "videos";
   if (pathname === ROUTE_PATHS.mediaVoiceovers) return "voiceovers";
   const category = routeCategoryForPath(pathname);
-  return Object.hasOwn(config.screens, category) ? category as UsageScreen : null;
+  const screen = ({ media: "media-landing", pages: "pages-list", posts: "posts-list" } as Record<string, string>)[category] ?? category;
+  return Object.hasOwn(config.screens, screen) ? screen as UsageScreen : null;
 }
 
 type ActionSink = (name: UsageAction, objectType?: UsageObjectType, objectId?: string) => void;
@@ -55,19 +56,28 @@ export function usageActionCollector(): ActionSink {
   };
 }
 
+type OutcomeActions = { sent?: UsageAction; ok?: UsageAction; failed?: UsageAction };
+
+// Uploads are measured where one person's upload succeeds or fails (after automatic retries).
+// A video upload starts when its session starts; each transfer attempt then finishes or fails.
+export const IMAGE_UPLOAD_ACTIONS: OutcomeActions = { sent: "media.upload.start", ok: "media.upload.finish", failed: "media.upload.failure" };
+export const VIDEO_TRANSFER_ACTIONS: OutcomeActions = { ok: "media.upload.finish", failed: "media.upload.failure" };
+
 // Actions measured at the shared Functions transport, so every caller of these endpoints is counted.
-const ENDPOINT_ACTIONS: Partial<Record<string, { sent?: UsageAction; ok?: UsageAction; failed?: UsageAction }>> = {
-  cmsUploadMedia: { sent: "media.upload.start", ok: "media.upload.finish", failed: "media.upload.failure" },
+const ENDPOINT_ACTIONS: Partial<Record<string, OutcomeActions>> = {
   cmsStartSourceMediaUpload: { sent: "media.upload.start", failed: "media.upload.failure" },
-  cmsCompleteSourceMediaUpload: { ok: "media.upload.finish", failed: "media.upload.failure" },
   cmsSaveContent: { failed: "content.save.failure" },
   cmsRequestVideoTranscript: { sent: "media.transcript.request" },
   cmsRequestByokVideoTranscript: { sent: "media.transcript.request" },
   cmsRequestVideoClip: { sent: "media.clip.request" },
 };
 
-export async function measureEndpointUsage<T>(endpoint: string, signal: AbortSignal | undefined, run: () => Promise<T>): Promise<T> {
-  const actions = ENDPOINT_ACTIONS[endpoint];
+export function measureEndpointUsage<T>(endpoint: string, signal: AbortSignal | undefined, run: () => Promise<T>): Promise<T> {
+  return measureUsage(ENDPOINT_ACTIONS[endpoint], signal, run);
+}
+
+// signal must be the person's own cancel signal, so a cancellation is not counted as a failure.
+export async function measureUsage<T>(actions: OutcomeActions | undefined, signal: AbortSignal | undefined, run: () => Promise<T>): Promise<T> {
   if (!actions) return run();
   const record = usageActionCollector();
   if (actions.sent) record(actions.sent);
@@ -132,12 +142,18 @@ export function startUsageAnalytics({ enabled, send, pathname, page = document, 
     else if (objectType && objectId && /^[a-zA-Z0-9_-]{1,128}$/.test(objectId)) add({ name, screen, objectType, objectId });
   };
   actionSink = sink;
-  // Count that a search was made, never its text, from any search box in Boardwalk.
+  // Count a search, never its text, once typing in any search box pauses for a second with text in it.
+  const searchTimers = new Map<HTMLInputElement, ReturnType<typeof setTimeout>>();
   function searched(event: Event) {
     const target = event.target;
-    if (target instanceof HTMLInputElement && target.type === "search" && target.value.trim()) sink("search");
+    if (!(target instanceof HTMLInputElement) || target.type !== "search") return;
+    clearTimeout(searchTimers.get(target));
+    searchTimers.set(target, setTimeout(() => {
+      searchTimers.delete(target);
+      if (target.value.trim()) sink("search");
+    }, 1_000));
   }
-  page.addEventListener("change", searched, true);
+  page.addEventListener("input", searched, true);
   function visibilityChanged() {
     duration();
     visible = page.visibilityState === "visible";
@@ -161,7 +177,8 @@ export function startUsageAnalytics({ enabled, send, pathname, page = document, 
       clearTimeout(flushTimer);
       clearInterval(timer);
       page.removeEventListener("visibilitychange", visibilityChanged);
-      page.removeEventListener("change", searched, true);
+      page.removeEventListener("input", searched, true);
+      for (const searchTimer of searchTimers.values()) clearTimeout(searchTimer);
       if (actionSink === sink) actionSink = null;
     },
   };

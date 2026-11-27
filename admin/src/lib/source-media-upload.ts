@@ -1,3 +1,4 @@
+import { measureUsage, VIDEO_TRANSFER_ACTIONS } from "./boardwalk-usage";
 import { postFunction } from "./functions";
 import type { SourceMediaAssetSummary, SourceMediaMarker } from "./source-media";
 
@@ -180,7 +181,13 @@ export function cancelVideoUpload(token: string | null | (() => Promise<string>)
   });
 }
 
-export async function transferVideo({ file, sourceId, session, getIdToken, signal, onProgress, onSession, onPhase, requireActiveSession = false }: {
+type TransferVideoRequest = Parameters<typeof transferVideoOnce>[0];
+
+export function transferVideo(request: TransferVideoRequest): Promise<VideoUploadResult> {
+  return measureUsage(VIDEO_TRANSFER_ACTIONS, request.signal, () => transferVideoOnce(request));
+}
+
+async function transferVideoOnce({ file, sourceId, session, getIdToken, signal, onProgress, onSession, onPhase, requireActiveSession = false }: {
   file: File;
   sourceId: string;
   session: VideoUploadSession;

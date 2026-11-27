@@ -22,11 +22,12 @@ happened, and these named actions:
 - Failed content saves, including failed publish and schedule saves.
 - Upload starts, finishes and failures.
 - Transcript and clip requests.
-- Searches. Boardwalk records that a search box was used, never what you typed.
+- Searches. When you pause typing in a search box, Boardwalk records that a
+  search happened, never what you typed.
 
 Destinations separate the Posts and Pages lists from their editors, and the
 Media landing from favorites, collections and public submissions. Counts from
-before this split combine them.
+before this split appear on their own combined rows.
 
 A publish count does not confirm that a public release finished, and a Preview
 request does not prove that someone viewed it.

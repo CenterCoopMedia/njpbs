@@ -108,7 +108,7 @@ async function readReport(firestore, days, now) {
     readActivityHistory(firestore, easternMidnight(dates[0]), new Date(now).toISOString()),
   ]);
   const easternFromDate = firstEastern.docs[0]?.id.startsWith(EASTERN_PREFIX) ? firstEastern.docs[0].id.slice(EASTERN_PREFIX.length) : null;
-  const screens = Object.entries(config.screens).map(([id, label]) => ({ id, label, views: 0, visibleMs: 0 }));
+  const screens = Object.entries({ ...config.screens, ...config.earlierScreens }).map(([id, label]) => ({ id, label, views: 0, visibleMs: 0 }));
   const actions = Object.entries(config.actions).map(([id, label]) => ({ id, label, count: 0 }));
   // Project known numeric fields explicitly: stored raw or person data cannot enter this response.
   const count = value => Number.isSafeInteger(value) && value >= 0 ? value : 0;
@@ -137,7 +137,8 @@ async function readReport(firestore, days, now) {
     weekly: people(weeklyRows, weeks, value => easternFromDate !== null && value >= mondayOf(easternFromDate))
       .map(({ key, ...row }) => ({ week: key, ...row })),
     history,
-    screens: screens.sort((a, b) => b.views - a.views || a.label.localeCompare(b.label)),
+    // Earlier combined destinations appear only in windows that include their stored counts.
+    screens: screens.filter(row => !own(config.earlierScreens, row.id) || row.views || row.visibleMs).sort((a, b) => b.views - a.views || a.label.localeCompare(b.label)),
     actions: actions.sort((a, b) => b.count - a.count || a.label.localeCompare(b.label)) };
 }
 

@@ -2,16 +2,16 @@
   "analyticsEnabled": true,
   "screens": {
     "dashboard": "Home",
-    "pages": "Pages list",
+    "pages-list": "Pages list",
     "pages-editor": "Page editor",
-    "posts": "Posts list",
+    "posts-list": "Posts list",
     "posts-editor": "Post editor",
     "content": "Other content",
     "post-templates": "Post templates",
     "cuez": "StoryDesk",
     "analytics": "Site analytics",
     "activity": "Activity",
-    "media": "Media landing",
+    "media-landing": "Media landing",
     "media-favorites": "Media favorites",
     "media-collections": "Media collections",
     "media-submissions": "Public submissions",
@@ -30,6 +30,11 @@
     "admin-settings": "Admin settings",
     "staff-access": "Staff access",
     "premiere-connect": "Connect Premiere"
+  },
+  "earlierScreens": {
+    "pages": "Pages, list and editor (before the split)",
+    "posts": "Posts, list and editor (before the split)",
+    "media": "Other media, landing and subpages (before the split)"
   },
   "actions": {
     "content.publish.request": "Content publish attempts",

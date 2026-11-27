@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { measureEndpointUsage, startUsageAnalytics, usageActionCollector, usageScreen, type UsageEvent } from "../src/lib/boardwalk-usage";
+import { IMAGE_UPLOAD_ACTIONS, measureEndpointUsage, measureUsage, startUsageAnalytics, VIDEO_TRANSFER_ACTIONS, usageActionCollector, usageScreen, type UsageEvent } from "../src/lib/boardwalk-usage";
 
 let visible = true;
 let time = 0;
@@ -28,11 +28,11 @@ describe("standard usage analytics (#4495)", () => {
 
   it("classifies destinations without retaining addresses, queries or source IDs", () => {
     expect(usageScreen("/content/post/record-123/edit")).toBe("posts-editor");
-    expect(usageScreen("/content/post")).toBe("posts");
+    expect(usageScreen("/content/post")).toBe("posts-list");
     expect(usageScreen("/media/favorites")).toBe("media-favorites");
     expect(usageScreen("/media/collections/private-collection")).toBe("media-collections");
     expect(usageScreen("/media/submissions")).toBe("media-submissions");
-    expect(usageScreen("/media")).toBe("media");
+    expect(usageScreen("/media")).toBe("media-landing");
     expect(usageScreen("/media/videos/custom-private-source")).toBe("videos");
     expect(usageScreen("/media/images")).toBe("images");
     expect(usageScreen("/unrecognized/private-data")).toBeNull();
@@ -49,7 +49,7 @@ describe("standard usage analytics (#4495)", () => {
     usageActionCollector()("preview.request", "page", "page-123");
     await tick(5_000);
     expect(events().filter(event => event.name === "screen.view")).toEqual([
-      { name: "screen.view", screen: "posts" }, { name: "screen.view", screen: "videos" },
+      { name: "screen.view", screen: "posts-list" }, { name: "screen.view", screen: "videos" },
     ]);
     const duration = events().filter(event => event.name === "screen.duration");
     expect(duration.reduce((sum, event) => sum + ("durationMs" in event ? event.durationMs : 0), 0)).toBe(20_000);
@@ -63,7 +63,7 @@ describe("standard usage analytics (#4495)", () => {
     await tick(60_000); expect(events()).toEqual([]);
     visible = true; document.dispatchEvent(new Event("visibilitychange"));
     await tick(5_000);
-    expect(events()).toEqual([{ name: "screen.view", screen: "posts" }]);
+    expect(events()).toEqual([{ name: "screen.view", screen: "posts-list" }]);
   });
 
   it("batches rapid tab visibility changes instead of sending more than once in five seconds", async () => {
@@ -115,23 +115,31 @@ describe("standard usage analytics (#4495)", () => {
     expect(batches[0].events.map(event => [event.name, event.offsetMs])).toEqual([["screen.view", 8_000], ["preview.request", 5_000]]);
   });
 
-  it("counts searches from any search box without their text", async () => {
+  it("counts a search, without its text, when typing in any search box pauses", async () => {
     active = startUsageAnalytics({ enabled: true, send, pathname: "/media/images", now: () => time });
     const box = document.body.appendChild(Object.assign(document.createElement("input"), { type: "search" }));
     const other = document.body.appendChild(Object.assign(document.createElement("input"), { type: "text", value: "x" }));
-    box.value = "   "; box.dispatchEvent(new Event("change", { bubbles: true }));
-    other.dispatchEvent(new Event("change", { bubbles: true }));
-    box.value = "private search text"; box.dispatchEvent(new Event("change", { bubbles: true }));
+    const type = (input: HTMLInputElement, value: string) => { input.value = value; input.dispatchEvent(new Event("input", { bubbles: true })); };
+    type(box, "   "); await tick(1_500);
+    type(other, "private"); await tick(1_500);
+    type(box, "priv"); await tick(300);
+    type(box, "private search text"); await tick(1_500);
+    // Clearing the box afterwards (for example with Escape) does not undo the counted search.
+    type(box, "");
     await tick(5_000);
     box.remove(); other.remove();
     expect(events()).toEqual([{ name: "screen.view", screen: "images" }, { name: "search", screen: "images" }]);
   });
 
-  it("measures upload, transcript, clip and save outcomes at the Functions boundary", async () => {
+  it("measures upload outcomes once per operation and endpoint actions at the Functions boundary", async () => {
     active = startUsageAnalytics({ enabled: true, send, pathname: "/media/videos", now: () => time });
     await measureEndpointUsage("cmsStartSourceMediaUpload", undefined, async () => "ok");
-    await measureEndpointUsage("cmsCompleteSourceMediaUpload", undefined, async () => "ok");
-    await expect(measureEndpointUsage("cmsUploadMedia", undefined, async () => { throw new Error("refused"); })).rejects.toThrow("refused");
+    await measureUsage(VIDEO_TRANSFER_ACTIONS, undefined, async () => "ok");
+    // A transfer stopped by an internal timeout is a failure; only the person's own cancel is not.
+    const timedOut = new AbortController();
+    await expect(measureUsage(VIDEO_TRANSFER_ACTIONS, new AbortController().signal, async () => { timedOut.abort(); throw new Error("timeout"); })).rejects.toThrow();
+    await expect(measureUsage(IMAGE_UPLOAD_ACTIONS, undefined, async () => { throw new Error("refused"); })).rejects.toThrow("refused");
+    await measureEndpointUsage("cmsUploadMedia", undefined, async () => "ok");
     await measureEndpointUsage("cmsRequestVideoClip", undefined, async () => "ok");
     await expect(measureEndpointUsage("cmsSaveContent", undefined, async () => { throw new Error("conflict"); })).rejects.toThrow();
     const cancelled = new AbortController(); cancelled.abort();
@@ -139,6 +147,6 @@ describe("standard usage analytics (#4495)", () => {
     await measureEndpointUsage("cmsListContent", undefined, async () => "ok");
     await tick(5_000);
     expect(events().slice(1).map(event => event.name)).toEqual(["media.upload.start", "media.upload.finish",
-      "media.upload.start", "media.upload.failure", "media.clip.request", "content.save.failure"]);
+      "media.upload.failure", "media.upload.start", "media.upload.failure", "media.clip.request", "content.save.failure"]);
   });
 });

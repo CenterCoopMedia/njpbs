@@ -28,11 +28,17 @@ saved page or record.
 
 - `content.publish.request`, `content.schedule.request` and `preview.request`
   are recorded where staff start them.
-- Upload start, finish and failure, failed content saves, transcript requests
-  and clip requests are recorded at the shared Functions transport
-  (`measureEndpointUsage` in `admin/src/lib/boardwalk-usage.ts`). A cancelled
-  request is not a failure.
-- `search` is recorded when any `input[type="search"]` changes to a nonblank
-  value. The text is never sent.
+- Failed content saves, transcript requests, clip requests and video upload
+  session starts are recorded at the shared Functions transport
+  (`measureEndpointUsage` in `admin/src/lib/boardwalk-usage.ts`).
+- Image uploads record start, finish or failure once per upload, after
+  automatic rate-limit retries and duplicate reuse (`uploadMediaReusingDuplicates`).
+  Each video transfer attempt records finish or failure (`transferVideo`).
+  Only the person's own cancellation is not a failure.
+- `search` is recorded when typing in any `input[type="search"]` pauses for one
+  second with nonblank text. The text is never sent.
+- `earlierScreens` labels the combined `posts`, `pages` and `media` counts
+  stored before the list and editor split. They appear only in report windows
+  that include them.
 
 The staff explanation is the Boardwalk guide page `boardwalk-usage`.

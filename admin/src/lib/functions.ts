@@ -1839,7 +1839,7 @@ export function cmsUploadMedia(
   metadata: UploadMediaMetadata,
   signal?: AbortSignal,
 ): Promise<UploadMediaResponse> {
-  return measureEndpointUsage("cmsUploadMedia", signal, () => postMediaFile("cmsUploadMedia", idToken, file, { ...metadata }, {}, signal));
+  return postMediaFile("cmsUploadMedia", idToken, file, { ...metadata }, {}, signal);
 }
 
 export interface ReplaceMediaResponse {
