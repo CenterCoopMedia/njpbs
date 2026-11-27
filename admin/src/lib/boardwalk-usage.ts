@@ -142,14 +142,13 @@ export function startUsageAnalytics({ enabled, send, pathname, page = document, 
     else if (objectType && objectId && /^[a-zA-Z0-9_-]{1,128}$/.test(objectId)) add({ name, screen, objectType, objectId });
   };
   actionSink = sink;
-  // Count a search, never its text, when any search box goes from blank to having text.
-  // Counting when typing starts does not depend on when each box applies its search.
-  const searching = new WeakSet<HTMLInputElement>();
+  // Count a search, never its text, when any search box's query reaches its first character.
+  // This does not depend on when a box applies its search, or on how it was cleared
+  // (Clear buttons and Escape reset controlled boxes without an input event).
+  // Backspacing a query down to one character counts again.
   function searched(event: Event) {
     const target = event.target;
-    if (!(target instanceof HTMLInputElement) || target.type !== "search") return;
-    if (!target.value.trim()) searching.delete(target);
-    else if (!searching.has(target)) { searching.add(target); sink("search"); }
+    if (target instanceof HTMLInputElement && target.type === "search" && target.value.trim().length === 1) sink("search");
   }
   page.addEventListener("input", searched, true);
   function visibilityChanged() {

@@ -115,7 +115,7 @@ describe("standard usage analytics (#4495)", () => {
     expect(batches[0].events.map(event => [event.name, event.offsetMs])).toEqual([["screen.view", 8_000], ["preview.request", 5_000]]);
   });
 
-  it("counts a search, without its text, when a search box goes from blank to having text", async () => {
+  it("counts a search, without its text, when a search box's query reaches its first character", async () => {
     active = startUsageAnalytics({ enabled: true, send, pathname: "/media/images", now: () => time });
     const box = document.body.appendChild(Object.assign(document.createElement("input"), { type: "search" }));
     const other = document.body.appendChild(Object.assign(document.createElement("input"), { type: "text" }));
@@ -123,8 +123,8 @@ describe("standard usage analytics (#4495)", () => {
     type(box, "   ");
     type(other, "private");
     type(box, "p"); type(box, "private search text");
-    // Escape clears the box; the next query counts again.
-    type(box, ""); type(box, "second");
+    // A Clear button resets a controlled box without an input event; the next query still counts.
+    box.value = ""; type(box, "s"); type(box, "second");
     await tick(5_000);
     box.remove(); other.remove();
     expect(events()).toEqual([{ name: "screen.view", screen: "images" },
