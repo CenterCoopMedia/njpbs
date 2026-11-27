@@ -229,8 +229,6 @@ lazyExport("cmsCreateVideoTranscriptRead", "./video-transcripts");
 lazyExport("cmsSaveVideoTranscript", "./video-transcripts");
 lazyExport("cmsRequestVideoTranscriptAlignment", "./video-transcript-alignment");
 lazyExport("cmsCancelVideoTranscriptAlignment", "./video-transcript-alignment");
-lazyExport("cmsRequestVideoOrientationExport", "./video-orientation-exports");
-lazyExport("cmsListVideoOrientationExports", "./video-orientation-exports");
 lazyExport("onVideoTranscriptTick", "./video-transcripts");
 lazyExport("videoTranscriptWorkerClaim", "./video-transcript-worker");
 lazyExport("videoTranscriptWorkerHeartbeat", "./video-transcript-worker");

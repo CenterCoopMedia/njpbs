@@ -33,15 +33,10 @@ function validLease(job, request, now) {
     job.localLeaseToken === request.leaseToken && job.localLeaseUntil > now;
 }
 function parseWorkerRequest(operation, body) {
-  const fields = { claim: ["capabilities"], heartbeat: ["jobId", "leaseToken", "stage", "processedSeconds"],
+  const fields = { claim: [], heartbeat: ["jobId", "leaseToken", "stage", "processedSeconds"],
     complete: ["jobId", "leaseToken", "engineRevision", "segments"], fail: ["jobId", "leaseToken", "errorCode"] }[operation];
   if (!fields || !body || typeof body !== "object" || Array.isArray(body) || Object.keys(body).some((key) => !fields.includes(key))) throw invalid();
-  if (operation === "claim") {
-    // A worker lists the extra job kinds it can run; older workers send {}.
-    const capabilities = body.capabilities ?? [];
-    if (!Array.isArray(capabilities) || capabilities.length > 1 || capabilities.some((value) => value !== "orientation")) throw invalid();
-    return { capabilities };
-  }
+  if (operation === "claim") return {};
   if (typeof body.jobId !== "string" || !/^[a-f0-9]{64}$/.test(body.jobId) ||
       typeof body.leaseToken !== "string" || !/^[a-f0-9-]{36}$/.test(body.leaseToken)) throw invalid();
   if (operation === "heartbeat" && (!STAGES.has(body.stage) || (body.processedSeconds !== undefined &&

@@ -508,13 +508,7 @@ describe("video replacement HTTP contract and processing boundary", () => {
   });
   it("rollback restores the previous binary within 14 days and atomically protects it from cleanup", async () => {
     const original = (await assetRef().get()).data();
-    const parentSource = { sourceId: source.id, assetId: "parent-video" };
-    const parentSourceVersions = { outputFileVersion: sourceContract.sourceMediaFileVersion(original.objectVersionId),
-      fileVersion: sourceContract.sourceMediaFileVersion("parent-original"), viewingCopyVersion: "a".repeat(64) };
-    await assetRef().update({ parentSource, parentSourceVersions });
-    const { current } = await replace();
-    const summarize = asset => sourceContract.sourceMediaAssetSummary(sourceContract.parseSourceMediaAsset(assetId, asset));
-    expect(summarize(current).parentSource).toBeNull();
+    await replace();
     clock += versions.RETENTION_MS - 1;
     const response = await call("rollback", { sourceId: source.id, assetId, expectedVersion: 2, confirmed: true });
     expect(response.statusCode, JSON.stringify(response.body)).toBe(200);
@@ -523,8 +517,6 @@ describe("video replacement HTTP contract and processing boundary", () => {
     await promote();
     const restored = (await assetRef().get()).data();
     expect(restored).toMatchObject({ objectKey: original.objectKey, rendition: original.rendition });
-    expect(summarize(restored).parentSource).toEqual({ ...parentSource,
-      fileVersion: parentSourceVersions.fileVersion, viewingCopyVersion: parentSourceVersions.viewingCopyVersion });
   });
   it("expired rollback disappears with a clear label and cleanup is repeatable and dry-run safe", async () => {
     const original = (await assetRef().get()).data();

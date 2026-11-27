@@ -1013,7 +1013,6 @@ export function MediaFavoritesLibrary({
         return <VideoViewerBody key={mediaFavoriteKey(record.ref)} principal={principal} asset={record.asset}
           getIdToken={getIdToken} canEditMetadata={source?.canEditMetadata === true && !pending.has(mediaFavoriteKey(record.ref))}
           canReplace={source?.canReplace === true}
-          canExportOrientation={source?.canExportOrientation === true}
           canRequestProduction={source?.canRequestProduction === true && !pending.has(mediaFavoriteKey(record.ref))}
           canDelete={source?.canDelete === true} deleteConfirmationId={deleteConfirmationId}
           headerTarget={context.headerActionsTarget} factsTarget={context.headerFactsTarget}

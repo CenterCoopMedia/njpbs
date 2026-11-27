@@ -131,30 +131,6 @@
       ]
     },
     {
-      "collectionGroup": "mediaSourceOrientationExports",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "active", "order": "ASCENDING" },
-        { "fieldPath": "createdAt", "order": "ASCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "mediaSourceOrientationExports",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "active", "order": "ASCENDING" },
-        { "fieldPath": "uploadDeadline", "order": "ASCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "mediaSourceOrientationExports",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "assetId", "order": "ASCENDING" },
-        { "fieldPath": "createdAt", "order": "DESCENDING" }
-      ]
-    },
-    {
       "collectionGroup": "mediaSourcePreviewJobs",
       "queryScope": "COLLECTION",
       "fields": [

@@ -35,7 +35,6 @@
       "placeholder": "node-gpu-b",
       "files": [
         "functions/lib/video-transcript-worker.js",
-        "functions/lib/video-orientation-export.js",
         "infrastructure/boardwalk-transcription-worker/worker.py"
       ]
     },

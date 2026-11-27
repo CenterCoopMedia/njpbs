@@ -21,7 +21,6 @@ export interface MediaSourceSummary {
   canRequestProduction: boolean;
   canDelete?: boolean;
   canReplace?: boolean;
-  canExportOrientation?: boolean;
 }
 
 export interface SourceMediaMarker {
