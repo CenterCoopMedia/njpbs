@@ -49,7 +49,7 @@ const { WRITE_SECRETS } = require("./lib/private-video-runtime");
 const KIB = 1024;
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 const COLLECTION = "mediaSourceUploads";
-const ABANDONED_UPLOAD_BATCH = 50;
+const ABANDONED_UPLOAD_PAGE = 50;
 const PREVIEW_ADMISSION_LOCKS = "mediaSourcePreviewAdmissionLocks";
 const MAX_ACTIVE_PREVIEWS_PER_ACTOR = 2;
 const MAX_ACTIVE_PREVIEWS_GLOBAL = 20;
@@ -823,17 +823,22 @@ async function finishCancellation({ firestore, now, session, authorize }) {
   });
 }
 
+// Replacement cleanup runs before the session leaves "canceling", so a failure in
+// either step leaves a session that the next cancel or sweep finishes.
 async function abortSession({ authorize, admit, firestore, now, session, source, uploader }) {
   const canceling = await claimCancellation({ firestore, now, session, authorize, admit });
-  if (canceling.status !== "canceled") {
-    try {
-      await uploader.cancel(source, canceling);
-    } catch (error) {
-      if (!multipartUploadAlreadyAbsent(error)) throw error;
-    }
-    await finishCancellation({ firestore, now, session: canceling, authorize });
+  const { cancelReplacement } = require("./lib/source-video-replacement");
+  if (canceling.status === "canceled") {
+    await cancelReplacement({ firestore, session: canceling });
+    return;
   }
-  await require("./lib/source-video-replacement").cancelReplacement({ firestore, session: canceling });
+  try {
+    await uploader.cancel(source, canceling);
+  } catch (error) {
+    if (!multipartUploadAlreadyAbsent(error)) throw error;
+  }
+  await cancelReplacement({ firestore, session: canceling });
+  await finishCancellation({ firestore, now, session: canceling, authorize });
 }
 
 async function cancelUpload({
@@ -869,42 +874,67 @@ async function cancelUpload({
 
 // Sessions expire SESSION_TTL_MS after they start, and an expired session can
 // neither sign parts nor complete. The sweep cancels those still open and aborts
-// their multipart uploads so the partial parts stop accruing storage.
+// their multipart uploads so the partial parts stop accruing storage. It pages
+// through every expired open session, and once a source's storage refuses an
+// abort it skips that source's other sessions until the next run, so one failing
+// source neither repeats calls nor holds back sessions from working sources.
 async function sweepAbandonedUploads({
   firestore,
   log = logger,
   nowFn = () => new Date().toISOString(),
+  pageSize = ABANDONED_UPLOAD_PAGE,
   registry,
   uploader,
 }) {
   const { now, nowMs } = currentTime(nowFn);
-  const snapshot = await firestore.collection(COLLECTION)
-    .where("status", "in", ["active", "canceling"])
-    .where("expiresAt", "<=", now)
-    .orderBy("expiresAt")
-    .limit(ABANDONED_UPLOAD_BATCH)
-    .get();
   const authorize = (current) => {
     if (!current) throw new SourceUploadError(404, "Upload session not found");
   };
   const admit = (current) => {
     if (Date.parse(current.expiresAt) > nowMs) throw new SourceUploadError(409, "Upload session is still open");
   };
+  const failedSources = new Set();
+  const sourceUploader = {
+    async cancel(source, session) {
+      try {
+        await uploader.cancel(source, session);
+      } catch (error) {
+        if (!multipartUploadAlreadyAbsent(error)) failedSources.add(source.id);
+        throw error;
+      }
+    },
+  };
+  const expired = firestore.collection(COLLECTION)
+    .where("status", "in", ["active", "canceling"])
+    .where("expiresAt", "<=", now)
+    .orderBy("expiresAt")
+    .limit(pageSize);
+  let found = 0;
   let canceled = 0;
-  for (const row of snapshot.docs) {
-    try {
+  let page = await expired.get();
+  for (;;) {
+    for (const row of page.docs) {
+      found += 1;
       const session = validSession(row.id, row.data());
-      authorize(session);
-      const source = registry.get(session.sourceId);
-      if (!source) throw new SourceUploadError(503, "Upload source is not configured");
-      await abortSession({ authorize, admit, firestore, now, session, source, uploader });
-      canceled += 1;
-    } catch (error) {
-      log.warn("Abandoned upload sweep will retry", { sessionId: row.id, message: error?.message });
+      if (session && failedSources.has(session.sourceId)) continue;
+      try {
+        authorize(session);
+        const source = registry.get(session.sourceId);
+        if (!source) {
+          failedSources.add(session.sourceId);
+          throw new SourceUploadError(503, "Upload source is not configured");
+        }
+        await abortSession({ authorize, admit, firestore, now, session, source, uploader: sourceUploader });
+        canceled += 1;
+      } catch (error) {
+        log.warn("Abandoned upload sweep will retry", { sessionId: row.id, message: error?.message });
+      }
     }
+    if (page.docs.length < pageSize) break;
+    page = await expired.startAfter(page.docs.at(-1)).get();
   }
-  if (snapshot.size) log.info("Abandoned upload sweep finished", { found: snapshot.size, canceled });
-  return { found: snapshot.size, canceled };
+  if (found) log.info("Abandoned upload sweep finished", { found, canceled, failedSources: [...failedSources] });
+  return { found, canceled };
 }
 
 function sourceMetadataAsset(snapshot, source) {

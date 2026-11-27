@@ -1,3 +1,4 @@
+import { createRequire } from "node:module";
 import { describe, expect, it, vi } from "vitest";
 import uploads from "../../functions/source-media-uploads.js";
 import uploadContract from "../../functions/lib/source-media-upload-contract.js";
@@ -137,23 +138,28 @@ function fakeFirestore(initial = {}, { createErrorAfterCommit = false } = {}) {
         in: (actual, expected) => expected.includes(actual),
         "<=": (actual, expected) => actual !== undefined && actual <= expected,
       };
-      function query(filters = [], count = Infinity, order) {
+      function query(filters = [], count = Infinity, order, after) {
         return {
           collection: name,
           doc: (id) => ref(name, id),
           where(field, operator, value) {
             expect(Object.keys(matches)).toContain(operator);
-            return query([...filters, [field, value, operator]], count, order);
+            return query([...filters, [field, value, operator]], count, order, after);
           },
-          orderBy(field) { return query(filters, count, field); },
-          limit(nextCount) { return query(filters, nextCount, order); },
+          orderBy(field) { return query(filters, count, field, after); },
+          limit(nextCount) { return query(filters, nextCount, order, after); },
+          startAfter(doc) { return query(filters, count, order, [String(doc.data()[order]), `${name}/${doc.id}`]); },
           async get() { const docs = this._snapshots().map(doc => ({ ...doc, ref: ref(name, doc.id) })); return { docs, size: docs.length }; },
           _snapshots() {
             return [...records.entries()]
               .filter(([key, value]) => key.startsWith(`${name}/`) &&
                 filters.every(([field, expected, operator = "=="]) =>
                   matches[operator](field.split(".").reduce((item, key) => item?.[key], value), expected)))
-              .sort(([, left], [, right]) => (order ? String(left[order]).localeCompare(String(right[order])) : 0))
+              .sort(([leftKey, left], [rightKey, right]) => (order
+                ? String(left[order]).localeCompare(String(right[order])) || leftKey.localeCompare(rightKey)
+                : 0))
+              .filter(([key, value]) => after === undefined ||
+                (String(value[order]).localeCompare(after[0]) || key.localeCompare(after[1])) > 0)
               .slice(0, count)
               .map(([key, value]) => snapshot(key.split("/")[1], value));
           },
@@ -737,6 +743,62 @@ describe("abandoned upload sweep", () => {
       { sessionId: "no-source", message: "Upload source is not configured" });
     expect(firestore.records.get("mediaSourceUploads/open")).toMatchObject({ status: "active", version: 1 });
     expect(firestore.records.get("mediaSourceUploads/completed")).toMatchObject({ status: "completed", version: 1 });
+  });
+
+  it("pages past a source whose storage refuses aborts and tries that source once per run", async () => {
+    const session = (id, sourceId, expiresAt) => ({
+      id, actorUid: "staff-1", sourceId, assetId: `asset-${id}`, objectKey: `shared/objects/asset-${id}.mp4`,
+      s3UploadId: `s3-${id}`, version: 1, status: "active", expiresAt,
+    });
+    const firestore = fakeFirestore({
+      "mediaSourceUploads/down-1": session("down-1", "archive", "2026-09-10T16:00:00.000Z"),
+      "mediaSourceUploads/down-2": session("down-2", "archive", "2026-09-11T16:00:00.000Z"),
+      "mediaSourceUploads/down-3": session("down-3", "archive", "2026-09-12T16:00:00.000Z"),
+      "mediaSourceUploads/up-1": session("up-1", "video-library", "2026-09-13T16:00:00.000Z"),
+    });
+    const cancel = vi.fn(async (current) => {
+      if (current.id === "archive") throw new Error("storage unavailable");
+    });
+    const log = { info: vi.fn(), warn: vi.fn() };
+    await expect(sweepAbandonedUploads({
+      firestore, log, pageSize: 2, nowFn: () => "2026-09-14T17:00:00.000Z",
+      registry: new Map([["video-library", source()], ["archive", source({ id: "archive" })]]),
+      uploader: { cancel },
+    })).resolves.toEqual({ found: 4, canceled: 1 });
+    expect(cancel.mock.calls.map(([, current]) => current.id)).toEqual(["down-1", "up-1"]);
+    expect(firestore.records.get("mediaSourceUploads/up-1")).toMatchObject({ status: "canceled" });
+    expect(firestore.records.get("mediaSourceUploads/down-1")).toMatchObject({ status: "canceling" });
+    expect(firestore.records.get("mediaSourceUploads/down-3")).toMatchObject({ status: "active" });
+  });
+
+  it("keeps a session in the sweep until its replacement cleanup succeeds", async () => {
+    // The module under test requires this file through Node, so spy on that same instance.
+    const replacement = createRequire(import.meta.url)("../../functions/lib/source-video-replacement.js");
+    const cleanup = vi.spyOn(replacement, "cancelReplacement")
+      .mockRejectedValueOnce(new Error("transaction aborted"))
+      .mockResolvedValue(undefined);
+    try {
+      const firestore = fakeFirestore({
+        "mediaSourceUploads/swap": {
+          id: "swap", actorUid: "staff-1", sourceId: "video-library", assetId: "asset-swap",
+          objectKey: "shared/objects/asset-swap/replacements/swap.mp4", s3UploadId: "s3-swap", version: 1,
+          status: "active", expiresAt: "2026-09-14T16:00:00.000Z", replacement: { assetId: "asset-swap" },
+        },
+      });
+      const run = (nowFn) => sweepAbandonedUploads({
+        firestore, log: { info: vi.fn(), warn: vi.fn() }, nowFn,
+        registry: new Map([["video-library", source()]]), uploader: { cancel: vi.fn(async () => undefined) },
+      });
+      await expect(run(() => "2026-09-14T17:00:00.000Z")).resolves.toEqual({ found: 1, canceled: 0 });
+      expect(firestore.records.get("mediaSourceUploads/swap")).toMatchObject({ status: "canceling", version: 2 });
+      await expect(run(() => "2026-09-14T18:00:00.000Z")).resolves.toEqual({ found: 1, canceled: 1 });
+      expect(firestore.records.get("mediaSourceUploads/swap")).toMatchObject({
+        status: "canceled", version: 3, canceledAt: "2026-09-14T18:00:00.000Z",
+      });
+      expect(cleanup).toHaveBeenCalledTimes(2);
+    } finally {
+      cleanup.mockRestore();
+    }
   });
 });
 
