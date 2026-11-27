@@ -17,7 +17,7 @@ function knownKeys(record, allowed) {
 export function validateConfigurationTable(table) {
   knownKeys(table, ["inputs", "parameters", "secrets", "provider"]);
   for (const [section, allowed] of Object.entries({
-    inputs: ["variable", "environment", "default", "type", "pattern", "required"],
+    inputs: ["variable", "environment", "default", "type", "pattern", "required", "requiredWhen"],
     parameters: ["input", "value", "format", "group", "binding", "encoding"],
     secrets: ["compare", "minLength", "deployAdmin", "mediaPin", "pattern", "environment", "discoveryFlag"],
   })) {
@@ -26,6 +26,9 @@ export function validateConfigurationTable(table) {
       if (!/^[A-Z][A-Z0-9_]+$/.test(name)) configurationFailure("Invalid Functions configuration table binding");
       knownKeys(row, allowed);
       if (section === "inputs" && (typeof row.default !== "string" || !["string", "boolean", "json"].includes(row.type))) configurationFailure("Invalid input type/default in Functions table");
+      // requiredWhen names the boolean feature flag that cannot work without this input.
+      if (section === "inputs" && row.requiredWhen !== undefined &&
+          (table.inputs[row.requiredWhen]?.type !== "boolean" || row.default !== "")) configurationFailure("Invalid requiredWhen flag in Functions table");
       if (section === "parameters" && (!["parameter", "environment"].includes(row.binding) ||
           (row.format && !["r2", "studio", "admin-map", "discovery"].includes(row.format)) ||
           (row.encoding !== undefined && (row.encoding !== "firebase-list" || row.binding !== "parameter")) ||
@@ -131,6 +134,11 @@ export function runtimeParameters(input, discovery = {}, target = cmsTarget()) {
         (row.required && !value) || (value && row.pattern && !new RegExp(row.pattern).test(value)) ||
         (row.type === "boolean" && value !== "" && !["true", "false"].includes(value))) configurationFailure(`Invalid Functions configuration: ${key}`);
     values[key] = value;
+  }
+  for (const [key, row] of Object.entries(CONFIGURATION_INPUTS)) {
+    if (row.requiredWhen && values[row.requiredWhen] === "true" && !values[key]) {
+      configurationFailure(`Invalid Functions configuration: ${key} is required when ${row.requiredWhen} is true`);
+    }
   }
   // Production publishes through the serializer only; dev through GitHub only.
   if ((values.CMS_PUBLISH_TRANSPORT === "github") !== (target.environment === "development")) configurationFailure("Invalid Functions configuration: CMS_PUBLISH_TRANSPORT");

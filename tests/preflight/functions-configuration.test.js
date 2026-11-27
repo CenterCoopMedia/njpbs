@@ -79,6 +79,19 @@ describe("Functions configuration contract", () => {
       .toContain("CMS_MEDIA_ORIGINAL_BUCKETS=fixture-originals,fixture-archive\n");
     expect(() => runtimeParameters({ ...input(), CMS_MEDIA_ORIGINAL_BUCKETS: "Not A Bucket" }, discovery())).toThrow();
   });
+  it("refuses an enabled feature whose companion input is empty", () => {
+    const enabled = { ...input(), CMS_MEDIA_AWS_VIDEO_ENABLED: "true", CMS_MEDIA_AWS_VIDEO_ACCOUNT_ID: "123456789012",
+      CMS_MEDIA_AWS_VIDEO_BUCKET: "fixture-video", CMS_MEDIA_AWS_VIDEO_ROLE_ARN: "arn:aws:iam::123456789012:role/fixture",
+      CMS_MEDIA_ORIGINAL_BUCKETS: "fixture-video" };
+    expect(runtimeParameters(enabled, discovery()).CMS_MEDIA_ORIGINAL_BUCKETS).toBe("fixture-video");
+    expect(() => runtimeParameters({ ...enabled, CMS_MEDIA_ORIGINAL_BUCKETS: "" }, discovery()))
+      .toThrow("CMS_MEDIA_ORIGINAL_BUCKETS is required when CMS_MEDIA_AWS_VIDEO_ENABLED is true");
+    expect(runtimeParameters({ ...enabled, CMS_MEDIA_AWS_VIDEO_ENABLED: "false", CMS_MEDIA_ORIGINAL_BUCKETS: "" }, discovery())
+      .CMS_MEDIA_ORIGINAL_BUCKETS).toBe("");
+    const table = JSON.parse(readFileSync(new URL("../../config/functions-configuration.json", import.meta.url), "utf8"));
+    table.inputs.CMS_MEDIA_ORIGINAL_BUCKETS.requiredWhen = "CMS_MEDIA_AWS_VIDEO_BUCKET";
+    expect(() => validateConfigurationTable(table)).toThrow("Invalid requiredWhen flag");
+  });
   it("enables replacement only when the cleanup role and replica bucket can perform cleanup", () => {
     const module = fileURLToPath(new URL("../../functions/lib/media-source-runtime.js", import.meta.url));
     const cases = [
