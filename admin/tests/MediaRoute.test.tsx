@@ -240,7 +240,7 @@ function pageOf(count: number): MediaAssetSummary[] {
   }));
 }
 
-function renderRoute(path = "/media", shellData = shell) {
+function renderRoute(path = "/media/images", shellData = shell) {
   const router = createMemoryRouter(
     [{ path: "/media/*", element: <MediaRoute /> }],
     { initialEntries: [path] },
@@ -264,7 +264,7 @@ function MediaRouteWithNotices() {
   );
 }
 
-function renderRouteWithNotices(path = "/media", shellData = shell) {
+function renderRouteWithNotices(path = "/media/images", shellData = shell) {
   const router = createMemoryRouter(
     [{ path: "/media/*", element: <MediaRouteWithNotices /> }],
     { initialEntries: [path] },
@@ -491,6 +491,22 @@ describe("MediaRoute", () => {
     fireEvent.click(screen.getByRole("button", { name: "Upload" }));
     expect(await screen.findByRole("link", { name: "Find it in the Recycle bin" })).toHaveAttribute("href", "/media/images?q=harbor&view=bin&bin=1&binAsset=binned-image");
   });
+  it("opens Videos from the media root when this browser has no last tab", async () => {
+    const { router } = renderRoute("/media");
+    await waitFor(() => expect(router.state.location.pathname).toBe("/media/videos"));
+  });
+  it("reopens the media tab this account last used in this browser", async () => {
+    const { router } = renderRoute("/media/voiceovers");
+    await waitFor(() => expect(localStorage.getItem("njpbs-admin:media-last-tab:editor-1")).toBe("/media/voiceovers"));
+    await act(async () => { await router.navigate("/media"); });
+    await waitFor(() => expect(router.state.location.pathname).toBe("/media/voiceovers"));
+  });
+  it("keeps an image link query on the media root opening Images", async () => {
+    localStorage.setItem("njpbs-admin:media-last-tab:editor-1", "/media/voiceovers");
+    const { router } = renderRoute("/media?q=harbor");
+    await waitFor(() => expect(router.state.location.pathname).toBe("/media/images"));
+    expect(router.state.location.search).toBe("?q=harbor");
+  });
   it("keeps a routed image upload open when switching media tabs", async () => {
     const { router } = renderRoute("/media/videos");
     act(() => routeChosenFiles([new File(["image"], "routed.png", { type: "image/png" })]));
@@ -558,6 +574,7 @@ describe("MediaRoute", () => {
     expect(await screen.findByText("routed.png")).toBeInTheDocument();
     expect(document.querySelector(".video-upload-panel")).toBe(transfers);
 
+    localStorage.setItem("njpbs-admin:media-last-tab:editor-1", "/media/images");
     await act(async () => { await router.navigate("/media"); });
     await waitFor(() => expect(router.state.location.pathname).toBe("/media/images"));
     expect(screen.queryByRole("dialog", { name: "Leave with unsaved changes?" })).not.toBeInTheDocument();
@@ -1560,7 +1577,7 @@ describe("MediaRoute", () => {
   });
 
   it("can keep the original JPEG or PNG when optimization is turned off", async () => {
-    renderRoute("/media");
+    renderRoute();
     fireEvent.click(
       await screen.findByRole("button", { name: "Upload media" }),
     );
@@ -1593,7 +1610,7 @@ describe("MediaRoute", () => {
   });
 
   it("uses an authorized section as the default upload category", async () => {
-    renderRoute("/media", {
+    renderRoute("/media/images", {
       ...shell,
       principal: {
         id: "editor-1",
@@ -2087,11 +2104,12 @@ describe("MediaRoute", () => {
     expect(uploadRouterSnapshot().videoSession).toBe(true);
   });
 
-  it("keeps a routed video when the Media link redirects to Images", async () => {
+  it("keeps a routed video when the Media link reopens Images", async () => {
     const { router } = renderRoute("/media/videos");
     act(() => routeChosenFiles([new File(["video"], "clip.mp4", { type: "video/mp4" })]));
     expect(await screen.findByText("Video uploads are not available.")).toBeInTheDocument();
 
+    localStorage.setItem("njpbs-admin:media-last-tab:editor-1", "/media/images");
     await act(async () => { await router.navigate("/media"); });
 
     await waitFor(() => expect(router.state.location.pathname).toBe("/media/images"));

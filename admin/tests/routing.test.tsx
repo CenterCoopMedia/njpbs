@@ -348,6 +348,7 @@ describe("admin routing shell", () => {
   });
 
   it("opens the authenticated media library from primary navigation", async () => {
+    localStorage.setItem("njpbs-admin:media-last-tab:user", "/media/images");
     renderRouted(shellFor(adminPrincipal), ["/media"]);
 
     expect(
@@ -2603,7 +2604,7 @@ describe("editor exit contract", () => {
     );
 
     const signOut = vi.fn();
-    renderRouted(shellFor(adminPrincipal, { signOut }), ["/media"]);
+    renderRouted(shellFor(adminPrincipal, { signOut }), ["/media/images"]);
     fireEvent.click(
       await screen.findByRole(
         "button",
@@ -2636,7 +2637,7 @@ describe("editor exit contract", () => {
 
   it("asks before signing out of an open media upload, which has no save to offer", async () => {
     const signOut = vi.fn();
-    renderRouted(shellFor(adminPrincipal, { signOut }), ["/media"]);
+    renderRouted(shellFor(adminPrincipal, { signOut }), ["/media/images"]);
     fireEvent.click(
       await screen.findByRole("button", { name: "Upload media" }, { timeout: 10_000 }),
     );
