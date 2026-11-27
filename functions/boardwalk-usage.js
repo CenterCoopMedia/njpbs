@@ -40,12 +40,15 @@ function easternMidnight(day) {
   return new Date(`${day}T00:00:00${offset.slice(3) || "Z"}`).toISOString();
 }
 
+// offsetMs: milliseconds between the event and its batch being sent (optional).
+const validOffset = event => !own(event, "offsetMs") ||
+  (Number.isInteger(event.offsetMs) && event.offsetMs >= 0 && event.offsetMs <= 600_000);
+
 function validEvent(event) {
   if (!only(event, ["name", "screen", "durationMs", "objectType", "objectId", "offsetMs"]) ||
       typeof event.name !== "string" || typeof event.screen !== "string" ||
       !(own(config.screens, event.screen) || own(config.earlierScreens, event.screen))) return false;
-  // offsetMs: milliseconds between the event and its batch being sent (optional).
-  if (own(event, "offsetMs") && !(Number.isInteger(event.offsetMs) && event.offsetMs >= 0 && event.offsetMs <= 600_000)) return false;
+  if (!validOffset(event)) return false;
   const size = Object.keys(event).length - (own(event, "offsetMs") ? 1 : 0);
   if (event.name === "screen.view") return size === 2;
   if (event.name === "screen.duration") return size === 3 &&

@@ -12,7 +12,7 @@ beforeEach(() => {
 afterEach(() => { active?.stop(); active = undefined; vi.useRealTimers(); vi.restoreAllMocks(); });
 const send = async (batch: { batchId: string; events: UsageEvent[] }) => { batches.push(batch); };
 // Offsets are checked in their own test; other tests compare the rest of each event.
-const events = () => batches.flatMap(batch => batch.events).map(({ offsetMs: _offset, ...event }) => event);
+const events = () => batches.flatMap(batch => batch.events).map(event => { const copy = { ...event }; delete copy.offsetMs; return copy; });
 const tick = async (ms: number) => { time += ms; await vi.advanceTimersByTimeAsync(ms); };
 
 describe("standard usage analytics (#4495)", () => {
