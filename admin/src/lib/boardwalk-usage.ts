@@ -61,11 +61,11 @@ type OutcomeActions = { sent?: UsageAction; ok?: UsageAction; failed?: UsageActi
 // Uploads are measured where one person's upload succeeds or fails (after automatic retries).
 // A video upload starts when its session starts; each transfer attempt then finishes or fails.
 export const IMAGE_UPLOAD_ACTIONS: OutcomeActions = { sent: "media.upload.start", ok: "media.upload.finish", failed: "media.upload.failure" };
+export const VIDEO_START_ACTIONS: OutcomeActions = { sent: "media.upload.start", failed: "media.upload.failure" };
 export const VIDEO_TRANSFER_ACTIONS: OutcomeActions = { ok: "media.upload.finish", failed: "media.upload.failure" };
 
 // Actions measured at the shared Functions transport, so every caller of these endpoints is counted.
 const ENDPOINT_ACTIONS: Partial<Record<string, OutcomeActions>> = {
-  cmsStartSourceMediaUpload: { sent: "media.upload.start", failed: "media.upload.failure" },
   cmsSaveContent: { failed: "content.save.failure" },
   cmsRequestVideoTranscript: { sent: "media.transcript.request" },
   cmsRequestByokVideoTranscript: { sent: "media.transcript.request" },
@@ -142,16 +142,14 @@ export function startUsageAnalytics({ enabled, send, pathname, page = document, 
     else if (objectType && objectId && /^[a-zA-Z0-9_-]{1,128}$/.test(objectId)) add({ name, screen, objectType, objectId });
   };
   actionSink = sink;
-  // Count a search, never its text, once typing in any search box pauses for a second with text in it.
-  const searchTimers = new Map<HTMLInputElement, ReturnType<typeof setTimeout>>();
+  // Count a search, never its text, when any search box goes from blank to having text.
+  // Counting when typing starts does not depend on when each box applies its search.
+  const searching = new WeakSet<HTMLInputElement>();
   function searched(event: Event) {
     const target = event.target;
     if (!(target instanceof HTMLInputElement) || target.type !== "search") return;
-    clearTimeout(searchTimers.get(target));
-    searchTimers.set(target, setTimeout(() => {
-      searchTimers.delete(target);
-      if (target.value.trim()) sink("search");
-    }, 1_000));
+    if (!target.value.trim()) searching.delete(target);
+    else if (!searching.has(target)) { searching.add(target); sink("search"); }
   }
   page.addEventListener("input", searched, true);
   function visibilityChanged() {
@@ -178,7 +176,6 @@ export function startUsageAnalytics({ enabled, send, pathname, page = document, 
       clearInterval(timer);
       page.removeEventListener("visibilitychange", visibilityChanged);
       page.removeEventListener("input", searched, true);
-      for (const searchTimer of searchTimers.values()) clearTimeout(searchTimer);
       if (actionSink === sink) actionSink = null;
     },
   };

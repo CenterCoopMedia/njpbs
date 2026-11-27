@@ -1,4 +1,4 @@
-import { measureUsage, VIDEO_TRANSFER_ACTIONS } from "./boardwalk-usage";
+import { measureUsage, VIDEO_START_ACTIONS, VIDEO_TRANSFER_ACTIONS } from "./boardwalk-usage";
 import { postFunction } from "./functions";
 import type { SourceMediaAssetSummary, SourceMediaMarker } from "./source-media";
 
@@ -162,14 +162,14 @@ function videoMimeType(file: Pick<File, "name">): string {
 export function startVideoUpload(token: string | null | (() => Promise<string>), sourceId: string, file: Pick<File, "name" | "size" | "lastModified">, metadata: VideoUploadMetadata,
   options: { requestId?: string; signal?: AbortSignal; collectionId?: string; replacement?: { assetId: string; expectedVersion: number; confirmed: true } } = {}) {
   if (file.size > MAX_VIDEO_FILE_BYTES) throw new VideoUploadValidationError("Browser uploads support videos up to 250 GiB. Ask an administrator to import larger files.");
-  return controlRequest(async signal => {
+  return measureUsage(VIDEO_START_ACTIONS, options.signal, () => controlRequest(async signal => {
     const idToken = typeof token === "function" ? await token() : token;
     signal.throwIfAborted();
     return postFunction<{ success: true; upload: VideoUploadSession }>("cmsStartSourceMediaUpload", idToken,
       { sourceId, ...(options.requestId === undefined ? {} : { requestId: options.requestId }), originalName: file.name, mimeType: videoMimeType(file), sizeBytes: file.size, lastModified: file.lastModified,
         ...(options.replacement ? { replacement: options.replacement } : { metadata }),
         ...(options.collectionId ? { collectionId: options.collectionId } : {}) }, {}, { appCheck: true, signal });
-  }, options.signal);
+  }, options.signal));
 }
 
 export function cancelVideoUpload(token: string | null | (() => Promise<string>), sourceId: string, session: VideoUploadSession) {

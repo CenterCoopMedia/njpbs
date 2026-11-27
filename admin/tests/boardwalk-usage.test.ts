@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { IMAGE_UPLOAD_ACTIONS, measureEndpointUsage, measureUsage, startUsageAnalytics, VIDEO_TRANSFER_ACTIONS, usageActionCollector, usageScreen, type UsageEvent } from "../src/lib/boardwalk-usage";
+import { IMAGE_UPLOAD_ACTIONS, measureEndpointUsage, measureUsage, startUsageAnalytics, VIDEO_START_ACTIONS, VIDEO_TRANSFER_ACTIONS, usageActionCollector, usageScreen, type UsageEvent } from "../src/lib/boardwalk-usage";
 
 let visible = true;
 let time = 0;
@@ -115,25 +115,26 @@ describe("standard usage analytics (#4495)", () => {
     expect(batches[0].events.map(event => [event.name, event.offsetMs])).toEqual([["screen.view", 8_000], ["preview.request", 5_000]]);
   });
 
-  it("counts a search, without its text, when typing in any search box pauses", async () => {
+  it("counts a search, without its text, when a search box goes from blank to having text", async () => {
     active = startUsageAnalytics({ enabled: true, send, pathname: "/media/images", now: () => time });
     const box = document.body.appendChild(Object.assign(document.createElement("input"), { type: "search" }));
-    const other = document.body.appendChild(Object.assign(document.createElement("input"), { type: "text", value: "x" }));
+    const other = document.body.appendChild(Object.assign(document.createElement("input"), { type: "text" }));
     const type = (input: HTMLInputElement, value: string) => { input.value = value; input.dispatchEvent(new Event("input", { bubbles: true })); };
-    type(box, "   "); await tick(1_500);
-    type(other, "private"); await tick(1_500);
-    type(box, "priv"); await tick(300);
-    type(box, "private search text"); await tick(1_500);
-    // Clearing the box afterwards (for example with Escape) does not undo the counted search.
-    type(box, "");
+    type(box, "   ");
+    type(other, "private");
+    type(box, "p"); type(box, "private search text");
+    // Escape clears the box; the next query counts again.
+    type(box, ""); type(box, "second");
     await tick(5_000);
     box.remove(); other.remove();
-    expect(events()).toEqual([{ name: "screen.view", screen: "images" }, { name: "search", screen: "images" }]);
+    expect(events()).toEqual([{ name: "screen.view", screen: "images" },
+      { name: "search", screen: "images" }, { name: "search", screen: "images" }]);
+    expect(JSON.stringify(batches)).not.toMatch(/private|second/);
   });
 
   it("measures upload outcomes once per operation and endpoint actions at the Functions boundary", async () => {
     active = startUsageAnalytics({ enabled: true, send, pathname: "/media/videos", now: () => time });
-    await measureEndpointUsage("cmsStartSourceMediaUpload", undefined, async () => "ok");
+    await measureUsage(VIDEO_START_ACTIONS, undefined, async () => "ok");
     await measureUsage(VIDEO_TRANSFER_ACTIONS, undefined, async () => "ok");
     // A transfer stopped by an internal timeout is a failure; only the person's own cancel is not.
     const timedOut = new AbortController();

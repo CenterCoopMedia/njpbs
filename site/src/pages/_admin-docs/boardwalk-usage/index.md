@@ -22,7 +22,7 @@ happened, and these named actions:
 - Failed content saves, including failed publish and schedule saves.
 - Upload starts, finishes and failures.
 - Transcript and clip requests.
-- Searches. When you pause typing in a search box, Boardwalk records that a
+- Searches. When you start typing in a search box, Boardwalk records that a
   search happened, never what you typed.
 
 Destinations separate the Posts and Pages lists from their editors, and the

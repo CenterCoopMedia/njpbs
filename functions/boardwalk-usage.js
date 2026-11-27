@@ -43,7 +43,7 @@ function easternMidnight(day) {
 function validEvent(event) {
   if (!only(event, ["name", "screen", "durationMs", "objectType", "objectId", "offsetMs"]) ||
       typeof event.name !== "string" || typeof event.screen !== "string" ||
-      !own(config.screens, event.screen)) return false;
+      !(own(config.screens, event.screen) || own(config.earlierScreens, event.screen))) return false;
   // offsetMs: milliseconds between the event and its batch being sent (optional).
   if (own(event, "offsetMs") && !(Number.isInteger(event.offsetMs) && event.offsetMs >= 0 && event.offsetMs <= 600_000)) return false;
   const size = Object.keys(event).length - (own(event, "offsetMs") ? 1 : 0);

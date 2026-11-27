@@ -171,6 +171,9 @@ describe("Boardwalk usage privacy and persistence contract (#4495)", () => {
     const res = (await invoke(handlers().report, { days: 7 })).body;
     expect(res.screens.find(row => row.id === "posts-editor").views).toBe(1);
     expect(res.screens.some(row => row.id === "posts")).toBe(false);
+    // Tabs opened before the split still send the combined ids; they count on the combined rows.
+    expect((await invoke(handlers().collect, batch([{ name: "screen.view", screen: "posts" }]))).statusCode).toBe(200);
+    expect((await invoke(handlers({ now: () => time + 120_000 }).report, { days: 7 })).body.screens.find(row => row.id === "posts").views).toBe(1);
     expect(res.screens.find(row => row.id === "media-collections").visibleMs).toBe(1_000);
     for (const id of ["media.upload.start", "search", "content.schedule.request"]) {
       expect(res.actions.find(row => row.id === id).count).toBe(1);
@@ -190,7 +193,6 @@ describe("Boardwalk usage privacy and persistence contract (#4495)", () => {
     batch([{ name: "screen.duration", screen: "posts-list", durationMs: -1 }]),
     batch([{ name: "content.publish.request", screen: "posts-list", objectType: "invalid", objectId: "id" }]),
     batch([{ name: "media.upload", screen: "images", objectType: "media", objectId: "private field value" }]),
-    batch([{ ...view, screen: "posts" }]),
     batch([{ ...view, offsetMs: -1 }]),
     batch([{ ...view, offsetMs: 600_001 }]),
     batch([{ ...view, offsetMs: "5" }]),

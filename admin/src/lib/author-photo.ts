@@ -15,6 +15,7 @@
 // Profile uploads retain the source binary required by the author-photo policy.
 // The 1:1 crop does not encode again: it is stored as a focal point and applied
 // at render time.
+import { IMAGE_UPLOAD_ACTIONS, measureUsage } from "./boardwalk-usage";
 import {
   AUTHOR_PHOTO_CATEGORY,
   AUTHOR_PHOTO_LICENSE_BY_BASIS,
@@ -179,7 +180,11 @@ async function reusableAuthorPhoto(
  * to. The server enforces the same two things, so this is convenience, not the
  * boundary.
  */
-export async function uploadAuthorPhoto(
+export function uploadAuthorPhoto(...args: Parameters<typeof uploadAuthorPhotoOnce>): Promise<{ asset: MediaAssetSummary }> {
+  return measureUsage(IMAGE_UPLOAD_ACTIONS, args[2].signal, () => uploadAuthorPhotoOnce(...args));
+}
+
+async function uploadAuthorPhotoOnce(
   idToken: string,
   file: File,
   {
