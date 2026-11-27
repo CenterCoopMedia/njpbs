@@ -7,6 +7,7 @@ import {
   type AppCheck,
 } from "firebase/app-check";
 import { getFirestore, connectFirestoreEmulator } from "firebase/firestore";
+import { appCheckFailure, withSecurityCheckTimeout } from "./app-check-failure";
 import {
   firebaseEmulatorMode,
   resolveFirebaseConfig,
@@ -67,7 +68,10 @@ export async function getRequiredAppCheckToken(): Promise<string | null> {
   if (!instance) {
     throw new Error("Account-request protection is not configured");
   }
-  return (await getAppCheckTokenValue(instance)).token;
+  const pending = getAppCheckTokenValue(instance).catch((error: unknown) => {
+    throw appCheckFailure(error);
+  });
+  return (await withSecurityCheckTimeout(pending)).token;
 }
 
 if (emulatorMode && !globalThis.__njpbsAdminEmulatorsConnected) {
