@@ -42,10 +42,11 @@ function editedLabel(days: number | null): string {
   return `Edited ${days} days ago`;
 }
 
-// Home archives only drafts that never had a public copy. Archiving a draft whose earlier
-// version is live also withdraws it from the site, which Posts explains before it happens.
-function neverPublished(draft: ContentRecordSummary): boolean {
-  return !draft.publishedSourceVersion && !draft.liveSourceVersion && draft.publicUpdatePending !== true;
+// Home archives only drafts with no public copy on the site: never published, or already
+// withdrawn. Archiving a draft whose earlier version is live also withdraws it, which Posts
+// explains before it happens.
+function hasNoLiveCopy(draft: ContentRecordSummary): boolean {
+  return !draft.liveSourceVersion && draft.publicUpdatePending !== true;
 }
 
 function archiveFailure(outcome: BulkArchiveOutcome | undefined): string | null {
@@ -164,7 +165,7 @@ export function HomeDrafts({ loadDrafts, archiveDraft, onArchived, now = Date.no
           {drafts.map((draft) => {
             const days = draftAgeDays(draft.updatedAt, nowMs);
             const version = draft.version;
-            const canArchive = archiveDraft !== undefined && days !== null && days >= STALE_DRAFT_DAYS && neverPublished(draft) &&
+            const canArchive = archiveDraft !== undefined && days !== null && days >= STALE_DRAFT_DAYS && hasNoLiveCopy(draft) &&
               typeof version === "number" && Number.isSafeInteger(version) && version > 0;
             return (
               <li key={draft.id}>

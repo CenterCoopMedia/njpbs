@@ -18,6 +18,8 @@ const drafts: ContentRecordSummary[] = [
 ];
 const revisedLivePost: ContentRecordSummary = { id: "live", kind: "post", status: "draft", title: "Election night results",
   version: 9, publishedSourceVersion: 6, liveSourceVersion: 6, updatedAt: "2026-09-01T15:00:00.000Z", updatedBy: "user-1" };
+const withdrawnPost: ContentRecordSummary = { id: "withdrawn", kind: "post", status: "draft", title: "Storm recovery fund",
+  version: 5, publishedSourceVersion: 3, updatedAt: "2026-09-02T15:00:00.000Z", updatedBy: "user-1" };
 
 function selection(records: ContentRecordSummary[]): LibrarySelection {
   return selectLibraryRecords(records, MY_DRAFTS_QUERY, "user-1");
@@ -64,10 +66,11 @@ describe("My drafts on Home", () => {
     expect(onArchived).toHaveBeenCalledTimes(1);
   });
 
-  it("leaves Archive to Posts for an old draft whose earlier version is live", async () => {
-    renderDrafts({ archiveDraft: vi.fn(), loadDrafts: vi.fn(async () => selection([revisedLivePost, ...drafts])) });
+  it("leaves Archive to Posts for an old draft whose earlier version is still live", async () => {
+    renderDrafts({ archiveDraft: vi.fn(), loadDrafts: vi.fn(async () => selection([revisedLivePost, withdrawnPost, ...drafts])) });
     expect(await screen.findByRole("link", { name: "Election night results" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Archive Election night results" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Archive Storm recovery fund" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Archive School budget vote" })).toBeInTheDocument();
   });
 
