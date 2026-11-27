@@ -19,12 +19,12 @@ for (const pair of specimenCapturePairs) {
 test("post-metadata waits for a late font before fitting control glyphs", async ({ page }) => {
   let releaseFont!: () => void;
   const fontGate = new Promise<void>(resolve => { releaseFont = resolve; });
-  await page.route("https://media.njpbs.org/cms-media/fonts/*/PBSSans.woff2", async route => {
+  await page.route("**/brand/fonts/PBSSans.woff2", async route => {
     await fontGate;
     await route.fulfill({ contentType: "font/ttf", headers: { "access-control-allow-origin": "*" },
       body: readFileSync(new URL("../../../site/src/assets/pdf-fonts/PublicSans-Regular.ttf", import.meta.url)) });
   });
-  const fontRequested = page.waitForRequest("https://media.njpbs.org/cms-media/fonts/*/PBSSans.woff2");
+  const fontRequested = page.waitForRequest("**/brand/fonts/PBSSans.woff2");
   const opening = openSpecimen(page, {
     id: "post-metadata", title: "Post metadata", width: 1280, presentation: "text",
   });
@@ -42,7 +42,7 @@ test("post-metadata waits for a late font before fitting control glyphs", async 
 });
 
 test("post-metadata still mounts when PBS Sans fails", async ({ page }) => {
-  await page.route("https://media.njpbs.org/cms-media/fonts/*/PBSSans.woff2", route => route.abort());
+  await page.route("**/brand/fonts/PBSSans.woff2", route => route.abort());
   await openSpecimen(page, {
     id: "post-metadata", title: "Post metadata", width: 1280, presentation: "text",
   });

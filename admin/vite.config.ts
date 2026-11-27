@@ -3,6 +3,7 @@ import { adminAssetHeadersPlugin } from "./build/asset-headers";
 import { adminAssetLimitsPlugin } from "./build/asset-limits";
 import { homeHeroCatalogPlugin } from "./build/home-hero-catalog";
 import { njDecidesAssetsPlugin } from "./build/nj-decides-assets";
+import { publicFontsPlugin } from "./build/public-fonts";
 import { boardwalkGuideContentPlugin } from "./build/boardwalk-guide-content";
 import { politicsResourceContentPlugin } from "./build/politics-resource-content";
 import react from "@vitejs/plugin-react";
@@ -127,6 +128,7 @@ export default defineConfig(({ mode }) => {
       whatsNewIdPlugin(),
       homeHeroCatalogPlugin(),
       njDecidesAssetsPlugin(),
+      publicFontsPlugin(),
       boardwalkGuideContentPlugin(),
       politicsResourceContentPlugin(),
       react(),

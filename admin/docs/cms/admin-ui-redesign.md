@@ -23,7 +23,7 @@ One persistent desktop hierarchy is organized around the task most editors arriv
 
 At 900 pixels and below, the rail becomes a compact header with one menu disclosure. The hierarchy opens vertically, has no horizontal navigation scroller, and closes after a destination is selected. The active destination uses color, fill, and type weight with `aria-current="page"`. Navigation items are created from the existing capability checks, so inaccessible surfaces are absent rather than merely disabled.
 
-The official white NJ PBS horizontal lockup anchors the dark shell and auth surfaces. The admin build owns an exact copy of the repository favicon. Five PBS Sans faces load from content-addressed media URLs; the system stack remains readable when those fonts are unavailable. Visual checks block media font requests and use the system stack.
+The official white NJ PBS horizontal lockup anchors the dark shell and auth surfaces. The admin build owns an exact copy of the repository favicon. Five PBS Sans faces load from Boardwalk's own `/brand/fonts/`: the production build copies the public site's checksum-verified files (`site/scripts/public-fonts.json`) into the output, and the boot check requires each face to answer 200 as `font/woff2`. The system stack remains readable when those fonts are unavailable. The development server does not serve the fonts, so visual checks use the system stack.
 
 ## Token layer
 

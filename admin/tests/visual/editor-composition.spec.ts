@@ -298,7 +298,7 @@ test("long independent slugs wrap in Advanced and the new chrome honors text pre
 test("a late PBS Sans load keeps the complete wrapped Summary visible", async ({ page }) => {
   let releaseFont!: () => void;
   const fontGate = new Promise<void>(resolve => { releaseFont = resolve; });
-  await page.route("https://media.njpbs.org/cms-media/fonts/*/PBSSans.woff2", async route => {
+  await page.route("**/brand/fonts/PBSSans.woff2", async route => {
     await fontGate;
     await route.fulfill({ contentType: "font/ttf", headers: { "access-control-allow-origin": "*" },
       body: readFileSync(new URL("../../../site/src/assets/pdf-fonts/PublicSans-Regular.ttf", import.meta.url)) });

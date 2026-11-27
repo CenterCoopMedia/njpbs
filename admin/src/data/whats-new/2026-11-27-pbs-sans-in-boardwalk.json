@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-27",
+  "kind": "fixed",
+  "order": 1795780800000,
+  "title": "Boardwalk shows PBS Sans again",
+  "body": "Boardwalk, the Home preview and the preview progress tab use the PBS Sans brand font again. Before this fix, they showed a system font.",
+  "prs": []
+}

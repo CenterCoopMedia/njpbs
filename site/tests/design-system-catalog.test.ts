@@ -54,7 +54,7 @@ describe("design-system catalog", () => {
     );
 
     for (const font of DESIGN_FONT_ASSETS) {
-      expect(font.path).toMatch(/^https:\/\/media\.njpbs\.org\/cms-media\/fonts\/[a-f0-9]{64}\/PBSSans(?:-[A-Za-z]+)?\.woff2$/);
+      expect(font.path).toMatch(/^\/brand\/fonts\/PBSSans(?:-[A-Za-z]+)?\.woff2$/);
       expect(font.use).not.toBe("");
       expect(font.version).not.toBe("");
       expect([300, 400, 500, 700, 900]).toContain(font.weight);
