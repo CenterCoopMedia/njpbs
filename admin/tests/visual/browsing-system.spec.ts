@@ -208,29 +208,26 @@ test("phone text preference keeps selection action words and clears space for th
   await expect(grid).not.toHaveAttribute("data-selection-mode");
 });
 
-test("queue refresh keeps its text footprint and failed reads recover independently", async ({ page }) => {
+test("queue refresh keeps its text footprint and a failed read recovers", async ({ page }) => {
   await freezeClock(page);
   await page.setViewportSize({ width: 390, height: 800 });
   const url = "/gallery.html?embed=browsing-workflow-states&family=queue&presentation=text&state=";
   await page.goto(`${url}ready`);
-  await expect(page.getByRole("heading", { name: "Editorial queue", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Publish activity", exact: true })).toBeVisible();
   await waitForFonts(page);
-  const idleWidth = (await page.getByRole("button", { name: "Refresh review requests", exact: true }).boundingBox())!.width;
+  const idleWidth = (await page.getByRole("button", { name: "Refresh publish activity", exact: true }).boundingBox())!.width;
   await page.goto(`${url}loading`);
-  const pending = page.getByRole("button", { name: /^Refresh review requests: Refreshing review requests$/ });
+  const pending = page.getByRole("button", { name: /^Refresh publish activity: Refreshing publish activity$/ });
   await expect(pending).toHaveAttribute("aria-busy", "true");
   await waitForFonts(page);
   expect((await pending.boundingBox())!.width).toBe(idleWidth);
   await expect(pending).toBeDisabled();
   await page.goto(`${url}error`);
-  const reviewFailure = page.getByText("Editorial queue could not be loaded", { exact: true });
   const publishFailure = page.getByText("Publish activity could not be loaded", { exact: true });
-  await expect(reviewFailure).toBeVisible();
   await expect(publishFailure).toBeVisible();
-  await page.getByRole("button", { name: "Try loading the editorial queue again" }).click();
-  await expect(reviewFailure).toBeHidden();
-  await expect(publishFailure).toBeVisible();
-  await expect(page.getByRole("table", { name: "Review requests" })).toBeVisible();
+  await page.getByRole("button", { name: "Try loading publish activity again" }).click();
+  await expect(publishFailure).toBeHidden();
+  await expect(page.getByRole("table", { name: "Publish activity" })).toBeVisible();
 });
 
 test("real media focus clears a tall text selection dock and releases its measured margin on clear", async ({ page }) => {

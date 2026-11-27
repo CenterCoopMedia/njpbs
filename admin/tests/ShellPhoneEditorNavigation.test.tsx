@@ -327,7 +327,6 @@ describe("document bar breadcrumbs", () => {
   });
 
   it.each([
-    ["/publish-queue?assignee=me", "Editorial queue", "Back to editorial queue"],
     ["/", "Home", "Back to newsroom home"],
     ["/content/post?page=2", "Posts", "Back to posts list"],
     ["/content/library?status=draft", "All content", "Back to All content"],

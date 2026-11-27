@@ -10,7 +10,7 @@ const records: NewsroomRecord[] = [
   {
     id: "story-17",
     kind: "post",
-    status: "in_review",
+    status: "approved",
     title: "Transit funding explained",
     thumbnailUrl: "https://media.example.org/transit.jpg",
     updatedAt: "2026-07-20T14:00:00.000Z",
@@ -71,17 +71,6 @@ const statusManifest = (refreshAfter: string): AdminStatusManifest => ({
 });
 
 describe("NewsroomHome", () => {
-  it("retries recent work without rereading the successful review count", async () => {
-    const loadRecords = vi.fn().mockRejectedValueOnce(new Error("offline")).mockResolvedValue(selectionFor(records));
-    const loadReviewRequestCount = vi.fn().mockResolvedValue(3);
-    render(<MemoryRouter><NewsroomHome currentUserId="user-1" canBrowsePages canBrowseRecords canCreate
-      canViewEditorialQueue canViewPublishActivity={false}
-      loadRecords={loadRecords} loadReviewRequestCount={loadReviewRequestCount} /></MemoryRouter>);
-    fireEvent.click(await screen.findByRole("button", { name: "Try loading newsroom work again" }));
-    await waitFor(() => expect(loadRecords).toHaveBeenCalledTimes(2));
-    expect(loadReviewRequestCount).toHaveBeenCalledTimes(1);
-  });
-
   it("splits build and milestone facts without loading the shared status twice", async () => {
     const loadAdminStatus = vi.fn().mockResolvedValue(
       statusManifest(new Date(Date.now() + 60_000).toISOString()),
@@ -92,7 +81,6 @@ describe("NewsroomHome", () => {
           canBrowsePages
           canBrowseRecords
           canCreate
-          canViewEditorialQueue={false}
           canViewPublishActivity={false}
           currentUserId="user-1"
           loadAdminStatus={loadAdminStatus}
@@ -138,7 +126,6 @@ describe("NewsroomHome", () => {
           canBrowsePages={false}
           canBrowseRecords={false}
           canCreate={false}
-          canViewEditorialQueue={false}
           canViewPublishActivity={false}
           currentUserId="user-1"
           loadAdminStatus={() => pending}
@@ -157,7 +144,6 @@ describe("NewsroomHome", () => {
           canBrowsePages={false}
           canBrowseRecords={false}
           canCreate={false}
-          canViewEditorialQueue={false}
           canViewPublishActivity={false}
           currentUserId="user-1"
           loadAdminStatus={vi.fn().mockResolvedValue(
@@ -178,7 +164,6 @@ describe("NewsroomHome", () => {
           canBrowsePages={false}
           canBrowseRecords={false}
           canCreate={false}
-          canViewEditorialQueue={false}
           canViewPublishActivity={false}
           currentUserId="user-1"
           loadAdminStatus={vi.fn().mockResolvedValue({
@@ -209,7 +194,6 @@ describe("NewsroomHome", () => {
           canBrowsePages={false}
           canBrowseRecords={false}
           canCreate={false}
-          canViewEditorialQueue={false}
           canViewPublishActivity={false}
           currentUserId="user-1"
           loadAdminStatus={vi.fn().mockRejectedValue(new Error("private failure"))}
@@ -234,7 +218,6 @@ describe("NewsroomHome", () => {
           canBrowsePages={false}
           canBrowseRecords={false}
           canCreate={false}
-          canViewEditorialQueue={false}
           canViewPublishActivity={false}
           currentUserId="user-1"
           loadAdminStatus={loadAdminStatus}
@@ -262,7 +245,6 @@ describe("NewsroomHome", () => {
           canBrowsePages
           canBrowseRecords
           canCreate
-          canViewEditorialQueue={false}
           canViewPublishActivity={false}
           currentUserId="user-1"
           loadRecords={vi.fn().mockResolvedValue(selectionFor([
@@ -300,12 +282,10 @@ describe("NewsroomHome", () => {
           canCreate
           canUseMediaLibrary
           canViewActivity
-          canViewEditorialQueue
           canViewPublishActivity
           currentUserId="user-1"
           loadRecords={vi.fn().mockResolvedValue(selectionFor(records))}
           loadPublishActivity={vi.fn().mockResolvedValue({ activeCount: 1, recoveryCount: 2 })}
-          loadReviewRequestCount={vi.fn().mockResolvedValue(1)}
         />
       </MemoryRouter>,
     );
@@ -328,7 +308,7 @@ describe("NewsroomHome", () => {
       .toHaveAttribute("href", "/content/post/story-17/edit");
     expect(within(activity).getByText(/Updated by you/)).toBeVisible();
     expect(screen.getByTestId("draft-count")).toHaveTextContent("1");
-    expect(screen.getByTestId("review-count")).toHaveTextContent("1");
+    expect(screen.queryByText("In review")).toBeNull();
     expect(screen.getByTestId("scheduled-count")).toHaveTextContent("1");
     expect(screen.getByTestId("failed-publish-count")).toHaveTextContent("2");
     expect(screen.getByTestId("failed-publish-count").closest(".newsroom-status-card"))
@@ -345,11 +325,6 @@ describe("NewsroomHome", () => {
       "href",
       "/content/library?status=draft&v=1",
     );
-    expect(
-      screen.getByRole("link", {
-        name: "In review, 1. Open review queue",
-      }),
-    ).toHaveAttribute("href", "/publish-queue");
     expect(screen.getByRole("link", { name: "Scheduled, 1. View scheduled work" })).toHaveAttribute(
       "href",
       "/content/library?status=scheduled&sort=publishAt&dir=asc&v=1",
@@ -366,9 +341,7 @@ describe("NewsroomHome", () => {
       "href",
       "/content/pages/home/edit",
     );
-    // The queue is the In review card and Browse all heads the Recent work panel, so the
-    // secondary panels do not repeat either.
-    expect(screen.queryByRole("link", { name: "Open editorial queue" })).toBeNull();
+    // Browse all heads the Recent work panel, so the secondary panels do not repeat it.
     expect(screen.getByRole("link", { name: "Browse all" })).toHaveAttribute(
       "href",
       "/content/library",
@@ -390,87 +363,6 @@ describe("NewsroomHome", () => {
     expect(screen.queryByText(/billing safeguard/i)).not.toBeInTheDocument();
   });
 
-  // The card links reviewers to the editorial queue, which projects requests from both cmsPages
-  // and cmsPosts. The record list behind every other count reads cmsPosts only, so counting it
-  // here would report zero beside a queue holding page requests.
-  it("counts in-review work from the editorial queue the card opens", async () => {
-    const loadReviewRequestCount = vi.fn().mockResolvedValue(3);
-    render(
-      <MemoryRouter>
-        <NewsroomHome
-          canBrowsePages
-          canBrowseRecords
-          canCreate
-          canViewEditorialQueue
-          canViewPublishActivity={false}
-          currentUserId="user-1"
-          loadRecords={vi.fn().mockResolvedValue(selectionFor(records))}
-          loadReviewRequestCount={loadReviewRequestCount}
-        />
-      </MemoryRouter>,
-    );
-
-    expect(
-      await screen.findByRole("link", {
-        name: "In review, 3. Open review queue",
-      }),
-    ).toHaveAttribute("href", "/publish-queue");
-    expect(screen.getByTestId("review-count")).toHaveTextContent("3");
-    // The record-derived counts beside it are unaffected.
-    expect(screen.getByTestId("draft-count")).toHaveTextContent("1");
-    expect(loadReviewRequestCount).toHaveBeenCalledTimes(1);
-  });
-
-  it("reports the review count as unavailable when the editorial queue cannot be read", async () => {
-    render(
-      <MemoryRouter>
-        <NewsroomHome
-          canBrowsePages
-          canBrowseRecords
-          canCreate
-          canViewEditorialQueue
-          canViewPublishActivity={false}
-          currentUserId="user-1"
-          loadRecords={vi.fn().mockResolvedValue(selectionFor(records))}
-          loadReviewRequestCount={vi.fn().mockRejectedValue(new Error("offline"))}
-        />
-      </MemoryRouter>,
-    );
-
-    expect(
-      await screen.findByRole("link", {
-        name: "In review, unavailable. Open review queue",
-      }),
-    ).toBeVisible();
-    // A stale record-only number beside the queue link would be worse than an honest dash.
-    expect(screen.getByTestId("review-count")).toHaveTextContent("—");
-  });
-
-  it("counts records, and reads no queue, for staff who cannot open the editorial queue", async () => {
-    const loadReviewRequestCount = vi.fn().mockResolvedValue(3);
-    render(
-      <MemoryRouter>
-        <NewsroomHome
-          canBrowsePages
-          canBrowseRecords
-          canCreate
-          canViewEditorialQueue={false}
-          canViewPublishActivity={false}
-          currentUserId="user-1"
-          loadRecords={vi.fn().mockResolvedValue(selectionFor(records))}
-          loadReviewRequestCount={loadReviewRequestCount}
-        />
-      </MemoryRouter>,
-    );
-
-    expect(
-      await screen.findByRole("link", {
-        name: "In review, 1. Open the review filter",
-      }),
-    ).toHaveAttribute("href", "/content/library?status=in_review&v=1");
-    expect(loadReviewRequestCount).not.toHaveBeenCalled();
-  });
-
   it("keeps record work usable when publish recovery status cannot load", async () => {
     const loadPublishActivity = vi
       .fn()
@@ -482,7 +374,6 @@ describe("NewsroomHome", () => {
           canBrowsePages
           canBrowseRecords
           canCreate
-          canViewEditorialQueue
           canViewPublishActivity
           currentUserId="user-1"
           loadRecords={vi.fn().mockResolvedValue(selectionFor(records))}
@@ -514,7 +405,6 @@ describe("NewsroomHome", () => {
           canBrowsePages
           canBrowseRecords
           canCreate
-          canViewEditorialQueue={false}
           canViewPublishActivity={false}
           currentUserId="user-1"
           loadRecords={loadRecords}
@@ -551,7 +441,6 @@ describe("NewsroomHome", () => {
           canBrowsePages={false}
           canBrowseRecords={false}
           canCreate={false}
-          canViewEditorialQueue={false}
           canViewPublishActivity={false}
           currentUserId="contributor-1"
           loadAdminStatus={loadAdminStatus}
@@ -583,7 +472,6 @@ describe("NewsroomHome progress and recovery", () => {
           canBrowsePages
           canBrowseRecords
           canCreate
-          canViewEditorialQueue={false}
           canViewPublishActivity={false}
           currentUserId="user-1"
           loadRecords={loadRecords}
@@ -601,38 +489,6 @@ describe("NewsroomHome progress and recovery", () => {
     expect(draftCount.querySelector(".activity-indicator")).toBeNull();
   });
 
-  it("lets the review card ask for its count again when the queue could not be read", async () => {
-    const loadReviewRequestCount = vi
-      .fn()
-      .mockRejectedValueOnce(new Error("offline"))
-      .mockResolvedValueOnce(3);
-    const loadRecords = vi.fn().mockResolvedValue(selectionFor(records));
-    render(
-      <MemoryRouter>
-        <NewsroomHome
-          canBrowsePages
-          canBrowseRecords
-          canCreate
-          canViewEditorialQueue
-          canViewPublishActivity={false}
-          currentUserId="user-1"
-          loadRecords={loadRecords}
-          loadReviewRequestCount={loadReviewRequestCount}
-        />
-      </MemoryRouter>,
-    );
-
-    await screen.findByRole("link", { name: "Transit funding explained" });
-    fireEvent.click(await screen.findByRole("button", { name: "Retry review count" }));
-    await waitFor(() => expect(loadReviewRequestCount).toHaveBeenCalledTimes(2));
-    expect(await screen.findByTestId("review-count")).toHaveTextContent("3");
-    expect(screen.queryByRole("button", { name: "Retry review count" })).toBeNull();
-    // The retry is scoped to the count that failed: the newsroom selection that loaded fine is
-    // neither requested again nor put back into loading.
-    expect(loadRecords).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole("link", { name: "Transit funding explained" })).toBeVisible();
-  });
-
   it("offers the first post from the empty state when the account can create", async () => {
     render(
       <MemoryRouter>
@@ -640,7 +496,6 @@ describe("NewsroomHome progress and recovery", () => {
           canBrowsePages
           canBrowseRecords
           canCreate
-          canViewEditorialQueue={false}
           canViewPublishActivity={false}
           currentUserId="user-1"
           loadRecords={vi.fn().mockResolvedValue(selectionFor([]))}
@@ -663,7 +518,6 @@ describe("NewsroomHome progress and recovery", () => {
           canBrowsePages={false}
           canBrowseRecords
           canCreate={false}
-          canViewEditorialQueue={false}
           canViewPublishActivity={false}
           currentUserId="user-1"
           loadRecords={vi.fn().mockResolvedValue(selectionFor([]))}
@@ -683,7 +537,7 @@ it.each([true, false])("retains settled record proof in recent work with visible
   const functions = await import("../src/lib/functions");
   const metadata = vi.spyOn(functions, "cmsGetPublicationStatus");
   render(<MemoryRouter><PublicContentStatusProvider getIdToken={async () => "test-token"}>
-    <NewsroomHome currentUserId="user-1" canBrowsePages canBrowseRecords canCreate canViewEditorialQueue={false}
+    <NewsroomHome currentUserId="user-1" canBrowsePages canBrowseRecords canCreate
       canViewPublishActivity={false} loadRecords={async () => selectionFor([{ ...records[2], status: "published",
         version: 10, contentVersion: 10, publishedSourceVersion: 10, publishedContentVersion: 10,
         liveSourceVersion: visible ? 10 : undefined, publicUpdatePending: false, publicBuildQueueId: null,

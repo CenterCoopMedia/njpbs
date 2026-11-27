@@ -62,43 +62,16 @@ interface QuickLifecycleAction {
   confirmation: string;
   success: string;
   danger?: boolean;
-  commentRequired?: boolean;
 }
 
 const LIFECYCLE_ACTIONS: Record<string, readonly QuickLifecycleAction[]> = {
-  draft: [
-    {
-      action: "submit",
-      label: "Submit for review",
-      confirmation:
-        "Submit this exact saved version to the editorial queue. Quick-edit changes must be saved first.",
-      success: "Submitted for review.",
-    },
-  ],
-  in_review: [
-    {
-      action: "approve",
-      label: "Approve",
-      confirmation:
-        "Approve this exact reviewed version. It remains read-only until it is reopened or published.",
-      success: "Approved.",
-    },
-    {
-      action: "sendBack",
-      label: "Send back to draft",
-      confirmation:
-        "Return this version to draft with a review note explaining what needs to change.",
-      success: "Returned to draft.",
-      commentRequired: true,
-    },
-  ],
   approved: [
     {
-      action: "reopen",
-      label: "Reopen for edits",
+      action: "edit",
+      label: "Edit",
       confirmation:
-        "Return this approved version to draft. It must pass review again before publication.",
-      success: "Reopened as a draft.",
+        "Return this approved version to draft so it can be changed. Approve the changed version again when it is ready.",
+      success: "Returned to draft.",
     },
   ],
   scheduled: [
@@ -196,14 +169,7 @@ function permitted(
   principal: Principal,
   resource: Resource,
 ): boolean {
-  if (action === "submit") return canEditContent(principal, resource);
-  if (
-    action === "approve" ||
-    action === "sendBack" ||
-    action === "reopen"
-  ) {
-    return can(principal, "content.edit.any", resource);
-  }
+  if (action === "edit") return canEditContent(principal, resource);
   if (action === "unschedule") {
     return can(principal, "content.publish", resource);
   }
@@ -252,7 +218,6 @@ export function ContentQuickEdit({
   const [changingStatus, setChangingStatus] = useState(false);
   const [pendingAction, setPendingAction] =
     useState<QuickLifecycleAction | null>(null);
-  const [reviewNote, setReviewNote] = useState("");
   const [message, setMessage] = useState<{
     tone: "success" | "error" | "info";
     title: string;
@@ -267,7 +232,6 @@ export function ContentQuickEdit({
     setLoadState({ status: "loading" });
     setMessage(null);
     setPendingAction(null);
-    setReviewNote("");
     void loadDocument(api, target)
       .then((document) => {
         if (cancelled) return;
@@ -435,16 +399,6 @@ export function ContentQuickEdit({
     ) {
       return;
     }
-    const note = reviewNote.trim();
-    if (action.commentRequired && note === "") {
-      setMessage({
-        tone: "error",
-        title: "Status was not changed",
-        copy: "Add a review note before sending this content back to draft.",
-      });
-      return;
-    }
-
     setChangingStatus(true);
     setMessage(null);
     try {
@@ -453,12 +407,10 @@ export function ContentQuickEdit({
         id: target.kind === "page" ? target.pageId : target.recordId,
         action: action.action,
         baseVersion: version,
-        ...(action.commentRequired ? { comment: note } : {}),
       });
       const success = action.success;
       adoptDocument(next);
       setPendingAction(null);
-      setReviewNote("");
       setMessage({
         tone: "success",
         title: "Status updated",
@@ -660,7 +612,6 @@ export function ContentQuickEdit({
                   variant={candidate.danger ? "danger" : "secondary"}
                   onClick={() => {
                     setPendingAction(candidate);
-                    setReviewNote("");
                     setMessage(null);
                   }}
                 >
@@ -684,17 +635,6 @@ export function ContentQuickEdit({
         >
           <strong id={confirmationId}>{pendingAction.label}?</strong>
           <p>{pendingAction.confirmation}</p>
-          {pendingAction.commentRequired ? (
-            <label>
-              <span>Review note</span>
-              <Textarea
-                disabled={busy}
-                rows={3}
-                value={reviewNote}
-                onChange={(event) => setReviewNote(event.target.value)}
-              />
-            </label>
-          ) : null}
           <div className="button-row">
             <AsyncActionButton
               variant={pendingAction.danger ? "danger" : "primary"}
@@ -709,7 +649,6 @@ export function ContentQuickEdit({
               disabled={busy}
               onClick={() => {
                 setPendingAction(null);
-                setReviewNote("");
               }}
             >
               Cancel

@@ -70,7 +70,7 @@ not refresh it.
 
 Choose **Pause updates** before a manual correction. Start a revision if needed,
 copy accepted values into the manual draft, correct the values and source time,
-then save, request review, approve and publish. After a manual publication,
+then save, approve and publish. After a manual publication,
 review and reconnect the source; Resume refuses results changed while paused.
 Manual entry remains available for races without a source. If connection status
 is unavailable, manual draft entry remains available; refresh before publication.

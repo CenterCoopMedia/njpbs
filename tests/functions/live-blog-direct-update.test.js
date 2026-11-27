@@ -10,7 +10,7 @@ import authorContract from "../../functions/lib/author-profile-contract.js";
 
 // Jules's 2026-10-28 rule: Editor access and above may publish live blog entries,
 // corrections, withdrawals and coverage state on a published live blog without
-// another whole-Post approval. Writers keep the normal review path.
+// another whole-Post approval. Writers save drafts for a publisher to publish.
 const HOST = process.env.FIRESTORE_EMULATOR_HOST;
 const PROJECT = "demo-njpbs";
 const sha = "a".repeat(40);
@@ -226,32 +226,33 @@ describe("direct live blog updates on a published live blog Post", () => {
     expect(after.published.publishedBy).toBe("tier-editor");
   });
 
-  it("keeps a Writer on the normal review and approval path", async () => {
+  it("keeps a Writer's live updates in a draft until a publisher publishes the Post", async () => {
     await publishFirst();
     const stored = await current();
     const res = await directUpdate(writer, withNewEntry(stored));
     expect(res.statusCode).toBe(403);
     expect(await current()).toEqual(stored);
-    // The Writer works in a reopened draft and submits it for review.
+    // The Writer works in a draft revision and cannot publish it.
     ok(await transition(manager, "revise"));
     ok(await call(saveHandler(writer), { collection: "cmsPosts", id: "post-one", baseVersion: (await current()).version,
       document: { liveBlog: withNewEntry(stored) } }));
     const publish = await call(saveHandler(writer), { collection: "cmsPosts", id: "post-one",
       baseVersion: (await current()).version, document: {}, publish: true });
     expect(publish.statusCode).toBe(403);
-    ok(await transition(writer, "submit"));
-    const submitted = await current();
-    expect(submitted.status).toBe("in_review");
-    expect(submitted.published).toEqual(stored.published);
+    ok(await call(saveHandler(manager), { collection: "cmsPosts", id: "post-one",
+      baseVersion: (await current()).version, document: {}, scheduleAt: "2026-11-04T12:00:00.000Z" }));
+    const scheduled = await current();
+    expect(scheduled.status).toBe("scheduled");
+    expect(scheduled.published).toEqual(stored.published);
     // An Editor whose form still holds the published version gets reload recovery first.
     const staleForm = await directUpdate(editor, withNewEntry(stored), { baseVersion: stored.version });
     expect(staleForm.statusCode).toBe(409);
     expect(staleForm.body.versionConflict).toBe(true);
-    const direct = await directUpdate(editor, submitted.liveBlog);
+    const direct = await directUpdate(editor, scheduled.liveBlog);
     expect(direct.statusCode).toBe(409);
-    expect(direct.body.error).toContain("review, approval or schedule");
+    expect(direct.body.error).toBe("Finish or cancel this Post's approval or schedule before publishing live updates directly.");
     expect(direct.body).not.toHaveProperty("versionConflict");
-    ok(await transition(manager, "approve"));
+    ok(await transition(manager, "unschedule"));
     ok(await call(saveHandler(manager), { collection: "cmsPosts", id: "post-one", baseVersion: (await current()).version, document: {}, publish: true }));
     expect((await current()).published.metadata.liveBlog.updates[0].headline).toBe("First results");
   });
@@ -302,7 +303,7 @@ describe("direct live blog updates on a published live blog Post", () => {
     const extra = await directUpdate(manager, withNewEntry(stored), { document: { liveBlog: withNewEntry(stored), title: "New title" } });
     expect(extra.statusCode).toBe(400);
     expect(await current()).toEqual(stored);
-    // A saved draft title change stays behind review and approval.
+    // A saved draft title change waits for the Post to be published.
     ok(await call(saveHandler(manager), { collection: "cmsPosts", id: "post-one", baseVersion: stored.version, document: { title: "Changed title" } }));
     const draft = await current();
     const parent = await directUpdate(manager, withNewEntry(draft));
@@ -323,7 +324,7 @@ describe("direct live blog updates on a published live blog Post", () => {
     const after = await current();
     expect(after.published.metadata.credits).toEqual(stored.published.metadata.credits);
     expect(after.published.metadata.liveBlog.updates[0].headline).toBe("First results");
-    // A saved draft that changes who is credited still needs review and approval.
+    // A saved draft that changes who is credited still needs the Post to be published.
     ok(await call(saveHandler(manager, "2026-11-03T23:10:00.000Z"), { collection: "cmsPosts", id: "post-one", baseVersion: after.version,
       document: { credits: [{ kind: "registered", authorId: ADA }, { kind: "registered", authorId: BEN }] } }));
     const draft = await current();
@@ -350,7 +351,7 @@ describe("direct live blog updates on a published live blog Post", () => {
     const after = await current();
     expect(after.published.metadata.liveBlog.updates[0].headline).toBe("First results");
     expect(after.published.blocks[0].data).toEqual({ ...stored.published.blocks[0].data, public: copy("b") });
-    // Choosing another video is a parent change and still needs review and approval.
+    // Choosing another video is a parent change and still needs the Post to be published.
     ok(await call(saveHandler(manager), { collection: "cmsPosts", id: "post-one", baseVersion: after.version,
       document: { blocks: [{ ...after.blocks[0], data: { ...after.blocks[0].data, assetId: "other-video" } }] } }));
     const refused = await directUpdate(editor, withNewEntry(await current()));

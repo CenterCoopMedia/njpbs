@@ -349,8 +349,8 @@ export async function runSweep({ apply = false, maxCalls = 120, call, model = cl
       report.documentsScanned++;
       // A save to a draft stays a draft. A save to a published document starts a
       // draft revision and leaves the public page unchanged until staff publish it.
-      // In review, approved and scheduled content is skipped, so reviewed text
-      // never changes after its review.
+      // Approved and scheduled content is skipped, so approved text never
+      // changes after its approval.
       if (!SAVABLE_STATUSES.has(document.status)) {
         report.skipped.push({ collection: item.collection, id: item.id, reason: "reviewed_or_scheduled_status", status: document.status ?? "unknown" });
         continue;

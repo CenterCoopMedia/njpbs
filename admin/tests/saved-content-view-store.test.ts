@@ -76,7 +76,7 @@ describe("saved content view store", () => {
       data: () => ({
         preferences: {
           contentLibraryViews: [
-            { id: "review", name: "Review", query: "status=in_review&v=1" },
+            { id: "approved", name: "Approved", query: "status=approved&v=1" },
           ],
         },
       }),
@@ -88,7 +88,7 @@ describe("saved content view store", () => {
         view: { id: "drafts", name: "Drafts", query: "status=draft&page=8&v=1" },
       }),
     ).resolves.toEqual([
-      { id: "review", name: "Review", query: "status=in_review&v=1" },
+      { id: "approved", name: "Approved", query: "status=approved&v=1" },
       { id: "drafts", name: "Drafts", query: "status=draft&v=1" },
     ]);
 
@@ -101,7 +101,7 @@ describe("saved content view store", () => {
       {
         preferences: {
           contentLibraryViews: [
-            { id: "review", name: "Review", query: "status=in_review&v=1" },
+            { id: "approved", name: "Approved", query: "status=approved&v=1" },
             { id: "drafts", name: "Drafts", query: "status=draft&v=1" },
           ],
         },

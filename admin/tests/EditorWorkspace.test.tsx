@@ -468,10 +468,10 @@ describe("EditorWorkspace surfaces", () => {
       within(publication).getByText("Working version 12"),
     ).toBeVisible();
     expect(
-      within(publication).queryByRole("button", { name: "Submit for review" }),
+      within(publication).queryByRole("button", { name: "Schedule publish" }),
     ).toBeNull();
     fireEvent.click(within(actionsTarget).getByRole("button", { name: "Publishing" }));
-    expect(screen.getByRole("button", { name: "Submit for review" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Schedule publish" })).toBeVisible();
     expect(container.querySelectorAll(".assignment-panel")).toHaveLength(1);
     expect(container.querySelectorAll(".lifecycle-actions")).toHaveLength(1);
 
@@ -502,6 +502,7 @@ describe("EditorWorkspace surfaces", () => {
             })}
             principal={admin}
             surface={{ kind: "record", record: "post", id: "post-1" }}
+            scheduleContent={vi.fn()}
             transitionContent={vi.fn()}
           />
         </WorkspaceActionsProvider>
@@ -518,10 +519,10 @@ describe("EditorWorkspace surfaces", () => {
     expect(publicationToggle).toHaveAttribute("aria-expanded", "false");
 
     fireEvent.click(within(actionsTarget).getByRole("button", { name: "Publishing" }));
-    fireEvent.click(screen.getByRole("button", { name: "Submit for review" }));
+    fireEvent.click(screen.getByRole("button", { name: "Schedule publish" }));
 
     const confirmation = screen.getByRole("group", {
-      name: "Confirm submission",
+      name: "Confirm schedule",
     });
     expect(publicationToggle).toHaveAttribute("aria-expanded", "true");
     expect(confirmation).toBeVisible();
@@ -2356,7 +2357,7 @@ describe("EditorWorkspace RBAC gate", () => {
     expect(screen.getByText("Your role cannot save this record.")).toBeTruthy();
   });
 
-  it("keeps a contributor's submitted record read-only", async () => {
+  it("keeps a contributor's approved record read-only", async () => {
     const saveRecord = vi.fn();
     const transitionContent = vi.fn();
     render(
@@ -2367,8 +2368,8 @@ describe("EditorWorkspace RBAC gate", () => {
             record: {
               id: "post-1",
               type: "post",
-              title: "Submitted post",
-              status: "in_review",
+              title: "Approved post",
+              status: "approved",
               createdBy: "c",
               version: 2,
             },
@@ -2386,7 +2387,7 @@ describe("EditorWorkspace RBAC gate", () => {
     expect(screen.queryByRole("button", { name: "Save draft" })).not.toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "Post title" })).toBeDisabled();
     expect(
-      screen.getAllByText(/select edit before changing reviewed content/i),
+      screen.getAllByText(/select edit before changing approved content/i),
     ).not.toHaveLength(0);
     expect(saveRecord).not.toHaveBeenCalled();
     expect(transitionContent).not.toHaveBeenCalled();
@@ -2461,7 +2462,7 @@ describe("EditorWorkspace RBAC gate", () => {
     expect(savePage).not.toHaveBeenCalled();
   });
 
-  it.each(["draft", "in_review"] as const)(
+  it.each(["draft"] as const)(
     "allows a contributor to create from a %s legacy seed",
     async (status) => {
       render(

@@ -573,41 +573,6 @@
       ]
     },
     {
-      "collectionGroup": "cmsPages",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "status", "order": "ASCENDING" },
-        { "fieldPath": "reviewRequest.requestedAt", "order": "DESCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "cmsPosts",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "status", "order": "ASCENDING" },
-        { "fieldPath": "reviewRequest.requestedAt", "order": "DESCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "cmsPages",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "status", "order": "ASCENDING" },
-        { "fieldPath": "section", "order": "ASCENDING" },
-        { "fieldPath": "reviewRequest.requestedAt", "order": "DESCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "cmsPosts",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "status", "order": "ASCENDING" },
-        { "fieldPath": "section", "order": "ASCENDING" },
-        { "fieldPath": "reviewRequest.requestedAt", "order": "DESCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "cmsPages",
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "status", "order": "ASCENDING" },

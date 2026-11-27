@@ -28,7 +28,7 @@ describe("buildRevisionDiff", () => {
     };
     const after = {
       title: "After",
-      status: "in_review",
+      status: "approved",
       social: { imageAssetId: "social-new" },
       blocks: [
         {

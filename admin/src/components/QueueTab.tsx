@@ -11,16 +11,12 @@ import {
 } from "firebase/firestore";
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "../context/AuthContext";
-import { canManageSettings, canPublishContent, canViewPublishActivity } from "../lib/access";
+import { canManageSettings, canPublishContent } from "../lib/access";
 import { retrySiteUpdate } from "../lib/site-update-retry";
 import type { SiteUpdateRetryResult } from "../lib/site-update-retry";
 import { cmsRecheckPublication } from "../lib/functions";
 import { loadPublishActivitySummary, type PublishActivitySummary } from "../lib/publish-activity";
 import { db } from "../lib/firebase";
-import {
-  cmsListReviewQueue,
-  type ReviewQueueItem,
-} from "../lib/review-queue";
 import { useShell } from "../routes/ShellContext";
 import type { QueueItem } from "./QueueList";
 import { QueueSurface } from "./QueueSurface";
@@ -135,16 +131,10 @@ async function readRecoveryQueueItems(summary: PublishActivitySummary, settingsA
 export function QueueTab() {
   const { principal } = useShell();
   const { getIdToken } = useAuth();
-  const showPublishActivity = canViewPublishActivity(principal);
   const settingsAccess = canManageSettings(principal);
 
-  const [reviewRequests, setReviewRequests] = useState<ReviewQueueItem[]>([]);
-  const [reviewLoading, setReviewLoading] = useState(true);
-  const [reviewError, setReviewError] = useState<string | null>(null);
-  const [reviewAttempt, setReviewAttempt] = useState(0);
-
   const [publishItems, setPublishItems] = useState<QueueItem[]>([]);
-  const [publishLoading, setPublishLoading] = useState(showPublishActivity);
+  const [publishLoading, setPublishLoading] = useState(true);
   const [publishError, setPublishError] = useState<string | null>(null);
   const [publishRecoveryError, setPublishRecoveryError] = useState<string | null>(null);
   const [publishRecoveryLoading, setPublishRecoveryLoading] = useState(false);
@@ -155,44 +145,7 @@ export function QueueTab() {
   const proofRecoveryItems = useRef<QueueItem[]>([]);
 
   useEffect(() => {
-    let current = true;
-    setReviewLoading(true);
-    setReviewError(null);
-
-    void (async () => {
-      try {
-        const idToken = await getIdToken();
-        const response = await cmsListReviewQueue(idToken);
-        if (!current) return;
-        setReviewRequests(response.requests);
-        setReviewLoading(false);
-      } catch (error) {
-        if (!current) return;
-        setReviewLoading(false);
-        setReviewError(
-          error instanceof Error
-            ? error.message
-            : "The editorial queue could not be loaded.",
-        );
-      }
-    })();
-
-    return () => {
-      current = false;
-    };
-  }, [getIdToken, reviewAttempt]);
-
-  useEffect(() => {
     setSiteUpdateResult(null);
-    if (!showPublishActivity) {
-      setPublishItems([]);
-      setPublishLoading(false);
-      setPublishError(null);
-      setPublishRecoveryError(null);
-      setPublishRecoveryLoading(false);
-      return;
-    }
-
     setPublishLoading(true);
     setPublishError(null);
     setPublishRecoveryError(null);
@@ -289,12 +242,10 @@ export function QueueTab() {
       }
     })();
     return () => { current = false; window.clearTimeout(checkTimer); stops.forEach(stop => stop()); };
-  }, [getIdToken, publishAttempt, settingsAccess, showPublishActivity]);
+  }, [getIdToken, publishAttempt, settingsAccess]);
 
   return <QueueSurface
-    reviewRequests={reviewRequests} reviewLoading={reviewLoading} reviewError={reviewError}
-    onReviewRefresh={() => setReviewAttempt((value) => value + 1)}
-    showPublishActivity={showPublishActivity} publishItems={publishItems}
+    publishItems={publishItems}
     publishLoading={publishLoading} publishError={publishError}
     publishRecoveryError={publishRecoveryError} publishRecoveryLoading={publishRecoveryLoading}
     publishRecoveryTruncated={publishRecoveryTruncated}

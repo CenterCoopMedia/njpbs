@@ -1023,7 +1023,7 @@ describe("cmsSaveContent function", () => {
     },
   );
 
-  it.each(["approved", "in_review", "scheduled", "published", "archived"])(
+  it.each(["approved", "scheduled", "published", "archived"])(
     "refuses Home conversion while the legacy record is %s",
     async (status) => {
       const current = legacyHome({
@@ -2403,7 +2403,7 @@ describe("cmsSaveContent function", () => {
     expect(res.body.error).toBe("Unknown status live");
   });
 
-  it("keeps review-state changes explicit but publishes a saved version directly", async () => {
+  it("keeps approval explicit but publishes a saved version directly", async () => {
     const approved = {
       id: "home",
       title: "Reviewed home",
@@ -2435,25 +2435,7 @@ describe("cmsSaveContent function", () => {
       },
     }), editRes);
     expect(editRes.statusCode).toBe(400);
-    expect(editRes.body.error).toBe("Reopen approved content before editing.");
-
-    await db.collection("cmsPages").doc("home").set({
-      ...approved,
-      status: "in_review",
-    });
-    const reviewEditRes = makeRes();
-    await handler(makeReq({
-      body: {
-        collection: "cmsPages",
-        id: "home",
-        baseVersion: 4,
-        document: { title: "Changed during review" },
-      },
-    }), reviewEditRes);
-    expect(reviewEditRes.statusCode).toBe(400);
-    expect(reviewEditRes.body.error).toBe(
-      "Select Edit before changing reviewed content.",
-    );
+    expect(editRes.body.error).toBe("Select Edit before changing approved content.");
 
     await db.collection("cmsPages").doc("home").set({
       ...approved,
@@ -2489,7 +2471,7 @@ describe("cmsSaveContent function", () => {
     expect(await docsIn("admin_logs")).toHaveLength(1);
   });
 
-  it.each(["draft", "in_review", "approved"])("schedules the exact saved %s version through a future publish action", async status => {
+  it.each(["draft", "approved"])("schedules the exact saved %s version through a future publish action", async status => {
     await db.collection("cmsPages").doc("contact").set({
       id: "contact",
       template: "genericPage",
@@ -2539,7 +2521,7 @@ describe("cmsSaveContent function", () => {
     ]);
   });
 
-  it.each(["draft", "in_review", "approved"])("lets a publisher schedule a %s Post without review", async status => {
+  it.each(["draft", "approved"])("lets a publisher schedule a %s Post without approval", async status => {
     await db.collection("cmsPosts").doc("scheduled-post").set({
       id: "scheduled-post", type: "post", title: "Scheduled post", slug: "scheduled-post",
       status, section: "station", tags: [], blocks: [], createdBy: "u1", version: 4,
@@ -2566,7 +2548,7 @@ describe("cmsSaveContent function", () => {
     expect(await docsIn("cmsPublishQueue")).toHaveLength(0);
   });
 
-  it.each(["draft", "in_review", "approved"])("refuses a Writer scheduling their own %s Post", async status => {
+  it.each(["draft", "approved"])("refuses a Writer scheduling their own %s Post", async status => {
     const before = {
       id: "scheduled-post", type: "post", title: "Scheduled post", slug: "scheduled-post",
       status, section: "station", tags: [], blocks: [], createdBy: "u1", version: 4,
@@ -2906,10 +2888,8 @@ describe("cmsSaveContent function", () => {
 
   it.each([
     ["draft", { social: { imageAssetId: 42 } }, /social\.imageAssetId/i],
-    ["in_review", { social: { imageAssetId: 42 } }, /social\.imageAssetId/i],
     ["approved", { social: { imageAssetId: 42 } }, /social\.imageAssetId/i],
     ["draft", { blocks: [{ id: "bad", type: "not-a-block", order: 0, visible: true, data: {} }] }, /block/i],
-    ["in_review", { blocks: [{ id: "bad", type: "not-a-block", order: 0, visible: true, data: {} }] }, /block/i],
     ["approved", { blocks: [{ id: "bad", type: "not-a-block", order: 0, visible: true, data: {} }] }, /block/i],
   ])("validates the complete %s document before scheduling (%o)", async (status, invalid, message) => {
     const stored = {
@@ -3282,7 +3262,7 @@ describe("cmsSaveContent function", () => {
       slug: "station-update",
       previousSlugs: [],
       locale: "en",
-      status: "in_review",
+      status: "draft",
       blocks: [],
       version: 3,
     });
@@ -7034,19 +7014,10 @@ describe("cmsSaveContent function", () => {
         });
         expect(injectedStatus.statusCode).toBe(403);
 
-        const submitRes = await save({
-          collection,
-          id: created.id,
-          baseVersion: edited.version,
-          document: { status: "in_review" },
-        });
-        expect(submitRes.statusCode).toBe(200);
-        expect(submitRes.body.document.status).toBe("in_review");
-
         const publishRes = await save({
           collection,
           id: created.id,
-          baseVersion: submitRes.body.document.version,
+          baseVersion: edited.version,
           publish: true,
           document: {},
         });
@@ -7058,8 +7029,8 @@ describe("cmsSaveContent function", () => {
         expect((await db.collection(collection).doc(created.id).get()).data())
           .toMatchObject({
             createdBy: "contributor-1",
-            status: "in_review",
-            version: submitRes.body.document.version,
+            status: "draft",
+            version: edited.version,
           });
       },
     );
@@ -8438,10 +8409,8 @@ describe("cmsSaveContent function", () => {
         expect(await docsIn("admin_logs")).toHaveLength(0);
       });
 
-      it.each([
-        ["publish", { publish: true, document: {} }],
-        ["review", { document: { status: "in_review" } }],
-      ])("does not let an unassigned draft enter %s", async (_action, request) => {
+      it("does not let an unassigned draft enter publish", async () => {
+        const request = { publish: true, document: {} };
         const stored = {
           id: "unassigned-lifecycle",
           ...newPostDocument("Ready for review"),

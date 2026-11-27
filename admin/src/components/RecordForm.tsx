@@ -332,7 +332,7 @@ interface RecordFormProps {
   readOnly?: boolean;
   showSaveAction?: boolean;
   // Existing Post workflow controls belong in the Publication bento panel, but they remain outside
-  // the editor-only disabled fieldsets so an approved record can still be reopened, published, or
+  // the editor-only disabled fieldsets so an approved record can still return to draft, be published, or be
   // scheduled. The host supplies the controls because it owns permissions, versions, assignment,
   // and lifecycle requests.
   postInspector?: ReactNode;

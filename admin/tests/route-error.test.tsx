@@ -57,7 +57,7 @@ describe("admin route error boundaries", () => {
       ["/", "Home"],
       ["/content", "Content studio"],
       ["/content/pages", "Content studio"],
-      ["/publish-queue", "Editorial queue"],
+      ["/publish-queue", "Publish activity"],
       ["/staff-access", "Staff access"],
       ["/nope", "Page not found"],
     ];

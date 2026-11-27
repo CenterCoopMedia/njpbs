@@ -616,7 +616,6 @@ describe("editorial record contract", () => {
 
   it("keeps active-work assignment out of terminal lifecycle states", () => {
     expect(isAssignableContentStatus("draft")).toBe(true);
-    expect(isAssignableContentStatus("in_review")).toBe(true);
     expect(isAssignableContentStatus("approved")).toBe(true);
     expect(isAssignableContentStatus("scheduled")).toBe(true);
     expect(isAssignableContentStatus("published")).toBe(false);

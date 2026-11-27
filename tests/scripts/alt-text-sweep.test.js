@@ -336,7 +336,7 @@ describe("alt-text sweep", () => {
   it("does not reset consecutive model errors on skipped reviewed records", async () => {
     const h = harness({ media: [asset("a", "Authored")], doc: document({ blocks: [] }),
       postIds: ["draft-1", "live-1", "draft-2", "live-2", "draft-3", "draft-4"], postPageSize: 1,
-      documents: { "live-1": document({ status: "in_review" }), "live-2": document({ status: "scheduled" }) },
+      documents: { "live-1": document({ status: "approved" }), "live-2": document({ status: "scheduled" }) },
       model: vi.fn(async () => { throw new Error("model_failed"); }) });
     const report = await runSweep({ call: h.call, fetchImpl: h.fetchImpl, model: h.model });
     expect(report.modelCalls).toBe(3);

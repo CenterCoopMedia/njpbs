@@ -30,7 +30,7 @@ import {
   canViewAudit,
   canViewAnalytics,
   canViewReports,
-  canViewQueue,
+  canViewPublishActivity,
   canViewUsers,
 } from "./access";
 import {
@@ -99,7 +99,7 @@ export function canOpenAdminPath(principal: Principal, pathname: string): boolea
   if (path === ROUTE_PATHS.analytics) return canViewAnalytics(principal);
   if (path === ROUTE_PATHS.activity) return canViewAudit(principal);
   if (parseMediaWorkspacePath(path).kind !== "not-found") return canAccessMediaWorkspace(principal);
-  if (path === ROUTE_PATHS.publishQueue) return canViewQueue(principal);
+  if (path === ROUTE_PATHS.publishQueue) return canViewPublishActivity(principal);
   if (path === ROUTE_PATHS.staffAccess) return canViewUsers(principal);
   if (path === ROUTE_PATHS.authorProfiles) return canManageAuthorProfiles(principal);
 

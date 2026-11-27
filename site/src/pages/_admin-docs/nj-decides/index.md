@@ -54,7 +54,7 @@ saving again. Do not keep retrying an older version.
 3. Add and arrange spans and planks with the normal Page controls. The theme
    supplies no results, reporting or fixed section order. Add the approved
    links and content your Page needs.
-4. Save, request review, approve and publish through the usual
+4. Save and publish through the usual
    [Page workflow](../review-preview-and-publish/).
 5. Open the public Page. Confirm its heading, content and links before using
    its address in the sitewide banner.
@@ -87,15 +87,14 @@ heading. Dedicated Pages such as Home and Contact retain their own controls.
    link. **Official results** and **Certified results** need an official source
    establishing that status. A concession is not a call; NJ PBS does not make
    its own projections.
-6. Save the draft. Open **Review & publish → Submit for review**, then choose
-   **Confirm submission**. A staff approver checks the exact values, source,
-   update time, reporting share and any call attribution, then chooses
-   **Approve** and **Confirm approval**.
+6. Save the draft. A staff approver opens the saved draft, checks the exact
+   values, source, update time, reporting share and any call attribution, then
+   opens **Review & publish → Approve** and chooses **Confirm approval**.
 7. Open **Review & publish → Publish** to request publication. Check Publish activity and the public race. Approval
    alone does not publish. Open **Race approval history** to inspect approved
    manual revisions.
 
-Later edits stay private until that exact revision is reviewed and published.
+Later edits stay private until that exact revision is approved and published.
 An unchanged race keeps its earlier approval. For an enabled source connection,
 use [the correction steps below](#pause-and-correct-results) before editing its
 manual values.
@@ -163,8 +162,8 @@ check Publish activity and the public values for confirmation.
    discards a source response still in flight.
 2. Start a revision if needed. Choose **Copy accepted values to manual draft**
    so the correction begins with the last accepted numbers.
-3. Correct the values and source time. Save, request review, approve and publish
-   the manual revision as described above.
+3. Correct the values and source time. Save, approve and publish the manual
+   revision as described above.
 4. Check the public correction. Review and reconnect the source afterward.
    **Resume updates** refuses a public binding changed by a manual publication;
    reconnect rather than trying to overwrite it with an older source state.

@@ -2,7 +2,6 @@ import { expect, it, vi } from "vitest";
 import { isolatedFirestore } from "../helpers/emulator-firestore.js";
 import notifications from "../../functions/editorial-notification.js";
 import notices from "../../functions/lib/editorial-notice.js";
-import reviewQueue from "../../functions/lib/review-queue.js";
 
 const { deliverEditorialNotification } = notifications;
 const { editorialNotice } = notices;
@@ -34,47 +33,41 @@ it("routes committed Page and Post notices to eligible participants once per tra
   const collection = "cmsPosts";
   const id = "sample post";
   const record = { type: "post", section: "news", createdBy: "writer", assignee: "assigned" };
-  const inReview = { ...record, reviewRequest: reviewQueue.createReviewRequest({
-    collection, id, sourceVersion: 2, requestedBy: "reviewer", requestedAt: "2026-11-22T12:00:00.000Z",
-  }) };
   const audit = (actorUid, action, after = record) => ({
-    actorUid, after: editorialNotice(collection, id, action, inReview, after),
+    actorUid, after: editorialNotice(collection, id, action, after),
   });
 
-  const submitted = audit("writer", "submit");
+  const approved = audit("writer", "approve");
   await Promise.all([
-    deliverEditorialNotification("submitted", submitted, deps),
-    deliverEditorialNotification("submitted", submitted, deps),
+    deliverEditorialNotification("approved", approved, deps),
+    deliverEditorialNotification("approved", approved, deps),
   ]);
   expect(sendEmail.mock.calls.map(([mail]) => mail.to)).toEqual(["assigned@example.org"]);
   expect(sendEmail.mock.calls[0][0].text).toContain(
     "https://boardwalk.example.org/content/post/sample%20post/edit",
   );
 
-  sendEmail.mockClear();
-  await deliverEditorialNotification("fallback", audit("writer", "submit", {
-    ...record, assignee: "otherDesk",
-  }), deps);
-  expect(sendEmail.mock.calls.map(([mail]) => mail.to).sort()).toEqual([
-    "assigned@example.org", "reviewer@example.org",
-  ]);
-
   for (const [action, actorUid, expected] of [
-    ["sendBack", "assigned", ["reviewer@example.org", "writer@example.org"]],
-    ["approve", "assigned", ["reviewer@example.org", "writer@example.org"]],
+    ["approve", "reviewer", ["assigned@example.org", "writer@example.org"]],
+    ["approve", "assigned", ["writer@example.org"]],
     ["schedule", "assigned", ["writer@example.org"]],
     ["publish", "system:scheduler", ["assigned@example.org", "writer@example.org"]],
   ]) {
     sendEmail.mockClear();
-    await deliverEditorialNotification(action, audit(actorUid, action), deps);
-    await deliverEditorialNotification(action, audit(actorUid, action), deps);
+    await deliverEditorialNotification(`${action}-${actorUid}`, audit(actorUid, action), deps);
+    await deliverEditorialNotification(`${action}-${actorUid}`, audit(actorUid, action), deps);
     expect(sendEmail.mock.calls.map(([mail]) => mail.to).sort()).toEqual(expected);
   }
 
   sendEmail.mockClear();
+  expect(audit("writer", "submit").after).toEqual({});
+  await deliverEditorialNotification("submitted", audit("writer", "submit"), deps);
+  expect(sendEmail).not.toHaveBeenCalled();
+
+  sendEmail.mockClear();
   await deliverEditorialNotification("page", {
     actorUid: "system:scheduler",
-    after: editorialNotice("cmsPages", "contact", "publish", {}, { createdBy: "otherDesk" }),
+    after: editorialNotice("cmsPages", "contact", "publish", { createdBy: "otherDesk" }),
   }, deps);
   expect(sendEmail).toHaveBeenCalledOnce();
   expect(sendEmail.mock.calls[0][0]).toMatchObject({ to: "otherdesk@example.org" });

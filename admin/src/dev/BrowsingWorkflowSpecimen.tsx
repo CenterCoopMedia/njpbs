@@ -6,7 +6,6 @@ import type { RecordListPage } from "../components/RecordList";
 import type { QueueItem } from "../components/QueueList";
 import type { ContentRecordSummary } from "../lib/content-records";
 import { selectLibraryRecords } from "../lib/content-library";
-import type { ReviewQueueItem } from "../lib/review-queue";
 import type { Principal } from "../../../packages/content-core/src/rbac";
 
 const owner: Principal = { id: "gallery", grants: [{ role: "super_admin" }] };
@@ -14,14 +13,12 @@ const viewer: Principal = { id: "gallery-viewer", grants: [{ role: "staff", tier
 const pending = () => new Promise<never>(() => {});
 
 /** Real browse owners with local read outcomes; never a backend operation. */
-export function BrowsingWorkflowSpecimen({ records, recordPage, requests, jobs }: {
-  records: ContentRecordSummary[]; recordPage: RecordListPage;
-  requests: ReviewQueueItem[]; jobs: QueueItem[];
+export function BrowsingWorkflowSpecimen({ records, recordPage, jobs }: {
+  records: ContentRecordSummary[]; recordPage: RecordListPage; jobs: QueueItem[];
 }) {
   const params = new URLSearchParams(window.location.search);
   const family = params.get("family") ?? "directory";
   const state = params.get("state") ?? "ready";
-  const [reviewRetried, setReviewRetried] = useState(false);
   const [publishRetried, setPublishRetried] = useState(false);
   const failed = state === "error";
   const load = async <T,>(value: T): Promise<T> => {
@@ -34,9 +31,6 @@ export function BrowsingWorkflowSpecimen({ records, recordPage, requests, jobs }
     : family === "directory" && state === "empty" ? "/content?page_q=no-matching-fixture-page" : "/content";
   return <MemoryRouter initialEntries={[entry]}>
     {family === "queue" ? <QueueSurface
-      reviewRequests={state === "empty" ? [] : requests}
-      reviewLoading={state === "loading"} reviewError={failed && !reviewRetried ? "The local fixture could not load review requests." : null}
-      onReviewRefresh={() => setReviewRetried(true)} showPublishActivity={!readonly}
       publishItems={state === "empty" ? [] : jobs}
       publishLoading={state === "loading"} publishError={failed && !publishRetried ? "The local fixture could not load publish activity." : null}
       onPublishRefresh={() => setPublishRetried(true)}

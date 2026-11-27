@@ -191,7 +191,6 @@ const {
   PUBLIC_SOURCE_VERSION_FIELD,
 } = require("./lib/publish-build-state");
 const { CONTENT_STATUSES } = require("./lib/content-statuses");
-const { advanceReviewRequest } = require("./lib/review-queue");
 
 // The two content collections and their id strategy (ADR 0013):
 //  - cmsPages holds one document per canonical public page id ("home", "contact", ...).
@@ -335,7 +334,7 @@ function confirmedPublicSourceVersion(document) {
 }
 
 // A direct live blog update is for a public live blog Post whose working copy
-// has no review in progress. A pending draft revision is allowed; the scope check
+// has no approval or schedule in progress. A pending draft revision is allowed; the scope check
 // below refuses it when that draft changes anything outside the live updates.
 function liveBlogUpdateRefusal(stored) {
   const publishedBlog = stored?.type === "post" ? stored.published?.metadata?.liveBlog : undefined;
@@ -343,15 +342,15 @@ function liveBlogUpdateRefusal(stored) {
     return "Only a live blog Post can publish live updates directly.";
   }
   if (publishedBlog === undefined) {
-    return "Publish this live blog through review and approval before publishing live updates directly.";
+    return "Publish this live blog Post before publishing live updates directly.";
   }
   const visible = stored.publiclyVisible === true ||
     (stored.publiclyVisible === undefined && stored.status === "published");
   if (!visible) {
-    return "This live blog is withdrawn. Republish it through review and approval before publishing live updates.";
+    return "This live blog is withdrawn. Republish the Post before publishing live updates.";
   }
   if (!["published", "draft"].includes(stored.status)) {
-    return "Finish or cancel this Post's review, approval or schedule before publishing live updates directly.";
+    return "Finish or cancel this Post's approval or schedule before publishing live updates directly.";
   }
   return null;
 }
@@ -398,7 +397,7 @@ function withPublishedParentByline(previous, next) {
 
 function liveBlogUpdateScopeRefusal(previous, next) {
   if (!isDeepStrictEqual(parentPublication(previous), parentPublication(next))) {
-    return "This Post has changes outside its live updates. Send the Post through review and approval to publish them.";
+    return "This Post has changes outside its live updates. Publish the Post to publish them.";
   }
   if (isDeepStrictEqual(previous?.metadata?.liveBlog, next.metadata?.liveBlog)) {
     return "There are no live update changes to publish.";
@@ -1907,7 +1906,7 @@ function createCmsSaveHandler(deps = {}) {
         }
 
         // Status: preserve the stored status when the client omits it, so a metadata-only
-        // edit of a live, scheduled, or in-review document does not silently downgrade it
+        // edit of a live, scheduled, or approved document does not silently downgrade it
         // to draft (a save of a published page would otherwise unpublish it on the next
         // build). Only a brand-new document falls back to draft. An explicitly sent
         // unknown status is rejected after record authorization above.
@@ -1916,21 +1915,9 @@ function createCmsSaveHandler(deps = {}) {
         }
 
         if (
-          !creating &&
-          stored?.status === "in_review" &&
-          !publishesSnapshot &&
-          !schedulesPublication
-        ) {
-          throw new SaveRejection(
-            400,
-            "Select Edit before changing reviewed content.",
-          );
-        }
-
-        if (
           publishesSnapshot &&
           !needsSeededPublishedSnapshot &&
-          !["draft", "in_review", "approved"].includes(stored?.status) &&
+          !["draft", "approved"].includes(stored?.status) &&
           !(liveBlogUpdate === true && stored?.status === "published")
         ) {
           throw new SaveRejection(
@@ -1947,7 +1934,7 @@ function createCmsSaveHandler(deps = {}) {
             "Publish the saved version without content changes.",
           );
         }
-        if (schedulesPublication && !["draft", "in_review", "approved"].includes(stored?.status)) {
+        if (schedulesPublication && !["draft", "approved"].includes(stored?.status)) {
           throw new SaveRejection(
             400,
             "Save this content as a draft before scheduling.",
@@ -1956,7 +1943,7 @@ function createCmsSaveHandler(deps = {}) {
 
         // Approval is evidence about one exact saved version, not a client-owned
         // field. An ordinary save cannot create that evidence, and it cannot
-        // change reviewed content while silently retaining it. Publishing and
+        // change approved content while silently retaining it. Publishing and
         // scheduling are the only operations that can consume an approved version.
         if (
           !creating &&
@@ -1964,7 +1951,7 @@ function createCmsSaveHandler(deps = {}) {
           !publishesSnapshot &&
           !schedulesPublication
         ) {
-          throw new SaveRejection(400, "Reopen approved content before editing.");
+          throw new SaveRejection(400, "Select Edit before changing approved content.");
         }
         if (status === "approved" && stored?.status !== "approved") {
           throw new SaveRejection(
@@ -2523,19 +2510,6 @@ function createCmsSaveHandler(deps = {}) {
           composed.unassignedDraft = true;
         } else {
           delete composed.unassignedDraft;
-        }
-        if (status === "in_review") {
-          const advancedRequest = advanceReviewRequest(
-            compositionBase?.reviewRequest,
-            {
-              collection,
-              id: docId,
-              sourceVersion: nextVersion,
-            },
-          );
-          if (advancedRequest) composed.reviewRequest = advancedRequest;
-        } else if (compositionBase?.status === "in_review") {
-          delete composed.reviewRequest;
         }
         // Complete the one-way byline conversion. The credits above already carry
         // whatever the legacy `author` said, so leaving the old field behind would
@@ -3213,7 +3187,7 @@ function createCmsSaveHandler(deps = {}) {
               created: creating,
               ...editorialNotice(collection, docId,
                 publish === true && !liveBlogUpdate ? "publish" : schedulesPublication ? "schedule" : null,
-                stored, composed),
+                composed),
               ...(contentLinkChanged ? { contentLink: contentLinkAfter } : {}),
               // Count the blocks actually stored, not just the ones this save sent: a
               // metadata-only save carries the stored blocks forward, so the compliance

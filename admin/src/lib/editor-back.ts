@@ -13,7 +13,6 @@ import {
   contentPagesPath,
   dashboardPath,
   parseContentPath,
-  publishQueuePath,
   recordListPath,
   stripTrailingSlash,
 } from "./routes";
@@ -68,14 +67,13 @@ function splitOrigin(origin: string | null | undefined): { pathname: string; suf
     : { pathname: origin.slice(0, cut), suffix: origin.slice(cut) };
 }
 
-// The work lists that live outside `/content/**` and still open editors: the editorial queue a
-// reviewer works through, and newsroom home, whose recent work and homepage action are the first
-// editor most people open in a session. Both list pages and records together, so either editor can
-// honestly return to them. Without this the canonical path's last stage lands on a list the person
-// never chose, and getting back to the queue they were working costs a second navigation — the
-// wrong turn and recovery action the task-flow criterion is written to catch (#1036).
+// The work list that lives outside `/content/**` and still opens editors: newsroom home, whose
+// recent work and homepage action are the first editor most people open in a session. It lists
+// pages and records together, so either editor can honestly return to it. Without this the
+// canonical path's last stage lands on a list the person never chose, and getting back costs a
+// second navigation — the wrong turn and recovery action the task-flow criterion is written to
+// catch (#1036).
 const WORK_LIST_ORIGINS: ReadonlyArray<{ path: string; label: string; shortLabel: string }> = [
-  { path: publishQueuePath(), label: "Back to editorial queue", shortLabel: "Editorial queue" },
   { path: dashboardPath(), label: "Back to newsroom home", shortLabel: "Home" },
 ];
 

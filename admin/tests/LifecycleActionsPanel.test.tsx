@@ -10,7 +10,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { useState } from "react";
 import { LifecycleActionsPanel } from "../src/components/LifecycleActionsPanel";
 import { WorkspaceActionsProvider } from "../src/components/WorkspaceActions";
-import { HttpError, type TransitionContentRequest, type TransitionContentResponse } from "../src/lib/functions";
+import { HttpError, type TransitionContentRequest } from "../src/lib/functions";
 import { SuccessNoticeProvider } from "../src/components/ui/SuccessNoticeRegion";
 
 describe("LifecycleActionsPanel", () => {
@@ -311,9 +311,9 @@ describe("LifecycleActionsPanel", () => {
       success: true;
       collection: "cmsPosts";
       id: string;
-      action: "submit";
+      action: "approve";
       fromStatus: "draft";
-      toStatus: "in_review";
+      toStatus: "approved";
       version: number;
       document: Record<string, unknown>;
     }) => void = () => {};
@@ -323,9 +323,9 @@ describe("LifecycleActionsPanel", () => {
           success: true;
           collection: "cmsPosts";
           id: string;
-          action: "submit";
+          action: "approve";
           fromStatus: "draft";
-          toStatus: "in_review";
+          toStatus: "approved";
           version: number;
           document: Record<string, unknown>;
         }>((resolve) => {
@@ -334,7 +334,9 @@ describe("LifecycleActionsPanel", () => {
     );
     render(
       <LifecycleActionsPanel
+        approvable
         baseVersion={5}
+        canApprove
         canArchive={false}
         canEdit
         canRestore
@@ -348,8 +350,8 @@ describe("LifecycleActionsPanel", () => {
     );
 
     expect(screen.queryByRole("button", { name: "Publish" })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Submit for review" }));
-    fireEvent.click(screen.getByRole("button", { name: "Confirm submission" }));
+    fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm approval" }));
 
     const pending = screen.getByRole("button", { name: /^.+: Applying action…$/ });
     expect(pending).not.toBeDisabled();
@@ -367,68 +369,74 @@ describe("LifecycleActionsPanel", () => {
         success: true,
         collection: "cmsPosts",
         id: "post-1",
-        action: "submit",
+        action: "approve",
         fromStatus: "draft",
-        toStatus: "in_review",
+        toStatus: "approved",
         version: 6,
-        document: { id: "post-1", status: "in_review", version: 6 },
+        document: { id: "post-1", status: "approved", version: 6 },
       });
     });
     expect(
-      (await screen.findByText("Content submitted for review")).closest(
+      (await screen.findByText("Content approved")).closest(
         '[role="status"]',
       ),
-    ).toHaveTextContent("Content submitted for review");
+    ).toHaveTextContent("Content approved");
   });
 
   it("locks confirmation fields while a lifecycle action is pending", () => {
-    const transition = vi.fn(
-      () => new Promise<TransitionContentResponse>(() => {}),
+    vi.spyOn(Date, "now").mockReturnValue(Date.parse("2030-08-15T12:00:00Z"));
+    const schedule = vi.fn(
+      () => new Promise<{ document: Record<string, unknown> }>(() => {}),
     );
     render(
       <LifecycleActionsPanel
         baseVersion={5}
         canArchive={false}
-        canApprove
         canEdit
+        canPublish
         canRestore
         canUnpublish
         collection="cmsPosts"
         documentId="post-1"
-        onTransition={transition}
+        onPublish={vi.fn()}
+        onSchedule={schedule}
+        onTransition={vi.fn()}
         publicationSupported
-        status="in_review"
+        status="draft"
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Send back" }));
-    const note = screen.getByLabelText("Review note");
-    fireEvent.change(note, { target: { value: "Add a second source." } });
-    fireEvent.click(screen.getByRole("button", { name: "Confirm send back" }));
+    fireEvent.click(screen.getByRole("button", { name: "Schedule publish" }));
+    const time = screen.getByLabelText("Publication time (New York)");
+    fireEvent.change(time, { target: { value: "2030-09-01T10:30" } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirm schedule" }));
 
-    expect(note).toBeDisabled();
+    expect(time).toBeDisabled();
     expect(screen.getByRole("button", { name: /^.+: Applying action…$/ }))
       .not.toBeDisabled();
   });
 
-  it("moves draft content through review and approval with a required send-back note", async () => {
+  it("offers Approve from draft only for content that takes approval", async () => {
     const transition = vi.fn(async (request) => ({
       success: true as const,
       ...request,
-      fromStatus: "in_review" as const,
-      toStatus: "draft" as const,
+      fromStatus: "draft" as const,
+      toStatus: "approved" as const,
       version: 6,
-      document: { id: request.id, status: "draft", version: 6 },
+      document: { id: request.id, status: "approved", version: 6 },
     }));
     const props = {
       baseVersion: 5,
       canArchive: true,
       canApprove: true,
       canEdit: true,
+      canPublish: true,
       canRestore: true,
       canUnpublish: true,
       collection: "cmsPosts" as const,
       documentId: "post-1",
+      onPublish: vi.fn(),
+      onSchedule: vi.fn(),
       onTransition: transition,
       publicationSupported: true,
     };
@@ -436,23 +444,41 @@ describe("LifecycleActionsPanel", () => {
       <LifecycleActionsPanel {...props} status="draft" />,
     );
 
-    expect(screen.getByRole("button", { name: "Submit for review" })).toBeEnabled();
-    rerender(<LifecycleActionsPanel {...props} status="in_review" />);
-    expect(screen.getByRole("button", { name: "Approve" })).toBeEnabled();
-    fireEvent.click(screen.getByRole("button", { name: "Send back" }));
-    expect(screen.getByRole("button", { name: "Confirm send back" })).toBeDisabled();
-    fireEvent.change(screen.getByLabelText("Review note"), {
-      target: { value: "Add a second source." },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Confirm send back" }));
+    expect(screen.getByRole("button", { name: "Publish" })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "Approve" })).not.toBeInTheDocument();
+    rerender(<LifecycleActionsPanel {...props} approvable status="draft" />);
+    expect(screen.getByRole("button", { name: "Publish" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm approval" }));
 
     await waitFor(() => expect(transition).toHaveBeenCalledWith({
       collection: "cmsPosts",
       id: "post-1",
-      action: "sendBack",
+      action: "approve",
       baseVersion: 5,
-      comment: "Add a second source.",
     }));
+  });
+
+  it("does not offer Approve once content is approved", () => {
+    render(
+      <LifecycleActionsPanel
+        approvable
+        baseVersion={6}
+        canApprove
+        canArchive
+        canEdit
+        canRestore
+        canUnpublish
+        collection="cmsPosts"
+        documentId="post-1"
+        onTransition={vi.fn()}
+        publicationSupported
+        status="approved"
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Edit" })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "Approve" })).not.toBeInTheDocument();
   });
 
   it("offers Edit for approved content", () => {
@@ -477,7 +503,6 @@ describe("LifecycleActionsPanel", () => {
 
   it.each([
     ["draft", "Draft"],
-    ["in_review", "In review"],
     ["approved", "Approved"],
   ])(
     "reports the %s revision without a duplicate workflow status",
@@ -636,7 +661,8 @@ describe("LifecycleActionsPanel", () => {
         liveSourceVersion={8}
         onTransition={vi.fn()}
         publicationSupported
-        status="in_review"
+        approvable
+        status="draft"
       />,
     );
 
@@ -949,9 +975,10 @@ describe("LifecycleActionsPanel", () => {
     expect(screen.queryByRole("button", { name: "Schedule publish" })).not.toBeInTheDocument();
   });
 
-  it("keeps review actions for library-only records", () => {
+  it("keeps Approve for library-only records that take approval", () => {
     render(
       <LifecycleActionsPanel
+        approvable
         baseVersion={6}
         canArchive
         canApprove
@@ -963,13 +990,11 @@ describe("LifecycleActionsPanel", () => {
         documentId="program-1"
         onTransition={vi.fn()}
         publicationSupported={false}
-        status="in_review"
+        status="draft"
       />,
     );
 
     expect(screen.getByRole("button", { name: "Approve" })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "Send back" })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "Edit" })).toBeEnabled();
     expect(screen.queryByRole("button", { name: "Publish" })).not.toBeInTheDocument();
   });
 
@@ -1186,7 +1211,7 @@ describe("LifecycleActionsPanel", () => {
       <LifecycleActionsPanel {...props} status="draft" />,
     );
 
-    for (const status of ["draft", "in_review", "approved", "scheduled", "published"]) {
+    for (const status of ["draft", "approved", "scheduled", "published"]) {
       rerender(<LifecycleActionsPanel {...props} status={status} />);
       expect(screen.getByRole("button", { name: "Delete" })).toBeEnabled();
     }
@@ -1255,19 +1280,19 @@ describe("LifecycleActionsPanel", () => {
     document.body.append(actionsTarget, secondaryTarget);
     const panel = (status: string) => (
       <WorkspaceActionsProvider target={actionsTarget} secondaryTarget={secondaryTarget}>
-        <LifecycleActionsPanel baseVersion={4} canApprove canEdit canPublish
-          canArchive={false} canUnpublish={false} canRestore={false}
+        <LifecycleActionsPanel approvable baseVersion={4} canApprove canEdit canPublish
+          canArchive={false} canUnpublish={false} canRestore={false} cardPublication
           collection="cmsPosts" documentId="sponsor-1" publicationSupported={false}
           status={status} workspaceActions onTransition={vi.fn()} />
       </WorkspaceActionsProvider>
     );
-    const view = render(panel("draft"));
+    const view = render(panel("approved"));
     try {
       expect(within(secondaryTarget).getAllByRole("button").map(button => button.textContent))
-        .toEqual(["Submit for review", "Lifecycle help"]);
-      view.rerender(panel("in_review"));
+        .toEqual(["Lifecycle help"]);
+      view.rerender(panel("draft"));
       expect(within(secondaryTarget).getAllByRole("button").map(button => button.textContent))
-        .toEqual(["Approve", "Send back", "Lifecycle help"]);
+        .toEqual(["Approve", "Lifecycle help"]);
       expect(secondaryTarget.firstElementChild).toBe(within(secondaryTarget).getByRole("button", { name: "Approve" }));
     } finally {
       view.unmount();
@@ -1482,30 +1507,21 @@ describe("LifecycleActionsPanel", () => {
 });
 
 describe("library card publication feedback", () => {
-  it("keeps Send back available to a card reviewer without publication permission", async () => {
-    const transition = vi.fn(async (request: TransitionContentRequest) => ({ success: true as const, ...request,
-      fromStatus: "in_review", toStatus: "draft", version: 3,
-      document: { id: "newsletter", status: "draft", version: 3 } }));
-    render(<LifecycleActionsPanel collection="cmsPosts" documentId="newsletter" status="in_review"
+  it("withholds Approve from a card reviewer without publication permission", () => {
+    render(<LifecycleActionsPanel collection="cmsPosts" documentId="newsletter" status="draft"
       baseVersion={2} canApprove canEdit canPublish={false} canArchive={false} canUnpublish={false} canRestore={false}
-      publicationSupported={false} cardPublication onTransition={transition} />);
+      publicationSupported={false} cardPublication approvable onTransition={vi.fn()} />);
     expect(screen.queryByRole("button", { name: "Approve" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Send back" })).toBeEnabled();
-    fireEvent.click(screen.getByRole("button", { name: "Send back" }));
-    fireEvent.change(screen.getByLabelText("Review note"), { target: { value: "Please check the description." } });
-    fireEvent.click(screen.getByRole("button", { name: "Confirm send back" }));
-    await waitFor(() => expect(transition).toHaveBeenCalledWith({ collection: "cmsPosts", id: "newsletter",
-      action: "sendBack", baseVersion: 2, comment: "Please check the description." }));
   });
 
   it("explains that approval publishes a library card and keeps routed actions absent", async () => {
     const transition = vi.fn(async (request: TransitionContentRequest) => ({ success: true as const, ...request,
-      fromStatus: "in_review", toStatus: "approved", version: 3,
+      fromStatus: "draft", toStatus: "approved", version: 3,
       document: { id: "newsletter", status: "approved", version: 3 },
       publication: { status: "queued" as const, queueId: "card-context", cardPublication: true } }));
-    render(<LifecycleActionsPanel collection="cmsPosts" documentId="newsletter" status="in_review"
+    render(<LifecycleActionsPanel collection="cmsPosts" documentId="newsletter" status="draft"
       baseVersion={2} liveSourceVersion={null} unifiedStatus={false} canApprove canEdit canPublish
-      canArchive canUnpublish canRestore publicationSupported={false} cardPublication onTransition={transition} />);
+      canArchive canUnpublish canRestore publicationSupported={false} cardPublication approvable onTransition={transition} />);
     expect(screen.queryByRole("button", { name: "Publish" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Schedule publish" })).toBeNull();
     expect(screen.getByText("Approve publishes this card. Unpublish or Archive removes it. Draft edits stay private.")).toBeVisible();

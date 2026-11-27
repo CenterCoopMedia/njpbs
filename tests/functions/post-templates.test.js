@@ -39,7 +39,7 @@ function fixture() {
     heroImage: "photo", heroImageAlt: "Lead description", heroImageDecorative: false,
     heroBackgroundPosition: "center", blocks,
     published: { sourceVersion: 6 }, publiclyVisible: true, publishAt: "2026-09-09T12:00:00Z",
-    previewToken: "private-preview", assigneeUid: "author", reviewRequest: { state: "approved" },
+    previewToken: "private-preview", assigneeUid: "author",
   };
 }
 
@@ -50,7 +50,7 @@ describe("Post template field contract", () => {
     expect(snapshot.blocks).toEqual(source.blocks);
     expect(snapshot.tags).toEqual(["format:multimedia"]);
     expect(snapshot.heroImageAlt).toBe("Lead description");
-    for (const field of ["id", "slug", "previousSlugs", "summary", "excerpt", "credits", "section", "createdBy", "version", "published", "publiclyVisible", "publishAt", "previewToken", "assigneeUid", "reviewRequest"]) {
+    for (const field of ["id", "slug", "previousSlugs", "summary", "excerpt", "credits", "section", "createdBy", "version", "published", "publiclyVisible", "publishAt", "previewToken", "assigneeUid"]) {
       expect(snapshot).not.toHaveProperty(field);
     }
     expect(snapshot).toMatchObject({ status: "draft", title: "", categories: [] });
@@ -265,7 +265,7 @@ describe("Post template trusted persistence", () => {
     const draft = created.body.document;
     expect(draft).toMatchObject({ status: "draft", createdBy: "owner", version: 1, title: "New independent story", unassignedDraft: true });
     expect(draft.slug).not.toBe("original-story");
-    for (const field of ["published", "section", "previewToken", "reviewRequest"]) expect(draft).not.toHaveProperty(field);
+    for (const field of ["published", "section", "previewToken"]) expect(draft).not.toHaveProperty(field);
     expect(draft.publishAt).not.toBe(fixture().publishAt);
     expect(draft.blocks.every(block => !block.id.startsWith("source-"))).toBe(true);
     const expected = capturePost(fixture(), mode).blocks;
@@ -322,7 +322,7 @@ describe("Post template trusted persistence", () => {
       recordMeaningfulUpdate: false,
       showUpdatedDate: false,
     });
-    for (const field of ["date", "published", "publiclyVisible", "reviewRequest", "firstPublishedAt", "lastMeaningfulUpdatedAt", "lastMeaningfulUpdatedBy"]) {
+    for (const field of ["date", "published", "publiclyVisible", "firstPublishedAt", "lastMeaningfulUpdatedAt", "lastMeaningfulUpdatedBy"]) {
       expect(draft).not.toHaveProperty(field);
     }
     expect(draft.slug).not.toBe(source.slug);

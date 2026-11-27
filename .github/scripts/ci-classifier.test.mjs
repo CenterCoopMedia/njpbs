@@ -340,7 +340,6 @@ describe("CI path classifier", () => {
       "site/src/lib/cms-loader.ts",
       "site/src/lib/public-artifact-inventory.ts",
       "site/src/lib/public-worker-artifact.ts",
-      "site/src/lib/workflow-projection.ts",
       "site/scripts/upload-public-worker-candidate.ts",
       "site/tests-e2e/loader.e2e.test.ts",
     ]) {

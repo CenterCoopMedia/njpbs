@@ -172,8 +172,6 @@ import {
 import { QueueList, type QueueItem } from "../components/QueueList";
 import { AccountSettingsRoute } from "../routes/AccountSettingsRoute";
 import { NavigationPreferences } from "../components/NavigationPreferences";
-import { ReviewQueueList } from "../components/ReviewQueueList";
-import type { ReviewQueueItem } from "../lib/review-queue";
 import { NewsroomHome, type NewsroomRecord } from "../components/NewsroomHome";
 import { RecordList, type RecordListPage } from "../components/RecordList";
 import { UsersTableSkeleton } from "../components/UsersTab";
@@ -531,7 +529,7 @@ const HOME_RECORDS: NewsroomRecord[] = [
     id: "post-transit",
     kind: "post",
     title: "Transit funding explained",
-    status: "in_review",
+    status: "draft",
     version: 2,
     updatedAt: "2026-07-20T14:00:00.000Z",
     updatedBy: "sa",
@@ -598,51 +596,6 @@ const LIBRARY_RECORDS: ContentRecordSummary[] = [
     version: 7,
     updatedAt: "2026-07-16T17:00:00.000Z",
     updatedBy: "sa",
-  },
-];
-
-const REVIEW_REQUESTS: ReviewQueueItem[] = [
-  {
-    requestId: `review_${"a".repeat(64)}`,
-    recordId: "post-station-update",
-    title: "Station update: what changes on July 1",
-    state: "in_review",
-    collection: "cmsPosts",
-    contentType: "post",
-    sourceVersion: 4,
-    requestedByLabel: "Blake Sutton",
-    requestedAt: "2026-08-18T15:12:00.000Z",
-    assigneeLabel: "Jordan Avery",
-    recovered: false,
-  },
-  {
-    // A headline at the length newsroom copy actually runs to, so the queue's content column is
-    // reviewed against real wrapping rather than against a two-word page name (#1036).
-    requestId: `review_${"c".repeat(64)}`,
-    recordId: "post-delaney-hall",
-    title:
-      "What the new water tests show about Delaney Hall and the towns downstream",
-    state: "in_review",
-    collection: "cmsPosts",
-    contentType: "post",
-    sourceVersion: 2,
-    requestedByLabel: "Sam Morgan",
-    requestedAt: "2026-08-18T13:05:00.000Z",
-    assigneeLabel: "Blake Sutton",
-    recovered: false,
-  },
-  {
-    requestId: `review_${"b".repeat(64)}`,
-    recordId: "home",
-    title: "Homepage",
-    state: "in_review",
-    collection: "cmsPages",
-    contentType: "page",
-    sourceVersion: 11,
-    requestedByLabel: "Sam Morgan",
-    requestedAt: "2026-08-18T09:40:00.000Z",
-    assigneeLabel: null,
-    recovered: false,
   },
 ];
 
@@ -790,7 +743,7 @@ function staffPageContent(kind: "empty" | "blocks" | "readonly"): PageContent {
         : {}),
     },
     createdBy: "sa",
-    status: kind === "readonly" ? "in_review" : "draft",
+    status: kind === "readonly" ? "approved" : "draft",
     version: 4,
   };
 }
@@ -842,7 +795,7 @@ const GALLERY_SPONSOR_PAGE_SIZE = 25;
 const GALLERY_SPONSORS = Array.from({ length: 63 }, (_, index) => ({
   id: `sponsor-${index + 1}`,
   title: `${["New Jersey Community Foundation", "Garden State Arts Council", "Delaware River Partners"][index % 3]} ${index + 1}`,
-  status: ["published", "in_review", "draft"][index % 3],
+  status: ["published", "approved", "draft"][index % 3],
   updatedAt: `2026-07-${String(19 - (index % 18)).padStart(2, "0")}T14:30:00.000Z`,
 }));
 const listSponsors = async (_kind: RecordKind, page: number) => {
@@ -1026,19 +979,19 @@ const transitionGalleryPost: NonNullable<
   id: request.id,
   action: request.action,
   fromStatus: "draft",
-  toStatus: "in_review",
+  toStatus: "approved",
   version: request.baseVersion + 1,
   document: {
     ...GALLERY_POST_RECORD,
-    status: "in_review",
+    status: "approved",
     version: request.baseVersion + 1,
   },
 });
 const loadSavedLibraryViews = async (): Promise<SavedContentView[]> => [
   {
-    id: "review-queue",
-    name: "Review queue",
-    query: "sort=updatedAt&status=in_review&v=1",
+    id: "approved-work",
+    name: "Approved work",
+    query: "sort=updatedAt&status=approved&v=1",
   },
 ];
 const mutateLibraryViews = async (
@@ -1094,7 +1047,7 @@ const GALLERY_ACTIVITY: AuditEntry[] = [
     action: "cms.save",
     target: "cmsPages/home",
     before: { status: "draft", version: 6 },
-    after: { status: "in_review", version: 7 },
+    after: { status: "draft", version: 7 },
     source: "admin.njpbs.org",
     at: "2026-08-13T16:15:00.000Z",
     resolved: {
@@ -1424,7 +1377,7 @@ function CustomShelfGallery() {
   return <ContentShelfSources.Provider value={{
     loadLibrarySelection: async () => ({ records: [{ id: "sample-post", kind: "post", status: "published", liveSourceVersion: 1, title: "A walk along the river" }],
       total: 1, allCount: 1, mineCount: 0, assignedCount: 0, page: 1, pageCount: 1,
-      statusCounts: { draft: 0, in_review: 0, approved: 0, scheduled: 0, published: 1, archived: 0 } }),
+      statusCounts: { draft: 0, approved: 0, scheduled: 0, published: 1, archived: 0 } }),
     loadRecord: async () => ({ status: "ready", record: { status: "published", publiclyVisible: true, publicSourceVersion: 1, published: { sourceVersion: 1, metadata: {
       title: "A walk along the river", slug: "river-walk", summary: "Places to explore along the Delaware River.",
       heroImage: "media-garden-state", heroImageAlt: "Community artwork" } } } }),
@@ -1674,11 +1627,9 @@ function BrowsingFamilyShellSpecimen() {
   const path = family === "library" ? "/content/library" : family === "record-list" ? `/content/${recordKind}`
     : family === "media" ? `/media/${mediaTab}` : family === "queue" ? "/publish-queue" : "/content";
   const title = family === "directory" ? "Site pages" : family === "record-list" ? recordKind === "event" ? "Events" : "Sponsors"
-    : family === "library" ? "All content" : family === "media" ? "Media library" : "Editorial queue";
+    : family === "library" ? "All content" : family === "media" ? "Media library" : "Publish activity";
   const [router] = useState(() => {
     const element = family === "media" ? <BrowsingShellMedia tab={mediaTab} /> : family === "queue" ? <QueueSurface
-        reviewRequests={REVIEW_REQUESTS.map(request => ({ ...request, requestedByLabel: "Sample contributor", assigneeLabel: request.assigneeLabel ? "Sample editor" : null }))}
-        reviewLoading={false} reviewError={null} onReviewRefresh={() => {}} showPublishActivity
         publishItems={QUEUE_ITEMS} publishLoading={false} publishError={null} onPublishRefresh={() => {}}
       /> : <ContentBrowseWorkspace principal={superAdmin}
         surface={family === "directory" ? { kind: "page-list" } : family === "library" ? { kind: "library" } : { kind: "record-list", record: recordKind }}
@@ -1819,11 +1770,9 @@ function ShellSpecimen({
                   canEditHomepage
                   canBrowseRecords
                   canCreate
-                  canViewEditorialQueue
                   canViewPublishActivity
                   currentUserId="sa"
                   loadRecords={async () => HOME_SELECTION}
-                  loadReviewRequestCount={async () => 3}
                   loadPublishActivity={async () => ({
                     activeCount: 1,
                     recoveryCount: 2,
@@ -2543,7 +2492,7 @@ export const SHOTS: Shot[] = [
     title: "Scheduled publication in Home",
     note: "Stored schedule and an unscheduled draft in the real Home list; local fixtures only.",
     render: () => <MemoryRouter><NewsroomHome
-      canBrowsePages canBrowseRecords canCreate canViewEditorialQueue={false} canViewPublishActivity={false}
+      canBrowsePages canBrowseRecords canCreate canViewPublishActivity={false}
       currentUserId="sa"
       loadAdminStatus={async () => ({ schemaVersion: 2, status: "current", environment: "Local gallery",
         generatedAt: "2026-10-13T16:00:00.000Z", refreshAfter: "2026-10-14T16:00:00.000Z",
@@ -2704,11 +2653,9 @@ export const SHOTS: Shot[] = [
           canBrowsePages
           canBrowseRecords
           canCreate
-          canViewEditorialQueue
           canViewPublishActivity={false}
           currentUserId="sa"
           loadRecords={galleryDelayed(async () => HOME_SELECTION)}
-          loadReviewRequestCount={galleryDelayed(async () => 3)}
         />
       </MemoryRouter>
     ),
@@ -3040,10 +2987,8 @@ export const SHOTS: Shot[] = [
           canCreate
           canUseMediaLibrary
           canViewActivity
-          canViewEditorialQueue
           canViewPublishActivity
           currentUserId="sa"
-          loadReviewRequestCount={async () => 3}
           loadAdminStatus={async () => ({
             schemaVersion: 2,
             status: "current",
@@ -3091,7 +3036,7 @@ export const SHOTS: Shot[] = [
       listRecords={async () => ({ records: [
         { id: "post-station-update", title: "NJ PBS announces six staff appointments", status: "published", updatedAt: "2026-08-19T14:30:00Z" },
         { id: "post-community", title: "Community stories from across New Jersey", status: "draft", updatedAt: "2026-08-18T14:30:00Z" },
-        { id: "post-fall", title: "This fall on NJ PBS", status: "in_review", updatedAt: "2026-08-17T14:30:00Z" },
+        { id: "post-fall", title: "This fall on NJ PBS", status: "draft", updatedAt: "2026-08-17T14:30:00Z" },
       ], page: 1, pageCount: 1, total: 3 })}
     />,
   },
@@ -4081,7 +4026,7 @@ export const SHOTS: Shot[] = [
     title: "Browsing and workflow — local read states",
     note: "Real directory, record-list, library and queue owners. family and state query parameters select deterministic ready, loading, empty, error or browse-only fixtures; no backend operation.",
     isolateDocument: true,
-    render: () => <BrowsingWorkflowSpecimen records={LIBRARY_RECORDS} recordPage={{ records: GALLERY_SPONSORS.slice(0, 3), page: 1, pageCount: 1, total: 3 }} requests={REVIEW_REQUESTS} jobs={QUEUE_ITEMS} />,
+    render: () => <BrowsingWorkflowSpecimen records={LIBRARY_RECORDS} recordPage={{ records: GALLERY_SPONSORS.slice(0, 3), page: 1, pageCount: 1, total: 3 }} jobs={QUEUE_ITEMS} />,
   },
   {
     id: "browsing-family-shell",
@@ -4176,27 +4121,6 @@ export const SHOTS: Shot[] = [
         newId={galleryIds}
         surface={HOME_PAGE_SURFACE}
       />
-    ),
-  },
-  {
-    id: "review-queue",
-    title: "Editorial queue — review requests",
-    note: "The list a reviewer works through. The content title carries the row: it takes the table's width and its primary type, because it is what a reviewer scans first. The waiting column reports a bounded age from the exact submitted time instead of repeating that every row is in review. Each row's own title opens the record or page, and carries the queue with it, so the editor's Back action returns here rather than to a content list nobody chose.",
-    render: () => (
-      <MemoryRouter initialEntries={["/publish-queue"]}>
-        <ReviewQueueList requests={guideCapture ? REVIEW_REQUESTS.map((request) => ({ ...request, requestedByLabel: "Sample contributor", assigneeLabel: request.assigneeLabel ? "Sample editor" : null })) : REVIEW_REQUESTS} />
-      </MemoryRouter>
-    ),
-  },
-  {
-    id: "review-queue-narrow",
-    title: "Editorial queue — review requests at 320px",
-    note: "The same requests as stacked cards at the narrow proof width. Every label and value pair reads from one left edge.",
-    width: 320,
-    render: () => (
-      <MemoryRouter initialEntries={["/publish-queue"]}>
-        <ReviewQueueList requests={guideCapture ? REVIEW_REQUESTS.map((request) => ({ ...request, requestedByLabel: "Sample contributor", assigneeLabel: request.assigneeLabel ? "Sample editor" : null })) : REVIEW_REQUESTS} />
-      </MemoryRouter>
     ),
   },
   {

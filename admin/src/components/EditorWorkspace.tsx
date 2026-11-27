@@ -53,6 +53,7 @@ import { RevisionHistory } from "./RevisionHistory";
 import { PublishedVersionStatus } from "./PublishedVersionStatus";
 import { LivePostAction } from "./LivePostAction";
 import { LifecycleActionsPanel } from "./LifecycleActionsPanel";
+import { hasVisibleElectionResults } from "../lib/approval-scope";
 import {
   EditorWorkspacePagePanels,
   type PageBlockEditorControls,
@@ -2642,6 +2643,9 @@ function EditorWorkspaceContent({
           publicationSupported={publicationSupported}
           cardPublication={["sponsor", "newsletter"].includes(recordSurface.record)}
           translationReview={editionOf !== null}
+          approvable={["sponsor", "newsletter"].includes(recordSurface.record) ||
+            (recordSurface.record === "post" && editionOf !== null) ||
+            hasVisibleElectionResults(initial?.blocks)}
           canRestore={can(
             principal,
             "content.delete",
@@ -2700,7 +2704,7 @@ function EditorWorkspaceContent({
           onTransition={
             transitionContent
               ? async (request, options) => {
-                  if (!options?.retryAcceptedCard && (request.action === "submit" || request.action === "approve")) await validateRecordForPublication();
+                  if (!options?.retryAcceptedCard && request.action === "approve") await validateRecordForPublication();
                   await reserveEditorForSave();
                   return transitionContent(request);
                 }
@@ -2806,7 +2810,7 @@ function EditorWorkspaceContent({
             {recordStatus !== "published" && recordStatus !== "scheduled" && <p>{translationApproved
               ? "Translation approved for this saved version."
               : recordStatus === "approved"
-                ? "Reopen this draft and submit it for translation review."
+                ? "Select Edit to change this version, then approve the saved Spanish version again."
                 : "Use Preview to check the saved Spanish version privately."}</p>}
             <Button type="button" variant="secondary" onClick={() => {
               const original: Surface = { kind: "record", record: "post", id: editionOf };
@@ -3018,7 +3022,6 @@ function EditorWorkspaceContent({
             restoring ||
             changingElectionSources ||
             changingLifecycle ||
-            recordStatus === "in_review" ||
             recordStatus === "approved" ||
             recordStatus === "scheduled"
           }
@@ -3033,7 +3036,7 @@ function EditorWorkspaceContent({
           saveLabel="Save draft"
           showSaveAction={
             recordSurface.record !== "post" ||
-            !["in_review", "approved", "scheduled"].includes(String(recordStatus))
+            !["approved", "scheduled"].includes(String(recordStatus))
           }
         />
         {recordSurface.record === "post" && persistedRecordId ? (
@@ -3279,7 +3282,6 @@ function EditorWorkspaceContent({
       }
     }
     const pageEditorReadOnly = convertingHome || enablingScheduleCopy || restoring || changingLifecycle ||
-      (content.pageStatus === "in_review" && !content.expectedAbsent) ||
       content.pageStatus === "approved" || content.pageStatus === "scheduled";
     const sharedEditorControls: PageEditorSharedControls = {
       allowIncomplete: autosaveDraft,
@@ -3472,7 +3474,7 @@ function EditorWorkspaceContent({
       onTransition:
           transitionContent
             ? async (request) => {
-                if (request.action === "submit" || request.action === "approve") await validatePageForPublication();
+                if (request.action === "approve") await validatePageForPublication();
                 await reserveEditorForSave();
                 return transitionContent(request);
               }

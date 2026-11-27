@@ -41,7 +41,7 @@ describe("Scheduling a post", () => {
     } finally { view.unmount(); actions.remove(); secondary.remove(); feedback.remove(); }
   });
 
-  it.each(["draft", "in_review", "approved"])("lets a publisher schedule the saved %s version without review", async status => {
+  it.each(["draft", "approved"])("lets a publisher schedule the saved %s version", async status => {
     const schedule = vi.fn(async (_baseVersion: number, _scheduleAt: string) => ({ document: { status: "scheduled", version: 7 } }));
     const changed = vi.fn();
     render(<LifecycleActionsPanel {...props} status={status} onPublish={vi.fn()} onSchedule={schedule} onChanged={changed} />);
@@ -59,11 +59,10 @@ describe("Scheduling a post", () => {
     expect(screen.queryByLabelText("Publication time (New York)")).toBeNull();
   });
 
-  it("keeps a Writer on the review path without publication actions", () => {
+  it("keeps a Writer without publication actions", () => {
     const schedule = vi.fn();
     render(<LifecycleActionsPanel {...props} status="draft" canPublish={false} canEdit
       onTransition={vi.fn()} onPublish={vi.fn()} onSchedule={schedule} />);
-    expect(screen.getByRole("button", { name: "Submit for review" })).toBeEnabled();
     expect(screen.queryByRole("button", { name: "Schedule publish" })).toBeNull();
     expect(screen.queryByRole("button", { name: /^Publish$/ })).toBeNull();
     expect(schedule).not.toHaveBeenCalled();

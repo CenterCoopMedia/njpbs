@@ -28,7 +28,7 @@ const summary: RevisionSummary = {
   beforeVersion: 1,
   version: 2,
   beforeStatus: "draft",
-  status: "in_review",
+  status: "approved",
   beforeBlockCount: 2,
   blockCount: 2,
   mediaReferenceCount: 1,
@@ -78,7 +78,7 @@ const detail: GetRevisionResponse = {
     },
     after: {
       title: "After",
-      status: "in_review",
+      status: "approved",
       version: 2,
       blocks: [
         {
@@ -161,7 +161,7 @@ describe("RevisionHistory", () => {
 
     expect(await screen.findByText("Version 2")).toBeInTheDocument();
     expect(screen.getByText("Draft")).toBeInTheDocument();
-    expect(screen.getByText("In review")).toBeInTheDocument();
+    expect(screen.getByText("Approved")).toBeInTheDocument();
     expect(screen.getByText("4 fields changed")).toBeInTheDocument();
     expect(screen.queryByText("Before")).not.toBeInTheDocument();
 

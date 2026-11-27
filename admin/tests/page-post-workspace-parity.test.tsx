@@ -433,7 +433,7 @@ describe("Page title save and lifecycle through the workspace", () => {
     renderPageWorkspace("contact", "genericPage", {
       metadata: { title: "Contact NJ PBS", description: "Reach the station." },
       version: 1,
-      status: "in_review",
+      status: "approved",
     });
 
     const writing = await screen.findByRole("region", { name: "Main area" });

@@ -49,9 +49,9 @@ it("keeps Home, malformed input, ownership and same-status authorization invaria
     authorizeContentWrite(siteWide("contributor"), draft(undefined)).allowed,
   ).toBe(false);
 
-  // The #380 lifecycle gate: draft and propose only. Submitting for review is
-  // the point at which the record stops being theirs to change.
-  for (const storedStatus of ["in_review", "scheduled", "published", "archived"]) {
+  // The #380 lifecycle gate: draft only. Leaving draft is the point at which
+  // the record stops being theirs to change.
+  for (const storedStatus of ["approved", "scheduled", "published", "archived"]) {
     const decision = authorizeContentWrite(siteWide("contributor"), {
       creating: false,
       publishing: false,

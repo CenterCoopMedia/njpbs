@@ -96,6 +96,17 @@ function postApi(
   };
 }
 
+const publishedStationUpdate = vi.fn(async () => ({
+  id: "post-1",
+  type: "post",
+  title: "Station update",
+  summary: "Original summary.",
+  status: "published",
+  section: "station",
+  createdBy: "sa",
+  version: 7,
+}));
+
 describe("ContentQuickEdit", () => {
   it.each(["program", "event"] as const)(
     "loads and restores an archived %s as restore-only content",
@@ -247,15 +258,49 @@ describe("ContentQuickEdit", () => {
     expect(screen.getByRole("button", { name: "Save quick edits" })).toBeDisabled();
   });
 
-  it("requires unsaved field changes to be resolved before a workflow transition", async () => {
+  it("returns approved content to draft through Edit", async () => {
+    const document = {
+      id: "post-1",
+      type: "post",
+      title: "Station update",
+      summary: "Original summary.",
+      status: "approved",
+      section: "station",
+      createdBy: "sa",
+      version: 5,
+    };
+    const api = postApi({ loadRecord: vi.fn(async () => document) });
+    renderQuickEdit(api, { kind: "post", recordId: "post-1" });
+
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm edit" }));
+
+    await waitFor(() => expect(api.transition).toHaveBeenCalledWith({
+      collection: "cmsPosts",
+      id: "post-1",
+      action: "edit",
+      baseVersion: 5,
+    }));
+  });
+
+  it("offers no quick status action for a draft", async () => {
     const api = postApi();
+    renderQuickEdit(api, { kind: "post", recordId: "post-1" });
+
+    expect(
+      await screen.findByText("No quick status action is available for this saved state and your access."),
+    ).toBeVisible();
+  });
+
+  it("requires unsaved field changes to be resolved before a workflow transition", async () => {
+    const api = postApi({ loadRecord: publishedStationUpdate });
     renderQuickEdit(api, { kind: "post", recordId: "post-1" });
 
     const title = await screen.findByRole("textbox", { name: "Title" });
     fireEvent.change(title, { target: { value: "Unsaved title" } });
 
     expect(
-      screen.getByRole("button", { name: "Submit for review" }),
+      screen.getByRole("button", { name: "Unpublish" }),
     ).toBeDisabled();
     expect(
       screen.getByText("Save or discard your quick edits before changing status."),
@@ -264,7 +309,7 @@ describe("ContentQuickEdit", () => {
   });
 
   it("blocks workflow transitions while the full editor retains a draft", async () => {
-    const api = postApi();
+    const api = postApi({ loadRecord: publishedStationUpdate });
     renderQuickEdit(
       api,
       { kind: "post", recordId: "post-1" },
@@ -279,7 +324,7 @@ describe("ContentQuickEdit", () => {
       ),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Submit for review" }),
+      screen.getByRole("button", { name: "Unpublish" }),
     ).toBeDisabled();
     expect(api.transition).not.toHaveBeenCalled();
   });

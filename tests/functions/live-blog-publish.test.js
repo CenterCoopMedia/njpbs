@@ -2,7 +2,6 @@ import { clearEmulatorFirestore, isolatedFirestore } from "../helpers/emulator-f
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import admin from "../helpers/firebase-admin.js";
 import save from "../../functions/save.js";
-import lifecycle from "../../functions/lifecycle-transition.js";
 import preview from "../../functions/preview.js";
 import reader from "../../functions/published-post-reader.js";
 import directory from "../../functions/lib/story-credit-directory.js";
@@ -48,10 +47,6 @@ async function call(handler, body) {
 const ok = res => expect({ status: res.statusCode, error: res.body?.error }).toEqual({ status: 200, error: undefined });
 const saveHandler = (overrides = {}) => save.createCmsSaveHandler({ firestore: db, requirePrincipalFn: () => actor,
   now: () => first, enablePublishSnapshot: true, assertPublishReadyFn: publisher.assertPublishReady, log: quiet, ...overrides });
-async function transition(action) {
-  return call(lifecycle.createCmsTransitionContentHandler({ firestore: db, requirePrincipalFn: () => actor, now: () => first, log: quiet }),
-    { collection: "cmsPosts", id: "post-one", baseVersion: (await current()).version, action });
-}
 async function publish(overrides = {}) {
   return call(saveHandler(overrides), { collection: "cmsPosts", id: "post-one", baseVersion: (await current()).version, document: {}, publish: true });
 }
@@ -102,11 +97,7 @@ describe("live blogs through the existing Post publication and preview paths", (
     await saveBlog(null);
     expect(await read()).not.toHaveProperty("liveBlog");
     await saveBlog({ schemaVersion: 1, coverageState: "ongoing", branding: "nj-decides-2026", updates: [] });
-    const approveAndPublish = async () => {
-      for (const action of ["submit", "approve"]) {
-        ok(await call(lifecycle.createCmsTransitionContentHandler({ firestore: db, requirePrincipalFn: () => actor,
-          now: () => clock, log: quiet }), { collection: "cmsPosts", id, baseVersion: (await read()).version, action }));
-      }
+    const publishPost = async () => {
       ok(await call(handler, { collection: "cmsPosts", id, baseVersion: (await read()).version, document: {}, publish: true }));
     };
     const value = { ...blog(), branding: "nj-decides-2026" };
@@ -119,7 +110,7 @@ describe("live blogs through the existing Post publication and preview paths", (
       sourceVersion: (await read()).version, persistent: false }, previewDeps());
     expect((await db.doc(`cmsPreviewQueue/${queued.queueId}`).get()).data().snapshot.published.metadata.liveBlog.updates[0].id).toBe(entryId);
     expect(await reader.readPublishedPost({ firestore: db, slug, now: new Date(later), includeChrome: false })).toEqual({ kind: "not-found" });
-    await approveAndPublish();
+    await publishPost();
     const frozen = structuredClone((await read()).published);
     clock = later;
     const edited = (await read()).liveBlog;
@@ -127,18 +118,18 @@ describe("live blogs through the existing Post publication and preview paths", (
     edited.updates[0].correction = "Corrected the description of the vote.";
     await saveBlog(edited);
     expect((await read()).published).toEqual(frozen);
-    await approveAndPublish();
+    await publishPost();
     expect((await read()).published.metadata.liveBlog.updates[0]).toMatchObject({ id: entryId, publishedAt: first,
       updatedAt: later, correction: edited.updates[0].correction });
     clock = "2026-10-25T15:02:00.000Z";
     const withdrawn = (await read()).liveBlog;
     withdrawn.updates[0].withdrawal = "The source withdrew this report.";
-    await saveBlog(withdrawn); await approveAndPublish();
+    await saveBlog(withdrawn); await publishPost();
     const tombstone = (await read()).published.metadata.liveBlog.updates[0];
     expect(tombstone).toMatchObject({ id: entryId, publishedAt: first, withdrawal: withdrawn.updates[0].withdrawal });
     expect(JSON.stringify(tombstone)).not.toContain("The vote was 6 to 1.");
     clock = "2026-10-25T15:03:00.000Z";
-    await saveBlog({ ...(await read()).liveBlog, coverageState: "ended" }); await approveAndPublish();
+    await saveBlog({ ...(await read()).liveBlog, coverageState: "ended" }); await publishPost();
     const result = await reader.readPublishedPost({ firestore: db, slug, now: new Date(clock), includeChrome: false });
     expect(result.document.published.metadata.liveBlog.coverageState).toBe("ended");
     expect(result.document.published.metadata.liveBlog.updates[0].id).toBe(entryId);
@@ -151,7 +142,7 @@ describe("live blogs through the existing Post publication and preview paths", (
       document: { liveBlog: { ...blog(), presentation } } }));
     expect((await current()).liveBlog.presentation).toEqual(presentation);
     expect((await current()).published).toBeUndefined();
-    ok(await transition("submit")); ok(await transition("approve")); ok(await publish());
+    ok(await publish());
     const result = await reader.readPublishedPost({ firestore: db, slug: "coverage", now: new Date(later), includeChrome: false });
     expect(result.document.published.metadata.liveBlog.presentation).toEqual(presentation);
   });
@@ -161,7 +152,7 @@ describe("live blogs through the existing Post publication and preview paths", (
     await marker.set({ schemaVersion: 1, rendererSha: sha, liveBlogContractVersion: 2 });
     ok(await call(saveHandler(), { collection: "cmsPosts", id: "post-one", baseVersion: 3,
       document: { liveBlog: { ...blog(), presentation: { playful: true } } } }));
-    ok(await transition("submit")); ok(await transition("approve")); ok(await publish());
+    ok(await publish());
     const stored = await current();
     await db.doc("system/publicDeployment/noBuildPostOwners/post-one").set({ schemaVersion: 1, postId: "post-one", rendererSha: sha,
       servingEnabled: true, generation: 1, operationId: "a".repeat(20), sourceVersion: stored.published.sourceVersion,
@@ -182,7 +173,7 @@ describe("live blogs through the existing Post publication and preview paths", (
     ok(response);
     expect(response.body.warnings).toContain("Live blog appearance settings take effect after the update. Choose them again after the update.");
     expect((await current()).liveBlog).not.toHaveProperty("presentation");
-    ok(await transition("submit")); ok(await transition("approve")); ok(await publish());
+    ok(await publish());
     expect((await current()).published.metadata.liveBlog).not.toHaveProperty("presentation");
   });
 
@@ -230,8 +221,8 @@ describe("live blogs through the existing Post publication and preview paths", (
     expect(response.statusCode).toBe(400); expect(await current()).toEqual(before);
   });
 
-  it("keeps normal whole-Post review and freezes an approved live blog for the public reader", async () => {
-    ok(await transition("submit")); ok(await transition("approve")); ok(await publish());
+  it("publishes the whole Post and freezes its live blog for the public reader", async () => {
+    ok(await publish());
     const published = (await current()).published;
     expect(published.metadata.liveBlog.updates[0]).toMatchObject({ id: "entry-one", publishedAt: first, updatedAt: first });
     const result = await reader.readPublishedPost({ firestore: db, slug: "coverage", now: new Date(later), includeChrome: false });
@@ -246,12 +237,12 @@ describe("live blogs through the existing Post publication and preview paths", (
   it("can remove a published empty blog but preserves the current public output until Post publication", async () => {
     const empty = { ...blog(), updates: [] };
     ok(await call(saveHandler(), { collection: "cmsPosts", id: "post-one", baseVersion: 3, document: { liveBlog: empty } }));
-    ok(await transition("submit")); ok(await transition("approve")); ok(await publish());
+    ok(await publish());
     const before = (await current()).published;
     ok(await call(saveHandler({ now: () => later }), { collection: "cmsPosts", id: "post-one", baseVersion: (await current()).version, document: { liveBlog: null } }));
     expect(await current()).not.toHaveProperty("liveBlog");
     expect((await current()).published).toEqual(before);
-    ok(await transition("submit")); ok(await transition("approve")); ok(await publish({ now: () => later }));
+    ok(await publish({ now: () => later }));
     expect((await current()).published.metadata).not.toHaveProperty("liveBlog");
   });
 
@@ -270,7 +261,7 @@ describe("live blogs through the existing Post publication and preview paths", (
     expect(queued.snapshot.published.metadata.liveBlog.updates[0].media).toEqual(value.updates[0].media);
     expect(queued.assets).toEqual(expect.arrayContaining([expect.objectContaining({ id: "entry-photo", url: image.url })]));
     expect((await current()).published).toBeUndefined();
-    ok(await transition("submit")); ok(await transition("approve")); ok(await publish());
+    ok(await publish());
     expect((await db.doc("cmsPosts/post-one/mediaUsage/published").get()).data()?.assetIds).toEqual(["entry-photo"]);
     const result = await reader.readPublishedPost({ firestore: db, slug: "coverage", now: new Date(later), includeChrome: false });
     expect(result.assets).toEqual(expect.arrayContaining([expect.objectContaining({ id: "entry-photo" })]));
@@ -280,7 +271,6 @@ describe("live blogs through the existing Post publication and preview paths", (
     const value = blog(); value.updates[0].media = { kind: "library-video", data: { sourceId: "video-library", assetId: "entry-video", title: "Results briefing", public: { url: "PRIVATE client spoof" } } };
     ok(await call(saveHandler(), { collection: "cmsPosts", id: "post-one", baseVersion: 3, document: { liveBlog: value } }));
     expect((await current()).liveBlog.updates[0].media.data).not.toHaveProperty("public");
-    ok(await transition("submit")); ok(await transition("approve"));
     const before = await current();
     const refused = await publish(); expect(refused.statusCode).toBe(409); expect(await current()).toEqual(before);
     const media = { url: `https://media.njpbs.org/cms-media/video/entry-video/${"a".repeat(64)}.mp4`,
@@ -297,7 +287,7 @@ describe("live blogs through the existing Post publication and preview paths", (
     expect(videoReferences.scheduledVideoAssetIds({ ...stored, status: "scheduled" })).toContain("entry-video");
     const withdrawn = structuredClone(stored.liveBlog); withdrawn.updates[0].withdrawal = "This briefing was superseded.";
     ok(await call(saveHandler({ now: () => later }), { collection: "cmsPosts", id: "post-one", baseVersion: stored.version, document: { liveBlog: withdrawn } }));
-    ok(await transition("submit")); ok(await transition("approve")); ok(await publish({ now: () => later }));
+    ok(await publish({ now: () => later }));
     const after = await current();
     expect(after.published.metadata.liveBlog.updates[0]).not.toHaveProperty("media");
     expect(after.published.previousVideoCopies).toContainEqual({ assetId: "entry-video", url: media.url });
@@ -335,8 +325,7 @@ describe("live blogs through the existing Post publication and preview paths", (
     expect(await current()).toEqual(before);
   });
 
-  it("refuses publication without feature support and leaves the approved Post unchanged", async () => {
-    ok(await transition("submit")); ok(await transition("approve"));
+  it("refuses publication without feature support and leaves the draft Post unchanged", async () => {
     await db.doc("system/publicDeployment/noBuildPosts/capability").update({ liveBlogVersion: admin.firestore.FieldValue.delete() });
     const before = await current(); const res = await publish();
     expect(res.statusCode).toBe(409); expect(res.body.error).toContain("installed Post renderer");
@@ -344,18 +333,19 @@ describe("live blogs through the existing Post publication and preview paths", (
     expect((await db.collection("cmsPublishQueue").get()).size).toBe(0);
   });
 
-  it("refuses an edited published entry at approval until it has a new correction", async () => {
+  it("refuses an edited published entry at publication until it has a new correction", async () => {
     const stored = await current();
     const frozen = await directory.freezeLiveBlogForPublish({ firestore: db, document: stored, at: first });
     stored.liveBlog.updates[0].body.content[0].content[0].text = "The vote was 5 to 2.";
-    await db.doc("cmsPosts/post-one").update({ status: "in_review", liveBlog: stored.liveBlog,
+    await db.doc("cmsPosts/post-one").update({ liveBlog: stored.liveBlog,
       published: { blocks: [], metadata: { type: "post", liveBlog: frozen }, sourceVersion: 3, publishedAt: first } });
-    const refused = await transition("approve");
+    const before = await current();
+    const refused = await publish();
     expect(refused.statusCode).toBe(400); expect(refused.body.error).toContain("new visible correction");
-    expect((await current()).status).toBe("in_review");
+    expect(await current()).toEqual(before);
   });
 
-  it("admits incomplete saved entries to private preview while refusing approval and public reads", async () => {
+  it("admits incomplete saved entries to private preview while refusing publication and public reads", async () => {
     const value = blog(); Object.assign(value.updates[0], { headline: "", body: { type: "doc", content: [] }, credits: [] });
     await db.doc("cmsPosts/post-one").update({ liveBlog: value });
     await db.doc("system/cmsPreviewRuntime").set({ schemaVersion: 1, phase: "ready", rendererSha: sha, serializerId: "fixture-preview", liveBlogVersion: 1 });
@@ -365,7 +355,7 @@ describe("live blogs through the existing Post publication and preview paths", (
     expect(queued.snapshot.published.metadata.liveBlog.updates[0]).toMatchObject({ headline: "", credits: [], body: { type: "doc", content: [] } });
     expect(await current()).toEqual(before);
     expect(await reader.readPublishedPost({ firestore: db, slug: "coverage", now: new Date(later), includeChrome: false })).toEqual({ kind: "not-found" });
-    const refused = await transition("submit"); expect(refused.statusCode).toBe(400);
+    const refused = await publish(); expect(refused.statusCode).toBe(400); expect(await current()).toEqual(before);
   });
 
   it("freezes only a private queue snapshot and requires the exact preview capability", async () => {
@@ -415,8 +405,7 @@ describe("live blogs through the existing Post publication and preview paths", (
     }
   });
 
-  it("recovers publication after an atomic Firestore write failure without losing the approved draft", async () => {
-    ok(await transition("submit")); ok(await transition("approve"));
+  it("recovers publication after an atomic Firestore write failure without losing the draft", async () => {
     const before = await current();
     const historyCount = (await db.collection("cmsVersionHistory").get()).size;
     const faulty = new Proxy(db, { get(target, property) {

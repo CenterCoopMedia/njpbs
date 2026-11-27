@@ -185,7 +185,7 @@ export default defineConfig(({ mode }) => {
               {
                 name: "route-shell",
                 includeDependenciesRecursively: false,
-                test: /(?:^|[\\/])(?:admin[\\/]src[\\/](?:routes[\\/]RequireCapability\.tsx|components[\\/](?:ui[\\/](?:Skeleton|AssetImage)|ContentRowThumbnail|EditorSkeleton|PublishedVersionStatus|MediaFavoriteButton)\.tsx|lib[\\/](?:admin-status|review-queue|editor-back|content-status|content-nav|content-records|media-favorites|use-media-categories|use-media-favorites|use-content-sections)\.ts)|packages[\\/]content-core[\\/]src[\\/](?:cms-settings|author-profiles)\.ts)(?:\?.*)?$/,
+                test: /(?:^|[\\/])(?:admin[\\/]src[\\/](?:routes[\\/]RequireCapability\.tsx|components[\\/](?:ui[\\/](?:Skeleton|AssetImage)|ContentRowThumbnail|EditorSkeleton|PublishedVersionStatus|MediaFavoriteButton)\.tsx|lib[\\/](?:admin-status|editor-back|content-status|content-nav|content-records|media-favorites|use-media-categories|use-media-favorites|use-content-sections)\.ts)|packages[\\/]content-core[\\/]src[\\/](?:cms-settings|author-profiles)\.ts)(?:\?.*)?$/,
                 priority: 30,
               },
               {

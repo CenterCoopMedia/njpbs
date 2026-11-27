@@ -20,8 +20,6 @@ describe("one record status (#3432)", () => {
       label: "Scheduled", tone: "publishing", newerDraft: false },
     { name: "withdrawn", status: "draft", publicState: "not-live" as const, withdrawn: true,
       label: "Not live", tone: "cancelled", newerDraft: false },
-    { name: "withdrawn then submitted for review", status: "in_review", publicState: "not-live" as const, withdrawn: true,
-      label: "In review", tone: "pending", newerDraft: false },
     { name: "withdrawn then approved", status: "approved", publicState: "not-live" as const, withdrawn: true,
       label: "Approved", tone: "brand", newerDraft: false },
     { name: "withdrawn then scheduled again", status: "scheduled", publicState: "not-live" as const, withdrawn: true,

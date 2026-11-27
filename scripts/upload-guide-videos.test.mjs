@@ -6,11 +6,11 @@ import { assertPrivateGuideBucket, storageClient } from "./upload-guide-videos.m
 import { readFile } from "node:fs/promises";
 import { guideTranscriptFiles, versionedGuideVideoKey, publishGuideVideoRelease, putGuideVideoObjects } from "./lib/guide-video-upload.mjs";
 
-test("all 15 transcript objects come from the reviewed private guide", async () => {
+test("all 14 transcript objects come from the reviewed private guide", async () => {
   const catalog = JSON.parse(await readFile(new URL("../admin/src/lib/guide-videos.json", import.meta.url), "utf8"));
   const markdown = await readFile(new URL("../site/src/pages/_admin-docs/video-tutorials/index.md", import.meta.url), "utf8");
   const transcripts = guideTranscriptFiles(markdown, catalog);
-  assert.equal(transcripts.length, 15);
+  assert.equal(transcripts.length, 14);
   for (const [index, file] of transcripts.entries()) {
     assert.equal(file.key, `videos/${catalog[index].id}.txt`);
     assert.equal(file.contentType, "text/plain; charset=utf-8");

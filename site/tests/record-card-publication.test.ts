@@ -14,7 +14,7 @@ const sponsor = {
   },
 };
 const newsletter = {
-  id: "newsletter", type: "newsletter", status: "in_review", publiclyVisible: false, version: 9,
+  id: "newsletter", type: "newsletter", status: "draft", publiclyVisible: false, version: 9,
   title: "Draft newsletter", signupUrl: "https://draft.example.test/join", imageAssetId: "draft-image",
   summary: "Private draft summary",
   approvedLibraryVersion: { status: "approved", type: "newsletter", title: "Approved newsletter", signupUrl: "https://public.example.test/join",
@@ -60,7 +60,7 @@ describe("library card publication boundary", () => {
     expect(html).not.toMatch(/Draft|Private|draft\.example/);
   });
 
-  it.each(["draft", "in_review", "approved", "published"])("omits %s library records without a version and warns without blocking", status => {
+  it.each(["draft", "approved", "published"])("omits %s library records without a version and warns without blocking", status => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     expect(exportRecordCards([
       { ...sponsor, status, activeUntil: undefined, approvedLibraryVersion: undefined },
@@ -79,7 +79,7 @@ describe("library card publication boundary", () => {
     { approvedLibraryVersion: { ...newsletter.approvedLibraryVersion, type: "sponsor" } },
     { approvedLibraryVersion: { ...newsletter.approvedLibraryVersion, version: 0 } },
     { approvedLibraryVersion: { ...newsletter.approvedLibraryVersion, version: 10 } },
-    { approvedLibraryVersion: { ...newsletter.approvedLibraryVersion, status: "in_review" } },
+    { approvedLibraryVersion: { ...newsletter.approvedLibraryVersion, status: "draft" } },
     { approvedLibraryVersion: null },
   ])("omits unavailable or malformed approved versions: %j", overrides => {
     expect(exportRecordCards([{ ...newsletter, ...overrides }], [], now, assets)).toEqual([]);

@@ -61,7 +61,6 @@ const { editorTemplateForPage } = require("./lib/public-page-contract");
 const { collectWorkingMediaUsage, mediaUsageDocument } = require("./lib/media-usage");
 const { mediaReplacementRef } = require("./lib/media-replacement");
 const { postPresentationError } = require("./lib/post-formats");
-const { createReviewRequest, advanceReviewRequest } = require("./lib/review-queue");
 const { editorialNotice } = require("./lib/editorial-notice");
 const { enqueuePublishBuild } = require("./publish");
 const { publishSecretBindings } = require("./lib/cms-publish-credentials");
@@ -78,36 +77,20 @@ const FORBIDDEN_MESSAGE =
 const NOT_FOUND_MESSAGE = "This content record is no longer available.";
 const CONFLICT_MESSAGE =
   "This document changed since you opened it. Reload before changing its lifecycle.";
-const MAX_COMMENT_BYTES = 4_000;
 
-// This is the deployed mirror of the admitted edges and capabilities in
-// site/src/lib/editorial-workflow.ts. Keep the actions finite and own-key
-// checked because the request body is untrusted runtime data.
+// Publishers publish and schedule drafts directly through save. Approve stays
+// only for the three paths that need a recorded approval before publication:
+// manual election results, Spanish editions, and library cards. Keep the
+// actions finite and own-key checked because the request body is untrusted.
 const LIFECYCLE_TRANSITIONS = Object.freeze({
   edit: Object.freeze({
-    from: Object.freeze(["in_review", "approved", "scheduled", "published"]),
+    from: Object.freeze(["approved", "scheduled", "published"]),
     to: "draft",
     authorization: "edit",
-  }),
-  submit: Object.freeze({
-    from: "draft",
-    to: "in_review",
-    authorization: "edit",
-  }),
-  sendBack: Object.freeze({
-    from: "in_review",
-    to: "draft",
-    capability: "content.edit.any",
-    requiresComment: true,
   }),
   approve: Object.freeze({
-    from: "in_review",
+    from: "draft",
     to: "approved",
-    capability: "content.edit.any",
-  }),
-  reopen: Object.freeze({
-    from: "approved",
-    to: "draft",
     capability: "content.edit.any",
   }),
   revise: Object.freeze({
@@ -126,7 +109,7 @@ const LIFECYCLE_TRANSITIONS = Object.freeze({
     capability: "content.unpublish",
   }),
   archive: Object.freeze({
-    from: Object.freeze(["draft", "in_review", "approved", "scheduled", "published"]),
+    from: Object.freeze(["draft", "approved", "scheduled", "published"]),
     to: "archived",
     capability: "content.delete",
   }),
@@ -136,6 +119,9 @@ const LIFECYCLE_TRANSITIONS = Object.freeze({
     capability: "content.delete",
   }),
 });
+
+const APPROVAL_SCOPE_MESSAGE =
+  "Approval is only for election results, Spanish editions, and library cards. Publish this draft directly.";
 
 class LifecycleTransitionRejection extends Error {
   constructor(status, message) {
@@ -178,14 +164,6 @@ function validateTransitionRequest(body) {
   }
   if (!Object.hasOwn(LIFECYCLE_TRANSITIONS, body.action)) {
     return "action must be an admitted lifecycle action";
-  }
-  if (LIFECYCLE_TRANSITIONS[body.action].requiresComment) {
-    if (typeof body.comment !== "string" || body.comment.trim().length === 0) {
-      return "comment is required when content is sent back";
-    }
-    if (Buffer.byteLength(body.comment.trim(), "utf8") > MAX_COMMENT_BYTES) {
-      return `comment must be no more than ${MAX_COMMENT_BYTES} bytes`;
-    }
   }
   return null;
 }
@@ -295,7 +273,6 @@ function boundedHistoryEntry({
   source,
   historyPath,
   versionHistoryEntryFn,
-  comment,
 }) {
   const documentPath = `${collection}/${id}`;
   const afterBytes = firestoreDocumentBytes(after, documentPath);
@@ -316,7 +293,6 @@ function boundedHistoryEntry({
     actorEmail: actor.email ?? null,
     source,
   });
-  if (comment) entry = { ...entry, comment };
   if (!documentSizeError(entry, historyPath, {
     label: `the version-history row for this ${action}`,
   })) {
@@ -342,7 +318,6 @@ function boundedHistoryEntry({
       actorEmail: actor.email ?? null,
       source,
     }),
-    ...(comment ? { comment } : {}),
     beforeTruncated: true,
     beforeEstimatedBytes: beforeBytes,
   };
@@ -424,7 +399,7 @@ function createCmsTransitionContentHandler(deps = {}) {
           throw new LifecycleTransitionRejection(403, FORBIDDEN_MESSAGE);
         }
         const translationReview = collection === "cmsPosts" && current.type === "post" && isSpanishEdition(current);
-        if (translationReview && automationAccount && (action === "approve" || action === "sendBack")) {
+        if (translationReview && automationAccount && action === "approve") {
           throw new LifecycleTransitionRejection(403, "A staff editor must review the Spanish translation.");
         }
         const automationRefusal = await automationWriteRefusal(tx, firestore, {
@@ -440,7 +415,7 @@ function createCmsTransitionContentHandler(deps = {}) {
         // A retired kind (#1039) is still a legible library row, so it is still an
         // eligible target -- but the only lifecycle move it accepts is out of
         // circulation. Refusing here rather than at the approval gate is what makes
-        // that true for every action: submit, send back, approve, reopen, revise,
+        // that true for every action: approve, revise,
         // unschedule, unpublish, and restore all write the record, and restoring an
         // archived article would put a type nothing can edit or publish back into
         // the draft workflow.
@@ -484,7 +459,7 @@ function createCmsTransitionContentHandler(deps = {}) {
         // The working stage and admitted public snapshot are independent. A
         // newer draft can still need its older public version withdrawn.
         const withdrawingSnapshot = action === "unpublish" && (current.publiclyVisible === true || card) &&
-          ["draft", "in_review", "approved", "scheduled"].includes(current.status);
+          ["draft", "approved", "scheduled"].includes(current.status);
         if (!acceptsStatus(transition, current.status) && !withdrawingSnapshot) {
           const requiredStatus = requiredStatusLabel(transition);
           throw new LifecycleTransitionRejection(
@@ -496,11 +471,15 @@ function createCmsTransitionContentHandler(deps = {}) {
         if (isUnassignedPostDraft(current) && action !== "archive") {
           throw new LifecycleTransitionRejection(400, "Choose a section before moving this draft toward publication.");
         }
+        const electionResults = visibleLayoutBlocks(current.blocks ?? []).some(block => block.type === "election_results");
+        if (action === "approve" && !card && !translationReview && !electionResults) {
+          throw new LifecycleTransitionRejection(400, APPROVAL_SCOPE_MESSAGE);
+        }
         if (action === "approve" && !card) {
           const frozenMessage = await readFrozenLibraryPublicationMessage({ firestore, transaction: tx, collection, documentId: id, document: current });
           if (frozenMessage) throw new LifecycleTransitionRejection(409, frozenMessage);
         }
-        if (action === "submit" || action === "approve") {
+        if (action === "approve") {
           const error = approvalError(collection, id, current, {
             parseBlocksFn,
             validateSectionFn,
@@ -522,7 +501,7 @@ function createCmsTransitionContentHandler(deps = {}) {
 
         const timestamp = now();
         let electionResultsApprovals;
-        if (action === "approve" && visibleLayoutBlocks(current.blocks ?? []).some(block => block.type === "election_results")) {
+        if (action === "approve" && electionResults) {
           const profile = (await tx.get(firestore.doc(`users/${user.uid}`))).data();
           const tiersActive = await userDocUsesAccessTier(firestore, profile, tx);
           const freshPrincipal = await registeredPrincipalFromUserDoc(firestore, user.uid, profile, tx, tiersActive);
@@ -534,7 +513,6 @@ function createCmsTransitionContentHandler(deps = {}) {
             ? profile.displayName.trim().slice(0, 120) : "Editor";
           electionResultsApprovals = approveElectionResults(current, { uid: user.uid, displayName }, timestamp);
         }
-        const comment = transition.requiresComment ? req.body.comment.trim() : undefined;
         const changed = {
           ...current,
           status: withdrawingSnapshot
@@ -558,32 +536,13 @@ function createCmsTransitionContentHandler(deps = {}) {
             delete changed.translationApproval;
           }
         }
-        if (action === "submit") {
-          // The review request lands in the same transaction and on the same
-          // authoritative document as the lifecycle change. There is no
-          // independently writable queue row that can succeed or fail apart.
-          changed.reviewRequest = createReviewRequest({
-            collection,
-            id,
-            sourceVersion: changed.version,
-            requestedBy: user.uid,
-            requestedAt: timestamp,
-          });
-        } else if (current.status === "in_review" && changed.status !== "in_review") {
-          delete changed.reviewRequest;
-        } else if (changed.status === "in_review") {
-          const request = advanceReviewRequest(current.reviewRequest, {
-            collection, id, sourceVersion: changed.version,
-          });
-          if (request) changed.reviewRequest = request;
-        }
         if (["unschedule", "edit", "unpublish", "archive"].includes(action)) {
           delete changed.publishAt;
         }
         if (changed.status !== "scheduled") delete changed.scheduledPublicationTransport;
-        // Cancelling or reopening content supersedes any recorded
+        // Cancelling or editing content supersedes any recorded
         // scheduled-publish failure, so clear it on the changed document.
-        if (["unschedule", "reopen", "edit", "unpublish", "archive"].includes(action)) {
+        if (["unschedule", "edit", "unpublish", "archive"].includes(action)) {
           delete changed.scheduledPublishFailure;
         }
         if (
@@ -676,7 +635,6 @@ function createCmsTransitionContentHandler(deps = {}) {
           source,
           historyPath: historyRef.path,
           versionHistoryEntryFn,
-          comment,
         });
         const clearsPublishedUsage = ["unpublish", "archive"].includes(action);
         const publishedUsageRef = clearsPublishedUsage || card && action === "approve"
@@ -720,11 +678,7 @@ function createCmsTransitionContentHandler(deps = {}) {
             after: {
               status: changed.status,
               version: changed.version,
-              ...editorialNotice(collection, id, action, current, changed),
-              ...(changed.reviewRequest
-                ? { requestId: changed.reviewRequest.requestId }
-                : {}),
-              ...(comment ? { comment } : {}),
+              ...editorialNotice(collection, id, action, changed),
             },
             source,
           }),
@@ -769,9 +723,6 @@ function createCmsTransitionContentHandler(deps = {}) {
         fromStatus: result.before.status,
         toStatus: result.after.status,
         version: result.after.version,
-        ...(action === "submit"
-          ? { reviewRequest: result.after.reviewRequest }
-          : {}),
         document: result.after,
         ...(publication ? { publication } : {}),
       });

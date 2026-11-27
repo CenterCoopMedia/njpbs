@@ -3,7 +3,7 @@ import { freezeClock, waitForFonts } from "./capture";
 
 const routes = [
   { name: "Home", specimen: "shell-home" },
-  { name: "Editorial queue", specimen: "browsing-family-shell", family: "queue" },
+  { name: "Publish activity", specimen: "browsing-family-shell", family: "queue" },
   { name: "Activity", specimen: "shell-home" },
   { name: "Pages", specimen: "browsing-family-shell", family: "directory" },
   { name: "editor", specimen: "shell-editor" },

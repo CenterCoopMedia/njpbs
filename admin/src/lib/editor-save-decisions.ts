@@ -24,7 +24,6 @@ function ownerOf(value: unknown): string | undefined {
 }
 
 function frozenReason(status: unknown): string | null {
-  if (status === "in_review") return "Select Edit before changing reviewed content.";
   if (status === "approved") return "Select Edit before changing approved content.";
   if (status === "scheduled") return "Cancel scheduled publication before editing.";
   return null;

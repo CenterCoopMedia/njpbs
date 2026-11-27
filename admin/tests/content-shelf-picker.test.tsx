@@ -64,7 +64,6 @@ function selection(): LibrarySelection {
     pageCount: 1,
     statusCounts: {
       draft: 0,
-      in_review: 0,
       approved: 0,
       scheduled: 0,
       published: 1,

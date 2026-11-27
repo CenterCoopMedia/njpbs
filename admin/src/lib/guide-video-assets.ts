@@ -50,7 +50,7 @@ function guideVideoRecord(value: unknown, ids: Set<string>): GuideVideo {
 }
 
 function guideVideoCatalog(value: unknown): readonly GuideVideo[] {
-  if (!Array.isArray(value) || value.length !== 15) {
+  if (!Array.isArray(value) || value.length !== 14) {
     throw new Error("The guide video catalog is invalid.");
   }
   const ids = new Set<string>();

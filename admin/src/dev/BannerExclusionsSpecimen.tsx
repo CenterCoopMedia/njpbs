@@ -35,7 +35,7 @@ function Specimen() {
         ],
         loadLibrarySelection: async () => ({ records: [{ id: "story", kind: "post", title: "Election story", status: "published", liveSourceVersion: 2 }],
           page: 1, pageCount: 1, total: 1, allCount: 1, mineCount: 0, assignedCount: 0,
-          statusCounts: { draft: 0, scheduled: 0, in_review: 0, approved: 0, published: 1, archived: 0 } }),
+          statusCounts: { draft: 0, scheduled: 0, approved: 0, published: 1, archived: 0 } }),
         loadRecord: async () => ({ status: "ready", record: { type: "post", status: "published", publicSourceVersion: 2,
           published: { sourceVersion: 2, metadata: { title: "Election story", slug: "election-story" } } } }),
       },

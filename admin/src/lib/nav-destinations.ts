@@ -16,7 +16,7 @@ import {
   canViewAudit,
   canViewAnalytics,
   canViewReports,
-  canViewEditorialQueue,
+  canViewPublishActivity,
   canViewUsers,
   isGuideOnly,
 } from "./access";
@@ -178,10 +178,10 @@ export const NAV_DESTINATIONS: readonly NavDestinationDef[] = [
   {
     id: "editorial-queue",
     group: "Workflow",
-    label: "Editorial queue",
+    label: "Publish activity",
     icon: "queue",
     to: publishQueuePath(),
-    visible: canViewEditorialQueue,
+    visible: canViewPublishActivity,
   },
   {
     id: "cuez-storydesk", group: "Workflow", label: "StoryDesk",

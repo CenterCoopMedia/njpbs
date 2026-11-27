@@ -125,7 +125,7 @@ describe("primary navigation with per-account preferences", () => {
 
     expect(railLabels()).toEqual([
       "Home", "Pages", "Posts", "All content", "Media library",
-      "Editorial queue", "StoryDesk", "Activity", "Resources", "Staff profiles", "Staff access",
+      "Publish activity", "StoryDesk", "Activity", "Resources", "Staff profiles", "Staff access",
       "Analytics", "Reports", "Admin settings", "Around NJ",
     ]);
     const around = screen.getByRole("link", { name: "Open Around NJ in a new tab" });

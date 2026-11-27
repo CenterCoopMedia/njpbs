@@ -52,7 +52,7 @@ describe("media usage Firestore reads", () => {
     });
     // cmsTransitionContent advances version for a status-only transition and
     // preserves the working usage written by the last content save.
-    await db.doc("cmsPosts/visible").update({ version: 3, status: "in_review" });
+    await db.doc("cmsPosts/visible").update({ version: 3, status: "approved" });
     const before = await db.doc("cmsPosts/visible/mediaUsage/working").get();
 
     const first = await usageApi.readMediaUsage(db, user, query("working", { pageSize: 1 }));

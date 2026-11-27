@@ -46,7 +46,7 @@ const records: ContentRecordSummary[] = [
     id: "a-2",
     kind: "post",
     title: "Trenton tonight",
-    status: "in_review",
+    status: "approved",
     version: 3,
     updatedAt: "2026-07-20T13:00:00.000Z",
     updatedBy: "editor-1",
@@ -783,7 +783,6 @@ describe("ContentLibrary", () => {
     const pendingReload = deferred<LibrarySelection>();
     const statusCounts = {
       draft: 1,
-      in_review: 0,
       approved: 0,
       scheduled: 0,
       published: 0,
@@ -931,7 +930,6 @@ describe("ContentLibrary", () => {
     const onMutatingChange = vi.fn();
     const statusCounts = {
       draft: 1,
-      in_review: 0,
       approved: 0,
       scheduled: 0,
       published: 0,

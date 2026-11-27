@@ -356,17 +356,14 @@ export function richTextRendersEmpty(doc: RichTextDoc): boolean {
 // Editorial records
 // ---------------------------------------------------------------------------
 
-// Publication lifecycle of an editorial record. `in_review` is the review queue;
-// `approved` is the reviewed, content-frozen resting state from which publishing or
-// scheduling can start. Editing approved content requires an explicit reopen to draft,
-// so a later content save cannot silently keep stale approval. The transitions between these
-// states, and who may make them, live in editorial-workflow.ts. This const is the
-// single source of truth (matching EDITORIAL_TYPES and BLOCK_TYPES): the type derives
-// from it, and the workflow imports it for its runtime stage-membership check, so a
-// new status is added here once and cannot silently split the two definitions.
+// Publication lifecycle of an editorial record. Publishers publish or schedule a
+// draft directly. `approved` is the content-frozen resting state that only election
+// results, Spanish editions and library cards use before publication; editing approved
+// content returns it to draft, so a later content save cannot silently keep stale
+// approval. The server transitions live in functions/lifecycle-transition.js. This
+// const is the single source of truth (matching EDITORIAL_TYPES and BLOCK_TYPES).
 export const CONTENT_STATUSES = [
   "draft",
-  "in_review",
   "approved",
   "scheduled",
   "published",

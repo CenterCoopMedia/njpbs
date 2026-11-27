@@ -237,7 +237,6 @@ const emptyLibrarySelection = {
   pageCount: 1,
   statusCounts: {
     draft: 0,
-    in_review: 0,
     scheduled: 0,
     published: 0,
     archived: 0,
@@ -1093,7 +1092,7 @@ describe("ContentTab", () => {
     expect(screen.getByText("No revisions yet")).toBeTruthy();
   });
 
-  it.each(["draft", "in_review"])("offers the configured Page Preview action to its Writer in %s", async status => {
+  it.each(["draft", "approved"])("offers the configured Page Preview action to its Writer in %s", async status => {
     mockFoundContent({ id: "watch", blocks: [], status, title: "Watch NJ PBS",
       createdBy: "c", version: 2 });
     render(<ContentTab principal={siteWideContributor} previewConfigured
@@ -1107,7 +1106,7 @@ describe("ContentTab", () => {
     expect(screen.queryByRole("button", { name: "Build preview" })).toBeNull();
   });
 
-  it.each(["draft", "in_review"])("offers the configured Post Preview action to its Writer in %s", async status => {
+  it.each(["draft", "approved"])("offers the configured Post Preview action to its Writer in %s", async status => {
     mockFoundContent({ id: "post-1", type: "post", version: 2, createdBy: "c",
       section: "news", status, title: "Garden State update", date: "2026-10-08", tags: [], blocks: [] });
     render(<MemoryRouter><ContentTab principal={siteWideContributor} previewConfigured
@@ -1292,12 +1291,12 @@ describe("ContentTab", () => {
     } finally { open.mockRestore(); vi.unstubAllGlobals(); }
   });
 
-  it("keeps a contributor's submitted page composition and metadata read-only", async () => {
+  it("keeps a contributor's approved page composition and metadata read-only", async () => {
     mockFoundContent({
       id: "home",
       blocks: [storedHeadline],
       createdBy: "c",
-      status: "in_review",
+      status: "approved",
       title: "Home",
       version: 3,
     });
@@ -1315,7 +1314,7 @@ describe("ContentTab", () => {
       screen.getByRole("button", { name: "Save metadata" }),
     ).toBeDisabled();
     expect(
-      screen.getAllByText(/select edit before changing reviewed content/i),
+      screen.getAllByText(/select edit before changing approved content/i),
     ).not.toHaveLength(0);
 
     fireEvent.click(screen.getByRole("button", { name: "Save page" }));
@@ -2103,7 +2102,7 @@ describe("ContentTab records (cmsPosts)", () => {
     await waitFor(() =>
       expect(functionsMocks.cmsListContent).toHaveBeenCalledWith(
         "id-token",
-        "status=draft&status=in_review&status=approved&status=scheduled&status=published&v=1",
+        "status=draft&status=approved&status=scheduled&status=published&v=1",
       ),
     );
   });

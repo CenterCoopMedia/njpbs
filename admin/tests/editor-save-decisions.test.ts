@@ -87,8 +87,8 @@ describe("recordSaveDecision", () => {
     }
   });
 
-  it("requires Edit before saving reviewed records", () => {
-    for (const status of ["in_review", "approved"]) {
+  it("requires Edit before saving approved records", () => {
+    for (const status of ["approved"]) {
       const decision = recordSaveDecision(scopedEditor(["watch"]), {
         ...draftRecord("watch"),
         status,
@@ -175,15 +175,15 @@ describe("pageSaveDecision", () => {
     ).toBe(true);
   });
 
-  it("requires Edit before saving a page during review", () => {
+  it("requires Edit before saving an approved page", () => {
     const decision = pageSaveDecision(
       siteWideEditor(),
       "watch",
-      readyPage({ pageStatus: "in_review" }),
+      readyPage({ pageStatus: "approved" }),
     );
     expect(decision).toEqual({
       allowed: false,
-      reason: "Select Edit before changing reviewed content.",
+      reason: "Select Edit before changing approved content.",
     });
   });
 });

@@ -57,9 +57,8 @@ While the sitewide Election announcement is visible, it supplies the election
 artwork. The band inside the live blog appears when that announcement is off or
 expires.
 
-The first publication uses the normal Post workflow: save, submit the saved
-version for review, have it approved, then publish the approved version. Approval
-alone does not publish. Follow
+The first publication uses the normal Post workflow: save the draft, then
+publish the saved version. Follow
 [Review, preview, and publish](../review-preview-and-publish/).
 
 Open the public Post after publication and confirm the first updates and their

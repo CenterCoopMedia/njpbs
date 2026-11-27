@@ -20,7 +20,7 @@ const fields = {
   newsletter: { title: "Approved newsletter", body: rich, signupUrl: "https://example.test/join", frequency: "Weekly" },
   sponsor: { name: "Approved sponsor", href: "https://example.test/supporter", tier: "Partner", description: "Station support" },
 };
-const document = (kind: keyof typeof fields) => ({ id: kind, type: kind, ...fields[kind], status: "in_review", version: 2,
+const document = (kind: keyof typeof fields) => ({ id: kind, type: kind, ...fields[kind], status: "draft", version: 2,
   section: "news", createdBy: actor.uid, privateNotes: "Private note", publiclyVisible: false });
 async function invoke(kind: string, action = "approve", baseVersion = 2, user = actor) {
   const res = { statusCode: 0, body: null as any, headersSent: false,

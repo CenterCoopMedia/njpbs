@@ -86,24 +86,16 @@ describe("editorBackDestination", () => {
     }
   });
 
-  it("returns a record editor to the editorial queue it was opened from", () => {
+  it("does not return an editor to publish activity", () => {
+    // Publish activity opens records through plain links without a list origin, so an origin that
+    // names it falls back to the editor's own list.
     expect(
       editorBackDestination({
         surface: { kind: "record", record: "post" },
         listLabel: "Post",
         origin: "/publish-queue",
       }),
-    ).toEqual({ to: "/publish-queue", label: "Back to editorial queue", shortLabel: "Editorial queue" });
-  });
-
-  it("returns a page editor to the editorial queue it was opened from", () => {
-    // The queue lists pages and records side by side, so either editor can honestly go back to it.
-    expect(
-      editorBackDestination({
-        surface: { kind: "page" },
-        origin: "/publish-queue",
-      }),
-    ).toEqual({ to: "/publish-queue", label: "Back to editorial queue", shortLabel: "Editorial queue" });
+    ).toEqual({ to: "/content/post", label: "Back to post list", shortLabel: "Posts" });
   });
 
   it("returns an editor to newsroom home when the work was opened from there", () => {
@@ -121,47 +113,9 @@ describe("editorBackDestination", () => {
       editorBackDestination({
         surface: { kind: "record", record: "post" },
         listLabel: "Post",
-        origin: "/publish-queue?assignee=me",
+        origin: "/?view=recent",
       }),
-    ).toEqual({
-      to: "/publish-queue?assignee=me",
-      label: "Back to editorial queue", shortLabel: "Editorial queue",
-    });
-  });
-
-  it("recognizes a work list recorded with a trailing slash", () => {
-    // The same route, spelled the way a hand-typed or copied address often arrives. Failing the
-    // match here would recreate the exact wrong turn this destination exists to remove.
-    expect(
-      editorBackDestination({
-        surface: { kind: "record", record: "post" },
-        listLabel: "Post",
-        origin: "/publish-queue/",
-      }),
-    ).toEqual({ to: "/publish-queue", label: "Back to editorial queue", shortLabel: "Editorial queue" });
-  });
-
-  it("keeps a trailing-slash work list's query", () => {
-    expect(
-      editorBackDestination({
-        surface: { kind: "record", record: "post" },
-        listLabel: "Post",
-        origin: "/publish-queue/?assignee=me",
-      }),
-    ).toEqual({
-      to: "/publish-queue?assignee=me",
-      label: "Back to editorial queue", shortLabel: "Editorial queue",
-    });
-  });
-
-  it("does not treat a work list's sub-path as that work list", () => {
-    expect(
-      editorBackDestination({
-        surface: { kind: "record", record: "post" },
-        listLabel: "Post",
-        origin: "/publish-queue/anything",
-      }),
-    ).toEqual({ to: "/content/post", label: "Back to post list", shortLabel: "Posts" });
+    ).toEqual({ to: "/?view=recent", label: "Back to newsroom home", shortLabel: "Home" });
   });
 
   it("accepts the page directory as a page editor origin", () => {

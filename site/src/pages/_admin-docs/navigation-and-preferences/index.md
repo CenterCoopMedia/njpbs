@@ -136,7 +136,7 @@ The default rail can include:
 
 - Home
 - Pages, Posts, All content, and Media library, grouped as Content
-- Editorial queue and Activity, grouped as Workflow
+- Publish activity and Activity, grouped as Workflow
 - Resources, Staff profiles, and Staff access, grouped as Team
 - Analytics, Reports, and Admin settings, grouped as Administration
 - Around NJ
@@ -235,7 +235,7 @@ current workspace stays open.
 A small dot on the gift icon means there are notes you have not seen. The dot
 clears after the notes load while the dialog is open. A failed load keeps the dot.
 On Home, select the gift icon directly, including on a phone. In editors, open
-**More**. On Pages, Posts, Media library and the queue, open **Help**. Select
+**More**. On Pages, Posts, Media library and Publish activity, open **Help**. Select
 **What's new** beside the Boardwalk guide and Report a problem.
 
 ## Return to the right place

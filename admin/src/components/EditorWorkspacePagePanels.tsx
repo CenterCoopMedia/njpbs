@@ -11,6 +11,7 @@ import type { PageContent, Surface } from "./EditorWorkspace";
 import { EditorBackLink, labelForSurface } from "./EditorWorkspaceNavigation";
 import { ElectionResultsHistory } from "./ElectionResultsHistory";
 import { LifecycleActionsPanel } from "./LifecycleActionsPanel";
+import { hasVisibleElectionResults } from "../lib/approval-scope";
 import { PublishedVersionStatus } from "./PublishedVersionStatus";
 import { RecordForm } from "./RecordForm";
 import { RevisionHistory } from "./RevisionHistory";
@@ -332,7 +333,7 @@ export function EditorWorkspacePagePanels({
     panels.push({
       id: "lifecycle",
       title: "Lifecycle",
-      subtitle: "Save, review, and publish this version.",
+      subtitle: "Save and publish this version.",
       defaultZone: "side",
       body: (
         <>
@@ -346,6 +347,7 @@ export function EditorWorkspacePagePanels({
           baseVersion={pageCurrentVersion}
           contentVersion={content.contentVersion ?? pageCurrentVersion}
           publicationSupported
+          approvable={hasVisibleElectionResults(savedPageBlocks)}
           collection="cmsPages"
           documentId={pageSurface.pageId}
           headless

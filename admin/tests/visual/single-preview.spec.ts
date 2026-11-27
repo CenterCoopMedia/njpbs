@@ -60,7 +60,6 @@ for (const width of [1280, 390]) {
     await publishing!.click();
     await expect(page.getByRole("button", { name: "Publish", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Schedule publish", exact: true })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Submit for review", exact: true })).toBeVisible();
     await publishing!.click();
     await page.locator("body").ariaSnapshot();
     const actions = await page.getByRole("button", { name: "Event actions", exact: true }).elementHandle();

@@ -4,99 +4,16 @@ description: "Save, review, preview, publish, and verify CMS content."
 ---
 
 
-## Separate editorial review from publication
+## Check a draft before publication
 
-<figure class="admin-docs-video">
-<video controls preload="none" playsinline width="1280" height="720" poster="/guide-content/videos/review-and-publish.jpg" aria-label="Review and publish work" src="/guide-content/videos/review-and-publish.mp4">
-<track kind="chapters" src="/guide-content/videos/review-and-publish.vtt" srclang="en" label="Chapters" default></track>
-</video>
-<figcaption>Review and publish work. <a href="/guide/video-tutorials#review-and-publish-work">Open this video in the tutorial list</a>.</figcaption>
-</figure>
-
-<details><summary>Transcript: Review and publish work</summary>
-<p>Descriptive guide. The video has interface sounds, optional instrumental music, and no spoken narration.</p>
-<p><strong>Title</strong></p>
-<p>The NJ PBS logo and &quot;Review and publish work&quot;. The opening includes a screen preview, duration and step count.</p>
-<p>Outcome: &quot;You send a saved draft to a reviewer, publish the approved version and confirm the result.&quot;</p>
-<p><strong>Overview: Start from your saved draft</strong></p>
-<p>Review and publishing both use the saved version, so save before you begin.</p>
-<p>The Boardwalk screen appears in a browser frame. Focus treatment identifies the named controls.</p>
-<ul>
-<li>A callout says &quot;Where the working version stands&quot;.</li>
-<li>A callout says &quot;What visitors can read now&quot; and &quot;Stays until a newer version publishes.&quot;</li>
-</ul>
-<p><strong>Step 1 of 6: Choose a reviewer, then submit</strong></p>
-<p>The reviewer sees the post in their queue. Submitting sends only the saved version.</p>
-<p>The Boardwalk screen appears in a browser frame. Focus treatment identifies the named controls.</p>
-<ul>
-<li>A callout says &quot;Assignment and Lifecycle&quot; and &quot;In Post settings, under Publication.&quot;</li>
-<li>A callout says &quot;Choose who reviews it&quot; and &quot;Then select Update assignment.&quot; The pointer opens the list and chooses &quot;Sue Super (sue@example.org)&quot;.</li>
-<li>A callout says &quot;Send the saved version to review&quot; and &quot;A confirmation opens under Lifecycle.&quot; The pointer clicks it.</li>
-</ul>
-<p><strong>Step 2 of 6: Confirm the submission</strong></p>
-<p>Confirming locks this saved version in the review queue until a reviewer acts.</p>
-<p>The Boardwalk screen appears in a browser frame. Focus treatment identifies the named controls.</p>
-<ul>
-<li>A callout says &quot;Confirm to send it&quot; and &quot;An editor can approve it or send it back with a note.&quot; The pointer clicks it.</li>
-</ul>
-<p><strong>Step 3 of 6: Reviewers open the Editorial queue</strong></p>
-<p>Work waiting for review collects in one list under Workflow.</p>
-<p>The Boardwalk screen appears in a browser frame. Focus treatment identifies the named controls.</p>
-<ul>
-<li>A callout says &quot;Open Editorial queue in the rail&quot; and &quot;Home's In review count opens it too.&quot; The pointer clicks it, and the next page opens.</li>
-</ul>
-<p><strong>Step 4 of 6: Find the request and open it</strong></p>
-<p>Read the whole list. The queue has no search or filters.</p>
-<p>The Boardwalk screen appears in a browser frame. Focus treatment identifies the named controls.</p>
-<ul>
-<li>A callout says &quot;The saved version to review&quot;.</li>
-<li>A callout says &quot;Who should review it&quot;.</li>
-<li>A callout says &quot;Select the title to open it&quot; and &quot;A row is a summary. Review the full draft in the editor.&quot; The pointer clicks it, and the next page opens.</li>
-</ul>
-<p><strong>Step 5 of 6: Publish the approved version</strong></p>
-<p>Approval does not publish. Publish sends this exact saved version to the public site.</p>
-<p>The Boardwalk screen appears in a browser frame. Focus treatment identifies the named controls.</p>
-<ul>
-<li>A callout says &quot;Approved, but not public yet&quot;.</li>
-<li>A callout says &quot;Select Publish once&quot;. The pointer clicks it. The result callout says &quot;Queued for a public build&quot; and &quot;The older public version stays live until this succeeds.&quot;</li>
-</ul>
-<p><strong>Step 6 of 6: Wait for a final result</strong></p>
-<p>Publish activity shows each job until it completes or fails.</p>
-<p>The Boardwalk screen appears in a browser frame. Focus treatment identifies the named controls.</p>
-<ul>
-<li>A callout says &quot;Completed means the build finished&quot;.</li>
-<li>A callout says &quot;Open details for a failed job&quot; and &quot;Do not start repeated runs. Report the job ID and status.&quot; The pointer clicks it. The result callout says &quot;Send this ID with your report&quot;.</li>
-</ul>
-<p><strong>Tip: Check the public page yourself</strong></p>
-<p>A finished job is not proof. Open the public URL in a clean browser tab.</p>
-<p>The Boardwalk screen appears in a browser frame. Focus treatment identifies the named controls.</p>
-<p>Remember:</p>
-<ul>
-<li>Check the change and nearby content</li>
-</ul>
-<p><strong>Recap</strong></p>
-<p>&quot;You can review and publish&quot;. Result pictures and confirmation marks accompany these points:</p>
-<ol>
-<li>Pick a reviewer, submit</li>
-<li>Confirm the submission</li>
-<li>Open the Editorial queue</li>
-<li>Open the request by title</li>
-<li>Publish the approved version</li>
-<li>Wait for a final result</li>
-</ol>
-<p><strong>End</strong></p>
-<p>The NJ PBS logo and &quot;More help: open the Boardwalk guide from Home.&quot;</p>
-</details>
-
-A saved draft can be complete enough for review without being authorized for
-publication. The workflow can include:
+A saved draft can be complete enough for an editorial check without being ready
+for publication. The workflow can include:
 
 - Drafting.
 - Assignment.
-- Submission.
 - Editorial review.
-- Requested changes.
-- Approval.
+- Approval, for manual election results, Spanish editions, and sponsor or
+  newsletter cards.
 - Preview.
 - Scheduling or publication.
 - Public verification.
@@ -141,14 +58,15 @@ Use this checklist before editorial review.
 7. Inspect the newest revision.
 8. Confirm the assignment.
 9. Add a concise review note in the area's review channel when required.
-10. Record that review is ready.
+10. Tell the person who checks your area's work that the draft is ready.
 
 A review note should state what changed, what needs special attention, and any
 known limitation. It should not repeat the entire draft.
 
-## Review submitted work
+## Review a saved draft
 
-A reviewer should evaluate both editorial quality and operational readiness.
+The person who checks a draft should evaluate both editorial quality and
+operational readiness.
 
 Check:
 
@@ -173,9 +91,8 @@ Preview is a separate operation from saving and publishing. It should represent
 a specific saved draft revision.
 
 You can preview any saved Page or Post that you can open in Boardwalk. Writers
-can preview their own drafts and keep that access after submitting for review.
-Editors can preview records in their assigned content areas. Preview does not
-give permission to edit a submitted record. Archived content cannot be previewed.
+can preview their own drafts. Editors can preview records in their assigned
+content areas. Preview does not give permission to edit a record. Archived content cannot be previewed.
 
 To preview a record:
 
@@ -228,52 +145,55 @@ Review the complete rendered result:
 
 A guide, block outline, or editor representation is not a preview.
 
-## Use the Editorial queue
+## Use Publish activity
 
 <figure class="admin-docs-screenshot">
   <p class="admin-docs-image-note">Screenshot omitted from this source distribution.</p>
-  <figcaption><strong>Open the title to review the work.</strong> The queue identifies the submitted version and assignee. A row in this list does not mean the content is live. </figcaption>
+  <figcaption><strong>Read each publish request.</strong> Publish activity lists recent, active, and failed publish jobs. A completed job does not mean that every saved draft is live. </figcaption>
 </figure>
 
-The **Editorial queue** gathers work that needs review or shows release activity
-available to your role.
+**Publish activity** shows the history of publish jobs. Staff with settings
+access can open it from the navigation rail. It lists the latest 100 requests,
+the requests still running, and the latest 100 requests that need recovery.
 
-For each item, identify:
+For each request, identify:
 
-- Record and content type.
-- Current lifecycle state.
-- Author or assignee.
-- Last meaningful change.
-- Required next action.
-- Preview or release status.
+- Record or site update.
+- Who or what started it.
+- Changes included.
+- Current stage and outcome.
 - Any failure that blocks progress.
 
-Open the record before taking a consequential action. A queue row is a summary
-and can become stale while another person works.
+When a site update fails, select **Retry site update**. When Boardwalk cannot
+confirm the public result, select **Check again**. Select **Refresh** to reload
+the list.
 
-Read the complete list to find the current assignment. The current queue does
-not provide search or filter controls.
+A row in this list is a summary. Confirm the exact public version on the content
+record before you say that a saved version is live.
 
 ## Publish
 
 Only publish after the required editorial and operational checks.
 
 1. Confirm the saved draft revision.
-2. Confirm the assignment and required editorial review.
+2. Confirm the assignment and any editorial review your area requires.
 3. Review the exact-draft preview when required.
-4. Open **Publishing** and select **Publish** once.
-5. Keep the publication status in view.
-6. Wait for a terminal success or failure.
-7. Open the public URL without relying on a logged-in preview session.
-8. Check the changed content and surrounding page.
-9. Record completion or start a correction.
+4. For manual election results and Spanish editions, select **Approve** on the
+   saved draft first. For sponsor and newsletter cards, **Approve** publishes
+   the card.
+5. Open **Publishing** and select **Publish** once.
+6. Keep the publication status in view.
+7. Wait for a terminal success or failure.
+8. Open the public URL without relying on a logged-in preview session.
+9. Check the changed content and surrounding page.
+10. Record completion or start a correction.
 
 A successful button press is not the same as a successful public release.
 
 ## Schedule publication
 
 Open **Publishing**, then select **Schedule publish**. You need publishing
-permission and a saved version in draft, in review, or approved status. Before you confirm:
+permission and a saved version in draft or approved status. Before you confirm:
 
 - Confirm the date, time, and displayed time zone.
 - Confirm that the content is appropriate to become public without another
@@ -281,8 +201,9 @@ permission and a saved version in draft, in review, or approved status. Before y
 - Verify that related links, media, and external services will be available at
   that time.
 - Record who owns the post-publication check.
-- Recheck the scheduled item after any later draft edit; the workflow may
-  require renewed approval.
+- Recheck the scheduled item after any later draft edit. Selecting **Edit**
+  returns scheduled or approved content to draft. Schedule it again, and
+  approve it again when its content type requires approval.
 
 Use an explicit date and time in handoff notes. Avoid “tomorrow morning” or
 other relative descriptions.

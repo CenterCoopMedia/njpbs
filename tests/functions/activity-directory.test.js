@@ -73,7 +73,7 @@ const savedEntry = (overrides = {}) => ({
   action: "cms.save",
   target: "cmsPages/watch",
   before: { status: "draft" },
-  after: { status: "in_review" },
+  after: { status: "approved" },
   source: "203.0.113.9",
   at: "2026-08-18T20:15:00.000Z",
   ...overrides,

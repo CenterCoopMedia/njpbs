@@ -525,7 +525,7 @@ export function RecordFormFields({
             ? [{
                 id: "publication",
                 title: "Lifecycle",
-                subtitle: "Save, review, and publish this version.",
+                subtitle: "Save and publish this version.",
                 defaultZone: "side" as const,
                 body: (
                   <LifecycleFeedbackRevealProvider

@@ -32,7 +32,7 @@ Keep these stages separate:
 | --- | --- | --- |
 | Editing in the browser | You have changed a field or block but have not saved it. | None. The work can still be lost if you leave. |
 | Saved draft | The CMS has stored the current draft and added revision evidence. | None by itself. |
-| Submitted or ready for review | The draft is waiting for an authorized reviewer. | None by itself. |
+| Approved | An authorized person has approved a saved version of manual election results, a Spanish edition, or a sponsor or newsletter card. | None for election results or Spanish editions. Approving a sponsor or newsletter card publishes it. |
 | Preview | The CMS has built a protected view of a specific saved draft. | None on the public site. |
 | Publish or schedule | An authorized action has started the release workflow. | The public site changes only after that workflow succeeds. |
 | Verified live | The released page has been checked at its public address. | The approved change is public. |
@@ -42,7 +42,7 @@ Keep these stages separate:
 > public address has been checked.
 
 An action label can vary by content type. You may see **Save draft**,
-**Submit**, **Preview**, **Publish**, or another lifecycle action. Read the
+**Preview**, **Publish**, **Approve**, or another lifecycle action. Read the
 current status and the confirmation message rather than assuming that every
 button performs the same kind of save.
 
@@ -57,7 +57,7 @@ Your rail contains only the destinations your account may use.
 | Posts | Create or maintain individual editorial records that have their own public routes. |
 | All content | Search across authorized records, combine filters, use saved views, and return to prior results. |
 | Media library | Choose a tab: Images, Videos, Public submissions, Audio, Favorites or Collections. Find and maintain the media available to your account. |
-| Editorial queue | Review submitted content and inspect publication activity. |
+| Publish activity | Check publish job history and retry or recheck a site update. Staff with settings access only. |
 | Activity | Search the administrative record of content and access changes. |
 | Staff profiles | Review or correct public-facing staff profile data. |
 | Staff access | Review roles and area grants; high-risk role changes remain restricted. |
@@ -104,8 +104,8 @@ Confirm the following before changing a record:
 - You understand whether the region is editable, locked, or derived.
 - The latest draft has finished loading.
 - Another editor does not currently hold the record.
-- You know whether the task ends at a saved draft, review submission, preview,
-  or publication.
+- You know whether the task ends at a saved draft, approval, preview, or
+  publication.
 - You have the original value when a reversible test or sensitive correction
   requires it.
 

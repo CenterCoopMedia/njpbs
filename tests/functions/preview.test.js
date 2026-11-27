@@ -52,7 +52,7 @@ function page(overrides = {}) {
     title: "Contact NJ PBS",
     description: "Get in touch.",
     template: "genericPage",
-    status: "in_review",
+    status: "draft",
     blocks: [
       { id: "divider", type: "divider", order: 0, visible: true, data: {} },
     ],
@@ -333,9 +333,9 @@ describe("CMS preview request", () => {
 
   it.each([
     ["cmsPages", "contact", "draft"],
-    ["cmsPages", "contact", "in_review"],
+    ["cmsPages", "contact", "approved"],
     ["cmsPosts", "post-1", "draft"],
-    ["cmsPosts", "post-1", "in_review"],
+    ["cmsPosts", "post-1", "approved"],
   ])("lets a Writer preview their own %s %s in %s and read both status paths", async (collection, pageId, status) => {
     await db.doc(`${collection}/${pageId}`).set({
       ...page(), type: "post", status, createdBy: "writer-1", section: "news",

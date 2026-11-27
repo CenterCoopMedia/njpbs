@@ -26,7 +26,6 @@ export function contentStatusTone(
   switch (normalizedStatus(status)) {
     case "approved":
       return "brand";
-    case "in_review":
     case "reserved":
     case "pending":
     case "public_unconfirmed":
@@ -123,7 +122,7 @@ export function contentStatusPresentation({
     // A site-code Page has no CMS revision number. Its saved unpublished copy
     // is the draft; an unsaved registry entry alone is not one.
     const siteDraft = siteContentLive && positiveVersion(savedVersion) &&
-      ["draft", "in_review", "approved", "scheduled"].includes(normalizedStatus(status));
+      ["draft", "approved", "scheduled"].includes(normalizedStatus(status));
     return {
       label: liveLabel,
       tone: "success",

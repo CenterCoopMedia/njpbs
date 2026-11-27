@@ -49,7 +49,7 @@
 
 .newsroom-status-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0;
   overflow: hidden;
   border: var(--cms-border-width) solid var(--cms-line);
@@ -103,10 +103,6 @@
   color: var(--cms-ink-muted);
   font-size: var(--cms-font-xs);
   line-height: 1.4;
-}
-
-.newsroom-status-card[data-workflow="review"] .newsroom-status-link > strong {
-  color: var(--cms-warning);
 }
 
 .newsroom-status-card[data-workflow="scheduled"] .newsroom-status-link > strong {

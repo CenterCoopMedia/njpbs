@@ -54,15 +54,9 @@ interface NewsroomHomeProps {
   canCreate: boolean;
   canUseMediaLibrary?: boolean;
   canViewActivity?: boolean;
-  canViewEditorialQueue: boolean;
   canViewPublishActivity: boolean;
   currentUserId: string;
   loadRecords: () => Promise<LibrarySelection>;
-  // The in-review count for staff who can open the editorial queue. Read separately from
-  // loadRecords because the two answer different questions: loadRecords is the cmsPosts library,
-  // while the queue projects review requests from cmsPages and cmsPosts alike. Counting records
-  // beside a link to the queue would report zero next to waiting page requests.
-  loadReviewRequestCount?: () => Promise<number>;
   loadPublishActivity?: () => Promise<PublishActivitySummary>;
   loadAdminStatus?: () => Promise<AdminStatusManifest>;
   loadHomeSettings?: () => Promise<{
@@ -79,12 +73,6 @@ type HomeState =
 type PublishState =
   | { status: "disabled" | "loading" | "error" }
   | { status: "ready"; summary: PublishActivitySummary };
-
-// "records" is the state for staff without the editorial queue: their card links to the review
-// filter over the record library, so the record-derived count is the count that matches it.
-type ReviewCountState =
-  | { status: "records" | "loading" | "error" }
-  | { status: "ready"; count: number };
 
 function loadDefaultHomeSettings(): Promise<{
   heading: string;
@@ -118,11 +106,9 @@ export function NewsroomHome({
   canCreate,
   canUseMediaLibrary = false,
   canViewActivity = false,
-  canViewEditorialQueue,
   canViewPublishActivity,
   currentUserId,
   loadRecords,
-  loadReviewRequestCount,
   loadPublishActivity,
   loadAdminStatus = fetchAdminStatus,
   loadHomeSettings = loadDefaultHomeSettings,
@@ -131,15 +117,9 @@ export function NewsroomHome({
   // it rather than to a record list nobody chose (#1036).
   const origin = listOriginState(useLocation());
   const [attempt, setAttempt] = useState(0);
-  // The review count's own retry. It shares nothing with `attempt`, so asking the queue again
-  // never throws away a newsroom selection that loaded fine.
-  const [reviewAttempt, setReviewAttempt] = useState(0);
   const [publishAttempt, setPublishAttempt] = useState(0);
   const [state, setState] = useState<HomeState>({ status: "loading" });
   const [publishState, setPublishState] = useState<PublishState>({ status: "disabled" });
-  const [reviewCountState, setReviewCountState] = useState<ReviewCountState>({
-    status: "records",
-  });
   const [bannerHeading, setBannerHeading] = useState(
     DEFAULT_NEWSROOM_BANNER_HEADING,
   );
@@ -197,37 +177,6 @@ export function NewsroomHome({
     };
   }, [attempt, canBrowseRecords, loadRecords]);
 
-  // Only staff whose card opens the editorial queue read it. A contributor's card points at the
-  // record library instead, so this never calls the scoped queue endpoint on their behalf.
-  useEffect(() => {
-    let cancelled = false;
-    if (!canViewEditorialQueue) {
-      setReviewCountState({ status: "records" });
-      return () => {
-        cancelled = true;
-      };
-    }
-    if (!loadReviewRequestCount) {
-      // The queue is this card's destination and its own count is unavailable. Showing the
-      // record count here would be a number for a different question.
-      setReviewCountState({ status: "error" });
-      return () => {
-        cancelled = true;
-      };
-    }
-    setReviewCountState({ status: "loading" });
-    loadReviewRequestCount()
-      .then((count) => {
-        if (!cancelled) setReviewCountState({ status: "ready", count });
-      })
-      .catch(() => {
-        if (!cancelled) setReviewCountState({ status: "error" });
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [canViewEditorialQueue, loadReviewRequestCount, reviewAttempt]);
-
   useEffect(() => {
     let cancelled = false;
     if (!canViewPublishActivity || !loadPublishActivity) {
@@ -271,22 +220,6 @@ export function NewsroomHome({
       : state.status === "loading"
         ? "loading"
         : "unavailable";
-  const reviewCount = (): ReactNode =>
-    reviewCountState.status === "records"
-      ? count("in_review")
-      : reviewCountState.status === "ready"
-        ? reviewCountState.count
-        : reviewCountState.status === "loading"
-          ? pendingCount
-          : "—";
-  const accessibleReviewCount = (): number | string =>
-    reviewCountState.status === "records"
-      ? accessibleCount("in_review")
-      : reviewCountState.status === "ready"
-        ? reviewCountState.count
-        : reviewCountState.status === "loading"
-          ? "loading"
-          : "unavailable";
   const libraryPath = (patch: Partial<typeof DEFAULT_CONTENT_QUERY>) =>
     contentLibraryPath({ ...DEFAULT_CONTENT_QUERY, ...patch });
   const mineCount: ReactNode = selection
@@ -337,47 +270,6 @@ export function NewsroomHome({
                 <strong data-testid="draft-count">{count("draft")}</strong>
                 <span className="newsroom-status-detail">Open drafts</span>
               </Link>
-            </Panel>
-            <Panel
-              data-workflow="review"
-              className={
-                reviewCountState.status === "error"
-                  ? "newsroom-status-card newsroom-status-card-with-retry"
-                  : "newsroom-status-card"
-              }
-            >
-              <Link
-                aria-label={`In review, ${accessibleReviewCount()}. ${
-                  canViewEditorialQueue
-                    ? "Open review queue"
-                    : "Open the review filter"
-                }`}
-                className="newsroom-status-link"
-                to={
-                  canViewEditorialQueue
-                    ? publishQueuePath()
-                    : libraryPath({ statuses: ["in_review"] })
-                }
-              >
-                <span>In review</span>
-                <strong data-testid="review-count">{reviewCount()}</strong>
-                <span className="newsroom-status-detail">
-                  {canViewEditorialQueue
-                    ? "Open review queue"
-                    : "Open the review filter"}
-                </span>
-              </Link>
-              {reviewCountState.status === "error" ? (
-                // The same way back the publish card offers: every card that can fail to
-                // count says so and can be asked again from where it sits.
-                <Button
-                  className="newsroom-status-retry"
-                  variant="ghost"
-                  onClick={() => setReviewAttempt((value) => value + 1)}
-                >
-                  Retry review count
-                </Button>
-              ) : null}
             </Panel>
             <Panel className="newsroom-status-card" data-workflow="scheduled">
               <Link

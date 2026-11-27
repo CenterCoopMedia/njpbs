@@ -37,7 +37,6 @@ import {
   Panel,
   Select,
   StatusBadge,
-  Textarea,
   TextInput,
 } from "./ui/Primitives";
 import { WorkspaceActions, WorkspaceFeedback, WorkspaceSecondaryActions, useWorkspaceFeedbackAvailable, useWorkspaceSecondaryActionsAvailable } from "./WorkspaceActions";
@@ -69,6 +68,8 @@ interface LifecycleActionsPanelProps {
   publicationSupported: boolean;
   cardPublication?: boolean;
   translationReview?: boolean;
+  /** Matches the server approval rule: library cards, Spanish editions, and visible election results. */
+  approvable?: boolean;
   publicationDisabledReason?: string;
   canArchive: boolean;
   canUnpublish: boolean;
@@ -126,15 +127,15 @@ interface ActionDefinition {
 }
 
 const ACTION_ICONS: Record<PanelAction, IconName> = {
-  edit: "pencil", submit: "users", sendBack: "undo", approve: "check",
+  edit: "pencil", approve: "check",
   unschedule: "calendar", publish: "upload", schedule: "calendar",
   unpublish: "eye-off", archive: "trash", restore: "undo",
 };
 
-type PanelAction = Exclude<LifecycleAction, "reopen" | "revise"> | "publish" | "schedule";
+type PanelAction = Exclude<LifecycleAction, "revise"> | "publish" | "schedule";
 
-function isSecondaryWorkspaceAction(action: PanelAction, canPublish: boolean): boolean {
-  return ["unschedule", "unpublish", "archive", "approve", "sendBack"].includes(action) || (action === "submit" && canPublish);
+function isSecondaryWorkspaceAction(action: PanelAction): boolean {
+  return ["unschedule", "unpublish", "archive", "approve"].includes(action);
 }
 
 const PUBLISHING_HELP = "Save your edits before publishing. Publish uses the saved version. A saved draft is separate from what visitors see; check the public-version status for the result.";
@@ -149,32 +150,12 @@ const ACTIONS: Record<PanelAction, ActionDefinition> = {
     errorTitle: "Editing was not enabled",
     variant: "primary",
   },
-  submit: {
-    action: "submit",
-    label: "Submit for review",
-    confirmLabel: "Confirm submission",
-    description:
-      "Submitting locks this saved version in the review queue. An editor can approve it or send it back with a note.",
-    successTitle: "Content submitted for review",
-    errorTitle: "Content was not submitted",
-    variant: "primary",
-  },
-  sendBack: {
-    action: "sendBack",
-    label: "Send back",
-    confirmLabel: "Confirm send back",
-    description:
-      "Send this version back to draft with a clear review note. The note is stored with the audit evidence.",
-    successTitle: "Content sent back to draft",
-    errorTitle: "Content was not sent back",
-    variant: "secondary",
-  },
   approve: {
     action: "approve",
     label: "Approve",
     confirmLabel: "Confirm approval",
     description:
-      "Approve this exact saved version for publishing or scheduling. Approval does not publish it. It stays read-only until an editor reopens it.",
+      "Approve this exact saved version for publishing or scheduling. Approval does not publish it. It stays read-only until someone selects Edit.",
     successTitle: "Content approved",
     errorTitle: "Content was not approved",
     variant: "primary",
@@ -243,12 +224,6 @@ const ACTIONS: Record<PanelAction, ActionDefinition> = {
 
 const TRANSLATION_REVIEW_ACTIONS = {
   ...ACTIONS,
-  submit: {
-    ...ACTIONS.submit,
-    label: "Submit translation for review",
-    description: "Send this saved Spanish version to the review queue. An editor can preview it privately, then approve it or send it back with a note.",
-    successTitle: "Translation submitted for review",
-  },
   approve: {
     ...ACTIONS.approve,
     label: "Approve translation",
@@ -261,12 +236,13 @@ function availableActions(
   status: string | undefined,
   canSchedule: boolean,
   publicationSupported: boolean,
+  approvable: boolean,
 ): PanelAction[] {
   const publish: PanelAction[] = publicationSupported ? ["publish"] : [];
   const schedule: PanelAction[] = canSchedule && publicationSupported ? ["schedule"] : [];
+  const approve: PanelAction[] = approvable ? ["approve"] : [];
   switch (status) {
-    case "draft": return [...publish, ...schedule, "submit", "archive"];
-    case "in_review": return ["approve", "sendBack", "edit", ...publish, ...schedule, "archive"];
+    case "draft": return [...approve, ...publish, ...schedule, "archive"];
     case "approved": return ["edit", ...publish, ...schedule, "archive"];
     case "scheduled": return ["edit", "unschedule", "archive"];
     case "published": return ["unpublish", "archive"];
@@ -303,6 +279,7 @@ export function LifecycleActionsPanel({
   publicationSupported,
   cardPublication = false,
   translationReview = false,
+  approvable = false,
   publicationDisabledReason,
   canArchive,
   canUnpublish,
@@ -339,9 +316,8 @@ export function LifecycleActionsPanel({
   const shownAgain = useShownAgainCount(rightsProbe);
   // Only a record that can still be published or scheduled asks staff to check rights.
   const rightsCheck = canPublish &&
-    availableActions(status, canSchedule, publicationSupported).some(action => action === "publish" || action === "schedule");
+    availableActions(status, canSchedule, publicationSupported, approvable).some(action => action === "publish" || action === "schedule");
   const videoRights = useVideoRightsWarnings(rightsCheck ? videos.map(video => video.assetId) : [], shownAgain);
-  const [reviewNote, setReviewNote] = useState("");
   const [scheduleAt, setScheduleAt] = useState("");
   const [scheduleOccurrence, setScheduleOccurrence] = useState("");
   const [scheduleClock, setScheduleClock] = useState(Date.now);
@@ -374,7 +350,6 @@ export function LifecycleActionsPanel({
 
   useEffect(() => {
     setPending(null);
-    setReviewNote("");
     setScheduleAt("");
     setScheduleOccurrence("");
     setResult(null);
@@ -427,6 +402,7 @@ export function LifecycleActionsPanel({
     status,
     canSchedule,
     publicationSupported,
+    approvable,
   ).filter(permissionFor);
   const hasPublicSnapshot = status === "published" ||
     (publication?.data?.publiclyVisible === true &&
@@ -443,9 +419,7 @@ export function LifecycleActionsPanel({
 
   function permissionFor(action: PanelAction): boolean {
     if (action === "edit") return canEdit;
-    if (action === "submit") return canEdit;
     if (action === "approve") return canApprove && (!cardPublication || canPublish);
-    if (action === "sendBack") return canApprove;
     if (action === "unschedule" || action === "publish" || action === "schedule") {
       return canPublish;
     }
@@ -456,14 +430,8 @@ export function LifecycleActionsPanel({
   function permissionReason(action: PanelAction): string | undefined {
     if (permissionFor(action)) return undefined;
     if (action === "edit") return "Your role cannot edit this content.";
-    if (action === "submit") return "Your role cannot submit this content.";
     if (action === "approve" && cardPublication && !canPublish) return "Your role cannot publish this card.";
-    if (
-      action === "sendBack" ||
-      action === "approve"
-    ) {
-      return "Your role cannot review this content.";
-    }
+    if (action === "approve") return "Your role cannot approve this content.";
     if (action === "unschedule") return "Your role cannot cancel publication.";
     if (action === "publish" || action === "schedule") {
       return "Your role cannot publish content.";
@@ -543,7 +511,6 @@ export function LifecycleActionsPanel({
           id: documentId,
           action,
           baseVersion: retryCard && cardReceipt ? cardReceipt.sourceVersion - 1 : baseVersion,
-          ...(action === "sendBack" ? { comment: reviewNote.trim() } : {}),
         };
         const response = retryCard
           ? await onTransition!(request, { retryAcceptedCard: true })
@@ -570,7 +537,6 @@ export function LifecycleActionsPanel({
         if (reminder) successMessage = `${successMessage} ${reminder}`;
       }
       setPending(null);
-      setReviewNote("");
       setScheduleAt("");
       setScheduleOccurrence("");
       setResult({
@@ -639,8 +605,8 @@ export function LifecycleActionsPanel({
   const actionButtons = actions.map((action) => {
     const definition = definitions[action];
     const menuItem = groupedActions
-      ? ["publish", "schedule", "unschedule", "unpublish", "archive"].includes(action) || (action === "submit" && canPublish)
-      : secondaryMenu && isSecondaryWorkspaceAction(action, canPublish);
+      ? ["publish", "schedule", "unschedule", "unpublish", "archive"].includes(action)
+      : secondaryMenu && isSecondaryWorkspaceAction(action);
     const variant = menuItem ? definition.variant === "danger" ? "menu-danger" : "menu"
       : workspaceActions && definition.variant === "primary" && action !== "edit" ? "secondary" : definition.variant;
     const unavailableReason =
@@ -663,7 +629,6 @@ export function LifecycleActionsPanel({
           onClick={() => {
             returnFocusAction.current = null;
             setPending(null);
-            setReviewNote("");
             setScheduleAt("");
             setResult(null);
             void submit(action);
@@ -708,7 +673,6 @@ export function LifecycleActionsPanel({
     if (!pending || submitting) return;
     returnFocusAction.current = pending;
     setPending(null);
-    setReviewNote("");
     setScheduleAt("");
     setScheduleOccurrence("");
   }
@@ -739,21 +703,6 @@ export function LifecycleActionsPanel({
       <p id={confirmationDescriptionId}>
         {definitions[pending].description}
       </p>
-      {pending === "sendBack" ? (
-        <label className="lifecycle-actions-note" htmlFor="lifecycle-review-note">
-          <span>Review note</span>
-          <Textarea
-            data-lifecycle-initial-focus
-            disabled={submitting}
-            id="lifecycle-review-note"
-            maxLength={1_000}
-            onChange={(event) => setReviewNote(event.currentTarget.value)}
-            required
-            rows={4}
-            value={reviewNote}
-          />
-        </label>
-      ) : null}
       {pending === "schedule" ? (
         <div className="lifecycle-actions-note">
           <label htmlFor={scheduleInputId}>Publication time (New York)</label>
@@ -802,12 +751,9 @@ export function LifecycleActionsPanel({
       <div className="lifecycle-actions-confirmation-buttons">
         <AsyncActionButton
           aria-describedby={confirmationDescriptionId}
-          data-lifecycle-initial-focus={
-            pending === "sendBack" || pending === "schedule" ? undefined : true
-          }
+          data-lifecycle-initial-focus={pending === "schedule" ? undefined : true}
           disabled={
             Boolean(sharedReason || connectionReason(pending) || permissionReason(pending)) ||
-            (pending === "sendBack" && reviewNote.trim().length === 0) ||
             (pending === "schedule" && !schedule.instant)
           }
           label={definitions[pending].confirmLabel}
@@ -917,7 +863,7 @@ export function LifecycleActionsPanel({
   const groupedActionButtons = groupedActions ? actionButtons.map((button, index) => {
     const action = actions[index];
     const group = action === "archive" || action === "unpublish" ? "destructive"
-      : action === "publish" || action === "schedule" || action === "unschedule" || (action === "submit" && canPublish) ? "publishing"
+      : action === "publish" || action === "schedule" || action === "unschedule" ? "publishing"
       : "workflow";
     return <EditorActionSlot key={action} group={group}>{button}</EditorActionSlot>;
   }) : null;
@@ -929,10 +875,10 @@ export function LifecycleActionsPanel({
           <div>
             <div className="editor-field-label-row">
               <h3 id="lifecycle-actions-heading">Lifecycle</h3>
-              <InfoTooltip label="content workflow" content="A draft is work in progress. Review asks another editor to check it. Approval does not publish. Publish sends the saved version through the publishing process; scheduling sets a future publication time." />
+              <InfoTooltip label="content workflow" content="A draft is work in progress. Publish sends the saved version through the publishing process; scheduling sets a future publication time. Election results and Spanish editions are approved before publication, and approving a library card publishes it." />
             </div>
             <p>
-              Save a draft, submit it for review, or publish the saved version.
+              Save a draft or publish the saved version.
             </p>
           </div>
         ) : null}
@@ -988,11 +934,11 @@ export function LifecycleActionsPanel({
         <WorkspaceActions>
           <>
             <div className="lifecycle-actions-buttons lifecycle-actions-buttons-header">
-              {actionButtons.filter((_, index) => !secondaryMenu || !isSecondaryWorkspaceAction(actions[index], canPublish))}
+              {actionButtons.filter((_, index) => !secondaryMenu || !isSecondaryWorkspaceAction(actions[index]))}
               <WorkspaceSecondaryActions>
                 {secondaryMenu ? <>
-                  {actionButtons.filter((_, index) => isSecondaryWorkspaceAction(actions[index], canPublish))}
-                  {actions.some(action => isSecondaryWorkspaceAction(action, canPublish)) ? <div className="ui-menu-separator" role="separator" /> : null}
+                  {actionButtons.filter((_, index) => isSecondaryWorkspaceAction(actions[index]))}
+                  {actions.some(action => isSecondaryWorkspaceAction(action)) ? <div className="ui-menu-separator" role="separator" /> : null}
                   <Tooltip content={PUBLISHING_HELP} openOnClick>
                     <Button variant="menu" data-lifecycle-help aria-describedby={publishingHelpId}><Icon name="info" /><span>Lifecycle help</span></Button>
                   </Tooltip>

@@ -51,9 +51,8 @@ describe("Editor actions", () => {
     expect(actions).toHaveFocus();
   });
 
-  it("keeps review available without offering publication to a writer", async () => {
+  it("offers a writer no publication actions", async () => {
     render(<Editor canPublish={false} />);
-    expect(screen.getByRole("button", { name: "Submit for review" })).toBeEnabled();
     await waitFor(() => expect(screen.getByText("Publishing", { selector: "summary" })).not.toBeVisible());
     expect(screen.queryByRole("button", { name: "Publish" })).toBeNull();
   });
@@ -66,11 +65,11 @@ describe("Editor actions", () => {
     expect(screen.getByRole("button", { name: "Publish" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Schedule publish" })).toBeDisabled();
     const reason = "Save or revert your content edits before changing lifecycle.";
-    for (const name of ["Publish", "Schedule publish", "Submit for review"]) {
+    for (const name of ["Publish", "Schedule publish"]) {
       expect(screen.getByRole("button", { name })).toHaveAccessibleDescription(reason);
     }
     const explanations = within(screen.getByRole("group", { name: "Publishing" })).getAllByText(reason);
-    expect(explanations).toHaveLength(3);
+    expect(explanations).toHaveLength(2);
     for (const explanation of explanations) expect(explanation).toBeVisible();
   });
 });

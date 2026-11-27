@@ -6156,8 +6156,7 @@
   font-weight: 700;
 }
 
-.queue-table,
-.review-queue-table {
+.queue-table {
   min-width: 52rem;
 }
 
@@ -6170,47 +6169,9 @@
   width: 13rem;
 }
 
-/* The editorial queue is scanned by content: the title answers whether a request is the
-   reviewer's to open next, so it takes the row's width and its primary type, and the people,
-   waiting, version, and time columns are sized to what they actually hold (#1036, #1485). */
-.review-queue-table {
-  table-layout: fixed;
-}
-
-.review-queue-table th:nth-child(1) {
-  width: 35%;
-}
-
-.review-queue-table th:nth-child(2) {
-  width: 9%;
-}
-
-.review-queue-table th:nth-child(3) {
-  width: 9%;
-}
-
-.review-queue-table th:nth-child(4) {
-  width: 11%;
-}
-
-.review-queue-table th:nth-child(5) {
-  width: 11%;
-}
-
-.review-queue-table th:nth-child(6) {
-  width: 10%;
-}
-
-.review-queue-table :is(th, td) { overflow-wrap: anywhere; }
-
-/* Reserve the visible native Open draft target before distributing spare width. */
-.review-queue-table th:nth-child(7) {
-  width: 8rem;
-}
-
 /* One content-title treatment for every Admin surface (#1036). A person moving between All
-   content, a typed record list, the pages directory, the media library, Staff access, the
-   editorial queue and the publish queue reads the same kind of thing on each: the name of the
+   content, a typed record list, the pages directory, the media library, Staff access and
+   publish activity reads the same kind of thing on each: the name of the
    record, page, asset, person or release the row is about. That name reads as ink at the row's
    primary weight everywhere, and where it is also a link it keeps the title's colour rather than
    taking the user agent's link blue. The underline stays: it is the row's only affordance that
@@ -6234,8 +6195,6 @@
 
 .queue-requester,
 .queue-table time,
-.review-queue-person,
-.review-queue-table time,
 .scoped-grants-cell {
   color: var(--color-text-muted);
   font-size: var(--font-size-sm);

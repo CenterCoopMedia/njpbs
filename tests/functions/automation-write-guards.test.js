@@ -221,7 +221,7 @@ describe("automation account write guards", () => {
       enqueuePublishBuildFn: vi.fn(), log: silentLog,
     });
     const res = makeRes();
-    await handler(makeReq({ collection: "cmsPages", id: "watch", baseVersion: 4, action: "submit" }), res);
+    await handler(makeReq({ collection: "cmsPages", id: "watch", baseVersion: 4, action: "edit" }), res);
     expect(res.statusCode).toBe(409);
     expect(res.body).toMatchObject({ lockRequired: true });
     await expectNothingWritten();

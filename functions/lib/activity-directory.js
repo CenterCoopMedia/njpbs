@@ -15,14 +15,8 @@
 // document answers "who is this" and the stored row keeps answering "what did the
 // server see".
 //
-// `lib/review-queue.js` resolves staff labels for the editorial queue and is
-// deliberately stricter: an editor there gets a name or "Another staff member"
-// and never an account id, because the queue is a working surface for the whole
-// newsroom. This module answers a different question for a different audience --
-// an administrator holding audit.view reading the compliance stream, who needs
-// the exact identifiers to act on a row. Same underlying read of users/{uid};
-// different disclosure rule, which is why it is a second resolver rather than a
-// shared one with a mode flag.
+// This module serves an administrator holding audit.view reading the
+// compliance stream, who needs the exact identifiers to act on a row.
 //
 // Privacy is a capability decision, not a formatting one. Account fields -- the
 // uid, the address, and the immutable id of a person-shaped target -- are only

@@ -78,7 +78,7 @@ const pickerCategories: MediaCategoryDefinition[] = [
 
 describe("RecordForm", () => {
   it.each([
-    ["in_review", "In review"], ["archived", "Deleted"], ["draft", "working draft"],
+    ["approved", "Approved"], ["archived", "Deleted"], ["draft", "working draft"],
   ])("uses staff workflow wording in the Article subtitle (%s)", (status, expected) => {
     const initial = { title: "Status wording", status, blocks: [] };
     const snapshot = structuredClone(initial);
@@ -217,6 +217,8 @@ describe("RecordForm", () => {
           postInspector={
             <LifecycleActionsPanel
               baseVersion={1}
+              approvable
+              canApprove
               canArchive={false}
               canEdit
               canRestore={false}
@@ -243,7 +245,7 @@ describe("RecordForm", () => {
       expect(toggle).toHaveAttribute("aria-expanded", "false");
 
       fireEvent.click(
-        within(actionsTarget).getByRole("button", { name: "Submit for review" }),
+        within(actionsTarget).getByRole("button", { name: "Approve" }),
       );
 
       await waitFor(() =>

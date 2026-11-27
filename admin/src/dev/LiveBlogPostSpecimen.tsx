@@ -30,7 +30,7 @@ const entry = (id: string): LiveBlogDraftUpdate => ({ id, headline: state === "l
 });
 const liveBlog: LiveBlogDraft = { schemaVersion: 1, coverageState: "ongoing", ...(params.has("branding") ? { branding: "nj-decides-2026" } : {}), updates: state === "empty" ? [] : [entry("entry-one"), entry("entry-two")] };
 function Specimen() {
-  const [initial] = useState<Record<string, unknown>>(() => ({ id: "post-example", type: "post", title: "Live coverage across New Jersey", summary: "Synthetic reporting for the local Post editor specimen.", blocks: [], categories: ["New Jersey"], tags: [], credits: [{ kind: "custom", name: "Example newsroom" }], status: state === "readonly" ? "in_review" : "draft", version: 3, createdBy: "fixture-editor", unassignedDraft: true,
+  const [initial] = useState<Record<string, unknown>>(() => ({ id: "post-example", type: "post", title: "Live coverage across New Jersey", summary: "Synthetic reporting for the local Post editor specimen.", blocks: [], categories: ["New Jersey"], tags: [], credits: [{ kind: "custom", name: "Example newsroom" }], status: state === "readonly" ? "approved" : "draft", version: 3, createdBy: "fixture-editor", unassignedDraft: true,
     ...(state === "before" ? {} : { liveBlog }),
     ...(state === "published" ? { published: { metadata: { liveBlog: { ...liveBlog, updatedAt: "2026-10-25T15:00:00.000Z", updates: liveBlog.updates.map(item => ({ ...item, publishedAt: "2026-10-25T15:00:00.000Z", updatedAt: "2026-10-25T15:00:00.000Z" })) } } } } : {}),
   }));
