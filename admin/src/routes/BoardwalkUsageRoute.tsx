@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { Button, EmptyState, InlineMessage, TableFrame } from "../components/ui/Primitives";
 import { LoadingIndicator } from "../components/ui/LoadingIndicator";
@@ -151,8 +151,9 @@ function UsageSections({ report }: { report: UsageReport }) {
         {Array.from({ length: 24 }, (_, hour) => <th scope="col" key={hour}>{hour}</th>)}<th scope="col">Newsroom total</th><th scope="col">Product team total</th></tr></thead>
         <tbody>{WEEKDAYS.map((weekday, index) => <tr key={weekday}><th scope="row">{weekday}</th>
           {report.hourMs.newsroom[index].map((ms, hour) => {
-            const level = Math.round(ms / heatPeak * 100);
-            return <td key={hour} className={level > 55 ? "is-strong" : undefined} style={{ "--level": level } as CSSProperties}>{Math.round(ms / 60_000)}</td>;
+            // Five shade steps; each step's text color is checked for 4.5:1 contrast in the stylesheet.
+            const step = Math.ceil(ms / heatPeak * 5);
+            return <td key={hour} className={`boardwalk-usage-heat-${step}`}>{Math.round(ms / 60_000)}</td>;
           })}
           <td>{minutes(report.hourMs.newsroom[index].reduce((sum, ms) => sum + ms, 0))}</td>
           <td>{minutes(report.hourMs.product[index].reduce((sum, ms) => sum + ms, 0))}</td></tr>)}</tbody></table></TableFrame>

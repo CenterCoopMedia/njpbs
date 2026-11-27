@@ -429,6 +429,23 @@ describe("Boardwalk usage privacy and persistence contract (#4495)", () => {
     expect(grid.flat().reduce((sum, value) => sum + value, 0)).toBe(5_000);
   });
 
+  it("adds visible time on earlier combined screens to session minutes", async () => {
+    await invoke(handlers().collect, batch([{ name: "screen.duration", screen: "posts", durationMs: 10_000 },
+      { name: "screen.duration", screen: "posts-list", durationMs: 5_000 }]));
+    expect((await invoke(handlers().report, { days: 7 })).body.sessions.newsroom).toEqual({ sessions: 1, visibleMs: 15_000 });
+  });
+
+  it("counts only Preview jobs that expired without being built", async () => {
+    await firestore.collection("users").doc("staff-1").set({ accessTier: "editor" });
+    const queue = firestore.collection("cmsPreviewQueue");
+    const requestedAt = Timestamp.fromMillis(start - 86_400_000);
+    await queue.add({ requestedBy: "staff-1", status: "expired", requestedAt });
+    // A built saved Preview later replaced by a newer one keeps the commit of its build.
+    await queue.add({ requestedBy: "staff-1", status: "expired", requestedAt, gitCommitSha: "a".repeat(40) });
+    const jobs = (await invoke(handlers().report, { days: 7 })).body.friction.jobs;
+    expect(jobs.current.newsroom).toEqual({ previews: 2, failed: 0, expired: 1, stuckUploads: 0 });
+  });
+
   it("counts Preview jobs only within their 30-day retention and reports the coverage", async () => {
     await firestore.collection("users").doc("staff-1").set({ accessTier: "editor" });
     const queue = firestore.collection("cmsPreviewQueue");

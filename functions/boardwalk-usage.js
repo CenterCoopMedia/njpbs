@@ -274,7 +274,7 @@ async function readReport(firestore, days, now) {
   const sessions = byGroup(group => eastern.reduce((totals, { data }) => {
     const stored = groupData(data, group);
     totals.sessions += count(stored.sessions);
-    totals.visibleMs += Object.keys(config.screens).reduce((sum, id) => sum + count(stored.visibleMs?.[id]), 0);
+    totals.visibleMs += Object.keys({ ...config.screens, ...config.earlierScreens }).reduce((sum, id) => sum + count(stored.visibleMs?.[id]), 0);
     return totals;
   }, { sessions: 0, visibleMs: 0 }));
   // Visible milliseconds by Eastern weekday (Monday first) and hour.
@@ -469,7 +469,7 @@ async function readJobs(firestore, groupOfUid, priorStart, start, now) {
     : from < previewFrom ? { status: "partial", from: dayOf(previewFrom) } : { status: "full" };
   const [previews, uploads] = await Promise.all([
     firestore.collection("cmsPreviewQueue").where("requestedAt", ">=", Timestamp.fromMillis(Math.max(priorStart, previewFrom)))
-      .select("status", "requestedAt", "requestedBy").limit(5001).get(),
+      .select("status", "requestedAt", "requestedBy", "gitCommitSha").limit(5001).get(),
     firestore.collection("mediaSourceUploads").where("status", "==", "active").select("createdAt", "actorUid").limit(1001).get(),
   ]);
   if (previews.size > 5000 || uploads.size > 1000) throw new Error("Too many jobs to summarize");
@@ -483,7 +483,8 @@ async function readJobs(firestore, groupOfUid, priorStart, start, now) {
     if (!group || !period) continue;
     period[group].previews += 1;
     if (job.status === "failed") period[group].failed += 1;
-    if (job.status === "expired") period[group].expired += 1;
+    // Only a built job gets gitCommitSha; a saved Preview replaced by a newer one also ends expired.
+    if (job.status === "expired" && typeof job.gitCommitSha !== "string") period[group].expired += 1;
   }
   for (const row of uploads.docs) {
     const upload = row.data();
