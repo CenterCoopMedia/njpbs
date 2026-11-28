@@ -5,6 +5,7 @@ const { onRequest } = require("firebase-functions/v2/https");
 const { defineSecret } = require("firebase-functions/params");
 const logger = require("firebase-functions/logger");
 const { sessionWasRefused, sessionRefusalReason, SESSION_EXPIRED_CODE } = require("./session-refusal");
+const { permissionRefusal } = require("./permission-refusal");
 
 const CMS_EDGE_ORIGIN_SECRET = defineSecret("CMS_EDGE_ORIGIN_SECRET");
 const CMS_EDGE_HEADER = "x-njpbs-cms-edge";
@@ -36,6 +37,9 @@ function secretsMatch(expected, supplied) {
     timingSafeEqual(expectedBytes, suppliedBytes)
   );
 }
+
+// Cloud Functions sets FUNCTION_TARGET to the exported function name.
+const deployedFunctionName = () => process.env.FUNCTION_TARGET || process.env.K_SERVICE || null;
 
 function withCmsEdge(handler, deps = {}) {
   const readSecret = deps.readSecret ?? configuredEdgeSecret;
@@ -82,6 +86,10 @@ function withCmsEdge(handler, deps = {}) {
       await handler(req, res);
     } finally {
       res.json = originalJson;
+      // Every staff refusal on a CMS Function ends here, whichever check refused it.
+      if (res.statusCode === 403) {
+        log.warn("permission_refused", permissionRefusal(req, deployedFunctionName(), requestHeader(req, "x-njpbs-request-id")));
+      }
     }
   };
 }

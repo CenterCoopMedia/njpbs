@@ -18,9 +18,14 @@ function linkForwardedRequest(forwarded, original) {
   forwardedFrom.set(forwarded, original);
 }
 
+// The request and every outer request it was forwarded from.
+function* linkedRequests(req) {
+  for (let target = req; target; target = forwardedFrom.get(target)) yield target;
+}
+
 function markSessionRefused(req, reason) {
   const value = reason === "token_expired" ? reason : undefined;
-  for (let target = req; target; target = forwardedFrom.get(target)) refusedRequests.set(target, value);
+  for (const target of linkedRequests(req)) refusedRequests.set(target, value);
 }
 
 function sessionWasRefused(req) {
@@ -41,6 +46,7 @@ module.exports = {
   MAX_SESSION_AGE_SECONDS,
   SESSION_EXPIRED_CODE,
   linkForwardedRequest,
+  linkedRequests,
   markSessionRefused,
   sessionOutlivedMaximum,
   sessionWasRefused,
