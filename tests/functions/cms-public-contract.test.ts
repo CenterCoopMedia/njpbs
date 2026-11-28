@@ -182,7 +182,12 @@ async function seed() {
     await db.doc(`cmsSettings/${id}`).set({ schemaVersion: schemas.currentCmsSettingsSchemaFor(id).schemaVersion,
       values: structuredClone(values[id as keyof typeof values]), version: 1 });
   }
-  await db.doc(`users/${actorId}`).set({ role: "admin", active: true, email: `${actorId}@example.test` });
+  await seedContractActor();
+}
+
+async function seedContractActor() {
+  await db.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true });
+  await db.doc(`users/${actorId}`).set({ accessTier: "admin", active: true, email: `${actorId}@example.test` });
 }
 
 async function nativePost() {
@@ -322,7 +327,7 @@ beforeEach(async () => {
   if (capsule) {
     for (const row of capsule.documents) if (row.data !== null) await db.doc(row.path).set(decodeContractValue(row.data, { Timestamp }));
     initialRoot = (await db.doc("system/publicDeployment").get()).data();
-    await db.doc(`users/${actorId}`).set({ role: "admin", active: true, email: `${actorId}@example.test` });
+    await seedContractActor();
   } else await seed();
 });
 afterEach(() => { ui?.cleanup(); });
