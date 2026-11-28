@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-27",
+  "kind": "new",
+  "title": "Tag a whole batch of video uploads",
+  "body": "The video upload panel's batch settings now include tags. They apply to new videos and to videos waiting to start, unless you have set that video's own tags.",
+  "prs": []
+}

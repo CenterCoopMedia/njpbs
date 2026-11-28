@@ -81,6 +81,25 @@ describe("video upload panel", () => {
     expect(screen.queryByText(problem)).not.toBeInTheDocument();
   });
 
+  it("applies batch tags to new and waiting videos unless a video has its own tags", async () => {
+    render(<VideoUploadPanel {...props} />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Upload media" })).toBeEnabled());
+    fireEvent.change(screen.getByRole("combobox", { name: "Batch tags default" }), { target: { value: "storm" } });
+    act(() => routeChosenFiles(["first.mp4", "second.mp4"].map(name => new File(["data"], name, { type: "video/mp4", lastModified: 42 }))));
+    const first = within(await screen.findByRole("group", { name: "Details before upload: first.mp4" }));
+    const second = within(await screen.findByRole("group", { name: "Details before upload: second.mp4" }));
+    expect(first.getByRole("combobox", { name: "Tags" })).toHaveValue("storm");
+    fireEvent.change(second.getByRole("combobox", { name: "Tags" }), { target: { value: "traffic" } });
+    // A later batch change reaches the waiting video that kept the batch value, not the edited one.
+    fireEvent.change(screen.getByRole("combobox", { name: "Batch tags default" }), { target: { value: "night" } });
+    expect(first.getByRole("combobox", { name: "Tags" })).toHaveValue("night");
+    expect(second.getByRole("combobox", { name: "Tags" })).toHaveValue("traffic");
+    fireEvent.click(screen.getByRole("button", { name: "Start all uploads" }));
+    await waitFor(() => expect(startVideoUpload).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(startVideoUpload).mock.calls.map(call => [call[2].name, call[3].tags]))
+      .toEqual([["first.mp4", ["night"]], ["second.mp4", ["traffic"]]]);
+  });
+
   it("clears an upload confirmation after the success notice time unless the pointer rests on it", async () => {
     const asset = { id: "asset", sourceId: props.sourceId, name: "Storm footage",
       viewingCopy: { state: "processing" },

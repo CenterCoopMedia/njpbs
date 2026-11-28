@@ -27,6 +27,7 @@ interface TransferDraft {
   metadataRequestOverridden?: boolean;
   nameOverridden?: boolean;
   descriptionOverridden?: boolean;
+  tagsOverridden?: boolean;
   rightsStatus: "pending" | "complete";
   collection?: { id: string; name: string };
 }
@@ -53,6 +54,7 @@ function defaultDraft(fileName: string): TransferDraft {
     metadataUpdateRequested: false,
     nameOverridden: false,
     descriptionOverridden: false,
+    tagsOverridden: false,
     rightsStatus: "pending",
   };
 }
@@ -86,6 +88,7 @@ function restoredDraft(value: unknown, fileName: string): TransferDraft {
     metadataRequestOverridden: candidate.metadataRequestOverridden === true,
     nameOverridden: candidate.nameOverridden !== false,
     descriptionOverridden: candidate.descriptionOverridden !== false,
+    tagsOverridden: candidate.tagsOverridden !== false,
     rightsStatus: candidate.rightsStatus === "complete" ? "complete" : "pending",
     collection: restoredCollection(candidate.collection),
   };
@@ -163,7 +166,7 @@ export function VideoUploadPanel({ sourceId, userId, getIdToken, onUploaded, onA
   const recordUpload = useRecordVideoUpload();
   const ownerKey = `${storageKey}:owner`;
   const [transfers, setTransfers] = useState<Transfer[]>(() => savedTransfers(storageKey));
-  const [assignment, setAssignment] = useState({ name: "", description: "", metadataUpdateRequested: false });
+  const [assignment, setAssignment] = useState({ name: "", description: "", tags: EMPTY_UPLOAD_MEDIA_TAGS, metadataUpdateRequested: false });
   const assignmentRef = useRef(assignment);
   const rows = useRef(transfers);
   const files = useRef(new Map<string, File>());
@@ -265,7 +268,8 @@ export function VideoUploadPanel({ sourceId, userId, getIdToken, onUploaded, onA
   const canChooseCollection = ownsQueue && sourceId === "video-library" &&
     transfers.some(row => !row.session && row.startRequested === false && !row.queued);
   const collectionPicker = useVideoUploadCollections(canChooseCollection, userId, getIdToken);
-  const hasBatchDefaults = assignment.name !== "" || assignment.description !== "" || assignment.metadataUpdateRequested;
+  const hasBatchDefaults = assignment.name !== "" || assignment.description !== "" || uploadMediaTagsText(assignment.tags) !== ""
+    || assignment.metadataUpdateRequested;
   const hasTransfers = active.length > 0 || hasPreparedFile;
   const hasLocalWork = hasTransfers || hasBatchDefaults;
   useEffect(() => {
@@ -332,6 +336,7 @@ export function VideoUploadPanel({ sourceId, userId, getIdToken, onUploaded, onA
       return { ...item, draft: { ...draft,
         ...(next.name !== previous.name && !draft.nameOverridden ? { name: next.name.trim() ? next.name : defaultDraft(item.name).name } : {}),
         ...(next.description !== previous.description && !draft.descriptionOverridden ? { description: next.description } : {}),
+        ...(next.tags !== previous.tags && !draft.tagsOverridden ? { tags: next.tags } : {}),
         ...(next.metadataUpdateRequested !== previous.metadataUpdateRequested && !draft.metadataRequestOverridden ? { metadataUpdateRequested: next.metadataUpdateRequested } : {}),
       } };
     }));
@@ -449,6 +454,7 @@ export function VideoUploadPanel({ sourceId, userId, getIdToken, onUploaded, onA
     return { ...row, draft: { ...draft,
       name: draft.name.trim() ? draft.name : assignmentRef.current.name,
       description: draft.description.trim() ? draft.description : assignmentRef.current.description,
+      tags: uploadMediaTagsText(draft.tags).trim() ? draft.tags : assignmentRef.current.tags,
     } };
   }
   function requestStart(row: Transfer, file: File) {
@@ -632,7 +638,7 @@ export function VideoUploadPanel({ sourceId, userId, getIdToken, onUploaded, onA
       return;
     }
     const additions = Array.from(selected).map(file => {
-      const row = { id: crypto.randomUUID(), name: file.name, size: file.size, lastModified: file.lastModified, draft: { ...defaultDraft(file.name), ...(assignmentRef.current.name.trim() ? { name: assignmentRef.current.name } : {}), description: assignmentRef.current.description, metadataUpdateRequested: assignmentRef.current.metadataUpdateRequested }, startRequested: false };
+      const row = { id: crypto.randomUUID(), name: file.name, size: file.size, lastModified: file.lastModified, draft: { ...defaultDraft(file.name), ...(assignmentRef.current.name.trim() ? { name: assignmentRef.current.name } : {}), description: assignmentRef.current.description, tags: assignmentRef.current.tags, metadataUpdateRequested: assignmentRef.current.metadataUpdateRequested }, startRequested: false };
       files.current.set(row.id, file);
       return row;
     });
@@ -785,6 +791,8 @@ export function VideoUploadPanel({ sourceId, userId, getIdToken, onUploaded, onA
       <p>Applies to new videos and videos waiting to start without their own values.</p>
       <label>Batch title default<TextInput maxLength={500} value={assignment.name} onChange={event => updateAssignment({ ...assignment, name: event.target.value })} /></label>
       <label>Batch description default<Textarea maxLength={2_000} rows={2} value={assignment.description} onChange={event => updateAssignment({ ...assignment, description: event.target.value })} /></label>
+      <MediaUploadTagInput surface="video" label="Batch tags default" value={assignment.tags} disabled={!ownsQueue || isClearing}
+        onUpdate={patch => updateAssignment({ ...assignmentRef.current, tags: { ...assignmentRef.current.tags, ...patch } })} />
       <label><input type="checkbox" checked={assignment.metadataUpdateRequested} onChange={event => updateAssignment({ ...assignment, metadataUpdateRequested: event.target.checked })} /> Request metadata update for the batch</label>
     </fieldset>
     {canChooseCollection && collectionPicker.loading ? <p role="status">Loading collections</p> : null}
@@ -834,7 +842,10 @@ export function VideoUploadPanel({ sourceId, userId, getIdToken, onUploaded, onA
           <label><input type="checkbox" checked={draft.metadataUpdateRequested} onChange={event => updateDraft(row.id, { metadataUpdateRequested: event.target.checked, metadataRequestOverridden: true })} /> Request metadata update</label>
           <VideoRightsFields values={draft} disabled={metadataDisabled} onChange={values => updateDraft(row.id, values)} />
           <MediaUploadTagInput surface="video" value={draft.tags} disabled={metadataDisabled}
-            onUpdate={patch => updateDraft(row.id, current => ({ tags: { ...current.tags, ...patch } }))} />
+            onUpdate={patch => updateDraft(row.id, current => {
+              const tags = { ...current.tags, ...patch };
+              return { tags, tagsOverridden: Boolean(uploadMediaTagsText(tags).trim()) };
+            })} />
           {prepared ? <p>Review these details, then start the upload. You can keep using the video library while the transfer runs.</p>
             : queued ? <p>These details are approved. The upload will start when a transfer slot is available.</p>
               : <p>These details were set when the upload started. Edit them from the video library after processing.</p>}
