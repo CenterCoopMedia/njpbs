@@ -17,7 +17,7 @@ const report: BugReportRecord = {
   actionableResolution: { immediateSafeAction: "", likelyCause: { certainty: "unknown", summary: "" }, recommendedResolution: [], verification: "", fallback: "", needsAdminInput: "", missingEvidence: [] },
   progress: { phase: "merged", label: "Merged; live verification pending", detail: "The code change is merged. The live fix has not been verified.",
     active: true, updatedAt: at, lastSyncedAt: at, syncState: "current", issues: [{ number: 2835, state: "closed" }],
-    pullRequests: [{ number: 2845, state: "closed", draft: false, merged: true, reviewState: "approved", checksState: "success" }], deployment: "unverified" },
+    pullRequests: [{ number: 2845, state: "closed", draft: false, merged: true, live: false, reviewState: "approved", checksState: "success" }], deployment: "unverified" },
 };
 
 for (const width of [390, 1280]) {

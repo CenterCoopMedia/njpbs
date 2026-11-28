@@ -34,6 +34,23 @@ that change cannot restore old PR evidence; the existing sync job refreshes the
 current namespace. Cached rows from another namespace are omitted from staff
 progress while that refresh is pending.
 
+A sync reads the report issue's timeline once for both repositories. A report
+with no manually attached pull request follows a fix-repository pull request
+that references its issue (`owner/name#number` in the pull request body or a
+comment): the sync writes the fix-repository identity with the discovered
+numbers, which clears the earlier namespace's evidence as an attachment does.
+A manual attachment keeps its namespace.
+
+A merged fix-repository pull request is live when its merge commit is the
+deployed revision or an ancestor of it. Production reads the revision from the
+live Admin status (`build.revision`); other environments use
+`CMS_ADMIN_BUILD_REVISION`. The sync compares the two commits through the fix
+repository, records `live` and `liveRevision` on the pull request row and does
+not compare that commit again. Staff progress then shows "Fix live" on the Live
+verification step. An unreadable revision or comparison leaves the fix at "Merged;
+live verification pending". Marking the report resolved stays an administrator
+action.
+
 Before enabling the CMS autofix host service, deploy this reader, supply and
 read back the four production settings in the switch packet's F09 table, and
 verify the host writer stores the same root identity fields atomically with the

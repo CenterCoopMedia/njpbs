@@ -1,9 +1,13 @@
 "use strict";
 
+const { defineString } = require("firebase-functions/params");
+
 const ADMIN_STATUS_URL = "https://admin.njpbs.org/admin-status.json";
 const BUILD_REVISION_PATTERN = /^[0-9a-f]{40}$/;
 const MAX_ADMIN_STATUS_BYTES = 256 * 1024;
 const TIMEOUT_MS = 5_000;
+const BUILD_REVISION = defineString("CMS_ADMIN_BUILD_REVISION", { default: "" });
+const DEPLOYMENT_ENVIRONMENT = defineString("CMS_DEPLOYMENT_ENVIRONMENT", { default: "" });
 
 class AdminStatusRevisionError extends Error {
   constructor(message = "The deployed Admin revision could not be read") {
@@ -76,9 +80,30 @@ async function readLiveAdminBuildRevision(deps = {}) {
   return parseProductionAdminRevision(payload);
 }
 
+function configuredValue(param, envName) {
+  // config-input: CMS_ADMIN_BUILD_REVISION, CMS_DEPLOYMENT_ENVIRONMENT
+  const local = process.env[envName]?.trim();
+  return local || param.value().trim();
+}
+
+function deploymentEnvironment() {
+  return configuredValue(DEPLOYMENT_ENVIRONMENT, "CMS_DEPLOYMENT_ENVIRONMENT");
+}
+
+// The revision this environment serves: the live production Admin build, or the
+// revision a non-production deploy configured.
+async function readDeployedRevision(deps = {}) {
+  if (deploymentEnvironment() === "production") return readLiveAdminBuildRevision(deps);
+  const local = configuredValue(BUILD_REVISION, "CMS_ADMIN_BUILD_REVISION");
+  if (!BUILD_REVISION_PATTERN.test(local)) throw new AdminStatusRevisionError();
+  return local;
+}
+
 module.exports = {
   ADMIN_STATUS_URL,
   AdminStatusRevisionError,
+  deploymentEnvironment,
   parseProductionAdminRevision,
+  readDeployedRevision,
   readLiveAdminBuildRevision,
 };

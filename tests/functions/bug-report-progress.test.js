@@ -52,6 +52,45 @@ describe("staff-safe report progress", () => {
     expect(result).toMatchObject({ phase: "merged", deployment: "unverified", active: true });
     expect(result.detail).toMatch(/live.*not.*verified/i);
   });
+  describe("public fix pull requests after the relay issue closes", () => {
+    // Labels come from the staff label table, so a renamed phase fails here.
+    const publicFix = (overrides = {}) => pull({ number: 734, url: "https://github.com/example-owner/public-code/pull/734",
+      mergeCommitSha: "e".repeat(40), ...overrides });
+    const relayClosed = (pulls) => report({ status: "acknowledged", acknowledgedAt: at,
+      fixPullRequestRepository: "example-owner/public-code", fixPullRequestRepositoryId: 1000002,
+      links: { githubIssueNumbers: [2835], githubIssues: [issue("closed")], pullRequestNumbers: pulls.map((row) => row.number),
+        discoveredPullRequestNumbers: pulls.map((row) => row.number), pullRequests: pulls } });
+    it.each([
+      ["open draft", [publicFix()], "in_progress", "fixing", "In progress"],
+      ["open, in review", [publicFix({ draft: false, checksState: "success" })], "ready_for_review", "review", "Fix ready for review"],
+      ["merged, not live", [publicFix({ state: "closed", merged: true })], "merged", "awaiting_live", "Merged; live verification pending"],
+      ["merged and live", [publicFix({ state: "closed", merged: true, live: true, liveRevision: "f".repeat(40) })], "live", "live", "Fix live"],
+      ["one of two merged fixes live", [publicFix({ state: "closed", merged: true, live: true }),
+        publicFix({ number: 737, url: "https://github.com/example-owner/public-code/pull/737", state: "closed", merged: true })],
+      "merged", "awaiting_live", "Merged; live verification pending"],
+    ])("shows a %s public fix instead of closed engineering work", (_name, pulls, phase, stage, label) => {
+      const result = read(relayClosed(pulls));
+      expect(result).toMatchObject({ phase, stage, label, active: true });
+      expect(result.deployment).toBe(phase === "live" ? "verified" : "unverified");
+      expect(result.label).not.toBe("Engineering work closed");
+    });
+    it("leaves the report unresolved and keeps Fix released for an administrator", () => {
+      const record = relayClosed([publicFix({ state: "closed", merged: true, live: true })]);
+      const result = read(record);
+      expect(record.status).toBe("acknowledged");
+      expect(result.detail).toMatch(/administrator/i);
+      expect(read({ ...record, status: "resolved", resolvedAt: at }).phase).toBe("resolved");
+    });
+    it("ignores a live flag on a pull request that is not merged", () => {
+      expect(read(relayClosed([publicFix({ draft: false, live: true })])).phase).toBe("ready_for_review");
+    });
+    it("counts a fix going live as progress", () => {
+      const before = relayClosed([publicFix({ state: "closed", merged: true })]);
+      const after = relayClosed([publicFix({ state: "closed", merged: true, live: true })]);
+      expect(progress.progressChangeFields(before, after, "2026-10-09T16:00:00.000Z").progressChangedAt)
+        .toBe("2026-10-09T16:00:00.000Z");
+    });
+  });
   it("shows closed engineering work separately from a resolved staff report", () => {
     const record = report({ links: { githubIssues: [issue("closed")], pullRequests: [] } });
     expect(read(record).phase).toBe("closed");

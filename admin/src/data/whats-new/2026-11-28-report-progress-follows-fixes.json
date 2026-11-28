@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-28",
+  "kind": "fixed",
+  "title": "Report progress follows the fix through release",
+  "body": "A report now shows its fix in progress, in review and merged, and shows Fix live once the fix is in the production release. Reports no longer show Engineering work closed when the fix moved to another code repository. An administrator still marks the report resolved.",
+  "prs": []
+}

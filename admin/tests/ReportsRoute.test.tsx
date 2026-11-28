@@ -481,7 +481,7 @@ const safeProgress = {
   detail: "The code change is merged. The live fix has not been verified.",
   active: true, updatedAt: report.updatedAt, lastSyncedAt: report.updatedAt,
   syncState: "current", issues: [{ number: 2835, state: "closed" }],
-  pullRequests: [{ number: 2845, state: "closed", draft: false, merged: true, reviewState: "approved", checksState: "success" }],
+  pullRequests: [{ number: 2845, state: "closed", draft: false, merged: true, live: false, reviewState: "approved", checksState: "success" }],
   deployment: "unverified",
 } as const;
 

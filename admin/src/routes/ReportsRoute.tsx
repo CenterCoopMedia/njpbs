@@ -109,7 +109,7 @@ function progressTone(progress: BugReportProgress) {
   if (progress.phase === "resolved") return "success" as const;
   if (["dismissed", "closed"].includes(progress.phase)) return "cancelled" as const;
   if (progress.phase === "in_progress") return "publishing" as const;
-  if (["ready_for_review", "reopened", "acknowledged"].includes(progress.phase)) return "brand" as const;
+  if (["ready_for_review", "reopened", "acknowledged", "live"].includes(progress.phase)) return "brand" as const;
   return "pending" as const;
 }
 
