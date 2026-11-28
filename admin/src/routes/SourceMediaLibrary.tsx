@@ -1496,8 +1496,21 @@ export function SourceMediaLibrary({ principal, source, getIdToken, userId, onEx
           : quickLook
             ? "Close Quick Look first."
             : undefined;
+  // The tray unmounts while the sheet is open, so its opener cannot take focus back.
+  // Return focus to the remounted tray instead when the sheet was opened from it.
+  const openedFromTray = useRef(false);
+  const [trayFocusRequest, setTrayFocusRequest] = useState(0);
+  useEffect(() => {
+    if (!trayFocusRequest) return;
+    const target = uploadTrayTarget?.querySelector<HTMLElement>(
+      "[data-upload-tray-focus], .media-upload-tray-pill, .media-upload-tray button:not([disabled])");
+    if (target) target.focus();
+    else setUploadFocusRequest(value => value + 1);
+  }, [trayFocusRequest, uploadTrayTarget]);
   function showVideoUpload() {
     if (uploadOpenBlockedReason) return;
+    // Read the live focus, not a captured tray element: the shortcut handler can hold an older closure.
+    openedFromTray.current = Boolean(document.activeElement?.closest(".source-video-upload-tray"));
     setUploadOpen(true);
   }
   function routeVideoDrop(files: readonly File[]) {
@@ -1900,7 +1913,11 @@ export function SourceMediaLibrary({ principal, source, getIdToken, userId, onEx
       setUploadTrayTarget={setUploadTrayTarget}
       upload={source.canUpload && !suppressUpload ? {
         sheet: {
-          heading: `Upload to ${source.label}`, onFocusFallback: () => setUploadFocusRequest(value => value + 1),
+          heading: `Upload to ${source.label}`, onFocusFallback: () => {
+            if (openedFromTray.current) setTrayFocusRequest(value => value + 1);
+            else setUploadFocusRequest(value => value + 1);
+            openedFromTray.current = false;
+          },
           onRequestClose: () => setUploadOpen(false), open: visibleUploadOpen,
         },
         panel: <VideoUploadPanel key={`${userId}:${source.id}`} sourceId={source.id} userId={userId} getIdToken={getIdToken}
@@ -1908,7 +1925,7 @@ export function SourceMediaLibrary({ principal, source, getIdToken, userId, onEx
           onAdmissionFailed={message => notice.show(message, { tone: "error" })}
           onCanceled={message => notice.show(message)} onIntakeChange={setUploadCanIntake} onOpenSheet={showVideoUpload}
           onTrayEmptyFocus={() => setUploadFocusRequest(value => value + 1)} onTransferStarted={() => setUploadOpen(false)}
-          openSheetBlockedReason={uploadOpenBlockedReason} presentation="sheet" rejectedFiles={routedRejectedFiles} trayTarget={uploadTrayTarget}
+          openSheetBlockedReason={uploadOpenBlockedReason} presentation="sheet" rejectedFiles={routedRejectedFiles} trayTarget={visibleUploadOpen ? null : uploadTrayTarget}
           onUploaded={asset => { notice.show(videoUploadCompletionMessage(asset), { preserveOnNextRoute: true }); setMediaSourceCount(source.id, null); resetFilters(); setAttempt(value => value + 1); }} />,
       } : null}
     />

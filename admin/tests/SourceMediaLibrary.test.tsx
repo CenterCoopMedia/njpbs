@@ -1998,8 +1998,27 @@ describe("private video library", () => {
     expect(sheet).not.toHaveAttribute("hidden");
     expect(within(sheet).getByText("studio.mp4")).toBeInTheDocument();
     expect(startVideoUpload).not.toHaveBeenCalled();
-    expect(within(screen.getByRole("region", { name: "Upload progress" }))
-      .getByRole("button", { name: "Review details for studio.mp4" })).toBeEnabled();
+    // The open sheet already lists the queue, so the page shows no second copy in the tray.
+    expect(screen.queryByRole("region", { name: "Upload progress" })).not.toBeInTheDocument();
+    fireEvent.click(within(sheet).getByRole("button", { name: "Close upload" }));
+    const review = within(screen.getByRole("region", { name: "Upload progress" }))
+      .getByRole("button", { name: "Review details for studio.mp4" });
+    expect(review).toBeEnabled();
+    // Opening the sheet from the tray removes the tray; closing the sheet returns focus to it.
+    review.focus();
+    fireEvent.click(review);
+    expect(sheet).not.toHaveAttribute("hidden");
+    expect(screen.queryByRole("region", { name: "Upload progress" })).not.toBeInTheDocument();
+    fireEvent.click(within(sheet).getByRole("button", { name: "Close upload" }));
+    await waitFor(() => expect(screen.getByRole("region", { name: "Upload progress" })).toContainElement(document.activeElement as HTMLElement));
+    // The upload shortcut from a tray control also returns focus to the tray.
+    const trayControl = within(screen.getByRole("region", { name: "Upload progress" }))
+      .getByRole("button", { name: "Review details for studio.mp4" });
+    trayControl.focus();
+    fireEvent.keyDown(trayControl, { key: "u", metaKey: true });
+    expect(sheet).not.toHaveAttribute("hidden");
+    fireEvent.click(within(sheet).getByRole("button", { name: "Close upload" }));
+    await waitFor(() => expect(screen.getByRole("region", { name: "Upload progress" })).toContainElement(document.activeElement as HTMLElement));
   });
 
   it("routes a video dropped on the library toolbar instead of letting the browser open it", async () => {
@@ -2168,6 +2187,8 @@ describe("private video library", () => {
     const sheet = screen.getByRole("complementary", { name: "Upload media" });
     expect(within(sheet).getByText("saved-0.mp4")).toBeInTheDocument();
     expect(within(sheet).getByRole("button", { name: "Upload media" })).toBeDisabled();
+    expect(screen.queryByRole("region", { name: "Upload progress" })).not.toBeInTheDocument();
+    fireEvent.click(within(sheet).getByRole("button", { name: "Close upload" }));
     expect(screen.getByRole("region", { name: "Upload progress" })).toHaveTextContent("20 video transfers");
   });
 

@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-27",
+  "kind": "fixed",
+  "title": "Video uploads list stays at the bottom of the screen",
+  "body": "In the video library, the uploads list no longer appears twice while the upload panel is open. When the page has only a few videos, the list stays at the bottom edge of the screen instead of moving up the page.",
+  "prs": []
+}
