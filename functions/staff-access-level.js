@@ -57,7 +57,7 @@ async function replaceStaffAccess({ firestore, actor, targetUid, accessTier, exp
     const target = targetSnapshot.data();
     if (target.active !== undefined && target.active !== true) throw fail(409, "This staff account is inactive");
     if (accessStateFromUserDoc(target) !== expectedAccess) {
-      throw fail(409, "This person's access changed. Review their current row and try again");
+      throw fail(409, "This person's access changed. Reload Boardwalk and try again.");
     }
 
     // Include the complete Owner set in the read fence before writing. A concurrent

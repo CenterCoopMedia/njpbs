@@ -94,7 +94,9 @@ describe("single staff level replacement", () => {
   it("refuses a stale reviewed row and keeps its new access", async () => {
     const expectedAccess = principal.accessStateFromUserDoc(await stored());
     await ref("target").update({ accessTier: "contributor" });
-    expect((await call({ body: { targetUid: "target", accessTier: "owner", expectedAccess } })).statusCode).toBe(409);
+    const stale = await call({ body: { targetUid: "target", accessTier: "owner", expectedAccess } });
+    expect(stale.statusCode).toBe(409);
+    expect(stale.body).toEqual({ error: "This person's access changed. Reload Boardwalk and try again." });
     expect((await stored()).accessTier).toBe("contributor");
     expect(await audit()).toEqual([]);
   });

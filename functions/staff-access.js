@@ -98,7 +98,7 @@ function assertExactKeys(value, allowed) {
   if (unexpected.length > 0) {
     throw new StaffAccessError(
       400,
-      "The request contains fields that are not allowed",
+      "The request contains fields that are not allowed. Reload Boardwalk and try again.",
       "forged_fields",
     );
   }
@@ -978,7 +978,7 @@ function createStaffAccessHandlers(overrides = {}) {
       ) {
         throw new StaffAccessError(
           400,
-          "Approval allows only viewer, contributor, editor, or publisher access",
+          "Approval allows only viewer, contributor, editor, or publisher access. Reload Boardwalk and try again.",
           "access_tier_invalid",
         );
       }

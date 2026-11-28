@@ -428,7 +428,8 @@ describe("staff access request functions", () => {
       accessTier: "admin",
     });
     expect(escalation.status).toBe(400);
-    await expect(escalation.json()).resolves.toMatchObject({ code: "access_tier_invalid" });
+    await expect(escalation.json()).resolves.toMatchObject({ code: "access_tier_invalid",
+      error: "Approval allows only viewer, contributor, editor, or publisher access. Reload Boardwalk and try again." });
     const legacyRole = await callFn("decideStaffAccessRequest", jules.token, {
       targetUid: requester.uid,
       requestVersion: request.requestVersion,
@@ -436,6 +437,11 @@ describe("staff access request functions", () => {
       role: "editor",
     });
     expect(legacyRole.status).toBe(400);
+    // An Admin tab opened before this release still sends role; the refusal tells it to reload.
+    await expect(legacyRole.json()).resolves.toMatchObject({
+      code: "forged_fields",
+      error: "The request contains fields that are not allowed. Reload Boardwalk and try again.",
+    });
 
     const stale = await callFn("decideStaffAccessRequest", jules.token, {
       targetUid: requester.uid,
