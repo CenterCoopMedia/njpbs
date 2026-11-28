@@ -9,7 +9,7 @@ const { isAccessTier } = require("./rbac");
 const { isApprovedPreviewStaff } = require("./preview-access");
 const { ADMIN_ACCESS_REQUIRED, OWNER_ACCESS_REQUIRED } = require("./staff-access-messages");
 const { markSessionRefused, sessionOutlivedMaximum, SESSION_EXPIRED_CODE } = require("./session-refusal");
-const { markCaller } = require("./permission-refusal");
+const { accessTierOf, markCaller } = require("./permission-refusal");
 
 class AuthError extends Error {
   constructor(message, code = SESSION_EXPIRED_CODE, reason) {
@@ -171,9 +171,6 @@ function sessionPredatesWatermark(authTime, profile) {
   if (!Number.isFinite(profile?.tokensValidAfter)) return false;
   return !(Number.isFinite(authTime) && authTime > profile.tokensValidAfter);
 }
-
-// The caller's stored access level for permission refusal logs; "none" when it has none.
-const accessTierOf = profile => isAccessTier(profile?.accessTier) ? profile.accessTier : "none";
 
 async function administrativeAccess(uid, emailVerified, authTime) {
   const snapshot = await db.collection("users").doc(uid).get();

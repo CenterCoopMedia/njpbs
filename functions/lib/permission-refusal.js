@@ -1,9 +1,13 @@
 "use strict";
 
 const { AsyncLocalStorage } = require("node:async_hooks");
+const { isAccessTier } = require("./rbac");
 const { usageHash } = require("./usage-person");
 
 const records = new AsyncLocalStorage();
+
+// The caller's stored access level for the log; "none" when it has none.
+const accessTierOf = profile => isAccessTier(profile?.accessTier) ? profile.accessTier : "none";
 
 // The outermost CMS edge wrapper opens one record per request; a nested wrapper gets null and
 // reuses the outer record, so a refusal is logged once.
@@ -39,4 +43,4 @@ function permissionRefusal(record, functionName, requestId) {
   };
 }
 
-module.exports = { markCaller, openRefusalRecord, permissionRefusal, runWithRefusalRecord };
+module.exports = { accessTierOf, markCaller, openRefusalRecord, permissionRefusal, runWithRefusalRecord };

@@ -3,6 +3,7 @@ import cmsEdge from "../../functions/lib/cms-edge.js";
 import { cmsEdgeFetch } from "../setup/cms-edge-fetch.js";
 import authPkg from "../../functions/lib/auth.js";
 import firebasePkg from "../../functions/lib/firebase.js";
+import desktopSessions from "../../functions/lib/premiere-desktop-session.js";
 
 const {
   CMS_EDGE_ORIGIN_SECRET,
@@ -116,6 +117,30 @@ describe("CMS Function edge boundary", () => {
       function: "cmsSyntheticReader",
       required: null,
       accessTier: null,
+      caller: "2f82f25ec33a07569fe10ecedd1d9044ed20f9880e63721c05a3c731080d5b26",
+      requestId: null,
+    });
+  });
+
+  it("records the caller of a refused Premiere desktop session", async () => {
+    vi.stubEnv("FUNCTION_TARGET", "cmsPremiereRequest");
+    const firestore = { collection: name => ({ doc: () => ({ get: async () => (name === "system"
+      ? { exists: true, data: () => ({ schema: 1, state: "active", cleanScan: true }) }
+      : { exists: true, data: () => ({ active: false, accessTier: "editor" }) }) }) }) };
+    const auth = { getUser: async () => ({ disabled: false, emailVerified: true }) };
+    const sessions = desktopSessions.createDesktopSessions({ firestore, auth, now: () => 1_000_000_000 });
+    const logger = { error: vi.fn(), warn: vi.fn() };
+    const wrapped = withCmsEdge(async (_req, res) => {
+      try { await sessions.activeActor("staff-editor", 999_999); res.status(200).json({ ok: true }); }
+      catch (error) { res.status(error.status ?? 500).json({ error: error.message }); }
+    }, { logger, readSecret: () => "expected-secret" });
+    await wrapped({ headers: { "x-njpbs-cms-edge": "expected-secret" } }, responseDouble());
+    expect(logger.warn).toHaveBeenCalledOnce();
+    expect(logger.warn).toHaveBeenCalledWith("permission_refused", {
+      event: "permission_refused",
+      function: "cmsPremiereRequest",
+      required: "active_staff",
+      accessTier: "editor",
       caller: "2f82f25ec33a07569fe10ecedd1d9044ed20f9880e63721c05a3c731080d5b26",
       requestId: null,
     });
