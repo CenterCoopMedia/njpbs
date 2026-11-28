@@ -26,11 +26,14 @@ function boundedWord(word) {
 /** The normalized words of one text, bounded in length. Other values give no words. */
 function searchWords(text) {
   if (typeof text !== "string") return [];
-  const normalized = text.toWellFormed().normalize("NFKC").toLocaleLowerCase("en-US");
+  const normalized = text.replace(/\p{Cs}/gu, "\uFFFD").normalize("NFKC").toLocaleLowerCase("en-US");
   return (normalized.match(WORD_PATTERN) ?? []).map(boundedWord);
 }
 
-/** The stored token list for a video asset. Name words come first. */
+/**
+ * The stored token list for a video asset. Name words come first.
+ * @param {{ name?: unknown, description?: unknown, tags?: unknown }} [metadata]
+ */
 function sourceMediaSearchTokens({ name, description, tags } = {}) {
   const tokens = new Set();
   for (const text of [name, ...(Array.isArray(tags) ? tags : []), description]) {
