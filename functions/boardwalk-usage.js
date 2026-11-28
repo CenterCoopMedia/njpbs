@@ -1,12 +1,12 @@
 "use strict";
 
-const { createHash } = require("node:crypto");
 const { FieldValue, Timestamp } = require("firebase-admin/firestore");
 const { cmsOnRequest } = require("./lib/cms-edge");
 const { db } = require("./lib/firebase");
 const { requirePrincipal, verifyAppCheckToken } = require("./lib/auth");
 const { hasCapability } = require("./lib/rbac");
 const config = require("./lib/boardwalk-usage-config.json");
+const { usageHash: hash } = require("./lib/usage-person");
 const HISTORY_ACTIONS = {
   "auth.login": "Accepted sign-ins",
   "cms.publish": "Publish requests (all content)",
@@ -22,7 +22,6 @@ const ID = /^[a-zA-Z0-9_-]{1,128}$/;
 const own = (object, key) => Object.hasOwn(object, key);
 const plain = value => value && typeof value === "object" && !Array.isArray(value);
 const only = (value, keys) => plain(value) && Object.keys(value).every(key => keys.includes(key));
-const hash = value => createHash("sha256").update(value).digest("hex");
 const TIMEZONE = "America/New_York";
 // Day and week keys are newsroom (Eastern) calendar dates, so evening work stays on its own day.
 const easternDate = new Intl.DateTimeFormat("en-CA", { timeZone: TIMEZONE, year: "numeric", month: "2-digit", day: "2-digit" });

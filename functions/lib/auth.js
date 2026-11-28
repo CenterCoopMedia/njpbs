@@ -9,6 +9,7 @@ const { isAccessTier } = require("./rbac");
 const { isApprovedPreviewStaff } = require("./preview-access");
 const { ADMIN_ACCESS_REQUIRED, OWNER_ACCESS_REQUIRED } = require("./staff-access-messages");
 const { markSessionRefused, sessionOutlivedMaximum, SESSION_EXPIRED_CODE } = require("./session-refusal");
+const { accessTierOf, markCaller } = require("./permission-refusal");
 
 class AuthError extends Error {
   constructor(message, code = SESSION_EXPIRED_CODE, reason) {
@@ -122,6 +123,8 @@ async function verifyAuthToken(authHeader, { checkRevoked = true, cacheRevocatio
   if (sessionOutlivedMaximum(decoded.auth_time)) {
     throw new AuthError("This session ended. Sign in again");
   }
+  // Every verified caller, including handlers that verify the token themselves.
+  markCaller({ uid: decoded.uid });
 
   return {
     uid: decoded.uid,
@@ -169,24 +172,23 @@ function sessionPredatesWatermark(authTime, profile) {
   return !(Number.isFinite(authTime) && authTime > profile.tokensValidAfter);
 }
 
-async function isSuperAdmin(uid, emailVerified = true, authTime = null) {
+async function administrativeAccess(uid, emailVerified, authTime) {
   const snapshot = await db.collection("users").doc(uid).get();
-  if (!snapshot.exists) return false;
+  if (!snapshot.exists) return { role: null, accessTier: "none" };
   const profile = snapshot.data();
-  if (sessionPredatesWatermark(authTime, profile)) return false;
+  const accessTier = accessTierOf(profile);
+  if (sessionPredatesWatermark(authTime, profile)) return { role: null, accessTier };
   const tiersActive = await userDocUsesAccessTier(db, profile);
-  if (tiersActive && emailVerified !== true) return false;
-  return administrativeRoleFromUserDoc(profile, tiersActive) === "super_admin";
+  if (tiersActive && emailVerified !== true) return { role: null, accessTier };
+  return { role: administrativeRoleFromUserDoc(profile, tiersActive), accessTier };
+}
+
+async function isSuperAdmin(uid, emailVerified = true, authTime = null) {
+  return (await administrativeAccess(uid, emailVerified, authTime)).role === "super_admin";
 }
 
 async function isAdmin(uid, emailVerified = true, authTime = null) {
-  const snapshot = await db.collection("users").doc(uid).get();
-  if (!snapshot.exists) return false;
-  const profile = snapshot.data();
-  if (sessionPredatesWatermark(authTime, profile)) return false;
-  const tiersActive = await userDocUsesAccessTier(db, profile);
-  if (tiersActive && emailVerified !== true) return false;
-  const role = administrativeRoleFromUserDoc(profile, tiersActive);
+  const { role } = await administrativeAccess(uid, emailVerified, authTime);
   return role === "admin" || role === "super_admin";
 }
 
@@ -211,6 +213,7 @@ async function requirePrincipal(req, options = {}) {
   const user = await requireAuth(req, authOptions);
   const snapshot = await firestore.collection("users").doc(user.uid).get();
   const profile = snapshot.exists ? snapshot.data() : null;
+  markCaller({ accessTier: accessTierOf(profile) });
   if (sessionPredatesWatermark(user.authTime, profile)) {
     markSessionRefused(req);
     throw new AuthError("This session was revoked. Sign in again");
@@ -219,10 +222,12 @@ async function requirePrincipal(req, options = {}) {
   if (tiersActive &&
       (user.emailVerified !== true || !isAccessTier(profile.accessTier) ||
         (profile.active !== undefined && profile.active !== true))) {
+    markCaller({ required: "active_staff" });
     throw new ForbiddenError("An active, verified staff access level is required");
   }
   const actor = { ...user, principal: await registeredPrincipalFromUserDoc(firestore, user.uid, profile, undefined, tiersActive) };
   if (previewStaff && !isApprovedPreviewStaff(user, profile, actor.principal)) {
+    markCaller({ required: "preview_staff" });
     throw new ForbiddenError("An active, verified staff account is required");
   }
   return includeAccountStatus
@@ -232,7 +237,10 @@ async function requirePrincipal(req, options = {}) {
 
 async function requireAdmin(req) {
   const user = await requireAuth(req);
-  if (!(await isAdmin(user.uid, user.emailVerified, user.authTime))) {
+  const { role, accessTier } = await administrativeAccess(user.uid, user.emailVerified, user.authTime);
+  markCaller({ accessTier });
+  if (role !== "admin" && role !== "super_admin") {
+    markCaller({ required: "admin" });
     throw new ForbiddenError(ADMIN_ACCESS_REQUIRED);
   }
   return user;
@@ -240,7 +248,10 @@ async function requireAdmin(req) {
 
 async function requireSuperAdmin(req) {
   const user = await requireAuth(req);
-  if (!(await isSuperAdmin(user.uid, user.emailVerified, user.authTime))) {
+  const { role, accessTier } = await administrativeAccess(user.uid, user.emailVerified, user.authTime);
+  markCaller({ accessTier });
+  if (role !== "super_admin") {
+    markCaller({ required: "owner" });
     throw new ForbiddenError(OWNER_ACCESS_REQUIRED);
   }
   return user;

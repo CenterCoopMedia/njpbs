@@ -3,6 +3,7 @@ import cmsEdge from "../../functions/lib/cms-edge.js";
 import { cmsEdgeFetch } from "../setup/cms-edge-fetch.js";
 import authPkg from "../../functions/lib/auth.js";
 import firebasePkg from "../../functions/lib/firebase.js";
+import desktopSessions from "../../functions/lib/premiere-desktop-session.js";
 
 const {
   CMS_EDGE_ORIGIN_SECRET,
@@ -65,6 +66,90 @@ describe("CMS Function edge boundary", () => {
     const response = responseDouble();
     await wrapped({ headers: { "x-njpbs-cms-edge": "expected-secret" } }, response);
     expect(response.body).toEqual({ error: "Access is unavailable" });
+  });
+
+  // One staff profile per uid behind the shared admin check, with access levels switched on.
+  function refusalFixture(uid, accessTier) {
+    vi.stubEnv("FUNCTION_TARGET", "cmsSyntheticAdminAction");
+    vi.spyOn(firebasePkg.admin.auth(), "verifyIdToken").mockResolvedValue({ uid, email_verified: true });
+    vi.spyOn(firebasePkg.db, "collection").mockImplementation(name => ({ doc: () => ({ get: async () => (name === "system"
+      ? { exists: true, data: () => ({ schema: 1, state: "active", cleanScan: true }) }
+      : { exists: true, data: () => ({ active: true, accessTier }) }) }) }));
+    const logger = { error: vi.fn(), warn: vi.fn() };
+    const wrapped = withCmsEdge(async (req, res) => {
+      try { await authPkg.requireAdmin(req); res.status(200).json({ ok: true }); }
+      catch (error) { res.status(error.status ?? 500).json({ error: error.message }); }
+    }, { logger, readSecret: () => "expected-secret" });
+    const request = { headers: { "x-njpbs-cms-edge": "expected-secret", authorization: `Bearer ${uid}-token`,
+      "x-njpbs-request-id": "request-1" } };
+    return { logger, run: () => wrapped(request, responseDouble()) };
+  }
+
+  it("logs one permission refusal with the caller digest and no identifying fields", async () => {
+    const { logger, run } = refusalFixture("staff-editor", "editor");
+    await run();
+    expect(logger.warn).toHaveBeenCalledOnce();
+    expect(logger.warn).toHaveBeenCalledWith("permission_refused", {
+      event: "permission_refused",
+      function: "cmsSyntheticAdminAction",
+      required: "admin",
+      accessTier: "editor",
+      // SHA-256 of "staff-editor", the digest usage analytics keys people by.
+      caller: "2f82f25ec33a07569fe10ecedd1d9044ed20f9880e63721c05a3c731080d5b26",
+      requestId: "request-1",
+    });
+  });
+
+  it("logs once through nested edge wrappers and records a caller who verified the token directly", async () => {
+    vi.stubEnv("FUNCTION_TARGET", "cmsSyntheticReader");
+    vi.spyOn(firebasePkg.admin.auth(), "verifyIdToken").mockResolvedValue({ uid: "staff-editor", email_verified: true });
+    const logger = { error: vi.fn(), warn: vi.fn() };
+    const edge = { logger, readSecret: () => "expected-secret" };
+    const inner = withCmsEdge(async (req, res) => {
+      await authPkg.verifyAuthToken(req.headers.authorization);
+      res.status(403).json({ error: "Unavailable" });
+    }, edge);
+    const outer = withCmsEdge((req, res) => inner(req, res), edge);
+    await outer({ headers: { "x-njpbs-cms-edge": "expected-secret", authorization: "Bearer nested-token" } }, responseDouble());
+    expect(logger.warn).toHaveBeenCalledOnce();
+    expect(logger.warn).toHaveBeenCalledWith("permission_refused", {
+      event: "permission_refused",
+      function: "cmsSyntheticReader",
+      required: null,
+      accessTier: null,
+      caller: "2f82f25ec33a07569fe10ecedd1d9044ed20f9880e63721c05a3c731080d5b26",
+      requestId: null,
+    });
+  });
+
+  it("records the caller of a refused Premiere desktop session", async () => {
+    vi.stubEnv("FUNCTION_TARGET", "cmsPremiereRequest");
+    const firestore = { collection: name => ({ doc: () => ({ get: async () => (name === "system"
+      ? { exists: true, data: () => ({ schema: 1, state: "active", cleanScan: true }) }
+      : { exists: true, data: () => ({ active: false, accessTier: "editor" }) }) }) }) };
+    const auth = { getUser: async () => ({ disabled: false, emailVerified: true }) };
+    const sessions = desktopSessions.createDesktopSessions({ firestore, auth, now: () => 1_000_000_000 });
+    const logger = { error: vi.fn(), warn: vi.fn() };
+    const wrapped = withCmsEdge(async (_req, res) => {
+      try { await sessions.activeActor("staff-editor", 999_999); res.status(200).json({ ok: true }); }
+      catch (error) { res.status(error.status ?? 500).json({ error: error.message }); }
+    }, { logger, readSecret: () => "expected-secret" });
+    await wrapped({ headers: { "x-njpbs-cms-edge": "expected-secret" } }, responseDouble());
+    expect(logger.warn).toHaveBeenCalledOnce();
+    expect(logger.warn).toHaveBeenCalledWith("permission_refused", {
+      event: "permission_refused",
+      function: "cmsPremiereRequest",
+      required: "active_staff",
+      accessTier: "editor",
+      caller: "2f82f25ec33a07569fe10ecedd1d9044ed20f9880e63721c05a3c731080d5b26",
+      requestId: null,
+    });
+  });
+
+  it("logs nothing for a permitted call", async () => {
+    const { logger, run } = refusalFixture("staff-admin", "admin");
+    await run();
+    expect(logger.warn).not.toHaveBeenCalled();
   });
 
   it("uses a constant-time equality contract for exact nonempty secrets", () => {

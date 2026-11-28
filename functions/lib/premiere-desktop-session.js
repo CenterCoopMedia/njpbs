@@ -6,6 +6,7 @@ const { sessionPredatesWatermark } = require("./auth");
 const { userDocUsesAccessTier } = require("./access-tier-activation");
 const { registeredPrincipalFromUserDoc } = require("./principal");
 const { MAX_SESSION_AGE_SECONDS, sessionOutlivedMaximum } = require("./session-refusal");
+const { accessTierOf, markCaller } = require("./permission-refusal");
 
 const PAIRING_TTL_MS = 10 * 60 * 1000;
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -102,12 +103,14 @@ function createDesktopSessions({ firestore = db, auth = admin.auth(), now = Date
       throw problem(401, "Sign in again to Boardwalk", "session_invalid");
     }
     const profile = (await firestore.collection("users").doc(uid).get()).data();
+    markCaller({ uid, accessTier: accessTierOf(profile) });
     if (sessionPredatesWatermark(authTime, profile)) {
       throw problem(401, "Sign in again to Boardwalk", "session_invalid");
     }
     const tiersActive = await userDocUsesAccessTier(firestore, profile);
     if (!profile || profile.active === false ||
         (tiersActive && user.emailVerified !== true)) {
+      markCaller({ required: "active_staff" });
       throw problem(403, "An active, verified Boardwalk staff account is required");
     }
     return {
