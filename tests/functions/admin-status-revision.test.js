@@ -73,3 +73,29 @@ describe("live Admin revision", () => {
     })).rejects.toMatchObject({ status: 503, name: "AdminStatusRevisionError" });
   });
 });
+
+describe("served revisions for live fix verification", () => {
+  const RELEASE = "b".repeat(40);
+  it("needs both the live Admin build and the Functions release in production", async () => {
+    vi.stubEnv("CMS_ADMIN_BUILD_REVISION", RELEASE);
+    const fetchFn = vi.fn(async () => jsonResponse(manifest()));
+    try {
+      await expect(adminStatus.readServedRevisions({ fetchFn, environment: "production" })).resolves.toEqual([REVISION, RELEASE]);
+      await expect(adminStatus.readServedRevisions({ fetchFn, environment: "development" })).resolves.toEqual([RELEASE]);
+      expect(fetchFn).toHaveBeenCalledTimes(1);
+      vi.stubEnv("CMS_ADMIN_BUILD_REVISION", REVISION);
+      await expect(adminStatus.readServedRevisions({ fetchFn, environment: "production" })).resolves.toEqual([REVISION]);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+  it("refuses a missing Functions release revision", async () => {
+    vi.stubEnv("CMS_ADMIN_BUILD_REVISION", "");
+    try {
+      await expect(adminStatus.readServedRevisions({ fetchFn: async () => jsonResponse(manifest()), environment: "production" }))
+        .rejects.toBeInstanceOf(adminStatus.AdminStatusRevisionError);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+});

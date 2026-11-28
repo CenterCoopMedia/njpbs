@@ -92,11 +92,25 @@ function deploymentEnvironment() {
 
 // The revision this environment serves: the live production Admin build, or the
 // revision a non-production deploy configured.
-async function readDeployedRevision(deps = {}) {
-  if ((deps.environment ?? deploymentEnvironment()) === "production") return readLiveAdminBuildRevision(deps);
+function configuredRevision() {
   const local = configuredValue(BUILD_REVISION, "CMS_ADMIN_BUILD_REVISION");
   if (!BUILD_REVISION_PATTERN.test(local)) throw new AdminStatusRevisionError();
   return local;
+}
+
+async function readDeployedRevision(deps = {}) {
+  if ((deps.environment ?? deploymentEnvironment()) === "production") return readLiveAdminBuildRevision(deps);
+  return configuredRevision();
+}
+
+// Every revision a fix must reach to be live. Admin can deploy on its own, so
+// production adds the live Admin build to the release revision these Functions
+// run (the release sets CMS_ADMIN_BUILD_REVISION to its deploy SHA). Site and
+// Workers releases are not covered.
+async function readServedRevisions(deps = {}) {
+  const functionsRevision = configuredRevision();
+  if ((deps.environment ?? deploymentEnvironment()) !== "production") return [functionsRevision];
+  return [...new Set([await readLiveAdminBuildRevision(deps), functionsRevision])].sort();
 }
 
 module.exports = {
@@ -106,4 +120,5 @@ module.exports = {
   parseProductionAdminRevision,
   readDeployedRevision,
   readLiveAdminBuildRevision,
+  readServedRevisions,
 };

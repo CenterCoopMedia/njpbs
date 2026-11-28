@@ -9,7 +9,8 @@ describe("public fix backfill plan", () => {
   it("plans one attach job per mapped pull request and skips links already in the fix namespace", () => {
     const linked = report("br_b", { fixPullRequestRepository: FIX, fixPullRequestRepositoryId: 1000002,
       links: { githubIssueNumbers: [41], pullRequestNumbers: [7] } });
-    const privateNamespace = report("br_c", { links: { githubIssueNumbers: [42], pullRequestNumbers: [7] } });
+    const privateNamespace = report("br_c", { links: { githubIssueNumbers: [42], pullRequestNumbers: [7],
+      discoveredPullRequestNumbers: [7] } });
     const plan = planLinks(new Map([[41, [report("br_a"), linked]], [42, [privateNamespace]]]), FIX,
       { 41: [7, 8], 42: [7], 43: [9] });
     expect(plan.filter((row) => row.jobId).map((row) => row.jobId))
@@ -28,6 +29,14 @@ describe("public fix backfill plan", () => {
   it("shows a job from an earlier run with its state instead of planning it again", () => {
     const entry = { issueNumber: 41, reportId: "br_" + "a".repeat(32), status: "open", pullNumber: 7,
       jobId: jobId("br_a", 7), existing: "terminal_failed" };
-    expect(describeEntry(entry)).toContain("attach PR #7 queued earlier, job terminal_failed");
+    expect(describeEntry(entry)).toContain("attach PR #7 failed earlier (terminal_failed); requeue");
+    expect(describeEntry({ ...entry, existing: "delivered" })).toContain("attach PR #7 queued earlier, job delivered");
+  });
+
+  it("leaves a report with a manual link in another namespace for an administrator", () => {
+    const manual = report("br_m", { fixPullRequestRepository: "example-owner/private-reports", fixPullRequestRepositoryId: 1000001,
+      links: { githubIssueNumbers: [41], pullRequestNumbers: [30], pullRequests: [{ number: 30 }] } });
+    expect(planLinks(new Map([[41, [manual]]]), FIX, { 41: [7] }))
+      .toEqual([{ issueNumber: 41, reportId: "br_m", status: "acknowledged", pullNumber: 7, skip: "manual link in another namespace" }]);
   });
 });

@@ -41,13 +41,16 @@ comment): the sync writes the fix-repository identity with the discovered
 numbers, which clears the earlier namespace's evidence as an attachment does.
 A manual attachment keeps its namespace.
 
-A merged fix-repository pull request is live when its merge commit is the
-deployed revision or an ancestor of it. Production reads the revision from the
-live Admin status (`build.revision`); other environments use
-`CMS_ADMIN_BUILD_REVISION`. The sync compares the two commits through the fix
-repository and records `live` and `liveRevision` on the pull request row. It
-compares again when the deployed revision changes, so a rollback to an older
-build clears `live`; a failed read keeps the stored evidence. Staff progress
+A merged fix-repository pull request is live when its merge commit is each
+served revision or an ancestor of it. The served revisions are the release
+revision the Functions run (`CMS_ADMIN_BUILD_REVISION`, which the release sets
+to its deploy SHA) and, in production, the live Admin status (`build.revision`),
+because Admin can deploy on its own. Site and Workers releases are not checked.
+The sync compares the commits through the fix repository and records `live`
+and `liveRevisions` on the pull request row. It compares again when a served
+revision changes, so a rollback to an older build clears `live`. An unreadable
+revision keeps the stored evidence; a failed comparison against new revisions
+leaves the fix pending. Staff progress
 shows "Fix live" on the Live verification step. A fix not yet verified stays at
 "Merged; live verification pending" while the revision or comparison cannot be
 read. Marking the report resolved stays an administrator action.

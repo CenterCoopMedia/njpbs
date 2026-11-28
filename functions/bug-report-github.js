@@ -23,7 +23,7 @@ const GITHUB_WEBHOOK_SECRET = defineSecret(
   "CMS_BUG_REPORT_GITHUB_WEBHOOK_SECRET",
 );
 const { githubIssueRepository, githubFixRepository, repositoryIdentity } = require("./lib/bug-report-github-config");
-const { readDeployedRevision } = require("./lib/admin-status-revision");
+const { readServedRevisions } = require("./lib/admin-status-revision");
 
 const API_VERSION = "2022-11-28";
 const MAX_ATTEMPTS = 5;
@@ -697,12 +697,13 @@ async function discoverIssuePullRequests(client, issues, manualNumbers, pullRepo
   return new Map([...found].map(([repository, numbers]) => [repository, numbers.slice(0, 10)]));
 }
 
-// Production serves one revision of the fix repository. A merged fix is live
-// when its merge commit is that revision or one of its ancestors. A rollback can
-// serve an older revision, so stored evidence holds only for the revision it was
-// checked against; a read that fails keeps the stored evidence unchanged.
+// A merged fix is live when its merge commit is each served revision of the fix
+// repository or an ancestor of it. A rollback can serve an older revision, so
+// stored evidence holds only for the revisions it was checked against. An
+// unreadable revision keeps stored evidence; a failed comparison against new
+// revisions leaves the fix pending.
 async function markLivePullRequests(row, pullClient, pulls, deps) {
-  if (!deps.deployedRevision || !row.fixRepository ||
+  if (!deps.servedRevisions || !row.fixRepository ||
       pullClient.repository?.toLowerCase() !== row.fixRepository.repository.toLowerCase()) return;
   const merged = pulls.map((entry) => entry.pullRequest)
     .filter((pull) => pull.merged && !pull.unavailable && pull.mergeCommitSha);
@@ -713,26 +714,27 @@ async function markLivePullRequests(row, pullClient, pulls, deps) {
     return stored?.live === true && stored.mergeCommitSha === pull.mergeCommitSha ? stored : null;
   };
   const keep = (pull) => {
-    if (known(pull)) Object.assign(pull, { live: true, liveRevision: known(pull).liveRevision });
+    if (known(pull)) Object.assign(pull, { live: true, liveRevisions: known(pull).liveRevisions });
   };
-  let revision;
+  let revisions;
   try {
-    revision = await deps.deployedRevision();
+    revisions = await deps.servedRevisions();
   } catch (error) {
     logger.warn("Production revision unavailable for live fix verification", { error: error?.name ?? "Error" });
     merged.forEach(keep);
     return;
   }
   await Promise.all(merged.map(async (pull) => {
-    if (known(pull)?.liveRevision === revision) return keep(pull);
+    if (String(known(pull)?.liveRevisions) === String(revisions)) return keep(pull);
     try {
-      const comparison = await pullClient.compareCommits(pull.mergeCommitSha, revision);
-      if (["ahead", "identical"].includes(comparison?.status)) {
-        Object.assign(pull, { live: true, liveRevision: revision });
+      const comparisons = await Promise.all(revisions.map((revision) =>
+        pullClient.compareCommits(pull.mergeCommitSha, revision)));
+      if (comparisons.every((comparison) => ["ahead", "identical"].includes(comparison?.status))) {
+        Object.assign(pull, { live: true, liveRevisions: revisions });
       }
     } catch (error) {
+      // Evidence for an earlier revision does not cover this one: stay pending.
       logger.warn("Live fix verification read failed", { pullRequest: pull.number, status: error?.status ?? null });
-      keep(pull);
     }
   }));
 }
@@ -1216,7 +1218,7 @@ async function processGithubOutboxRow(id, deps = {}) {
       {
         pullRequestClient,
         fixPullRequestClient,
-        deployedRevision: deps.deployedRevision ?? (() => readDeployedRevision({ fetchFn: deps.fetchFn })),
+        servedRevisions: deps.servedRevisions ?? (() => readServedRevisions({ fetchFn: deps.fetchFn })),
         onReusableIssueSelected: async (number) => {
           const at = now();
           await row.ref.update({

@@ -57,7 +57,10 @@ function boundary({ beforePullRead, timeline = [], metadata = {}, issueState = "
           head: { sha: SHA }, html_url: `https://github.com/${identity.repository}/pull/${number}`,
           updated_at: NOW.toISOString(), ...(identity === FIX ? pulls[number] : {}) });
       }
-      if (identity === FIX && path.startsWith("/compare/")) return Response.json({ status: compare });
+      if (identity === FIX && path.startsWith("/compare/")) {
+        const status = typeof compare === "object" ? compare[path.split("...")[1]] : compare;
+        return status === "error" ? Response.json({}, { status: 404 }) : Response.json({ status });
+      }
       if (path.endsWith("/reviews") || path === "/deployments") return Response.json([]);
       if (path.endsWith("/check-runs")) return Response.json({ check_runs: [
         { status: "completed", conclusion: "success", details_url: `https://github.com/${identity.repository}/actions/runs/73` },
@@ -266,7 +269,7 @@ describe("public fix pull requests on a report filed in the private tracker", ()
     return stored;
   }
   const merged = { state: "closed", merged: true, merge_commit_sha: MERGE };
-  async function sync(options, deps = { deployedRevision: async () => RELEASE }) {
+  async function sync(options, deps = { servedRevisions: async () => [RELEASE] }) {
     const stored = relayReport();
     const api = boundary({ issueState: "closed", timeline: [reference(ISSUE.repository, 30), reference(FIX.repository, 734)], ...options });
     expect(await run(await seed(stored), api, deps)).toEqual({ state: "delivered" });
@@ -292,18 +295,25 @@ describe("public fix pull requests on a report filed in the private tracker", ()
   it.each(["ahead", "identical"])("marks a merged fix live when production is %s of its merge commit", async (compare) => {
     const { next, view } = await sync({ pulls: { 734: merged }, compare });
     expect(next.status).toBe("acknowledged");
-    expect(next.links.pullRequests[0]).toMatchObject({ live: true, liveRevision: RELEASE });
+    expect(next.links.pullRequests[0]).toMatchObject({ live: true, liveRevisions: [RELEASE] });
     expect(view).toMatchObject({ phase: "live", stage: "live", label: "Fix live", deployment: "verified", active: true });
     expect((await db.collection("bugReportDeliveryOutbox").get()).docs.every((doc) => doc.data().channel !== "email")).toBe(true);
+  });
+  it("waits for the Functions release when only the live Admin build contains the fix", async () => {
+    const admin = "a".repeat(40);
+    const { next, view } = await sync({ pulls: { 734: merged }, compare: { [admin]: "ahead", [RELEASE]: "behind" } },
+      { servedRevisions: async () => [admin, RELEASE] });
+    expect(next.links.pullRequests[0].live).toBeUndefined();
+    expect(view).toMatchObject({ phase: "merged", label: "Merged; live verification pending" });
   });
   it("keeps a verified fix live without another comparison", async () => {
     const { next } = await sync({ pulls: { 734: merged }, compare: "ahead" });
     await db.collection("bugReportGithubOutbox").doc(`${next.id}--sync`).set({ reportId: next.id,
       operation: "sync", targetNumber: null, state: "pending", attemptCount: 0, nextAttemptAt: NOW });
     const api = boundary({ issueState: "closed", timeline: [reference(FIX.repository, 734)], pulls: { 734: merged }, compare: "behind" });
-    expect(await run(`${next.id}--sync`, api, { deployedRevision: async () => RELEASE })).toEqual({ state: "delivered" });
+    expect(await run(`${next.id}--sync`, api, { servedRevisions: async () => [RELEASE] })).toEqual({ state: "delivered" });
     const later = (await db.collection("bug_reports").doc(next.id).get()).data();
-    expect(later.links.pullRequests[0]).toMatchObject({ live: true, liveRevision: RELEASE });
+    expect(later.links.pullRequests[0]).toMatchObject({ live: true, liveRevisions: [RELEASE] });
     expect(api.requests.some(({ path }) => path.includes("/compare/"))).toBe(false);
   });
   it("clears live evidence after production rolls back to a build without the fix", async () => {
@@ -312,12 +322,22 @@ describe("public fix pull requests on a report filed in the private tracker", ()
       operation: "sync", targetNumber: null, state: "pending", attemptCount: 0, nextAttemptAt: NOW });
     const rollback = "d".repeat(40);
     const api = boundary({ issueState: "closed", timeline: [reference(FIX.repository, 734)], pulls: { 734: merged }, compare: "behind" });
-    expect(await run(`${next.id}--sync`, api, { deployedRevision: async () => rollback })).toEqual({ state: "delivered" });
+    expect(await run(`${next.id}--sync`, api, { servedRevisions: async () => [rollback] })).toEqual({ state: "delivered" });
     const later = (await db.collection("bug_reports").doc(next.id).get()).data();
     expect(later.links.pullRequests[0].live).toBeUndefined();
     expect(api.requests).toContainEqual({ method: "GET", path: `/repos/${FIX.repository}/compare/${MERGE}...${rollback}` });
     expect(contract.reportForReporter(later, "editor-1").progress)
       .toMatchObject({ phase: "merged", label: "Merged; live verification pending" });
+  });
+  it("shows a verified fix as pending when the new revision cannot be compared", async () => {
+    const { next } = await sync({ pulls: { 734: merged }, compare: "ahead" });
+    await db.collection("bugReportGithubOutbox").doc(`${next.id}--sync`).set({ reportId: next.id,
+      operation: "sync", targetNumber: null, state: "pending", attemptCount: 0, nextAttemptAt: NOW });
+    const api = boundary({ issueState: "closed", timeline: [reference(FIX.repository, 734)], pulls: { 734: merged }, compare: "error" });
+    expect(await run(`${next.id}--sync`, api, { servedRevisions: async () => ["d".repeat(40)] })).toEqual({ state: "delivered" });
+    const later = (await db.collection("bug_reports").doc(next.id).get()).data();
+    expect(later.links.pullRequests[0].live).toBeUndefined();
+    expect(contract.reportForReporter(later, "editor-1").progress.phase).toBe("merged");
   });
   it("skips the timeline when ten manual pull requests fill the links", async () => {
     const stored = relayReport();
@@ -325,19 +345,19 @@ describe("public fix pull requests on a report filed in the private tracker", ()
     stored.links = { ...stored.links, pullRequestNumbers: numbers, discoveredPullRequestNumbers: [],
       pullRequests: numbers.map((number) => pull(ISSUE.repository, number)) };
     const api = boundary({ issueState: "closed", timeline: [reference(FIX.repository, 734)] });
-    expect(await run(await seed(stored), api, { deployedRevision: async () => RELEASE })).toEqual({ state: "delivered" });
+    expect(await run(await seed(stored), api, { servedRevisions: async () => [RELEASE] })).toEqual({ state: "delivered" });
     expect(api.requests.some(({ path }) => path.endsWith("/timeline"))).toBe(false);
     expect((await db.collection("bug_reports").doc(stored.id).get()).data()).toMatchObject(identityFields(ISSUE));
   });
   it("leaves live verification pending when the production revision cannot be read", async () => {
-    const { view } = await sync({ pulls: { 734: merged } }, { deployedRevision: async () => { throw new Error("offline"); } });
+    const { view } = await sync({ pulls: { 734: merged } }, { servedRevisions: async () => { throw new Error("offline"); } });
     expect(view).toMatchObject({ phase: "merged", label: "Merged; live verification pending" });
   });
   it("keeps a manually linked private pull request in its namespace", async () => {
     const stored = relayReport();
     stored.links.discoveredPullRequestNumbers = [];
     const api = boundary({ issueState: "closed", timeline: [reference(FIX.repository, 734)] });
-    expect(await run(await seed(stored), api, { deployedRevision: async () => RELEASE })).toEqual({ state: "delivered" });
+    expect(await run(await seed(stored), api, { servedRevisions: async () => [RELEASE] })).toEqual({ state: "delivered" });
     const next = (await db.collection("bug_reports").doc(stored.id).get()).data();
     expect(next).toMatchObject(identityFields(ISSUE));
     expect(next.links.pullRequestNumbers).toEqual([30]);

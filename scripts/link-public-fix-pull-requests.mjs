@@ -5,8 +5,9 @@
 // namespace and verifies whether the fix is live. This script never changes a
 // report's status and queues no email.
 //
-// Dry run (default) reads only. --apply creates the planned outbox jobs; their
-// ids are deterministic, so a rerun skips jobs that already exist.
+// Dry run (default) reads only. --apply creates the planned outbox jobs. Job ids
+// are deterministic: a rerun skips jobs that exist and requeues its own failed
+// jobs, because a sibling job's success can leave Retry GitHub unavailable.
 //
 //   node scripts/link-public-fix-pull-requests.mjs --fix-repository <owner/name> [--apply] 3<credentials.json
 //
@@ -17,6 +18,9 @@ import { pathToFileURL } from "node:url";
 import { cert, deleteApp, initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { cmsTarget } from "./lib/cms-target.mjs";
+import progressPkg from "../functions/lib/bug-report-progress.js";
+
+const { manualPullRequestNumbers } = progressPkg;
 
 export const SYSTEM_ACTOR = "system:public-fix-backfill";
 
@@ -29,12 +33,16 @@ export const SHIPPED_FIXES = Object.freeze({
   5134: [734, 737, 738],
 });
 
+export const FAILED_JOB_STATES = new Set(["retryable_failed", "terminal_failed", "unknown"]);
+
 export function jobId(reportId, pullNumber) {
   return `${reportId}--public-fix-${pullNumber}`;
 }
 
 // One planned job for each mapped pull request not already linked in the fix
-// namespace. Reports keep their status; resolved reports are listed too.
+// namespace. Reports keep their status; resolved reports are listed too. An
+// attachment would clear a manual link in another namespace, so those reports
+// are left for an administrator.
 export function planLinks(reportsByIssue, fixRepository, fixes = SHIPPED_FIXES) {
   const plan = [];
   for (const [issueNumber, pullNumbers] of Object.entries(fixes)) {
@@ -44,9 +52,11 @@ export function planLinks(reportsByIssue, fixRepository, fixes = SHIPPED_FIXES) 
       const inFixNamespace = typeof report.fixPullRequestRepository === "string" &&
         report.fixPullRequestRepository.toLowerCase() === fixRepository.toLowerCase();
       const linked = new Set(inFixNamespace ? report.links?.pullRequestNumbers ?? [] : []);
+      const otherManual = !inFixNamespace && manualPullRequestNumbers(report.links).length > 0;
       for (const pullNumber of pullNumbers) {
+        const skip = otherManual ? "manual link in another namespace" : linked.has(pullNumber) ? "already linked" : null;
         plan.push({ issueNumber: Number(issueNumber), reportId: report.id, status: report.status, pullNumber,
-          ...(linked.has(pullNumber) ? { skip: "already linked" } : { jobId: jobId(report.id, pullNumber) }) });
+          ...(skip ? { skip } : { jobId: jobId(report.id, pullNumber) }) });
       }
     }
   }
@@ -62,15 +72,18 @@ export function outboxJob(entry, now) {
 async function readReports(firestore) {
   const reportsByIssue = new Map();
   for (const issueNumber of Object.keys(SHIPPED_FIXES).map(Number)) {
-    const snapshot = await firestore.collection("bug_reports")
-      .where("links.githubIssueNumbers", "array-contains", issueNumber).limit(20).get();
-    reportsByIssue.set(issueNumber, snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
+    const query = firestore.collection("bug_reports")
+      .where("links.githubIssueNumbers", "array-contains", issueNumber).orderBy("__name__").limit(100);
+    const reports = [];
+    for (let page = await query.get(); ; page = await query.startAfter(page.docs.at(-1)).get()) {
+      reports.push(...page.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
+      if (page.docs.length < 100) break;
+    }
+    reportsByIssue.set(issueNumber, reports);
   }
   return reportsByIssue;
 }
 
-// A rerun finds the jobs an earlier run created. A failed job is reported, not
-// requeued: an administrator retries it from the report (Retry GitHub).
 async function readExistingJobs(firestore, plan) {
   for (const entry of plan.filter((row) => row.jobId)) {
     const snapshot = await firestore.collection("bugReportGithubOutbox").doc(entry.jobId).get();
@@ -80,9 +93,22 @@ async function readExistingJobs(firestore, plan) {
 
 async function applyPlan(firestore, plan, now) {
   const results = [];
-  for (const entry of plan.filter((row) => row.jobId && !row.existing)) {
-    await firestore.collection("bugReportGithubOutbox").doc(entry.jobId).create(outboxJob(entry, now));
-    results.push(`created ${entry.jobId}`);
+  for (const entry of plan.filter((row) => row.jobId && (!row.existing || FAILED_JOB_STATES.has(row.existing)))) {
+    const ref = firestore.collection("bugReportGithubOutbox").doc(entry.jobId);
+    if (!entry.existing) {
+      await ref.create(outboxJob(entry, now));
+      results.push(`created ${entry.jobId}`);
+      continue;
+    }
+    // The scheduled outbox run picks up a pending job within the hour.
+    const requeued = await firestore.runTransaction(async (transaction) => {
+      const job = (await transaction.get(ref)).data();
+      if (job?.requestedBy !== SYSTEM_ACTOR || !FAILED_JOB_STATES.has(job.state)) return false;
+      transaction.update(ref, { state: "pending", attemptCount: 0, nextAttemptAt: now, leaseUntil: null,
+        lastError: null, updatedAt: now });
+      return true;
+    });
+    results.push(`${requeued ? "requeued" : "left unchanged"} ${entry.jobId}`);
   }
   return results;
 }
@@ -90,12 +116,11 @@ async function applyPlan(firestore, plan, now) {
 export function describe(entry) {
   const report = entry.reportId ? `${entry.reportId.slice(0, 11)}… (${entry.status})` : "-";
   const action = entry.skip ? `skip: ${entry.skip}`
+    : FAILED_JOB_STATES.has(entry.existing) ? `attach PR #${entry.pullNumber} failed earlier (${entry.existing}); requeue`
     : entry.existing ? `attach PR #${entry.pullNumber} queued earlier, job ${entry.existing}`
       : `attach PR #${entry.pullNumber}`;
   return `issue ${entry.issueNumber}  report ${report}  ${action}`;
 }
-
-export const FAILED_JOB_STATES = new Set(["retryable_failed", "terminal_failed", "unknown"]);
 
 async function main(argv) {
   const apply = argv.includes("--apply");
@@ -109,14 +134,9 @@ async function main(argv) {
     const firestore = getFirestore(app);
     const plan = planLinks(await readReports(firestore), fixRepository);
     await readExistingJobs(firestore, plan);
-    console.log(`${apply ? "Apply" : "Dry run"}: ${plan.filter((row) => row.jobId && !row.existing).length} attach jobs planned`);
+    console.log(`${apply ? "Apply" : "Dry run"}: ${plan.filter((row) => row.jobId && (!row.existing || FAILED_JOB_STATES.has(row.existing))).length} attach jobs planned`);
     for (const entry of plan) console.log(describe(entry));
     if (apply) for (const line of await applyPlan(firestore, plan, new Date())) console.log(line);
-    const failed = plan.filter((row) => FAILED_JOB_STATES.has(row.existing));
-    if (failed.length) {
-      console.error(`${failed.length} earlier jobs failed; retry each from its report with Retry GitHub`);
-      process.exitCode = 1;
-    }
   } finally {
     await deleteApp(app);
   }
