@@ -7,7 +7,7 @@ import { withCmsEdge } from "../../functions/lib/cms-edge.js";
 import { datasetRelease } from "../fixtures/dataset-release.js";
 
 const { db, admin } = firebase;
-let server, origin, owner, contributor, stranger, staff;
+let server, origin, owner, contributor, stranger, staff, viewer;
 async function account(profile) {
   const uid = `datasets-${randomUUID()}`;
   await admin.auth().createUser({ uid, email: `${uid}@example.test`, emailVerified: true });
@@ -35,9 +35,10 @@ async function transition(record, action, actor = owner, extra = {}) {
 }
 beforeAll(async () => {
   if (!process.env.FIRESTORE_EMULATOR_HOST || !process.env.FIREBASE_AUTH_EMULATOR_HOST) throw new Error("Use Auth and Firestore emulators.");
-  [owner, contributor, stranger, staff] = await Promise.all([
+  [owner, contributor, stranger, staff, viewer] = await Promise.all([
     account({ accessTier: "admin" }), account({ accessTier: "contributor" }),
     account({ accessTier: "contributor" }), account({ grants: [{ role: "staff" }] }),
+    account({ accessTier: "viewer" }),
   ]);
   const handler = withCmsEdge(datasets.createDatasetsHandler(), { readSecret: () => "synthetic-edge" });
   server = createServer(async (req, res) => {
@@ -121,6 +122,8 @@ describe("dataset HTTP/Auth/Firestore boundary", () => {
     expect((await call(body, contributor)).status).toBe(403);
     expect((await call({ action: "owners" }, contributor)).status).toBe(403);
     expect((await call({ ...body, ownerUid: staff.uid })).status).toBe(400);
+    // An active Viewer can read but not create, so it cannot own a dataset.
+    expect((await call({ ...body, ownerUid: viewer.uid })).status).toBe(400);
     const assigned = await call(body);
     expect(assigned.status, assigned.body.error).toBe(200);
     record = assigned.body.dataset;
