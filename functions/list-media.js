@@ -38,7 +38,6 @@ const {
   encodeMediaCorpusCursor,
   parseMediaCorpusRequest,
 } = require("./lib/media-corpus");
-const { MAX_FAVORITE_PROJECTION_REFS, readFavoriteProjection } = require("./lib/media-favorites");
 const { readIndexedMedia } = require("./lib/media-discovery-query");
 const { MEDIA_TAG_SAMPLE_SIZE, savedMediaTagSample } = require("./lib/media-tag-sample");
 const {
@@ -55,8 +54,6 @@ const PROFILE_PHOTO_SCOPE_MESSAGE =
   "Profile photo browsing is limited to your own staff profile images.";
 const COUNTS_FLAG_MESSAGE =
   "counts must be true and cannot be combined with assetIds or profilePhotoScope";
-const FAVORITES_FLAG_MESSAGE =
-  "favorites must be true and cannot be combined with profile photo scope.";
 const SUMMARY_FIELDS = Object.freeze([
   "name",
   "originalName",
@@ -290,7 +287,6 @@ function createCmsListMediaHandler(deps = {}) {
     readIndexedMediaFn = readIndexedMedia,
     isApprovedActiveAccountFn = isApprovedActiveAccount,
     computeTabCountsFn = computeMediaTabCounts,
-    readFavoriteProjectionFn = readFavoriteProjection,
     registryFn = runtimeRegistry,
     log = logger,
   } = deps;
@@ -309,10 +305,6 @@ function createCmsListMediaHandler(deps = {}) {
       // Tab counts are opt-in; every list still requires current account admission.
       const countsRequested = Boolean(req.body) && typeof req.body === "object" &&
         Object.hasOwn(req.body, "counts");
-      // Favorite states for the listed page are opt-in too. They replace the separate
-      // cmsListMediaFavorites round trip that otherwise waits for this response.
-      const favoritesRequested = Boolean(req.body) && typeof req.body === "object" &&
-        Object.hasOwn(req.body, "favorites");
       const user = await requirePrincipalFn(req, { includeAccountStatus: true });
       if (req.body && Object.hasOwn(req.body, "tagsOnly")) {
         if (req.body.tagsOnly !== true || Object.keys(req.body).length !== 1) {
@@ -345,13 +337,8 @@ function createCmsListMediaHandler(deps = {}) {
       }
       let listBody = req.body;
       let countsFlag;
-      let favoritesFlag;
       if (countsRequested) ({ counts: countsFlag, ...listBody } = listBody);
-      if (favoritesRequested) ({ favorites: favoritesFlag, ...listBody } = listBody);
       const query = parseMediaListRequest(listBody);
-      if (favoritesRequested && (favoritesFlag !== true || query.profilePhotoScope)) {
-        throw new ListMediaRejection(400, FAVORITES_FLAG_MESSAGE);
-      }
       if (
         countsRequested &&
         (countsFlag !== true || query.assetIds || query.profilePhotoScope)
@@ -413,35 +400,21 @@ function createCmsListMediaHandler(deps = {}) {
         );
         library = selectMediaLibrary(visible, query, query.pageSize, categoryLabels);
       }
-      // Favorites belong to approved active accounts, as in cmsListMediaFavorites. Otherwise the
-      // states are omitted and the client's own favorites request reports the refusal.
-      const favoriteRefs = library.records.map((asset) => ({ backend: "r2", id: asset.id }));
-      const [counts, favoriteStates] = await Promise.all([
-        countsRequested
-          ? readTabCounts({
-            firestore,
-            user,
-            imagesCount: query.kinds.includes("audio") ? null : library.allCount,
-            computeTabCountsFn,
-            registryFn,
-            isApprovedActiveAccountFn,
-            log,
-          })
-          : null,
-        favoritesRequested && user.approvedActive === true &&
-          favoriteRefs.length <= MAX_FAVORITE_PROJECTION_REFS
-          // A failed read leaves the states out; the list still loads and the client asks again.
-          ? readFavoriteProjectionFn(firestore, user.uid, favoriteRefs).catch((error) => {
-            log.warn("cmsListMedia could not read favorite states", { uid: user.uid, error: error?.message });
-            return null;
-          })
-          : null,
-      ]);
+      const counts = countsRequested
+        ? await readTabCounts({
+          firestore,
+          user,
+          imagesCount: query.kinds.includes("audio") ? null : library.allCount,
+          computeTabCountsFn,
+          registryFn,
+          isApprovedActiveAccountFn,
+          log,
+        })
+        : null;
       res.status(200).json({
         success: true,
         ...library,
         ...(counts ? { counts } : {}),
-        ...(favoriteStates ? { favoriteStates } : {}),
       });
     } catch (error) {
       if (res.headersSent) return;

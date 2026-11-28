@@ -105,7 +105,6 @@ function Harness({
             asset={item}
             canDelete
             categoryLabel={categoryLabel}
-            favorite={false}
             fields={DEFAULT_MEDIA_DISPLAY.fields}
             onAction={() => {}}
             onOpen={() => onOpen(item)}
@@ -119,7 +118,6 @@ function Harness({
               asset={item}
               canDelete
               categoryLabel={categoryLabel}
-              favorite={false}
               fields={DEFAULT_MEDIA_DISPLAY.fields}
               onAction={() => {}}
               onOpen={() => onOpen(item)}
@@ -160,8 +158,6 @@ describe("MediaGrid keyboard", () => {
     expect(tabbable.map((element) => element.getAttribute("aria-label") ?? element.closest("label")?.textContent)).toEqual([
       "Item 0, image, 2.1 MB",
       "Select Item 0",
-      "Add to favorites: Item 0",
-      "Add to collection: Item 0",
       "More actions: Item 0",
     ]);
 

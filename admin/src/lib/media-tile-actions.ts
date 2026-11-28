@@ -1,17 +1,14 @@
 import type { IconName } from "../components/ui/Icon";
 import type { MenuItem } from "../components/ui/Menu";
 import type { IconControlId } from "./icon-control-registry";
-import { collectionCapError } from "./media-selection";
 import { MAX_BULK_IMAGES } from "./source-media-bulk";
 
 // The actions for one media card or a multi-selection (HIG). One list feeds the card's quick-action cluster, the selection bar and
 // the context menu, so the menu mirrors every visible action. Unavailable actions carry
 // hidden: true and the Menu leaves them out (hidden, not dimmed).
 //
-// Card menu order: Open details, Favorite, Add to collection, Select,
-// Copy link, then Delete last in danger ink. Video has no Copy link; "Show videos uploaded
-// by NAME" takes its place. Images and Videos support batch favorites
-// for selections of up to 100 items.
+// Card menu order: Open details, Select, Copy link, then Delete last in danger ink.
+// Video has no Copy link; "Show videos uploaded by NAME" takes its place.
 //
 // Quick Look follows Open details on both surfaces, with Open full size after it for images.
 // Each is offered only when the host passes its flag,
@@ -22,11 +19,6 @@ export type MediaTileActionId =
   | "open"
   | "quick-look"
   | "open-full-size"
-  | "favorite"
-  | "favorite-add"
-  | "favorite-remove"
-  | "collect"
-  | "remove-collection"
   | "select"
   | "copy-link"
   | "copy-file-address"
@@ -52,9 +44,6 @@ export interface MediaTileAction {
 export interface MediaTileActionInput {
   surface: MediaTileSurface;
   name: string;
-  favorite: boolean;
-  /** False for an archived or unavailable item; favorites are hidden for it. */
-  available: boolean;
   selected: boolean;
   /**
    * Images pass canManageMediaMetadata(principal, category); video passes the source's
@@ -82,15 +71,6 @@ export function mediaTileActions(input: MediaTileActionInput): MediaTileAction[]
   if (input.openFullSize && !video) opens.push({ id: "open-full-size", label: "Open full size", icon: "maximize", group: "open", hidden: false });
   return [
     ...opens,
-    {
-      id: "favorite",
-      label: input.favorite ? "Remove from favorites" : "Add to favorites",
-      icon: "heart",
-      group: "organize",
-      hidden: !input.available,
-      registryId: "media-favorite",
-    },
-    { id: "collect", label: "Add to collection", icon: "folder-plus", group: "organize", hidden: false, registryId: "media-collect" },
     { id: "select", label: input.selected ? "Deselect" : "Select", icon: "check-square", group: "organize", hidden: false, registryId: "media-select" },
     video
       ? { id: "uploader", label: `Show videos uploaded by ${input.uploader?.name ?? ""}`, icon: "users", group: "organize", hidden: !uploader }
@@ -100,144 +80,25 @@ export function mediaTileActions(input: MediaTileActionInput): MediaTileAction[]
   ];
 }
 
-export interface MediaFavoriteTileActionInput {
-  available: boolean;
-  selected: boolean;
-  video: boolean;
-}
-
-/** One Favorites card never offers an add-back action after removal. */
-export function mediaFavoriteTileActions(
-  input: MediaFavoriteTileActionInput,
-): MediaTileAction[] {
-  const remove: MediaTileAction = {
-    id: "favorite-remove",
-    label: "Remove from favorites",
-    icon: "heart-off",
-    group: "organize",
-    hidden: false,
-    registryId: "media-favorite",
-  };
-  const select: MediaTileAction = {
-    id: "select",
-    label: input.selected ? "Deselect" : "Select",
-    icon: "check-square",
-    group: "organize",
-    hidden: false,
-    registryId: "media-select",
-  };
-  if (!input.available) return [remove, select];
-  return [
-    {
-      id: "open",
-      label: input.video ? "Open and play" : "Open details",
-      icon: input.video ? "play" : "eye",
-      group: "open",
-      hidden: false,
-    },
-    { id: "quick-look", label: "Quick Look", icon: "image", group: "open", hidden: false },
-    { ...remove, id: "favorite" },
-    {
-      id: "collect",
-      label: "Add to collection",
-      icon: "folder-plus",
-      group: "organize",
-      hidden: false,
-      registryId: "media-collect",
-    },
-    select,
-  ];
-}
-
-export interface MediaCollectionTileActionInput {
-  available: boolean;
-  selected: boolean;
-  video: boolean;
-}
-
-/** Collection items can be opened or removed, but never added back to their current collection. */
-export function mediaCollectionTileActions(
-  input: MediaCollectionTileActionInput,
-): MediaTileAction[] {
-  const remove: MediaTileAction = {
-    id: "remove-collection",
-    label: "Remove from collection",
-    icon: "remove",
-    group: "organize",
-    hidden: false,
-  };
-  const select: MediaTileAction = {
-    id: "select",
-    label: input.selected ? "Deselect" : "Select",
-    icon: "check-square",
-    group: "organize",
-    hidden: false,
-    registryId: "media-select",
-  };
-  if (!input.available) return [remove, select];
-  return [
-    {
-      id: "open",
-      label: input.video ? "Open and play" : "Open details",
-      icon: input.video ? "play" : "eye",
-      group: "open",
-      hidden: false,
-    },
-    { id: "quick-look", label: "Quick Look", icon: "image", group: "open", hidden: false },
-    remove,
-    select,
-  ];
-}
-
-/**
- * A menu's actions while the favorite state is unknown or saving: Favorite is left out, since
- * choosing it could do nothing or send a second write. The card's heart stays and says why.
- */
-export function settledMenuActions(actions: MediaTileAction[], favoriteSettled: boolean): MediaTileAction[] {
-  return favoriteSettled ? actions : actions.filter((action) => action.id !== "favorite");
-}
-
 /**
  * A menu's actions while details or an upload hold unsaved work: only Open details stays, which
- * the leave prompt then guards. Selecting, favoriting, collecting, copying and deleting wait
+ * the leave prompt then guards. Selecting, copying and deleting wait
  * until the form is saved or discarded (the images page's dirty-form guard).
  */
 export function lockedMenuActions(actions: MediaTileAction[], locked: boolean): MediaTileAction[] {
   return locked ? actions.filter((action) => action.id === "open") : actions;
 }
 
-/** The card's always-visible quick actions: the heart and the folder. More opens the menu. */
-export function mediaClusterActions(actions: readonly MediaTileAction[]): MediaTileAction[] {
-  return actions.filter((action) => !action.hidden && (action.id === "favorite" || action.id === "collect"));
-}
-
 /**
  * The menu for a multi-selection, which is also the selection bar's action set. Images:
- * Add to favorites and Remove from favorites (1–100 items), Add to collection and, when
- * the role can edit, Edit tags. Video: The same favorite actions, Add to collection and Edit
- * selected. Both: Clear selection. Bulk mode opens only from Edit tags or Edit selected.
+ * Edit tags, when the role can edit. Video: Edit selected, when the role can edit.
+ * Both: Clear selection. Bulk mode opens only from Edit tags or Edit selected.
  */
 export function mediaSelectionActions({ surface, count, canEdit }: { surface: MediaTileSurface; count: number; canEdit: boolean }): MediaTileAction[] {
-  const capError = collectionCapError(count, surface === "video" ? "videos" : "items");
   const bulkCapError = surface === "images" && count > MAX_BULK_IMAGES
     ? `Select no more than ${MAX_BULK_IMAGES} items in one batch.`
     : null;
-  const favoriteActions: MediaTileAction[] = count >= 1 && count <= 100
-    ? [
-        { id: "favorite-add", label: "Add to favorites", icon: "heart", group: "organize", hidden: false },
-        { id: "favorite-remove", label: "Remove from favorites", icon: "heart-off", group: "organize", hidden: false },
-      ]
-    : [];
   return [
-    ...favoriteActions,
-    {
-      id: "collect",
-      label: "Add to collection",
-      icon: "folder-plus",
-      group: "organize",
-      hidden: capError !== null,
-      ...(capError ? { disabledReason: capError } : {}),
-    },
     {
       id: "edit-tags",
       label: "Edit tags",
@@ -248,71 +109,6 @@ export function mediaSelectionActions({ surface, count, canEdit }: { surface: Me
     },
     { id: "edit-selected", label: "Edit selected", icon: "pencil", group: "organize", hidden: surface !== "video" || !canEdit },
     { id: "clear-selection", label: "Clear selection", icon: "close", group: "organize", hidden: false },
-  ];
-}
-
-export interface MediaFavoriteSelectionActionInput {
-  count: number;
-  allAvailable: boolean;
-}
-
-/** Selection actions for mixed Favorites, including unavailable saved references. */
-export function mediaFavoriteSelectionActions({
-  count,
-  allAvailable,
-}: MediaFavoriteSelectionActionInput): MediaTileAction[] {
-  const favoriteCapError = count > 100
-    ? "Select no more than 100 favorites in one batch."
-    : null;
-  const collectionError = collectionCapError(count, "items") ?? (
-    allAvailable ? null : "Unavailable favorites cannot be added to a collection."
-  );
-  return [
-    {
-      id: "favorite-remove",
-      label: "Remove from favorites",
-      icon: "heart-off",
-      group: "organize",
-      hidden: count < 1 || favoriteCapError !== null,
-      ...(favoriteCapError ? { disabledReason: favoriteCapError } : {}),
-    },
-    {
-      id: "collect",
-      label: "Add to collection",
-      icon: "folder-plus",
-      group: "organize",
-      hidden: count < 1 || collectionError !== null,
-      ...(collectionError ? { disabledReason: collectionError } : {}),
-    },
-    {
-      id: "clear-selection",
-      label: "Clear selection",
-      icon: "close",
-      group: "organize",
-      hidden: false,
-    },
-  ];
-}
-
-/** One collection membership write removes at most 30 full media references. */
-export function mediaCollectionSelectionActions(count: number): MediaTileAction[] {
-  const capError = collectionCapError(count, "items");
-  return [
-    {
-      id: "remove-collection",
-      label: "Remove from collection",
-      icon: "remove",
-      group: "organize",
-      hidden: count < 1 || capError !== null,
-      ...(capError ? { disabledReason: capError } : {}),
-    },
-    {
-      id: "clear-selection",
-      label: "Clear selection",
-      icon: "close",
-      group: "organize",
-      hidden: false,
-    },
   ];
 }
 

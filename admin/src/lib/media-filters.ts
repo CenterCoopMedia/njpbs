@@ -1,8 +1,6 @@
 import type { ListMediaResponse, MediaAssetSummary, MediaKind, MediaListQuery, MediaSortDirection, MediaSortField } from "./functions";
 import { MEDIA_ASPECTS, type MediaMetadataBounds } from "./media-browse-metadata";
 import type {
-  CollectionsMediaLocationState,
-  FavoritesMediaLocationState,
   MediaLocationState,
   VideoMediaLocationState,
   VideoRightsFilter,
@@ -217,11 +215,9 @@ export type VideoStructuredFilter =
 
 export interface SurfaceFilterChip {
   key: string;
-  field: "tag" | "by" | "rights" | MetadataFilterField | "kind" | "show" | "scope";
+  field: "tag" | "by" | "rights" | MetadataFilterField;
   value: string;
   label: string;
-  /** Client-only filters use this visible qualifier beside the chip row. */
-  scopeLabel?: "On this page";
 }
 
 /** Video supports one indexed structured property. Choosing another replaces it. */
@@ -258,49 +254,4 @@ export function videoFilterChips(
 export function clearVideoFilterChips(state: VideoMediaLocationState): VideoMediaLocationState {
   const cleared = setVideoStructuredFilter(state, null);
   return { ...cleared, query: { ...cleared.query, q: "" } };
-}
-
-const FAVORITE_KIND_LABELS = {
-  audio: "Audio",
-  image: "Images",
-  document: "Documents",
-  video: "Videos",
-} as const;
-
-export function favoritesFilterChips(state: FavoritesMediaLocationState): SurfaceFilterChip[] {
-  return state.kind ? [{
-    key: `kind:${state.kind}`,
-    field: "kind",
-    value: state.kind,
-    label: `Type: ${FAVORITE_KIND_LABELS[state.kind]}`,
-    scopeLabel: "On this page",
-  }] : [];
-}
-
-export function clearFavoritesFilterChips(state: FavoritesMediaLocationState): FavoritesMediaLocationState {
-  return { ...state, kind: null };
-}
-
-const COLLECTION_SCOPE_LABELS = { private: "Private", all_staff: "All staff" } as const;
-
-export function collectionsFilterChips(state: CollectionsMediaLocationState): SurfaceFilterChip[] {
-  return [
-    ...(state.show === "archived" ? [{
-      key: "show:archived",
-      field: "show" as const,
-      value: "archived",
-      label: "Status: Archived",
-    }] : []),
-    ...(state.scope ? [{
-      key: `scope:${state.scope}`,
-      field: "scope" as const,
-      value: state.scope,
-      label: `Scope: ${COLLECTION_SCOPE_LABELS[state.scope]}`,
-      scopeLabel: "On this page" as const,
-    }] : []),
-  ];
-}
-
-export function clearCollectionsFilterChips(state: CollectionsMediaLocationState): CollectionsMediaLocationState {
-  return { ...state, show: "active", scope: null };
 }

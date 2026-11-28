@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createMemoryRouter, MemoryRouter, RouterProvider } from "react-router";
 import { useRef } from "react";
@@ -6,13 +6,11 @@ import { SourceMediaBulkEditor, useSourceMediaBulkEditing } from "../src/compone
 import { MediaGrid, restoreMediaFocus, type MediaGridHandle } from "../src/components/media/MediaGrid";
 import { MediaTile } from "../src/components/media/MediaTile";
 import { SourceMediaLibrary } from "../src/routes/SourceMediaLibrary";
-import { SuccessNoticeProvider } from "../src/components/ui/SuccessNoticeRegion";
 import { BULK_SAVE_INTERVAL_MS, emptyBulkMetadataDraft, type BulkMetadataDraft } from "../src/lib/source-media-bulk";
 import { cmsUpdateMediaMetadata, HttpError, type MediaAssetSummary } from "../src/lib/functions";
 import { createSourceMediaRead, listSourceMedia, updateSourceMediaMetadata, type MediaSourceSummary, type SourceMediaAssetSummary } from "../src/lib/source-media";
 import type { VideoBatchEntry, VideoMetadataBatch } from "../src/lib/use-video-metadata-batch";
 
-const collectionMocks = vi.hoisted(() => ({ list: vi.fn(), setItems: vi.fn() }));
 const sendBatch = vi.hoisted(() => vi.fn());
 
 vi.mock("../src/lib/functions", async importOriginal => {
@@ -29,11 +27,6 @@ vi.mock("../src/lib/source-media", () => ({ createSourceMediaRead: vi.fn(), list
 vi.mock("../src/components/VideoUploadPanel", () => ({ VideoUploadPanel: () => null }));
 vi.mock("../src/components/VideoMeaningSearch", () => ({ VideoMeaningSearch: () => null }));
 vi.mock("../src/components/VideoProductionTools", () => ({ useVideoProductionTools: () => ({ content: null, actions: null, onTimeUpdate: vi.fn(), editorExportsItem: { key: "editor-export-settings", label: "Broadcast & editing exports…", onSelect: vi.fn() }, downloadItems: [], }) }));
-vi.mock("../src/lib/media-collections", async importOriginal => ({
-  ...(await importOriginal<typeof import("../src/lib/media-collections")>()),
-  listMediaCollections: (...args: unknown[]) => collectionMocks.list(...args),
-  setMediaCollectionItems: (...args: unknown[]) => collectionMocks.setItems(...args),
-}));
 
 const source: MediaSourceSummary = { id: "video-library", label: "Videos", description: "Private staff videos", mediaKind: "video", canBrowse: true, canUpload: true, canEditMetadata: true, canRequestProduction: true };
 const first: SourceMediaAssetSummary = { id: "a", sourceId: source.id, name: "Interview", originalName: "interview.mp4", description: "Original description", credit: "Camera crew", license: "Editorial", tags: ["Interview"], rightsStatus: "pending", version: 4, kind: "video", mimeType: "video/mp4", sizeBytes: 1024, preview: "download_only", createdAt: null, updatedAt: null };
@@ -93,12 +86,12 @@ function imageEditor({
 function HarnessContent({ records = [first, second], mediaSource = source, userId = "staff" }: { records?: SourceMediaAssetSummary[]; mediaSource?: MediaSourceSummary; userId?: string }) {
   const grid = useRef<MediaGridHandle>(null);
   const bulk = useSourceMediaBulkEditing({
-    source: mediaSource, userId, records, favorites: { retryDisabled: false, reconcile: () => undefined }, getIdToken, disabled: false, onRefresh, onTagsSaved,
+    source: mediaSource, userId, records, getIdToken, disabled: false, onRefresh, onTagsSaved,
     returnFocus: () => restoreMediaFocus(grid.current, () => document.getElementById("video-search")?.focus()),
   });
   return <><input id="video-search" aria-label="Search" />{bulk.notice}
     <MediaGrid handleRef={grid} items={records} label="Videos" onOpen={() => undefined} onSelectionChange={bulk.changeSelection} rules={bulk.rules} selection={bulk.selection}
-      renderItem={(asset, context) => <MediaTile asset={asset} canDelete={false} favorite={false} onAction={() => undefined} onOpen={() => undefined}
+      renderItem={(asset, context) => <MediaTile asset={asset} canDelete={false} onAction={() => undefined} onOpen={() => undefined}
         onSelectChange={context.onSelectChange} selected={context.selected} selectionMode={context.selectionMode} surface="video" tabbable={context.tabbable} thumbnail={null} />} />
     {bulk.bar}{bulk.inspector}{bulk.editor(navigation)}</>;
 }
@@ -157,13 +150,6 @@ beforeEach(() => {
     success: true, changed: true, asset: { ...asset, ...changes, version: asset.version + 1, etag: `${asset.etag}-next` },
   }));
   vi.mocked(listSourceMedia).mockResolvedValue({ success: true, records: [first, second], total: 2, nextCursor: null, hasMore: false });
-  collectionMocks.list.mockImplementation(async (_token: string, query: { scope: string }) => ({
-    success: true,
-    collections: query.scope === "all_staff" ? [{ id: "c".repeat(64), scope: "all_staff", name: "Shared package", description: "", lifecycle: "active", version: 1, membershipVersion: 2, cover: null, canEdit: true, createdAt: null, updatedAt: null, itemCount: 0 }] : [],
-    nextCursor: null,
-    hasMore: false,
-  }));
-  collectionMocks.setItems.mockResolvedValue({ success: true, collectionId: "c".repeat(64), changed: true, replayed: false, version: 1, membershipVersion: 3 });
 });
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); });
 
@@ -361,23 +347,7 @@ describe("bulk video selection", () => {
     expect(screen.getByLabelText("Select B-roll")).toBeChecked();
     expect(within(bar()).getByRole("checkbox", { name: "Select this page" })).toBeChecked();
   });
-  it("adds selected video references to a collection and returns focus to the card that last had focus", async () => {
-    render(<Harness />);
-    fireEvent.click(screen.getByLabelText("Select Interview"));
-    fireEvent.click(screen.getByRole("button", { name: "Add to collection" }));
-    fireEvent.click(await screen.findByRole("radio", { name: /Shared package/ }));
-    fireEvent.click(within(screen.getByRole("dialog", { name: "Add selected to collection" })).getByRole("button", { name: "Add to collection" }));
-    await waitFor(() => expect(collectionMocks.setItems).toHaveBeenCalledWith("token", expect.objectContaining({
-      collectionId: "c".repeat(64),
-      refs: [{ backend: "s3", sourceId: "video-library", id: "a" }],
-      present: true,
-    })));
-    // Decision 3: after a bulk action, focus returns to the card that last had focus.
-    await waitFor(() => expect(cardName("Interview")).toHaveFocus());
-    expect(screen.queryByRole("group", { name: "Video selection" })).not.toBeInTheDocument();
-    expect(updateSourceMediaMetadata).not.toHaveBeenCalled();
-  });
-  it("keeps collection organization available for a read-only source and hides metadata editing", () => {
+  it("keeps the selection bar for a read-only source and hides metadata editing", () => {
     const view = render(<Harness />);
     fireEvent.click(screen.getByLabelText("Select Interview"));
     expect(within(bar()).getByRole("button", { name: "Edit selected" })).toBeEnabled();
@@ -386,7 +356,7 @@ describe("bulk video selection", () => {
     expect(screen.getByLabelText("Select Interview")).not.toBeChecked();
     expect(screen.queryByRole("group", { name: "Video selection" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByLabelText("Select Interview"));
-    expect(within(bar()).getByRole("button", { name: "Add to collection" })).toBeEnabled();
+    expect(within(bar()).getByRole("button", { name: "Clear selection" })).toBeEnabled();
     expect(within(bar()).queryByRole("button", { name: "Edit selected" })).not.toBeInTheDocument();
     view.rerender(<Harness />);
     expect(screen.queryByRole("button", { name: "Edit selected" })).not.toBeInTheDocument();
@@ -420,42 +390,6 @@ describe("bulk video selection", () => {
     expect(screen.getByRole("alert")).toHaveTextContent(/^Select no more than 100 videos in one batch\. No additional videos were selected\.$/);
     expect(screen.getByLabelText("Select Video 0")).toBeChecked();
     expect(screen.getByLabelText("Select Video 1")).not.toBeChecked();
-  });
-  it("announces how many videos were added to the collection, in the real library", async () => {
-    const router = createMemoryRouter([{ path: "/media", element: <SourceMediaLibrary source={source} userId="staff" getIdToken={getIdToken} /> }], { initialEntries: ["/media"] });
-    render(<RouterProvider router={router} />);
-    fireEvent.click(await screen.findByRole("checkbox", { name: "Select Interview" }));
-    fireEvent.click(screen.getByRole("checkbox", { name: "Select B-roll" }));
-    fireEvent.click(screen.getByRole("button", { name: "Add to collection" }));
-    fireEvent.click(await screen.findByRole("radio", { name: /Shared package/ }));
-    fireEvent.click(within(screen.getByRole("dialog", { name: "Add selected to collection" })).getByRole("button", { name: "Add to collection" }));
-    expect(await screen.findByText("2 videos were added to Shared package.")).toBeInTheDocument();
-    expect(screen.getByText("Items added to collection")).toBeInTheDocument();
-    expect(listSourceMedia).toHaveBeenCalledTimes(1);
-  });
-  it("keeps only the collection Undo notice after the video bulk picker closes", async () => {
-    const refs = [first, second].map(asset => ({ backend: "s3" as const, sourceId: asset.sourceId, id: asset.id }));
-    collectionMocks.setItems
-      .mockResolvedValueOnce({ success: true, collectionId: "c".repeat(64), changed: true, replayed: false,
-        version: 1, membershipVersion: 3, changedRefs: refs })
-      .mockResolvedValueOnce({ success: true, collectionId: "c".repeat(64), changed: true, replayed: false,
-        version: 1, membershipVersion: 4, changedRefs: refs });
-    const router = createMemoryRouter([{ path: "/media", element: <SuccessNoticeProvider routeKey="staff:media">
-      <SourceMediaLibrary source={source} userId="staff" getIdToken={getIdToken} />
-    </SuccessNoticeProvider> }], { initialEntries: ["/media"] });
-    render(<RouterProvider router={router} />);
-    fireEvent.click(await screen.findByRole("checkbox", { name: "Select Interview" }));
-    fireEvent.click(screen.getByRole("checkbox", { name: "Select B-roll" }));
-    fireEvent.click(screen.getByRole("button", { name: "Add to collection" }));
-    fireEvent.click(await screen.findByRole("radio", { name: /Shared package/ }));
-    fireEvent.click(within(screen.getByRole("dialog", { name: "Add selected to collection" })).getByRole("button", { name: "Add to collection" }));
-    const notice = await screen.findByRole("region", { name: "Notifications" });
-    expect(await within(notice).findByRole("button", { name: "Undo" })).toBeInTheDocument();
-    expect(screen.queryByText("Items added to collection")).toBeNull();
-    fireEvent.click(within(notice).getByRole("button", { name: "Undo" }));
-    await waitFor(() => expect(collectionMocks.setItems).toHaveBeenCalledTimes(2));
-    expect(notice).toHaveTextContent("2 items removed from Shared package.");
-    expect(screen.queryByText("2 videos were added to Shared package.")).toBeNull();
   });
   it("removes successful files, retains a conflict, and refreshes only once when closing results", async () => {
     vi.useFakeTimers();

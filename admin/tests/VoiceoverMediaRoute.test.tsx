@@ -46,8 +46,7 @@ beforeEach(() => {
     if (endpoint === "cmsListMediaSources") return json({success:true, sources:[{id:"video-library",label:"Videos",description:"Staff videos",mediaKind:"video",canBrowse:true,canUpload:false}]});
     if (endpoint === "cmsListSourceMedia") return json({success:true,records:[],total:0,hasMore:false,nextCursor:null});
     if (endpoint === "cmsListMedia") return json({success:true,records:body.assetIds ? [voiceover] : [voiceover,uploaded],paging:"cursor",nextCursor:null,total:null,allCount:null,page:1,pageCount:null,categoryCounts:null,kindCounts:null,
-      tabCounts:{audio:2,images:0,voiceovers:196,favorites:1,sources:{"video-library":0}}});
-    if (endpoint === "cmsListMediaFavorites") return json({success:true,states:(body.refs ?? []).map((ref:unknown) => ({ref,favorite:false}))});
+      tabCounts:{audio:2,images:0,voiceovers:196,sources:{"video-library":0}}});
     if (endpoint === "cmsGetMediaReview") return json({success:true,review});
     if (endpoint === "cmsListMediaComments") return json({success:true,comments:[],nextCursor:null});
     if (endpoint === "cmsSaveMediaReview") return mocks.save(body);
@@ -107,7 +106,7 @@ describe("unified Audio media route", () => {
     expect(router.state.location.pathname).toBe("/media/voiceovers");
     expect(router.state.location.search).toContain(`asset=${voiceover.id}`);
     const sources = screen.getByRole("navigation", {name:"Media sources"});
-    expect(within(sources).getAllByRole("link").map(link => link.textContent?.replace(/\d+$/, "").trim())).toEqual(["Images","Videos","Public submissions","Audio","Favorites","Collections"]);
+    expect(within(sources).getAllByRole("link").map(link => link.textContent?.replace(/\d+$/, "").trim())).toEqual(["Images","Videos","Public submissions","Audio"]);
     expect(within(sources).getByRole("link", {name:/^Audio/})).toHaveAttribute("aria-current","page");
     const details = await screen.findByRole("complementary", {name:"Asset details"});
     expect(await within(details).findByRole("textbox", {name:"Notes"})).toHaveValue("Original note");
@@ -115,7 +114,7 @@ describe("unified Audio media route", () => {
     expect(mocks.fetch.mock.calls.some(([url,init]) => String(url).endsWith("cmsListMedia") && JSON.parse(String(init.body)).kinds?.[0] === "audio")).toBe(true);
     expect(mocks.fetch.mock.calls.some(([url]) => String(url).endsWith("cmsVoiceoverLibrary") || String(url).endsWith("cmsVoiceoverAudio"))).toBe(false);
     expect(NAV_DESTINATIONS.some(item => item.id === "voiceovers")).toBe(false);
-    for (const path of ["/media","/media/","/media/images","/media/videos","/media/favorites","/media/collections","/media/voiceovers","/voiceovers","/voiceovers/"]) expect(NAV_DESTINATIONS.find(item => item.id === "media")?.activeFor?.(path)).toBe(true);
+    for (const path of ["/media","/media/","/media/images","/media/videos","/media/voiceovers","/voiceovers","/voiceovers/"]) expect(NAV_DESTINATIONS.find(item => item.id === "media")?.activeFor?.(path)).toBe(true);
     fireEvent.click(within(sources).getByRole("link", {name:/^Videos/}));
     await screen.findByRole("heading", {name:"Videos"});
     expect(router.state.location.pathname).toBe("/media/videos");
@@ -140,7 +139,7 @@ describe("unified Audio media route", () => {
     expect(mocks.fetch.mock.calls.some(([url]) => String(url).endsWith("cmsUpdateMediaMetadata"))).toBe(true);
   });
 
-  it("confirms a personal review save without writing media metadata or the shared favorite", async () => {
+  it("confirms a personal review save without writing media metadata", async () => {
     mocks.save.mockResolvedValueOnce(json({success:true,review:{...review,notes:"Use for station IDs",version:2}}));
     renderRoute(`/media/voiceovers?asset=${voiceover.id}`);
     const notes=await screen.findByRole("textbox",{name:"Notes"});
@@ -148,7 +147,7 @@ describe("unified Audio media route", () => {
     fireEvent.change(notes,{target:{value:"Use for station IDs"}});
     fireEvent.click(screen.getByRole("button",{name:"Save details"}));
     expect(await screen.findByText("Your review saved")).toBeVisible();
-    expect(mocks.fetch.mock.calls.some(([url]) => String(url).endsWith("cmsUpdateMediaMetadata") || String(url).endsWith("cmsSetMediaFavorite"))).toBe(false);
+    expect(mocks.fetch.mock.calls.some(([url]) => String(url).endsWith("cmsUpdateMediaMetadata"))).toBe(false);
     expect(screen.getByRole("button",{name:"Save details"})).toBeDisabled();
     expect(screen.getAllByText("Your review saved")).toHaveLength(1);
     expect(screen.getByText("Your private review is version 2.")).toBeVisible();
@@ -200,7 +199,6 @@ describe("unified Audio media route", () => {
     expect(screen.queryByText(/Your review was saved\./)).not.toBeInTheDocument();
     expect(mocks.save).toHaveBeenCalledTimes(1);
     expect(metadataRequests).toBe(2);
-    expect(mocks.fetch.mock.calls.some(([url]) => String(url).endsWith("cmsSetMediaFavorite"))).toBe(false);
   });
 
   it("holds a source change during a personal review save and retains notes after failure", async () => {

@@ -41,11 +41,10 @@ describe("resumable video transfers", () => {
   it("stops waiting for a hung start while retaining the same request id for retry", async () => {
     vi.mocked(postFunction).mockReturnValue(new Promise(() => {}));
     const controller = new AbortController();
-    const collectionId = "a".repeat(64);
     const request = startVideoUpload("token", "video-library", file(), { name: "news" },
-      { requestId: "local-row-1", signal: controller.signal, collectionId });
+      { requestId: "local-row-1", signal: controller.signal });
     expect(postFunction).toHaveBeenCalledWith("cmsStartSourceMediaUpload", "token",
-      expect.objectContaining({ requestId: "local-row-1", originalName: "news.mp4", collectionId }), {},
+      expect.objectContaining({ requestId: "local-row-1", originalName: "news.mp4" }), {},
       { appCheck: true, signal: expect.any(AbortSignal) });
     controller.abort();
     await expect(request).rejects.toMatchObject({ name: "AbortError" });
@@ -76,7 +75,7 @@ describe("resumable video transfers", () => {
     expect(postFunction).toHaveBeenCalledTimes(1);
   });
   it("recovers a completed upload after losing the completion response", async () => {
-    const asset = { id: "asset-1", collectionPlacement: "added" };
+    const asset = { id: "asset-1" };
     vi.mocked(postFunction).mockResolvedValueOnce({ success: true, asset });
     expect(await transferVideo(callbacks())).toEqual(asset);
     expect(postFunction).toHaveBeenCalledTimes(1);

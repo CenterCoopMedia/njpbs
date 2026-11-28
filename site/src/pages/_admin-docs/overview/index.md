@@ -56,7 +56,7 @@ Your rail contains only the destinations your account may use.
 | Pages | Open the fixed NJ PBS public pages and edit their saved drafts. |
 | Posts | Create or maintain individual editorial records that have their own public routes. |
 | All content | Search across authorized records, combine filters, use saved views, and return to prior results. |
-| Media library | Choose a tab: Images, Videos, Public submissions, Audio, Favorites or Collections. Find and maintain the media available to your account. |
+| Media library | Choose a tab: Images, Videos, Public submissions or Audio. Find and maintain the media available to your account. |
 | Publish activity | Check publish job history and retry or recheck a site update. Staff with settings access only. |
 | Activity | Search the administrative record of content and access changes. |
 | Staff profiles | Review or correct public-facing staff profile data. |

@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Button, InlineMessage, Select, Textarea, TextInput } from "./ui/Primitives";
+import { Button, InlineMessage, Textarea, TextInput } from "./ui/Primitives";
 import { Icon } from "./ui/Icon";
 import { SUCCESS_NOTICE_TIMEOUT_MS } from "./ui/SuccessNoticeRegion";
 import { VideoRightsFields } from "./media/VideoRightsFields";
@@ -12,7 +12,6 @@ import { startVideoUpload, cancelVideoUpload, transferVideo, UploadFileMismatchE
 import { clearRejectedUploads, registerVideoUpload, routeChosenFiles, uploadRouterSnapshot } from "../lib/upload-router";
 import { UNSUPPORTED_UPLOAD_MESSAGE, UNIVERSAL_UPLOAD_ACCEPT, videoUploadCompletionMessage } from "../lib/upload-destination";
 import { HttpError, RequestNotDispatchedError } from "../lib/functions";
-import { useVideoUploadCollections } from "../lib/use-video-upload-collections";
 import { formatVideoBytes } from "../lib/media-format";
 import { invalidateVideoSearchCorpus } from "../lib/video-search-session-cache";
 import "./VideoUploadPanel.css";
@@ -29,7 +28,6 @@ interface TransferDraft {
   descriptionOverridden?: boolean;
   tagsOverridden?: boolean;
   rightsStatus: "pending" | "complete";
-  collection?: { id: string; name: string };
 }
 interface Transfer {
   id: string;
@@ -62,15 +60,6 @@ function restoredTagText(value: unknown): string {
   return typeof value === "string" && value.length <= 2_429 ? value : "";
 }
 
-function restoredCollection(value: unknown): TransferDraft["collection"] {
-  if (!value || typeof value !== "object") return undefined;
-  const { id, name } = value as { id?: unknown; name?: unknown };
-  if (typeof id === "string" && /^[0-9a-f]{64}$/.test(id) && typeof name === "string" && name.length <= 120) {
-    return { id, name };
-  }
-  return undefined;
-}
-
 function restoredDraft(value: unknown, fileName: string): TransferDraft {
   const fallback = defaultDraft(fileName);
   if (!value || typeof value !== "object" || Array.isArray(value)) return fallback;
@@ -94,7 +83,6 @@ function restoredDraft(value: unknown, fileName: string): TransferDraft {
       ? candidate.tagsOverridden
       : Boolean(uploadMediaTagsText({ committed: restoredTagText(tags?.committed), draft: restoredTagText(tags?.draft) }).trim()),
     rightsStatus: candidate.rightsStatus === "complete" ? "complete" : "pending",
-    collection: restoredCollection(candidate.collection),
   };
 }
 function draftFor(transfer: Transfer): TransferDraft {
@@ -186,7 +174,7 @@ export function VideoUploadPanel({ sourceId, userId, getIdToken, onUploaded, onA
   const [states, setStates] = useState<Record<string, { phase: Phase; bytes: number; error?: string }>>({});
   const [notice, setNotice] = useState("");
   // A plain upload confirmation clears itself like other success notices. A result that needs
-  // follow-up (a failed or missing viewing copy, an unavailable collection) and problem notices stay.
+  // follow-up (a failed or missing viewing copy) and problem notices stay.
   // Each confirmation is its own event, so a repeated identical message gets the full interval.
   const completionNotice = useRef("");
   const [completionEvent, setCompletionEvent] = useState(0);
@@ -269,9 +257,6 @@ export function VideoUploadPanel({ sourceId, userId, getIdToken, onUploaded, onA
   }, [ownerKey, storageKey]);
   const hasPreparedFile = transfers.some(row =>
     !row.session && row.startRequested === false && files.current.has(row.id));
-  const canChooseCollection = ownsQueue && sourceId === "video-library" &&
-    transfers.some(row => !row.session && row.startRequested === false && !row.queued);
-  const collectionPicker = useVideoUploadCollections(canChooseCollection, userId, getIdToken);
   const hasBatchDefaults = assignment.name !== "" || assignment.description !== "" || uploadMediaTagsText(assignment.tags) !== ""
     || assignment.metadataUpdateRequested;
   const hasTransfers = active.length > 0 || hasPreparedFile;
@@ -373,7 +358,7 @@ export function VideoUploadPanel({ sourceId, userId, getIdToken, onUploaded, onA
         }
         session = (await startVideoUpload(getIdToken, sourceId, row,
           metadataFor(row),
-          { requestId: row.id, signal: controller.signal, collectionId: row.draft?.collection?.id })).upload;
+          { requestId: row.id, signal: controller.signal })).upload;
         store(rows.current.map(item => item.id === row.id ? { ...item, session } : item));
       }
       const asset = await transferVideo({ file, sourceId, session, getIdToken, signal: controller.signal,
@@ -395,7 +380,7 @@ export function VideoUploadPanel({ sourceId, userId, getIdToken, onUploaded, onA
         recordUpload?.(row.name, asset);
         const message = videoUploadCompletionMessage(asset);
         const state = asset.viewingCopy?.state;
-        if ((state === "ready" || state === "processing") && asset.collectionPlacement !== "unavailable") {
+        if (state === "ready" || state === "processing") {
           completionNotice.current = message;
           setNotice(message);
           setCompletionEvent(value => value + 1);
@@ -531,7 +516,7 @@ export function VideoUploadPanel({ sourceId, userId, getIdToken, onUploaded, onA
       if (!session && row.startRequested) {
         session = (await startVideoUpload(getIdToken, sourceId, row,
           metadataFor(row),
-          { requestId: row.id, collectionId: row.draft?.collection?.id })).upload;
+          { requestId: row.id })).upload;
         store(rows.current.map(item => item.id === row.id ? { ...item, session } : item));
       }
       if (session) {
@@ -798,10 +783,6 @@ export function VideoUploadPanel({ sourceId, userId, getIdToken, onUploaded, onA
         onUpdate={patch => updateAssignment({ ...assignmentRef.current, tags: { ...assignmentRef.current.tags, ...patch } })} />
       <label><input type="checkbox" checked={assignment.metadataUpdateRequested} onChange={event => updateAssignment({ ...assignment, metadataUpdateRequested: event.target.checked })} /> Request metadata update for the batch</label>
     </fieldset>
-    {canChooseCollection && collectionPicker.loading ? <p role="status">Loading collections</p> : null}
-    {canChooseCollection && collectionPicker.error ? <InlineMessage tone="warning" title="Some collections could not be loaded">
-      <Button disabled={collectionPicker.loading} onClick={collectionPicker.loadMore}>Retry loading collections</Button>
-    </InlineMessage> : null}
     {notice ? <p role="status" onMouseEnter={() => setNoticeHeld(true)} onMouseLeave={() => setNoticeHeld(false)}>{notice}</p> : null}
     {followUps.map(({ id, message }) => <div className="video-upload-follow-up" key={id} role="status">
       <p>{message}</p>
@@ -826,22 +807,6 @@ export function VideoUploadPanel({ sourceId, userId, getIdToken, onUploaded, onA
             onChange={event => updateDraft(row.id, { name: event.target.value, nameOverridden: Boolean(event.target.value.trim()) })} /></label>
           <label>Description<Textarea maxLength={2_000} rows={2} placeholder={assignment.description || undefined} value={draft.description}
             onChange={event => updateDraft(row.id, { description: event.target.value, descriptionOverridden: Boolean(event.target.value.trim()) })} /></label>
-          {sourceId === "video-library" ? <label>Collection
-            <Select value={draft.collection?.id ?? ""} onChange={event => {
-              const selected = collectionPicker.collections.find(collection => collection.id === event.target.value);
-              updateDraft(row.id, { collection: selected ? { id: selected.id, name: selected.name } : undefined });
-            }}>
-              <option value="">No collection</option>
-              {draft.collection && !collectionPicker.collections.some(collection => collection.id === draft.collection?.id)
-                ? <option value={draft.collection.id}>{draft.collection.name}</option> : null}
-              {(["private", "all_staff"] as const).map(scope => {
-                const options = collectionPicker.collections.filter(collection => collection.scope === scope);
-                return options.length ? <optgroup key={scope} label={scope === "private" ? "Private collections" : "Shared with all staff"}>
-                  {options.map(collection => <option key={collection.id} value={collection.id}>{collection.name}</option>)}
-                </optgroup> : null;
-              })}
-            </Select>
-          </label> : null}
           <label><input type="checkbox" checked={draft.metadataUpdateRequested} onChange={event => updateDraft(row.id, { metadataUpdateRequested: event.target.checked, metadataRequestOverridden: true })} /> Request metadata update</label>
           <VideoRightsFields values={draft} disabled={metadataDisabled} onChange={values => updateDraft(row.id, values)} />
           <MediaUploadTagInput surface="video" value={draft.tags} disabled={metadataDisabled}
@@ -853,7 +818,6 @@ export function VideoUploadPanel({ sourceId, userId, getIdToken, onUploaded, onA
             : queued ? <p>These details are approved. The upload will start when a transfer slot is available.</p>
               : <p>These details were set when the upload started. Edit them from the video library after processing.</p>}
         </fieldset> : null}
-        {row.session && draft.collection ? <p>Collection destination · {draft.collection.name}</p> : null}
         <progress value={state?.bytes ?? 0} max={row.size} aria-label={`Upload progress for ${row.name}`} />
         <span role="status">{cancelingRow ? "Canceling upload" : phase === "checking" ? "Checking file" : phase === "finishing" ? "Bytes uploaded. Verifying the upload" : phase === "paused" ? "Paused" : phase === "ready" ? queued ? "Queued to upload" : prepared ? "Ready to start" : "Ready to resume" : phase === "error" ? "Transfer interrupted" : `${percent}%`} · {formatVideoBytes(state?.bytes ?? 0)} of {formatVideoBytes(row.size)}</span>
         {legacyRow ? <p className="video-upload-legacy-note">Saved by an older version without a recoverable session. Check the library, then remove this browser record and add the file again if needed. Server cancellation cannot be confirmed.</p> : null}
@@ -869,9 +833,6 @@ export function VideoUploadPanel({ sourceId, userId, getIdToken, onUploaded, onA
         </div>
       </li>;
     })}</ul>
-    {canChooseCollection && collectionPicker.hasMore && !collectionPicker.error ? <div className="video-upload-actions">
-      <Button disabled={collectionPicker.loading} onClick={collectionPicker.loadMore}>Load more collections</Button>
-    </div> : null}
     {preparedRows.length > 1 ? <div className="video-upload-actions">
       <Button variant="primary" disabled={!ownsQueue || isClearing || startAllDisabled} onClick={startPreparedBatch}>Start all uploads</Button>
     </div> : null}

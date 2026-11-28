@@ -12,7 +12,7 @@ import type { SourceMediaAssetSummary } from "../lib/source-media";
 import "./MediaTileSpecimen.css";
 
 // Gallery specimens for the shared media card and list row. No route uses them yet. Local fixture images and solid black and white
-// data URIs only, fixed dates, and no favorites call: every action changes local state.
+// data URIs only, fixed dates, and no request: every action changes local state.
 
 export const BLACK = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='640' height='480'%3E%3Crect width='640' height='480' fill='%23000'/%3E%3C/svg%3E";
 export const WHITE = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='640' height='480'%3E%3Crect width='640' height='480' fill='%23fff'/%3E%3C/svg%3E";
@@ -52,19 +52,17 @@ export function video(id: string, name: string, overrides: Partial<SourceMediaAs
 }
 
 interface TileState {
-  favorite: boolean;
   selected: boolean;
   opened: boolean;
 }
 
 function useTileState(initial: Partial<TileState>) {
-  const [state, setState] = useState<TileState>({ favorite: false, selected: false, opened: false, ...initial });
+  const [state, setState] = useState<TileState>({ selected: false, opened: false, ...initial });
   return {
     ...state,
     onOpen: () => setState((current) => ({ ...current, opened: true })),
     onSelectChange: (checked: boolean) => setState((current) => ({ ...current, selected: checked })),
     onAction: (id: MediaTileActionId) => setState((current) => {
-      if (id === "favorite") return { ...current, favorite: !current.favorite };
       if (id === "select") return { ...current, selected: !current.selected };
       if (id === "open") return { ...current, opened: true };
       return current;
@@ -95,7 +93,6 @@ function ImageTile({ asset, drawn, selectionMode = false, ...initial }: Partial<
       canDelete
       categoryLabel={categoryLabel}
       data-specimen-state={drawn}
-      favorite={state.favorite}
       fields={DEFAULT_MEDIA_DISPLAY.fields}
       onAction={state.onAction}
       onOpen={state.onOpen}
@@ -116,7 +113,6 @@ function VideoTile({ asset, poster, ...initial }: Partial<TileState> & { asset: 
       asset={asset}
       canDelete
       data-filtered-tag={tag ?? undefined}
-      favorite={state.favorite}
       onAction={state.onAction}
       onOpen={state.onOpen}
       onSelectChange={state.onSelectChange}
@@ -143,15 +139,14 @@ export function MediaTileSpecimen() {
           <li><Figure caption="Hover"><ImageTile asset={image("housing", "Rowhouse framing, Jersey City", housingImage)} drawn="hover" /></Figure></li>
           <li><Figure caption="Keyboard focus"><ImageTile asset={image("classroom", "Classroom desk, morning light", educationImage)} drawn="focus" /></Figure></li>
           <li><Figure caption="Opened in details"><ImageTile asset={image("about", "Studio control room during the evening broadcast", aboutImage)} opened /></Figure></li>
-          <li><Figure caption="Favorite"><ImageTile asset={image("favorite", "Election desk map graphic", domeImage, { tags: ["elections"] })} favorite /></Figure></li>
           <li><Figure caption="PDF"><ImageTile asset={PDF} /></Figure></li>
         </ul>
       </section>
       <section aria-labelledby="media-tile-selection">
         <h2 id="media-tile-selection">Selection mode</h2>
         <ul className="media-tile-specimen-grid">
-          <li><Figure caption="Selected, over a white image"><ImageTile asset={image("white", "White seamless backdrop", WHITE)} favorite selected /></Figure></li>
-          <li><Figure caption="Not selected, over a black image"><ImageTile asset={image("black", "Black slate before the countdown", BLACK)} favorite selectionMode /></Figure></li>
+          <li><Figure caption="Selected, over a white image"><ImageTile asset={image("white", "White seamless backdrop", WHITE)} selected /></Figure></li>
+          <li><Figure caption="Not selected, over a black image"><ImageTile asset={image("black", "Black slate before the countdown", BLACK)} selectionMode /></Figure></li>
           <li><Figure caption="Selected and opened"><ImageTile asset={image("both", "Offshore wind turbines, Barnegat Bay", housingImage)} opened selected /></Figure></li>
         </ul>
       </section>
@@ -159,10 +154,9 @@ export function MediaTileSpecimen() {
         <h2 id="media-tile-video">Video cards</h2>
         <ul className="media-tile-specimen-grid media-tile-specimen-video">
           <li>
-            <Figure caption="Duration, Needs review and favorite, over a black poster">
+            <Figure caption="Duration and Needs review, over a black poster">
               <VideoTile
                 asset={video("forum", "Community forum: Housing and rent in Newark", { rightsStatus: "pending" })}
-                favorite
                 poster={BLACK}
               />
             </Figure>
@@ -199,7 +193,6 @@ function Row({ asset, drawn, ...initial }: Partial<TileState> & { asset: MediaAs
       canDelete
       categoryLabel={categoryLabel}
       data-specimen-state={drawn}
-      favorite={state.favorite}
       fields={LIST_FIELDS}
       onAction={state.onAction}
       onOpen={state.onOpen}
@@ -217,7 +210,7 @@ function RowList({ label }: { label: string }) {
       <Row asset={image("dome", "Statehouse dome at dusk, Trenton", domeImage)} />
       <Row asset={image("housing", "Rowhouse framing, Jersey City", housingImage)} drawn="hover" />
       <Row asset={image("classroom", "Classroom desk, morning light", educationImage)} selected />
-      <Row asset={image("favorite", "Election desk map graphic with a long name that truncates", aboutImage)} favorite />
+      <Row asset={image("long-name", "Election desk map graphic with a long name that truncates", aboutImage)} />
       <Row asset={PDF} />
     </div>
   );
@@ -228,7 +221,7 @@ export function MediaListRowSpecimen() {
     <div className="media-tile-specimen">
       <section aria-labelledby="media-row-wide">
         <h2 id="media-row-wide">List rows</h2>
-        <p className="media-tile-specimen-note">Rest, hover (drawn), selected, favorite and PDF. Columns follow Display&apos;s fields plus Updated.</p>
+        <p className="media-tile-specimen-note">Rest, hover (drawn), selected, a long name and PDF. Columns follow Display&apos;s fields plus Updated.</p>
         <RowList label="Images" />
       </section>
       <section aria-labelledby="media-row-narrow">

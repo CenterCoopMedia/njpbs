@@ -4,8 +4,6 @@ import { openSpecimen } from "./capture";
 const surfaces = [
   { id: "media-toolbar", search: true, display: true },
   { id: "media-video-toolbar", search: true, display: true },
-  { id: "media-favorites-toolbar", search: false, display: true },
-  { id: "media-collections-list", search: false, display: true },
   { id: "media-voiceovers-toolbar", search: true, display: false },
 ] as const;
 
@@ -64,11 +62,5 @@ for (const width of [1280, 320]) {
     expect(await page.evaluate(() =>
       document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1,
     )).toBe(true);
-
-    await page.goto("/gallery.html?embed=media-collections-detail&presentation=text");
-    const lastItem = page.getByRole("grid", { name: "Collection media" })
-      .getByRole("button", { name: "Unavailable item", exact: true });
-    await lastItem.scrollIntoViewIfNeeded();
-    await expect(lastItem).toBeInViewport();
   });
 }

@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import mediaAssetRef from "../../functions/lib/media-asset-ref.js";
-import mediaFavoriteRef from "../../functions/lib/media-favorites.js";
 
 const {
   canonicalMediaAssetRef,
@@ -9,10 +8,9 @@ const {
   parseUniqueMediaAssetRefs,
   storedMediaAssetRef,
 } = mediaAssetRef;
-const { canonicalFavoriteRef, favoriteDocumentId } = mediaFavoriteRef;
 
 describe("media asset references", () => {
-  it("keeps the persisted favorite canonical value and document id", () => {
+  it("keeps a distinct canonical value and document id per source", () => {
     const refs = [
       { backend: "r2", id: "same-id" },
       { backend: "s3", sourceId: "video-library", id: "same-id" },
@@ -24,8 +22,6 @@ describe("media asset references", () => {
       "s3:video-library:same-id",
       "s3:archive-working:same-id",
     ]);
-    expect(refs.map(canonicalMediaAssetRef)).toEqual(refs.map(canonicalFavoriteRef));
-    expect(refs.map(mediaAssetRefDocumentId)).toEqual(refs.map(favoriteDocumentId));
     expect(new Set(refs.map(mediaAssetRefDocumentId)).size).toBe(3);
   });
 

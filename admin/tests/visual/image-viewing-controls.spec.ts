@@ -1,7 +1,7 @@
 import { expect, test } from "./fixtures";
 import { openSpecimen } from "./capture";
 
-for (const id of ["image-viewer", "media-favorites-viewer-image", "media-collections-viewer-image"]) {
+for (const id of ["image-viewer"]) {
   for (const width of [1280, 390]) {
     test(`${id} retains image, zoom, pan and metadata while Details switches at ${width}px`, async ({ page }) => {
       await openSpecimen(page, { id, title: "Image view controls", width, presentation: "text" }, { normalizeGeneratedIds: false });

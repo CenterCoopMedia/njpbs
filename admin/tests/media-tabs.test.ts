@@ -19,15 +19,13 @@ function click(init: Partial<Pick<MouseEvent, "button" | "ctrlKey" | "metaKey" |
 }
 
 describe("media tabs", () => {
-  it("orders Images, each video source, UGC, Audio, Favorites, Collections with the earlier paths", () => {
+  it("orders Images, each video source, UGC and Audio with the earlier paths", () => {
     expect(mediaTabs({ canUseImages: true, canReviewSubmissions: true, sources }).map((tab) => [tab.id, tab.label, tab.icon, tab.path])).toEqual([
       ["images", "Images", "image", "/media/images"],
       ["video-library", "Videos", "video", "/media/videos"],
       ["spotlight", "NJ Spotlight News originals", "video", "/media/videos/spotlight"],
       ["submissions", "Public submissions", "folder", "/media/submissions"],
       ["voiceovers", "Audio", "microphone", "/media/voiceovers"],
-      ["favorites", "Favorites", "heart", "/media/favorites"],
-      ["collections", "Collections", "folder", "/media/collections"],
     ]);
   });
 
@@ -57,7 +55,7 @@ describe("media tabs", () => {
 
   it("attaches known counts and leaves unknown ones out", () => {
     const tabs = mediaTabs({ canUseImages: true, sources, counts: { images: 412, spotlight: 86 } });
-    expect(tabs.map((tab) => tab.count)).toEqual([412, undefined, 86, undefined, undefined, undefined]);
+    expect(tabs.map((tab) => tab.count)).toEqual([412, undefined, 86, undefined]);
   });
 
   it("marks the current tab from route kind and source id, never by path prefix", () => {
@@ -65,10 +63,6 @@ describe("media tabs", () => {
     expect(currentMediaTabId({ kind: "videos", sourceId: null }, sources)).toBe("video-library");
     expect(currentMediaTabId({ kind: "videos", sourceId: null }, [])).toBe("video-library");
     expect(currentMediaTabId({ kind: "images" }, sources)).toBe("images");
-  });
-
-  it("keeps Collections current on a collection detail path", () => {
-    expect(currentMediaTabId({ kind: "collections", collectionId: "c1" }, sources)).toBe("collections");
   });
 
   it("marks no tab current while a custom source is still loading", () => {
@@ -79,7 +73,7 @@ describe("media tabs", () => {
 
   it("suppresses only an unmodified primary click on a tab whose path is the current pathname", () => {
     expect(shouldSuppressTabClick(click(), "/media/images", "/media/images")).toBe(true);
-    expect(shouldSuppressTabClick(click(), "/media/collections", "/media/collections/c1")).toBe(false);
+    expect(shouldSuppressTabClick(click(), "/media/videos", "/media/videos/spotlight")).toBe(false);
     for (const init of [{ ctrlKey: true }, { metaKey: true }, { shiftKey: true }, { altKey: true }, { button: 1 }]) {
       expect(shouldSuppressTabClick(click(init), "/media/images", "/media/images")).toBe(false);
     }
@@ -87,7 +81,7 @@ describe("media tabs", () => {
 
   it("names a counted tab with its label and count", () => {
     expect(mediaTabName("Images", 1204)).toBe("Images 1,204 items");
-    expect(mediaTabName("Favorites", 1)).toBe("Favorites 1 item");
+    expect(mediaTabName("Audio", 1)).toBe("Audio 1 item");
     expect(mediaTabName("Collections")).toBe("Collections");
   });
 

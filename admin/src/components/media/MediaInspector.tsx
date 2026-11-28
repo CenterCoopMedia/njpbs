@@ -160,7 +160,6 @@ interface MediaInspectorBaseProps {
     metadata: UpdateMediaMetadata,
   ) => Promise<UpdateMediaMetadataResponse>;
   deleteMedia: (asset: MediaAssetSummary) => Promise<DeleteMediaResponse>;
-  favoriteControl?: ReactNode;
   replaceControl?: ReactNode;
   pageTags?: readonly string[];
   recentTags?: readonly string[];
@@ -208,7 +207,6 @@ function MediaInspectorContent({
   locked = false,
   saveMetadata,
   deleteMedia,
-  favoriteControl,
   replaceControl,
   footerTarget,
   pageTags = [],
@@ -565,7 +563,7 @@ function MediaInspectorContent({
       />
     </div>
   ) : null;
-  const previewActions = docked && (favoriteControl || replaceControl);
+  const previewActions = docked && replaceControl;
   const showSavedNotice = saved && !reviewOnlySaved;
   const footer = actionsTarget && canEdit && !error && !showSavedNotice && !previewActions && !showFramedCancel ? undefined : (
     <div className="media-image-inspector-footer" data-viewer-keys="off" data-pinned={pinFormActions || undefined}>
@@ -581,7 +579,7 @@ function MediaInspectorContent({
         </InlineMessage>
       ) : null}
       {previewActions ? (
-        <div className="media-image-inspector-preview-actions">{favoriteControl}{replaceControl}</div>
+        <div className="media-image-inspector-preview-actions">{replaceControl}</div>
       ) : null}
       {maySave && !actionsTarget ? formActions : null}
       {showFramedCancel ? cancelAction : null}
@@ -634,7 +632,7 @@ function MediaInspectorContent({
               {asset.mimeType} · {formatMediaBytes(asset.sizeBytes)}
               {asset.width && asset.height ? ` · ${asset.width} × ${asset.height}` : ""}
             </p>
-            {favoriteControl || replaceControl ? <div className="media-image-inspector-preview-actions">{favoriteControl}{replaceControl}</div> : null}
+            {replaceControl ? <div className="media-image-inspector-preview-actions">{replaceControl}</div> : null}
           </InspectorSection>
         ) : null}
 

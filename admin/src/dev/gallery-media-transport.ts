@@ -1,24 +1,18 @@
 import { useEffect, useState } from "react";
 import type { MediaAssetSummary } from "../lib/functions";
 import { commentThreads, threadMatches, type CommentFilter } from "../lib/media-comment-threads";
-import type {
-  MediaCollectionItemPage,
-  MediaCollectionPage,
-  MediaCollectionSummary,
-} from "../lib/media-collections";
 import type { SourceMediaAssetSummary } from "../lib/source-media";
 import { GALLERY_MEDIA } from "./gallery-media-fixtures";
 
-export const GALLERY_COLLECTION_ID = "c".repeat(64);
-export const GALLERY_COLLECTION_IMAGE: MediaAssetSummary = {
+const GALLERY_MIXED_IMAGE: MediaAssetSummary = {
   ...GALLERY_MEDIA[0],
-  id: "gallery-collection-image",
+  id: "gallery-mixed-image",
   name: "Statehouse newsroom still",
   originalName: "statehouse-newsroom-still.svg",
   category: "news",
   categories: ["news"],
   tags: ["newsroom", "statehouse"],
-  description: "A local image fixture in a mixed collection.",
+  description: "A local image fixture in a mixed media set.",
   altText: "Blue circles arranged over a navy field",
   mimeType: "image/svg+xml",
   sizeBytes: 48_210,
@@ -26,19 +20,19 @@ export const GALLERY_COLLECTION_IMAGE: MediaAssetSummary = {
   height: 540,
   url: `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540"><rect width="960" height="540" fill="#123354"/><circle cx="360" cy="270" r="116" fill="#67b7df"/><circle cx="600" cy="270" r="116" fill="#ffffff" opacity=".88"/></svg>')}`,
 };
-export const GALLERY_COLLECTION_DOCUMENT: MediaAssetSummary = {
+const GALLERY_MIXED_DOCUMENT: MediaAssetSummary = {
   ...GALLERY_MEDIA.find(asset => asset.kind === "document")!,
-  id: "gallery-collection-document",
+  id: "gallery-mixed-document",
   name: "Field production guide",
   originalName: "field-production-guide.pdf",
-  description: "A local PDF fixture in a mixed collection.",
-  url: "#gallery-collection-document",
+  description: "A local PDF fixture in a mixed media set.",
+  url: "#gallery-mixed-document",
 };
-export const GALLERY_COLLECTION_VIDEO: SourceMediaAssetSummary = {
-  id: "gallery-collection-video",
+const GALLERY_MIXED_VIDEO: SourceMediaAssetSummary = {
+  id: "gallery-mixed-video",
   sourceId: "archive",
   name: "Archive interview excerpt",
-  description: "A local private-video fixture in a mixed collection.",
+  description: "A local private-video fixture in a mixed media set.",
   originalName: "archive-interview.mov",
   mimeType: "video/quicktime",
   kind: "video",
@@ -52,41 +46,6 @@ export const GALLERY_COLLECTION_VIDEO: SourceMediaAssetSummary = {
   uploadedBy: { name: "Archive team" },
   createdAt: "2026-08-18T14:00:00.000Z",
   updatedAt: "2026-08-20T13:00:00.000Z",
-};
-const GALLERY_COLLECTION: MediaCollectionSummary = {
-  id: GALLERY_COLLECTION_ID,
-  scope: "private",
-  name: "Statehouse reporting package",
-  description: "Images, documents and private video for the reporting team.",
-  color: "blue",
-  lifecycle: "active",
-  version: 4,
-  membershipVersion: 7,
-  cover: GALLERY_COLLECTION_IMAGE,
-  canEdit: true,
-  createdAt: "2026-08-15T14:00:00.000Z",
-  updatedAt: "2026-08-20T14:00:00.000Z",
-  itemCount: 4,
-};
-const GALLERY_COLLECTIONS: readonly MediaCollectionSummary[] = [
-  GALLERY_COLLECTION,
-  { ...GALLERY_COLLECTION, id: "1".repeat(64), scope: "all_staff", name: "Reporting team selects", description: "An all-staff active package.", color: "purple", itemCount: undefined },
-  { ...GALLERY_COLLECTION, id: "2".repeat(64), scope: "all_staff", lifecycle: "archived", name: "Archived pledge drive", description: "Shared stills and clips from the spring drive.", color: "gold", itemCount: undefined },
-  { ...GALLERY_COLLECTION, id: "3".repeat(64), scope: "all_staff", lifecycle: "archived", name: "Retired station IDs", description: "Older station identity files kept for reference.", color: "slate", itemCount: undefined },
-  { ...GALLERY_COLLECTION, id: "4".repeat(64), scope: "private", lifecycle: "archived", name: "Old draft package", description: "A private archived package.", color: "red", itemCount: 2 },
-  { ...GALLERY_COLLECTION, id: "5".repeat(64), name: "New reporting package", description: "", cover: null, itemCount: 0 },
-];
-const GALLERY_COLLECTION_ITEMS_PAGE: MediaCollectionItemPage = {
-  success: true,
-  collection: GALLERY_COLLECTION,
-  items: [
-    { ref: { backend: "r2", id: GALLERY_COLLECTION_IMAGE.id }, addedAt: "2026-08-20T12:00:00.000Z", available: true, asset: GALLERY_COLLECTION_IMAGE },
-    { ref: { backend: "s3", sourceId: GALLERY_COLLECTION_VIDEO.sourceId, id: GALLERY_COLLECTION_VIDEO.id }, addedAt: "2026-08-20T11:00:00.000Z", available: true, asset: GALLERY_COLLECTION_VIDEO },
-    { ref: { backend: "r2", id: GALLERY_COLLECTION_DOCUMENT.id }, addedAt: "2026-08-20T10:00:00.000Z", available: true, asset: GALLERY_COLLECTION_DOCUMENT },
-    { ref: { backend: "s3", sourceId: "archive", id: "missing-collection-video" }, addedAt: "2026-08-20T09:00:00.000Z", available: false },
-  ],
-  nextCursor: null,
-  hasMore: false,
 };
 
 export function galleryJsonResponse(body: unknown, status = 200): Response {
@@ -123,7 +82,6 @@ export function useGalleryMediaTransport(): () => Promise<string> {
     const originalFetch = window.fetch;
     let installed = false;
     const privateWav = galleryWavBytes();
-    const favoriteIds = new Set<string>(["voiceover-soft-spoken-station-id-01"]);
     let voiceoverReview = {
       favorite: true,
       moreLikeThis: false,
@@ -154,13 +112,13 @@ export function useGalleryMediaTransport(): () => Promise<string> {
       commentsByRef.set(key, seeded);
       return seeded;
     };
-    const audioRecords: MediaAssetSummary[] = [{ ...GALLERY_COLLECTION_DOCUMENT,
+    const audioRecords: MediaAssetSummary[] = [{ ...GALLERY_MIXED_DOCUMENT,
       id: "station-interview", name: "Station interview", originalName: "station-interview.wav",
       category: "news", categories: ["news"], tags: ["interview"], altText: null,
       mimeType: "audio/wav", kind: "audio", source: "upload", license: null, credit: null,
       url: "https://media.example.test/station-interview.wav", sizeBytes: 96_044,
       etag: '"media.station-interview.1"', description: "A station interview uploaded by staff." },
-    { ...GALLERY_COLLECTION_DOCUMENT,
+    { ...GALLERY_MIXED_DOCUMENT,
       id: "voiceover-soft-spoken-station-id-01", name: "Station identification",
       originalName: "soft-spoken-station-id-01.wav", category: "news", categories: ["news"],
       tags: ["voiceover", "soft-spoken"], description: "You're watching NJ PBS.", altText: null,
@@ -193,7 +151,7 @@ export function useGalleryMediaTransport(): () => Promise<string> {
       if (endpoint === "cmsSourceMediaOriginal") return galleryJsonResponse({ success: true,
         original: { state: "available", archiveTier: null, checkedAt: "2026-08-20T19:00:00.000Z" }, notices: [] });
       if (endpoint === "cmsListMedia") {
-        const availableRecords = [GALLERY_COLLECTION_IMAGE, GALLERY_COLLECTION_DOCUMENT, ...audioRecords];
+        const availableRecords = [GALLERY_MIXED_IMAGE, GALLERY_MIXED_DOCUMENT, ...audioRecords];
         const requestedIds = Array.isArray(request.assetIds)
           ? new Set(request.assetIds.filter((id): id is string => typeof id === "string"))
           : null;
@@ -211,15 +169,12 @@ export function useGalleryMediaTransport(): () => Promise<string> {
           allCount: records.length, categoryCounts: null, kindCounts: null, page: 1,
           pageCount: null,
           ...(request.counts === true ? { counts: {
-            images: 1, audio: audioRecords.length, favorites: favoriteIds.size, sources: {},
+            images: 1, audio: audioRecords.length, sources: {},
           } } : {}),
-          ...(request.favorites === true ? { favoriteStates: records.map(asset => ({
-            ref: { backend: "r2", id: asset.id }, favorite: favoriteIds.has(asset.id),
-          })) } : {}),
         });
       }
       if (endpoint === "cmsListSourceMedia") return galleryJsonResponse({
-        success: true, records: [{ ...GALLERY_COLLECTION_VIDEO, sourceId: request.sourceId ?? "video-library" }],
+        success: true, records: [{ ...GALLERY_MIXED_VIDEO, sourceId: request.sourceId ?? "video-library" }],
         nextCursor: null, hasMore: false, total: 1,
       });
       if (endpoint === "cmsUploadMedia" && init?.body instanceof FormData) {
@@ -231,32 +186,6 @@ export function useGalleryMediaTransport(): () => Promise<string> {
           url: "https://media.example.test/uploaded.wav" };
         audioRecords.push(uploaded);
         return galleryJsonResponse({ success: true, asset: uploaded }, 201);
-      }
-      if (endpoint === "cmsListMediaFavorites") {
-        const refs = Array.isArray(request.refs) ? request.refs : [];
-        return galleryJsonResponse({ success: true, states: refs.map(ref => {
-          const id = typeof ref === "object" && ref !== null && "id" in ref
-            ? String(ref.id)
-            : "";
-          return { ref, favorite: favoriteIds.has(id) };
-        }) });
-      }
-      if (endpoint === "cmsSetMediaFavorite") {
-        const ref = request.ref as { backend: "r2"; id: string };
-        const favorite = request.favorite === true;
-        const changed = favoriteIds.has(ref.id) !== favorite;
-        if (favorite) favoriteIds.add(ref.id); else favoriteIds.delete(ref.id);
-        return galleryJsonResponse({ success: true, ref, favorite, changed });
-      }
-      if (endpoint === "cmsSetMediaFavorites") {
-        const refs = request.refs as { backend: "r2"; id: string }[];
-        const favorite = request.favorite === true;
-        const results = refs.map(ref => {
-          const changed = favoriteIds.has(ref.id) !== favorite;
-          if (favorite) favoriteIds.add(ref.id); else favoriteIds.delete(ref.id);
-          return { ref, favorite, changed };
-        });
-        return galleryJsonResponse({ success: true, favorite, results });
       }
       if (endpoint === "cmsGetMediaReview") {
         const key = feedbackKey(request.ref);
@@ -333,23 +262,6 @@ export function useGalleryMediaTransport(): () => Promise<string> {
         return new Response(new Uint8Array(privateWav).buffer, { status: 200, headers: {
           "Content-Type": "audio/wav", "Content-Length": String(privateWav.byteLength),
         } });
-      }
-      if (endpoint === "cmsListMediaCollections") {
-        const page: MediaCollectionPage = {
-          success: true,
-          collections: GALLERY_COLLECTIONS.filter(collection =>
-            collection.scope === request.scope && collection.lifecycle === request.lifecycle),
-          nextCursor: null,
-          hasMore: false,
-        };
-        return galleryJsonResponse(page);
-      }
-      if (endpoint === "cmsListMediaCollectionItems") {
-        if (request.collectionId === GALLERY_COLLECTION_ID) return galleryJsonResponse(GALLERY_COLLECTION_ITEMS_PAGE);
-        const collection = GALLERY_COLLECTIONS.find(item => item.id === request.collectionId);
-        return collection
-          ? galleryJsonResponse({ ...GALLERY_COLLECTION_ITEMS_PAGE, collection, items: [] })
-          : galleryJsonResponse({ error: "Media collection unavailable" }, 404);
       }
       if (endpoint === "cmsListMediaSources") return galleryJsonResponse({
         success: true,

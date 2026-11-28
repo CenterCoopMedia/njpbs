@@ -12,8 +12,6 @@
     "analytics": "Site analytics",
     "activity": "Activity",
     "media-landing": "Media landing",
-    "media-favorites": "Media favorites",
-    "media-collections": "Media collections",
     "media-submissions": "Public submissions",
     "images": "Images",
     "videos": "Videos",
@@ -34,7 +32,9 @@
   "earlierScreens": {
     "pages": "Pages, list and editor (before the split)",
     "posts": "Posts, list and editor (before the split)",
-    "media": "Other media, landing and subpages (before the split)"
+    "media": "Other media, landing and subpages (before the split)",
+    "media-favorites": "Media favorites",
+    "media-collections": "Media collections"
   },
   "actions": {
     "content.publish.request": "Content publish attempts",

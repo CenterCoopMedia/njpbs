@@ -8,8 +8,6 @@ import { SegmentedControl } from "../components/ui/SegmentedControl";
 
 const items: MenuItem[] = [
   { key: "open", label: "Open", icon: "eye", onSelect: () => {} },
-  { key: "favorite", label: "Favorite", icon: "heart", onSelect: () => {} },
-  { key: "collect", label: "Add to collection", icon: "folder-plus", group: "organize", onSelect: () => {} },
   { key: "tags", label: "Edit tags", icon: "tag", group: "organize", onSelect: () => {} },
   { key: "delete", label: "Delete from library", icon: "trash", danger: true, group: "danger", onSelect: () => {} },
 ];

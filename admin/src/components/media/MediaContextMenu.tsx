@@ -6,7 +6,6 @@ import {
   mediaMenuTitle,
   mediaSelectionActions,
   mediaTileActions,
-  settledMenuActions,
   type MediaTileAction,
   type MediaTileActionId,
   type MediaTileActionInput,
@@ -15,7 +14,7 @@ import { ContextMenuArea } from "../ui/Menu";
 
 // The card's context menu. Right-click,
 // Shift+F10 and the Menu key open the same items as the card's More (Delete last in danger ink). On a selected card in a multi-selection, the menu is the
-// selection's actions, titled "N items". Image and video selections include batch favorites. The items come
+// selection's actions, titled "N items". The items come
 // from props when the menu opens; opening it makes no request. Focus returns to the card.
 
 export interface MediaContextMenuProps {
@@ -23,19 +22,17 @@ export interface MediaContextMenuProps {
   tile: MediaTileActionInput;
   /** How many items are selected on this surface, on or off the page. */
   selectionCount: number;
-  /** False while the card's favorite state loads or saves; the menu then leaves Favorite out. */
-  favoriteSettled?: boolean;
   /** True while details or an upload hold unsaved work: the menu offers only Open details. */
   actionsDisabled?: boolean;
   /** A selection transition that the caller guards before discarding dirty details. */
   allowSelectionActionWhileDisabled?: MediaTileActionId;
-  /** An inspector batch or picker owns the selection until it closes. */
+  /** An inspector batch owns the selection until it closes. */
   selectionBusy?: boolean;
   /** Video only: the selection can open Edit selected. */
   canEditSelection?: boolean;
   /** A single card's action. */
   onAction: (id: MediaTileActionId) => void;
-  /** A multi-selection action: collect, edit-selected, favorites, or clear-selection. */
+  /** A multi-selection action: edit-tags, edit-selected, or clear-selection. */
   onSelectionAction: (id: MediaTileActionId) => void;
   /** The caller's selection actions. When omitted, the menu builds them from the tile surface. */
   selectionActions?: readonly MediaTileAction[];
@@ -48,7 +45,6 @@ export function MediaContextMenu({
   selectionBusy = false,
   canEditSelection = false,
   children,
-  favoriteSettled = true,
   onAction,
   onSelectionAction,
   selectionActions: selectionActionsProp,
@@ -59,7 +55,7 @@ export function MediaContextMenu({
   const selectionActions = selectionActionsProp ?? mediaSelectionActions({ surface: tile.surface, count: selectionCount, canEdit: canEditSelection });
   const items = multiple
     ? mediaMenuItems(availableSelectionActions(selectionActions, actionsDisabled, selectionBusy, allowSelectionActionWhileDisabled), onSelectionAction)
-    : mediaMenuItems(lockedMenuActions(settledMenuActions(mediaTileActions(tile), favoriteSettled), actionsDisabled), onAction);
+    : mediaMenuItems(lockedMenuActions(mediaTileActions(tile), actionsDisabled), onAction);
   return (
     <ContextMenuArea
       items={items}

@@ -1,16 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  adjustMediaFavoritesCount,
   beginMediaTabCountsRequest,
   clearMediaSessionCache,
-  clearMediaTabCounts,
   failMediaTabCountsRequest,
   finishMediaTabCountsRequest,
   invalidateMediaLists,
   markMediaTabCountsStale,
   mediaListRevision,
   mediaTabCounts,
-  mediaTabCountsRevision,
   setMediaCachePrincipal,
   setMediaCacheUser,
   subscribeMediaCacheIdentity,
@@ -158,18 +155,18 @@ describe("media tab counts", () => {
     expect(first).not.toBeNull();
     // A second load while the first is in flight does not ask again.
     expect(beginMediaTabCountsRequest()).toBeNull();
-    finishMediaTabCountsRequest(first!, { images: 3, favorites: 2, voiceovers: 196, sources: { "video-library": 412 } });
-    expect(mediaTabCounts()).toEqual({ images: 3, favorites: 2, voiceovers: 196, sources: { "video-library": 412 } });
+    finishMediaTabCountsRequest(first!, { images: 3, audio: 2, voiceovers: 196, sources: { "video-library": 412 } });
+    expect(mediaTabCounts()).toEqual({ images: 3, audio: 2, voiceovers: 196, sources: { "video-library": 412 } });
     // Paging, filtering, sorting and searching reuse the counts in hand.
     expect(beginMediaTabCountsRequest()).toBeNull();
 
     markMediaTabCountsStale();
     // The shown counts stay until the reload that follows the write replaces them.
-    expect(mediaTabCounts().favorites).toBe(2);
+    expect(mediaTabCounts().audio).toBe(2);
     const afterWrite = beginMediaTabCountsRequest();
     expect(afterWrite).not.toBeNull();
-    finishMediaTabCountsRequest(afterWrite!, { images: 4, favorites: 2 });
-    expect(mediaTabCounts()).toEqual({ images: 4, favorites: 2 });
+    finishMediaTabCountsRequest(afterWrite!, { images: 4, audio: 2 });
+    expect(mediaTabCounts()).toEqual({ images: 4, audio: 2 });
     expect(beginMediaTabCountsRequest()).toBeNull();
   });
 
@@ -187,7 +184,7 @@ describe("media tab counts", () => {
     const request = beginMediaTabCountsRequest();
     finishMediaTabCountsRequest(request!, {
       images: -1,
-      favorites: 1.5,
+      audio: 1.5,
       voiceovers: "196",
       sources: { "video-library": 7, broken: Number.NaN },
       extra: 3,
@@ -198,12 +195,12 @@ describe("media tab counts", () => {
   it("drops a response that started before an account change or a write", () => {
     const request = beginMediaTabCountsRequest();
     setMediaCachePrincipal("editor-2", "{}");
-    finishMediaTabCountsRequest(request!, { favorites: 5 });
+    finishMediaTabCountsRequest(request!, { audio: 5 });
     expect(mediaTabCounts()).toEqual({});
 
     const beforeWrite = beginMediaTabCountsRequest();
     markMediaTabCountsStale();
-    finishMediaTabCountsRequest(beforeWrite!, { favorites: 5 });
+    finishMediaTabCountsRequest(beforeWrite!, { audio: 5 });
     expect(mediaTabCounts()).toEqual({});
     expect(beginMediaTabCountsRequest()).not.toBeNull();
   });
@@ -229,37 +226,11 @@ describe("media tab counts", () => {
     expect(mediaTabCounts().sources).toEqual({ "archive-working": 3 });
   });
 
-  it("moves the favorites count by one for the caller's own toggles only while it is current", () => {
-    adjustMediaFavoritesCount(1, mediaTabCountsRevision());
-    expect(mediaTabCounts()).not.toHaveProperty("favorites");
-
-    const request = beginMediaTabCountsRequest();
-    finishMediaTabCountsRequest(request!, { favorites: 1 });
-    const revision = mediaTabCountsRevision();
-    adjustMediaFavoritesCount(1, revision);
-    expect(mediaTabCounts().favorites).toBe(2);
-    adjustMediaFavoritesCount(-1, revision);
-    adjustMediaFavoritesCount(-1, revision);
-    adjustMediaFavoritesCount(-1, revision);
-    expect(mediaTabCounts().favorites).toBe(0);
-    adjustMediaFavoritesCount(4, revision);
-    expect(mediaTabCounts().favorites).toBe(4);
-    adjustMediaFavoritesCount(0, revision);
-    adjustMediaFavoritesCount(1.5, revision);
-    expect(mediaTabCounts().favorites).toBe(4);
-    adjustMediaFavoritesCount(-4, revision);
-    expect(mediaTabCounts().favorites).toBe(0);
-
-    clearMediaTabCounts();
-    adjustMediaFavoritesCount(1, revision);
-    expect(mediaTabCounts()).toEqual({});
-  });
-
   it("clears counts for a new account or sign-out and tells subscribers once per turn", async () => {
     const listener = vi.fn();
     const unsubscribe = subscribeMediaTabCounts(listener);
     const request = beginMediaTabCountsRequest();
-    finishMediaTabCountsRequest(request!, { favorites: 4 });
+    finishMediaTabCountsRequest(request!, { audio: 4 });
     setMediaSourceCount("video-library", 9);
     await Promise.resolve();
     expect(listener).toHaveBeenCalledTimes(1);

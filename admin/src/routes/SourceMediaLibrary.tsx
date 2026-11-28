@@ -4,7 +4,7 @@ import { focusMediaDialogNavigation, mediaDialogNavigation } from "../components
 import { ActionControl } from "../components/ui/ActionControl";
 import { Menu } from "../components/ui/Menu";
 import { createPortal } from "react-dom";
-import { MediaPreviewHeaderActions, type MediaPreviewHeaderActionsProps } from "../components/media/MediaPreviewHeaderActions";
+import { MediaPreviewHeaderActions } from "../components/media/MediaPreviewHeaderActions";
 import { formatMediaDuration, formatMediaUpdated, formatVideoBytes } from "../lib/media-format";
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent as ReactDragEvent, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactElement, type ReactNode } from "react";
 import type { Principal } from "../../../packages/content-core/src/rbac";
@@ -31,8 +31,6 @@ import { cachedPoster, cachePoster, invalidatePoster, setMediaCachePrincipal, se
 import { useRegisterExitGuard } from "./ExitGuard";
 import { parseMediaWorkspacePath } from "../lib/routes";
 import { LeaveGuardDialog } from "./LeaveGuardDialog";
-import { useMediaFavorites } from "../lib/use-media-favorites";
-import type { MediaFavoriteRef } from "../lib/media-favorites";
 import { MediaContextMenu } from "../components/media/MediaContextMenu";
 import { restoreMediaFocus, type MediaGridHandle, type MediaGridItemContext } from "../components/media/MediaGrid";
 import { MediaRow } from "../components/media/MediaRow";
@@ -70,7 +68,6 @@ import { mediaShortcutBlocked } from "../lib/media-search";
 import { splitUploadFiles, videoUploadCompletionMessage } from "../lib/upload-destination";
 import { routeChosenFiles } from "../lib/upload-router";
 import { useSuccessNotice } from "../components/ui/SuccessNoticeRegion";
-import { useFavoriteUndo } from "../lib/use-favorite-undo";
 import { useClearFilterUndo } from "../lib/use-clear-filter-undo";
 import "./SourceMediaLibrary.css";
 import { canPlayInBrowser, createVersionedSourceMediaRead, SourceMediaFileChangedError } from "../lib/source-media-read";
@@ -161,7 +158,6 @@ export interface VideoPreviewProps {
   navigationBlocked: boolean;
   onDiscardNavigation: () => void;
   onKeepNavigation: () => void;
-  favorite?: MediaPreviewHeaderActionsProps["favorite"];
   pageTags?: readonly string[];
   recentTags?: readonly string[];
   onTagsSaved?: (tags: readonly string[]) => void;
@@ -206,7 +202,6 @@ export function VideoViewerBody({
   navigationBlocked,
   onDiscardNavigation,
   onKeepNavigation,
-  favorite,
   pageTags = [],
   recentTags = [],
   onTagsSaved,
@@ -778,7 +773,7 @@ export function VideoViewerBody({
     />;
   return <>
     {headerTarget ? createPortal(<MediaPreviewHeaderActions downloads={downloads} bookmarks={bookmarks}
-      favorite={favorite} copyLink={() => mediaPermalink(mediaVideosPath(asset.sourceId), asset.id, player.current?.currentTime ?? initialSeek)} />, headerTarget) : null}
+      copyLink={() => mediaPermalink(mediaVideosPath(asset.sourceId), asset.id, player.current?.currentTime ?? initialSeek)} />, headerTarget) : null}
     {factsTarget ? createPortal(facts, factsTarget) : null}
     <MediaDialogNotice>{previewError ? <InlineMessage tone="error" title="Video access needs attention">{previewError}
       {canRefreshPreview ? <Button onClick={() => refreshPreview(true)}>Refresh preview</Button> : null}
@@ -1328,14 +1323,8 @@ export function SourceMediaLibrary({ principal, source, getIdToken, userId, onEx
     }
   }
   function focusSearch() { document.getElementById("video-search")?.focus(); }
-  const favoriteRefs: MediaFavoriteRef[] = page?.records.map(asset => ({ backend: "s3" as const, sourceId: asset.sourceId, id: asset.id })) ?? [];
-  if (selected && !page?.records.some(asset => asset.id === selected.id && asset.sourceId === selected.sourceId)) {
-    favoriteRefs.push({ backend: "s3", sourceId: selected.sourceId, id: selected.id });
-  }
-  const favorites = useMediaFavorites(userId, favoriteRefs, getIdToken);
-  const favoriteUndo = useFavoriteUndo(userId, favorites);
   const bulk = useSourceMediaBulkEditing({
-    source, userId, getIdToken, favorites, records: loading || error ? [] : page?.records ?? [],
+    source, userId, getIdToken, records: loading || error ? [] : page?.records ?? [],
     pageTags: pageVideoTags, recentTags: recentVideoTags,
     onTagsSaved: rememberVideoTags,
     disabled: Boolean(selected) || loading || Boolean(error) || metadataDirty || metadataSaving || visibleUploadOpen,
@@ -1483,8 +1472,8 @@ export function SourceMediaLibrary({ principal, source, getIdToken, userId, onEx
   const pendingRouteNavigation = useRef(false);
   pendingRouteNavigation.current = blocker.state !== "unblocked";
   const navigationBlocked = blocker.state === "blocked" && !metadataSaving && !bulk.saving;
-  // Selecting, favoriting or collecting from a card waits while the viewer, the batch editor or
-  // the collection picker is open, or while details hold unsaved work (the images page's guard).
+  // Selecting from a card waits while the viewer or the batch editor is open, or while details
+  // hold unsaved work (the images page's guard).
   const uploadOpenBlockedReason = routedLibraryActive
     ? "Finish the current Images upload first."
     : metadataDirty || metadataSaving
@@ -1625,8 +1614,6 @@ export function SourceMediaLibrary({ principal, source, getIdToken, userId, onEx
     if (id === "uploader") { showUploader(asset); return; }
     if (cardsLocked) return;
     if (id === "quick-look") { openQuickLook(asset); return; }
-    if (id === "favorite") void favoriteUndo.toggle({ backend: "s3", sourceId: asset.sourceId, id: asset.id }, asset.name);
-    if (id === "collect") bulk.collect(asset);
     if (id === "select") bulk.changeSelection(toggleSelection(bulk.selection, asset, bulk.rules));
     if (id === "delete") openVideo(asset, { confirmDelete: true });
   }
@@ -1634,7 +1621,7 @@ export function SourceMediaLibrary({ principal, source, getIdToken, userId, onEx
   // with its own Escape.
   function escapeResults() {
     if (bulk.selection.items.length > 0) {
-      if (!bulk.pickerOpen) bulk.clear();
+      bulk.clear();
       return;
     }
     if (search || searchDraft.current) {
@@ -1647,9 +1634,6 @@ export function SourceMediaLibrary({ principal, source, getIdToken, userId, onEx
   // cells sit in the same context menu, so the row stays the grid's row. cardsLocked is the
   // one guard. Both take the same VideoPoster, so switching View reuses cached posters.
   function renderTile(asset: SourceMediaAssetSummary, context: MediaGridItemContext) {
-    const ref = { backend: "s3" as const, sourceId: asset.sourceId, id: asset.id };
-    const favorite = favorites.value(ref);
-    const favoritePending = favorites.pending(ref);
     const canDelete = source.canDelete === true;
     const selectionBusy = bulk.selectionBusy;
     const selectionMenu = context.selected && bulk.selection.items.length > 1 ? {
@@ -1666,15 +1650,14 @@ export function SourceMediaLibrary({ principal, source, getIdToken, userId, onEx
       canEditSelection={source.canEditMetadata}
       selectionBusy={selectionBusy}
       selectionActions={bulk.selectionActions}
-      favoriteSettled={favorite !== undefined && !favoritePending}
       onAction={id => tileAction(asset, id)}
       onSelectionAction={bulk.selectionAction}
       selectionCount={bulk.selection.items.length}
-      tile={{ surface: "video", name: asset.name, favorite: favorite === true, available: true, selected: context.selected, canDelete, uploader: canFilterUploader ? asset.uploadedBy : undefined, quickLook: true }}>
+      tile={{ surface: "video", name: asset.name, selected: context.selected, canDelete, uploader: canFilterUploader ? asset.uploadedBy : undefined, quickLook: true }}>
       {children}
     </MediaContextMenu>;
     const shared = {
-      actionsDisabled: cardsLocked, asset, canDelete, favorite, favoritePending, fields: visibleVideoFields, quickLook: true,
+      actionsDisabled: cardsLocked, asset, canDelete, fields: visibleVideoFields, quickLook: true,
       showUploaderFilter: canFilterUploader,
       onAction: (id: MediaTileActionId) => tileAction(asset, id), onOpen: () => openVideo(asset),
       onSelectChange: context.onSelectChange, opened: asset.id === selected?.id, selected: context.selected,
@@ -1883,8 +1866,6 @@ export function SourceMediaLibrary({ principal, source, getIdToken, userId, onEx
       related={source.id === "video-library" ? <VideoMeaningSearch key={`${userId}:${source.id}:${shownSearchRevision}`} userId={userId} sourceId={source.id} query={search} getIdToken={getIdToken} filters={activeFilter} disabled={contentLocked || !!selected || bulk.open || visibleUploadOpen}
         renderPoster={asset => <VideoPoster asset={asset} getIdToken={getIdToken} />}
         onOpen={(asset, seconds) => { if (!contentLockedRef.current && !selectedRef.current && !bulk.open && !visibleUploadOpen) openVideo(asset, { seek: seconds }); }} /> : null}
-      favoriteError={favorites.loadError || favorites.saveError}
-      onRetryFavorites={favorites.loadError ? favorites.retry : undefined} favoriteRetryDisabled={favorites.retryDisabled}
       sizeSortFallback={sizeSortFallback && videoQuery.sort === "updated_desc"}
       selectionStatus={selectionStatus} viewerAnnouncement={viewerAnnouncement}
       resultSummaryRef={resultSummaryRef}
@@ -1969,11 +1950,7 @@ export function SourceMediaLibrary({ principal, source, getIdToken, userId, onEx
       onDiscardNavigation={discardNavigation}
       onUpdated={updateSelectedVideo} onSaveReceipt={offerVideoSaveUndo}
       onSaveSuccess={(asset) => notice.show(`${asset.name} details saved.`)}
-      onClose={() => { void closeVideo(); }}
-      favorite={{ name: selected.name,
-        favorite: favorites.value({ backend: "s3", sourceId: selected.sourceId, id: selected.id }),
-        pending: favorites.pending({ backend: "s3", sourceId: selected.sourceId, id: selected.id }),
-        onToggle: () => void favoriteUndo.toggle({ backend: "s3", sourceId: selected.sourceId, id: selected.id }, selected.name) }} /> : null}
+      onClose={() => { void closeVideo(); }} /> : null}
     {bulk.editor({ navigationBlocked, onKeepNavigation: keepNavigation, onDiscardNavigation: discardNavigation })}
     {!selected && !bulk.reviewOpen && navigationBlocked ? <LeaveGuardDialog
       onConfirm={() => { bulk.discard(); discardNavigation(); }} onCancel={keepNavigation} /> : null}

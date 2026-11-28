@@ -27,7 +27,6 @@ for (const width of [320]) {
     await page.route("**/cmsListSourceMedia", route => route.fulfill({ json: {
       success: true, records: [VIDEO_LIBRARY_RECORD], nextCursor: null, hasMore: false, total: 1, posters: [],
     } }));
-    await page.route("**/cmsListMediaFavorites", route => route.fulfill({ json: { success: true, states: [] } }));
     await page.setViewportSize({ width, height: 844 });
     await page.goto("/gallery.html?embed=shell-video-library&presentation=text");
     try {
@@ -70,7 +69,6 @@ test("video controls pin directly below the shared identity bar after scrolling"
       ...VIDEO_LIBRARY_RECORD, id: `video-${index + 1}`, name: `County interview ${index + 1}`,
     })), nextCursor: null, hasMore: false, total: 24, posters: [],
   } }));
-  await page.route("**/cmsListMediaFavorites", route => route.fulfill({ json: { success: true, states: [] } }));
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/gallery.html?embed=shell-video-library&presentation=text");
   await page.getByRole("button", { name: /^County interview 12, video/ }).scrollIntoViewIfNeeded();
@@ -95,12 +93,6 @@ for (const width of [320, 1280]) {
         posters: [],
       }),
     }));
-    await page.route("**/cmsListMediaFavorites", route => route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({ success: true, states: [] }),
-    }));
-
     await page.setViewportSize({ width, height: 900 });
     await page.goto("/gallery.html?embed=video-library&presentation=text");
     await page.getByRole("grid", { name: "Videos" }).waitFor({ state: "visible" });
@@ -136,12 +128,6 @@ for (const width of [390, 1280]) {
         }),
       });
     });
-    await page.route("**/cmsListMediaFavorites", route => route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({ success: true, states: [] }),
-    }));
-
     await page.setViewportSize({ width, height: width === 390 ? 844 : 800 });
     await page.goto("/gallery.html?embed=video-library&presentation=text");
     await page.getByRole("button", { name: /^First page video 1, video/ }).waitFor({ state: "visible" });
@@ -179,9 +165,6 @@ for (const [width, height] of [[320, 844], [1280, 844], [390, 320]]) {
         name: `County interview ${index + 1}`,
       })),
       nextCursor: null, hasMore: false, total: 24, posters: [],
-    } }));
-    await page.route("**/cmsListMediaFavorites", route => route.fulfill({ json: {
-      success: true, states: [],
     } }));
     await page.setViewportSize({ width, height });
     await page.goto("/gallery.html?embed=shell-video-library&presentation=text");

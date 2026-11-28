@@ -433,7 +433,7 @@ describe("media source list counts", () => {
         }
         return true;
       }),
-      computeTabCountsFn: vi.fn(async () => ({ favorites: 2, sources: { "video-library": 412 } })),
+      computeTabCountsFn: vi.fn(async () => ({ audio: 2, sources: { "video-library": 412 } })),
       log: { error: vi.fn(), warn: vi.fn() },
       ...overrides,
     });
@@ -474,7 +474,7 @@ describe("media source list counts", () => {
   });
 
   it("adds counts on request for the sources the caller may browse", async () => {
-    const computeTabCountsFn = vi.fn(async () => ({ favorites: 2, sources: { "video-library": 412 } }));
+    const computeTabCountsFn = vi.fn(async () => ({ audio: 2, sources: { "video-library": 412 } }));
     const requirePrincipalFn = vi.fn(async () => ({ ...actor(), approvedActive: true }));
     const authorizeFn = vi.fn(async ({ source: target, operation }) => {
       if (target.access === "archive" || operation === "delete") {
@@ -485,7 +485,7 @@ describe("media source list counts", () => {
     const res = response();
     await sourcesHandler({ computeTabCountsFn, requirePrincipalFn, authorizeFn })(request({ counts: true }), res);
     expect(res.statusCode).toBe(200);
-    expect(res.body.counts).toEqual({ favorites: 2, sources: { "video-library": 412 } });
+    expect(res.body.counts).toEqual({ audio: 2, sources: { "video-library": 412 } });
     expect(requirePrincipalFn).toHaveBeenCalledWith(expect.anything(), { includeAccountStatus: true });
     expect(computeTabCountsFn).toHaveBeenCalledWith(expect.objectContaining({
       approvedActive: true,

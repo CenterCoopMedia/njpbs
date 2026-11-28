@@ -133,8 +133,6 @@ interface ListMediaResponseBase {
   page: number;
   /** Present only when the request asked with `counts: true`; never cached with the list. */
   counts?: MediaTabCounts;
-  /** Favorite states for `records`, only when asked with `favorites: true`; never cached with the list. */
-  favoriteStates?: { ref: { backend: "r2"; id: string }; favorite: boolean }[];
 }
 
 export type ListMediaResponse = ListMediaResponseBase & (

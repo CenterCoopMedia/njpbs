@@ -97,9 +97,6 @@ describe("canOpenAdminPath", () => {
       "/media/images",
       "/media/videos",
       "/media/videos/archive-originals",
-      "/media/favorites",
-      "/media/collections",
-      `/media/collections/${"a".repeat(64)}`,
       "/media/voiceovers",
     ]) {
       expect(canOpenAdminPath(siteWideEditor, path)).toBe(true);

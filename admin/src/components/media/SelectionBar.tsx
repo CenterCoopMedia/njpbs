@@ -20,7 +20,7 @@ function actionTooltip(button: ReactElement<ButtonProps>, label: string, key: st
 // the count. The caller owns focus after Clear selection.
 
 export interface SelectionBarProps {
-  /** The group's name, such as "Collection selection" or "Video selection". */
+  /** The group's name, such as "Image selection" or "Video selection". */
   label: string;
   count: number;
   /** Selected items not on the visible page. */
@@ -142,11 +142,7 @@ export function SelectionBar({
             aria-describedby={action.disabledReason ? reasonId : undefined}
             className="media-selection-bar-action"
             disabled={(actionsDisabled && action.id !== allowActionWhileDisabled) || Boolean(action.disabledReason)}
-            onClick={event => {
-              // Some browsers leave mouse-activated buttons unfocused. The picker needs its opener.
-              if (action.id === "collect") event.currentTarget.focus();
-              onAction(action.id);
-            }}
+            onClick={() => onAction(action.id)}
             variant="ghost"
             size="standard"
           >

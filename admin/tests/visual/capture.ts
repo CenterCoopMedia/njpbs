@@ -111,9 +111,6 @@ export async function openSpecimen(
     await page.addInitScript(() => { Math.random = () => 2.5 / 48; });
   }
   await page.setViewportSize({ width: pair.width, height: pair.width >= 1024 ? 900 : 800 });
-  if (pair.id === "media-favorites-list") {
-    await page.addInitScript(() => localStorage.setItem("njpbs-admin:media-display:favorites", JSON.stringify({ layout: "list" })));
-  }
   const captureUrl = visualSpecimenUrl(GALLERY_PATH, pair);
   await page.goto(pageStatusFixture ? `${captureUrl}&pageStatusFixture=1` : captureUrl);
   // A specimen's visible control or region proves it has mounted even when
@@ -136,31 +133,6 @@ export async function openSpecimen(
       strip.scrollLeft = 0;
       window.dispatchEvent(new Event("resize"));
     });
-  }
-  if (pair.id.startsWith("media-favorites-") && pair.id !== "media-favorites-toolbar") {
-    const grid = page.getByRole("grid", { name: "Favorite media" });
-    await grid.waitFor({ state: "visible" });
-    if (pair.id === "media-favorites-selection") {
-      await grid.getByRole("checkbox", { name: "Select Station image" }).click();
-      await grid.getByRole("checkbox", { name: "Select unavailable favorite" }).click();
-      // This specimen records selection, with the card details at rest. Keep
-      // focus on the last chosen item and the pointer away from media names.
-      await grid.getByRole("checkbox", { name: "Select unavailable favorite" }).focus();
-      await page.getByRole("heading", { name: "Favorites", exact: true }).hover();
-      await expect(page.getByRole("group", { name: "Details for Station image", exact: true })).toBeHidden();
-    }
-    if (pair.id.startsWith("media-favorites-viewer-")) {
-      const name = pair.id.endsWith("image") ? /^Station image, image/
-        : pair.id.endsWith("document") ? /^Brand guide, PDF/
-          : /^Archive interview, video/;
-      await grid.getByRole("button", { name }).click();
-      await page.getByRole("dialog", { name: pair.id.endsWith("image") ? "Station image"
-        : pair.id.endsWith("document") ? "Brand guide" : "Archive interview" }).waitFor({ state: "visible" });
-      if (pair.id.endsWith("video")) {
-        await page.getByRole("dialog", { name: "Archive interview" })
-          .getByRole("toolbar", { name: "Preview actions" }).waitFor({ state: "visible" });
-      }
-    }
   }
   // Interaction tests retain React-owned IDs so later renders keep ARIA links valid.
   if (normalizeGeneratedIds) await normalizeIds(page);

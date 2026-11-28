@@ -717,7 +717,7 @@ export function useVideoProductionTools({ headerControls = false, workspace = fa
         {!validRange ? <p role="status">Enter an in/out range within this video ({videoTime(duration)}).</p> : <p>Selected length: {videoTime((outMs! - inMs!) / 1000)}</p>}
       </>}
       {clipOpen && principal?.id && asset.sourceId === "video-library" && asset.fileVersion ? <VideoSubclips
-        key={`${principal.id}/${binaryIdentity}`} userId={principal.id} assetId={asset.id} fileVersion={asset.fileVersion}
+        key={`${principal.id}/${binaryIdentity}`} assetId={asset.id} fileVersion={asset.fileVersion}
         durationMs={ready ? durationMs : 0} range={ready && validRange ? { inMs: inMs!, outMs: outMs! } : undefined}
         getIdToken={getIdToken} disabled={controlsDisabled}
         onOpen={range => {

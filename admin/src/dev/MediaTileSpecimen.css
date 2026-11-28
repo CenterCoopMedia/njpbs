@@ -65,10 +65,6 @@
   opacity: 1;
 }
 
-.media-tile[data-specimen-state]:not([data-selection-mode]) .media-tile-badge-favorite {
-  visibility: hidden;
-}
-
 .media-tile[data-specimen-state="focus"] {
   outline: var(--cms-focus-outline);
   outline-offset: var(--cms-focus-offset);

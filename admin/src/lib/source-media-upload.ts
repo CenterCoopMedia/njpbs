@@ -59,9 +59,7 @@ export interface VideoUploadSession {
   expiresAt: string;
   version: number;
 }
-export type VideoUploadResult = SourceMediaAssetSummary & {
-  collectionPlacement?: "added" | "unavailable";
-};
+export type VideoUploadResult = SourceMediaAssetSummary;
 interface CompletedPart { partNumber: number; etag: string; checksumSha256: string }
 interface SignedPart { partNumber: number; url: string; expiresAt: string; requiredHeaders: Record<string, string> }
 interface PreparedPartBatch { numbers: number[]; slices: Blob[]; checksums: string[] }
@@ -160,15 +158,14 @@ function videoMimeType(file: Pick<File, "name">): string {
 }
 
 export function startVideoUpload(token: string | null | (() => Promise<string>), sourceId: string, file: Pick<File, "name" | "size" | "lastModified">, metadata: VideoUploadMetadata,
-  options: { requestId?: string; signal?: AbortSignal; collectionId?: string; replacement?: { assetId: string; expectedVersion: number; confirmed: true } } = {}) {
+  options: { requestId?: string; signal?: AbortSignal; replacement?: { assetId: string; expectedVersion: number; confirmed: true } } = {}) {
   if (file.size > MAX_VIDEO_FILE_BYTES) throw new VideoUploadValidationError("Browser uploads support videos up to 250 GiB. Ask an administrator to import larger files.");
   return measureUsage(VIDEO_START_ACTIONS, options.signal, () => controlRequest(async signal => {
     const idToken = typeof token === "function" ? await token() : token;
     signal.throwIfAborted();
     return postFunction<{ success: true; upload: VideoUploadSession }>("cmsStartSourceMediaUpload", idToken,
       { sourceId, ...(options.requestId === undefined ? {} : { requestId: options.requestId }), originalName: file.name, mimeType: videoMimeType(file), sizeBytes: file.size, lastModified: file.lastModified,
-        ...(options.replacement ? { replacement: options.replacement } : { metadata }),
-        ...(options.collectionId ? { collectionId: options.collectionId } : {}) }, {}, { appCheck: true, signal });
+        ...(options.replacement ? { replacement: options.replacement } : { metadata }) }, {}, { appCheck: true, signal });
   }, options.signal));
 }
 

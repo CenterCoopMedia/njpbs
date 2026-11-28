@@ -1740,15 +1740,14 @@ export function cmsListMedia(
   idToken: string,
   body: ListMediaRequest | SelfProfilePhotoListMediaRequest,
   signal?: AbortSignal,
-  options: { counts?: boolean; favorites?: boolean } = {},
+  options: { counts?: boolean } = {},
 ): Promise<ListMediaResponse> {
-  // The tab-count and favorites flags ride on the request body only; they never enter MediaListQuery.
+  // The tab-count flag rides on the request body only; it never enters MediaListQuery.
   const indexedBrowse = body.assetIds === undefined && !("profilePhotoScope" in body);
   const request = {
     ...body,
     ...(indexedBrowse ? { paging: "cursor" as const } : {}),
     ...(options.counts ? { counts: true } : {}),
-    ...(options.favorites ? { favorites: true } : {}),
   };
   return postFunction<ListMediaResponse>("cmsListMedia", idToken, request, {}, { signal });
 }

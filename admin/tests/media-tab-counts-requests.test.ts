@@ -7,7 +7,6 @@ import {
   type MediaAssetSummary,
 } from "../src/lib/functions";
 import { listMediaSources } from "../src/lib/source-media";
-import { setMediaFavorite } from "../src/lib/media-favorites";
 import { withMediaTabCounts } from "../src/lib/media-tab-counts";
 import {
   beginMediaTabCountsRequest,
@@ -73,12 +72,12 @@ describe("withMediaTabCounts", () => {
   it("asks once, strips counts from the list result and stores them", async () => {
     const send = vi.fn(async (withCounts: boolean) => ({
       records: [],
-      ...(withCounts ? { counts: { favorites: 2, sources: { "video-library": 5 } } } : {}),
+      ...(withCounts ? { counts: { audio: 2, sources: { "video-library": 5 } } } : {}),
     }));
     await expect(withMediaTabCounts(send)).resolves.toEqual({ records: [] });
     await expect(withMediaTabCounts(send)).resolves.toEqual({ records: [] });
     expect(send.mock.calls).toEqual([[true], [false]]);
-    expect(mediaTabCounts()).toEqual({ favorites: 2, sources: { "video-library": 5 } });
+    expect(mediaTabCounts()).toEqual({ audio: 2, sources: { "video-library": 5 } });
   });
 
   it("retries once without the flag when an older Functions version rejects it", async () => {
@@ -102,7 +101,7 @@ describe("withMediaTabCounts", () => {
 
   it("asks again after a failed load and clears every count after a denial", async () => {
     const seeded = beginMediaTabCountsRequest();
-    finishMediaTabCountsRequest(seeded!, { favorites: 3 });
+    finishMediaTabCountsRequest(seeded!, { audio: 3 });
     const fetchMock = vi.fn(async () => okResponse({ success: true, asset }));
     vi.stubGlobal("fetch", fetchMock);
     await cmsUploadMedia("id-token", new File(["x"], "x.png", { type: "image/png" }), { category: "news" });
@@ -110,7 +109,7 @@ describe("withMediaTabCounts", () => {
     const failing = vi.fn(async () => { throw new Error("offline"); });
     await expect(withMediaTabCounts(failing)).rejects.toThrow("offline");
     expect(failing).toHaveBeenCalledWith(true);
-    expect(mediaTabCounts()).toEqual({ favorites: 3 });
+    expect(mediaTabCounts()).toEqual({ audio: 3 });
 
     const denied = vi.fn(async () => { throw new HttpError(403, "Access changed"); });
     await expect(withMediaTabCounts(denied)).rejects.toThrow("Access changed");
@@ -122,39 +121,17 @@ describe("withMediaTabCounts", () => {
 describe("writes that change counts", () => {
   it("asks for fresh counts on the next list load after an upload or delete", async () => {
     const seeded = beginMediaTabCountsRequest();
-    finishMediaTabCountsRequest(seeded!, { favorites: 1 });
+    finishMediaTabCountsRequest(seeded!, { audio: 1 });
     expect(beginMediaTabCountsRequest()).toBeNull();
 
     vi.stubGlobal("fetch", vi.fn(async () => okResponse({ success: true, asset })));
     await cmsUploadMedia("id-token", new File(["x"], "x.png", { type: "image/png" }), { category: "news" });
     const afterUpload = beginMediaTabCountsRequest();
     expect(afterUpload).not.toBeNull();
-    finishMediaTabCountsRequest(afterUpload!, { favorites: 1 });
+    finishMediaTabCountsRequest(afterUpload!, { audio: 1 });
 
     vi.stubGlobal("fetch", vi.fn(async () => okResponse({ success: true, deleted: true })));
     await cmsDeleteMedia("id-token", asset);
     expect(beginMediaTabCountsRequest()).not.toBeNull();
-  });
-
-  it("moves the favorites count by one for a toggle that changed something", async () => {
-    const seeded = beginMediaTabCountsRequest();
-    finishMediaTabCountsRequest(seeded!, { favorites: 4 });
-    const ref = { backend: "r2" as const, id: "asset-one" };
-    const fetchMock = vi.fn()
-      .mockResolvedValueOnce(okResponse({ success: true, ref, favorite: true, changed: true }))
-      .mockResolvedValueOnce(okResponse({ success: true, ref, favorite: true, changed: false }))
-      .mockResolvedValueOnce(okResponse({ success: true, ref, favorite: false, changed: true }))
-      .mockResolvedValueOnce(okResponse({ success: true, ref, favorite: false, changed: true }));
-    vi.stubGlobal("fetch", fetchMock);
-
-    await setMediaFavorite("id-token", ref, true);
-    expect(mediaTabCounts().favorites).toBe(5);
-    await setMediaFavorite("id-token", ref, true);
-    expect(mediaTabCounts().favorites).toBe(5);
-    await setMediaFavorite("id-token", ref, false);
-    await setMediaFavorite("id-token", ref, false);
-    expect(mediaTabCounts().favorites).toBe(3);
-    // The toggle response itself carries no count.
-    expect(sentBody(fetchMock, 0)).toEqual({ ref, favorite: true });
   });
 });

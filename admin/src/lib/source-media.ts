@@ -123,7 +123,7 @@ export async function listMediaSources(token: string | null, options: { counts?:
     "cmsListMediaSources", token, options.counts ? { counts: true } : {},
   );
   // Admin and Functions deploy separately. Keep the station tab copy current for every
-  // consumer, including routed uploads and collection viewers, with an older source API.
+  // consumer, including routed uploads, with an older source API.
   return { ...result, sources: result.sources.map(source => source.id === "video-library"
     ? { ...source, label: "Videos", description: "Browse station videos for production, preview, and download." }
     : source) };

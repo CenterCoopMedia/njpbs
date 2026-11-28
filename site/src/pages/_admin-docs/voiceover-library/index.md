@@ -44,8 +44,7 @@ signed-in Boardwalk session. The audio loads only when you ask for it. Starting
 another recording pauses the current one. Select **Download WAV** only when you
 need a local review copy.
 
-Access still follows the asset's primary category. A favorite or collection
-reference does not grant access to the recording.
+Access still follows the asset's primary category.
 
 ## Upload station audio
 
@@ -55,8 +54,6 @@ files, select **Upload all files** to start the batch with the current details.
 You can still upload one file at a time. Staff with media management access can
 add or change optional details later. The Audio upload sheet accepts WAV files.
 Use Images for images and PDFs.
-Favorites and Collections also provide a general **Upload media** control. It
-sends files to their library and keeps your current tab open.
 
 Choose an uncompressed PCM WAV file with these limits:
 
@@ -113,27 +110,12 @@ See
 [Metadata and media](/guide/metadata-and-media/#review-media-and-give-staff-feedback)
 for the shared flow.
 
-## Favorite or collect audio
-
-Select the heart on a card, row, or in Asset details to add the audio asset to
-your shared Boardwalk favorites. Open **Media library → Favorites** and choose
-the Audio Type filter to see audio favorites on the loaded page.
-
-The heart is separate from **More like this** and **Notes**. It uses the shared
-media favorite and does not change the retained favorite value from the earlier
-voiceover review screen.
-
-Use **Add to collection** on one audio item, or select several available items
-and add them together. Audio can join the same private or all-staff collections
-as images, documents, and private videos. A collection saves references. It
-does not copy a file, publish it, or change its access.
-
 ## Earlier interface screenshot
 
 The synthetic example below shows the
 earlier Voiceovers tab, compact review rows, waveform player, and automatic
-review saves. Use the shared Audio cards, Asset details, heart, collections,
-and explicit **Save details** action described above.
+review saves. Use the shared Audio cards, Asset details, and explicit
+**Save details** action described above.
 
 <figure class="admin-docs-screenshot">
   <p class="admin-docs-image-note">Screenshot omitted from this source distribution.</p>
@@ -143,5 +125,5 @@ and explicit **Save details** action described above.
 ## Return to Audio
 
 Open **Media library → Audio**, or use an existing `/voiceovers` bookmark. If
-Boardwalk asks you to sign in, use your approved staff account. Your shared
-favorite and personal review choices belong to that account.
+Boardwalk asks you to sign in, use your approved staff account. Your personal
+review choices belong to that account.

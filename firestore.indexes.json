@@ -842,27 +842,6 @@
       ]
     },
     {
-      "collectionGroup": "mediaCollections",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "scope", "order": "ASCENDING" },
-        { "fieldPath": "ownerUid", "order": "ASCENDING" },
-        { "fieldPath": "lifecycle", "order": "ASCENDING" },
-        { "fieldPath": "updatedAt", "order": "DESCENDING" },
-        { "fieldPath": "__name__", "order": "DESCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "mediaCollections",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "scope", "order": "ASCENDING" },
-        { "fieldPath": "lifecycle", "order": "ASCENDING" },
-        { "fieldPath": "updatedAt", "order": "DESCENDING" },
-        { "fieldPath": "__name__", "order": "DESCENDING" }
-      ]
-    },
-    {
       "collectionGroup": "media_assets",
       "queryScope": "COLLECTION",
       "fields": [
@@ -2062,28 +2041,6 @@
       "collectionGroup": "media_assets",
       "fieldPath": "mediaDiscovery",
       "indexes": []
-    },
-    {
-      "collectionGroup": "items",
-      "fieldPath": "voiceoverMigration.id",
-      "indexes": [
-        {
-          "order": "ASCENDING",
-          "queryScope": "COLLECTION"
-        },
-        {
-          "order": "DESCENDING",
-          "queryScope": "COLLECTION"
-        },
-        {
-          "arrayConfig": "CONTAINS",
-          "queryScope": "COLLECTION"
-        },
-        {
-          "order": "ASCENDING",
-          "queryScope": "COLLECTION_GROUP"
-        }
-      ]
     },
     {
       "collectionGroup": "mediaDiscoveryCursors",

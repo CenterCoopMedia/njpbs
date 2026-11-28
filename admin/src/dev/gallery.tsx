@@ -42,7 +42,6 @@ import { MediaToolbarSpecimen } from "./MediaToolbarSpecimen";
 import { MediaTabsSpecimen } from "./MediaTabsSpecimen";
 import { MediaTabs } from "../components/media/MediaTabs";
 import { mediaTabs } from "../lib/media-tabs";
-import { WorkspaceUploadButton } from "../components/media/WorkspaceUploadButton";
 import { MediaToolbarPartsSpecimen } from "./MediaToolbarPartsSpecimen";
 import { MediaPagingSpecimen } from "./MediaPagingSpecimen";
 import { MediaSurfaceToolbarSpecimen } from "./MediaSurfaceToolbarSpecimen";
@@ -162,7 +161,7 @@ import {
   useState,
 } from "react";
 import { createRoot } from "react-dom/client";
-import { BrowserRouter, createMemoryRouter, MemoryRouter, RouterProvider, useLocation } from "react-router";
+import { BrowserRouter, createMemoryRouter, MemoryRouter, RouterProvider } from "react-router";
 import {
   EditorWorkspace,
   type LoadedRecord,
@@ -235,20 +234,11 @@ import { MediaLibrarySurface } from "../routes/MediaRoute";
 import { galleryMediaCorpusLoader } from "./media-corpus-fixture";
 import { MediaInspector } from "../components/media/MediaInspector";
 import { clearMediaSessionCache } from "../lib/media-session-cache";
-import { MediaFavoritesLibrary } from "../routes/MediaFavoritesLibrary";
-import type { MediaFavoritePage } from "../lib/media-favorites";
-import { MediaCollectionsLibrary } from "../routes/MediaCollectionsLibrary";
-import { parseMediaCollectionPins, setMediaCollectionPinned } from "../lib/media-collection-pins";
 import { GALLERY_MEDIA, GALLERY_MEDIA_CATEGORIES, guideCapture } from "./gallery-media-fixtures";
 import {
-  GALLERY_COLLECTION_DOCUMENT,
-  GALLERY_COLLECTION_ID,
-  GALLERY_COLLECTION_IMAGE,
-  GALLERY_COLLECTION_VIDEO,
   galleryJsonResponse,
   useGalleryMediaTransport,
 } from "./gallery-media-transport";
-import { parseMediaWorkspacePath } from "../lib/routes";
 import { SourceMediaLibrary } from "../routes/SourceMediaLibrary";
 import { MediaUploadForm } from "../components/MediaUploadForm";
 import { cmsListMedia, cmsUploadMedia } from "../lib/functions";
@@ -266,7 +256,6 @@ import homePrograms from "../../../site/src/data/launch-media-manager.json";
 import homeNews from "../../../site/src/data/spotlight-news.json";
 import { RichTextEditor } from "../components/RichTextEditor";
 import { ControlPresentationProvider } from "../context/ControlPresentationContext";
-import { SuccessNoticeProvider } from "../components/ui/SuccessNoticeRegion";
 import {
   CONTROL_PRESENTATIONS,
   type ControlPresentation,
@@ -1651,23 +1640,18 @@ function BrowsingFamilyShellSpecimen() {
 
 // The route's real tab strip and real family owners, supplied only with local fixture reads.
 function BrowsingShellMedia({ tab }: { tab: string }) {
-  const [panelReady, setPanelReady] = useState(() => !new URLSearchParams(window.location.search).has("deferPanel"));
   const getIdToken = useGalleryMediaTransport();
   const source = { id: "video-library", label: "Videos", description: "Private staff video fixture.",
     mediaKind: "video" as const, canBrowse: true as const, canUpload: true, canEditMetadata: true, canRequestProduction: true };
   const panel = tab === "videos" ? <SourceMediaLibrary principal={editor} userId="gallery" source={source} getIdToken={getIdToken} />
-    : tab === "favorites" ? <MediaFavoritesLibrary principal={editor} userId="gallery" getIdToken={getIdToken}
-      categoryRegistry={{ status: "ready", categories: GALLERY_MEDIA_CATEGORIES }} loadFavorites={galleryFavorites} loadSources={galleryFavoriteSources} />
-    : tab === "collections" ? <MediaCollectionsGalleryRoute getIdToken={getIdToken} />
     : <MediaLibrarySurface audioLibrary={tab === "voiceovers"} principal={editor} userId="gallery" getIdToken={getIdToken}
       categories={GALLERY_MEDIA_CATEGORIES} deleteMedia={deleteGalleryMedia}
-      loadMedia={tab === "voiceovers" ? async (query, options) => cmsListMedia(await getIdToken(), query, undefined, { counts: Boolean(options?.tabCounts), favorites: Boolean(options?.tabCounts) }) : loadEditorGalleryMedia}
+      loadMedia={tab === "voiceovers" ? async (query, options) => cmsListMedia(await getIdToken(), query, undefined, { counts: Boolean(options?.tabCounts) }) : loadEditorGalleryMedia}
       loadCorpus={galleryMediaCorpusLoader(loadEditorGalleryMedia)} saveMetadata={saveGalleryMedia} uploadMedia={uploadGalleryMedia} />;
   return <div className="media-workspace"><div className="media-workspace-bar"><MediaTabs
-    tabs={mediaTabs({ canUseImages: true, sources: [source], counts: { images: 3, voiceovers: 2, favorites: 4 } })}
+    tabs={mediaTabs({ canUseImages: true, sources: [source], counts: { images: 3, voiceovers: 2 } })}
     currentId={tab === "videos" ? source.id : tab} />
-    {tab === "favorites" || tab === "collections" ? <WorkspaceUploadButton secondary={tab === "collections"} /> : null}
-    </div>{panelReady ? panel : <Button onClick={() => setPanelReady(true)}>Load media fixture</Button>}</div>;
+    </div>{panel}</div>;
 }
 
 function HomeShortcutsSpecimen({ principal = superAdmin }: { principal?: Principal }) {
@@ -2307,44 +2291,6 @@ function SourceMediaLibraryGallery() {
   return <RouterProvider router={router} />;
 }
 
-const GALLERY_FAVORITES_PAGE: MediaFavoritePage = {
-  success: true,
-  records: [
-    { ref: { backend: "r2", id: "gallery-image" }, createdAt: "2026-08-20T12:00:00.000Z", available: true,
-      asset: { ...GALLERY_MEDIA[0], id: "gallery-image", name: "Station image", thumbnails: [],
-        url: `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540"><rect width="960" height="540" fill="#123354"/><circle cx="480" cy="270" r="120" fill="#67b7df"/></svg>')}` } },
-    { ref: { backend: "r2", id: "gallery-document" }, createdAt: "2026-08-20T11:00:00.000Z", available: true,
-      asset: { ...GALLERY_MEDIA.find(asset => asset.kind === "document")!, id: "gallery-document", name: "Brand guide" } },
-    { ref: { backend: "s3", sourceId: "archive", id: "gallery-video" }, createdAt: "2026-08-20T10:00:00.000Z", available: true,
-      asset: { id: "gallery-video", sourceId: "archive", name: "Archive interview", description: "Local fixture",
-        originalName: "interview.mov", mimeType: "video/quicktime", kind: "video", sizeBytes: 9_830_400,
-        preview: "download_only", license: "NJ PBS owned", credit: "NJ PBS", tags: ["interview"], rightsStatus: "pending",
-        version: 1, createdAt: "2026-08-20T10:00:00.000Z", updatedAt: "2026-08-20T10:00:00.000Z" } },
-    { ref: { backend: "s3", sourceId: "archive", id: "missing-video" }, createdAt: "2026-08-20T09:00:00.000Z", available: false },
-  ],
-  nextCursor: null,
-  hasMore: false,
-};
-const galleryFavorites = async () => GALLERY_FAVORITES_PAGE;
-const galleryFavoriteSources = async () => ({ success: true as const, sources: [{ id: "archive", label: "Archive", description: "Local fixture",
-  mediaKind: "video" as const, canBrowse: true as const, canUpload: false, canEditMetadata: false, canRequestProduction: false,
-  canDelete: false }] });
-
-function MediaFavoritesGallery() {
-  const [router] = useState(() => createMemoryRouter([{
-    path: "*",
-    element: <MediaFavoritesLibrary
-      principal={superAdmin}
-      userId="gallery"
-      getIdToken={async () => "local-gallery-fixture"}
-      categoryRegistry={{ status: "ready", categories: GALLERY_MEDIA_CATEGORIES }}
-      loadFavorites={galleryFavorites}
-      loadSources={galleryFavoriteSources}
-    />,
-  }], { initialEntries: ["/media"] }));
-  return <RouterProvider router={router} />;
-}
-
 function AudioLibraryGallery() {
   const getIdToken = useGalleryMediaTransport();
   useState(clearMediaSessionCache);
@@ -2352,7 +2298,7 @@ function AudioLibraryGallery() {
     path: "/media/voiceovers", element: <MediaLibrarySurface audioLibrary principal={editor} userId="gallery-audio"
       getIdToken={getIdToken} categories={GALLERY_MEDIA_CATEGORIES}
       loadMedia={async (query, options) => cmsListMedia(await getIdToken(), query, undefined,
-        { counts: Boolean(options?.tabCounts), favorites: Boolean(options?.tabCounts) })}
+        { counts: Boolean(options?.tabCounts) })}
       loadCorpus={async () => ({success:true, records:[], nextCursor:null})}
       saveMetadata={saveGalleryMedia} deleteMedia={deleteGalleryMedia}
       uploadMedia={async (file, metadata, signal) => cmsUploadMedia(await getIdToken(), file, metadata, signal)} />,
@@ -2363,40 +2309,6 @@ function AudioLibraryGallery() {
 function VideoViewerInspectorGallery() {
   const getIdToken = useGalleryMediaTransport();
   return <VideoViewerInspectorSpecimen getIdToken={getIdToken} />;
-}
-
-function MediaCollectionsGallery({ initialEntry = "/media/collections" }: { initialEntry?: string }) {
-  const getIdToken = useGalleryMediaTransport();
-  const [router] = useState(() => createMemoryRouter([{
-    path: "*",
-    element: <MediaCollectionsGalleryRoute getIdToken={getIdToken} />,
-  }], { initialEntries: [initialEntry] }));
-  return <RouterProvider router={router} />;
-}
-
-function MediaCollectionsGalleryRoute({ getIdToken }: { getIdToken: () => Promise<string> }) {
-  const location = useLocation();
-  const route = parseMediaWorkspacePath(location.pathname);
-  const [pinStore] = useState(() => {
-    let pins = parseMediaCollectionPins(null);
-    return {
-      load: async () => pins,
-      save: async (_userId: string, collectionId: string, pinned: boolean) => {
-        pins = setMediaCollectionPinned(pins, collectionId, pinned);
-        return pins;
-      },
-    };
-  });
-  return <SuccessNoticeProvider routeKey={location.key}><MediaCollectionsLibrary
-    collectionId={route.kind === "collections" ? route.collectionId : null}
-    userId="gallery"
-    userDoc={null}
-    pinStore={pinStore}
-    principal={{ id: "gallery", grants: [{ role: "super_admin" }] }}
-    categories={GALLERY_MEDIA_CATEGORIES}
-    canBrowseImages
-    getIdToken={getIdToken}
-  /></SuccessNoticeProvider>;
 }
 
 // Staff guide fixture for the Premiere connection page. Only the approval endpoint is
@@ -3585,7 +3497,7 @@ export const SHOTS: Shot[] = [
   {
     id: "audio-library",
     title: "Audio library",
-    note: "The shared Audio grid and inspector with staff WAV upload, private voiceover playback, private review details, staff comments, and shared favorites. Browser-local API fixtures only; no production data or writes.",
+    note: "The shared Audio grid and inspector with staff WAV upload, private voiceover playback, private review details and staff comments. Browser-local API fixtures only; no production data or writes.",
     render: () => <AudioLibraryGallery />,
   },
   {
@@ -3611,63 +3523,9 @@ export const SHOTS: Shot[] = [
     render: () => <MediaPickerGallery loadMedia={loadIndexedGalleryMedia} />,
   },
   {
-    id: "media-favorites",
-    title: "Media library — favorites",
-    note: "A deterministic mixed page of images, documents and private videos, including an unavailable reference. Local records only.",
-    render: () => <MediaFavoritesGallery />,
-  },
-  ...(["grid", "list", "selection", "viewer-image", "viewer-document", "viewer-video"] as const).map(state => ({
-    id: `media-favorites-${state}`,
-    title: `Media library — Favorites ${state}`,
-    note: "The same local mixed Favorites page with one shared grid and full viewer. No staff account or live records.",
-    render: () => <MediaFavoritesGallery />,
-  })),
-  {
-    id: "media-collections",
-    title: "Media library — collections",
-    note: "Private and all-staff media packages from the local collection fixture. This specimen has no staff credentials or live records.",
-    isolateDocument: true,
-    render: () => <MediaCollectionsGallery />,
-  },
-  {
-    id: "media-collections-list",
-    title: "Media library — collections list filters",
-    note: "The deterministic archived list has Status and Scope chips applied. Status selects the loaded lifecycle; Scope filters the two loaded scope pages. Local records only.",
-    isolateDocument: true,
-    render: () => <MediaCollectionsGallery initialEntry="/media/collections?show=archived&scope=all_staff" />,
-  },
-  {
-    id: "media-collections-detail",
-    title: "Media library — mixed collection detail",
-    note: "One shared collection contains a local image, private video, PDF and unavailable reference in the shared grid. Local records only.",
-    isolateDocument: true,
-    render: () => <MediaCollectionsGallery initialEntry={`/media/collections/${GALLERY_COLLECTION_ID}`} />,
-  },
-  {
-    id: "media-collections-viewer-image",
-    title: "Media library — collection image viewer",
-    note: "The mixed collection opens its local image in the shared full viewer. The same open shell can step to the video and PDF bodies.",
-    isolateDocument: true,
-    render: () => <MediaCollectionsGallery initialEntry={`/media/collections/${GALLERY_COLLECTION_ID}?asset=r2:${GALLERY_COLLECTION_IMAGE.id}`} />,
-  },
-  {
-    id: "media-collections-viewer-video",
-    title: "Media library — collection video viewer",
-    note: "The same mixed collection viewer shows the private video body and its backend-owned tools and access label. Local records only.",
-    isolateDocument: true,
-    render: () => <MediaCollectionsGallery initialEntry={`/media/collections/${GALLERY_COLLECTION_ID}?asset=s3:${GALLERY_COLLECTION_VIDEO.sourceId}:${GALLERY_COLLECTION_VIDEO.id}`} />,
-  },
-  {
-    id: "media-collections-viewer-document",
-    title: "Media library — collection document viewer",
-    note: "The same mixed collection viewer shows the PDF fallback body and image-library tools. Local records only.",
-    isolateDocument: true,
-    render: () => <MediaCollectionsGallery initialEntry={`/media/collections/${GALLERY_COLLECTION_ID}?asset=r2:${GALLERY_COLLECTION_DOCUMENT.id}`} />,
-  },
-  {
     id: "media-browsing",
     title: "Media library — browsing",
-    note: "The real unselected library under the images toolbar: search, Filter with counts on its options, Sort, Display, the shared tile grid and one result bar after it, with only the assets visible to the news-scoped editor. Each tile has a selection mark, Favorite, Add to collection and More, a right-click menu with the same items, and hover facts after a 600 ms pause. Selecting shows the floating selection bar. Uncaptured: the favorites call and the meaning-search model are not deterministic in CI.",
+    note: "The real unselected library under the images toolbar: search, Filter with counts on its options, Sort, Display, the shared tile grid and one result bar after it, with only the assets visible to the news-scoped editor. Each tile has a selection mark and More, a right-click menu with the same items, and hover facts after a 600 ms pause. Selecting shows the floating selection bar. Uncaptured: the meaning-search model is not deterministic in CI.",
     render: () => <MediaLibraryGallery />,
   },
   {
@@ -3765,7 +3623,7 @@ export const SHOTS: Shot[] = [
   {
     id: "media-tabs",
     title: "Media library — source tabs and upload",
-    note: "One row of links for each media page, with Favorites current and the shared Upload control beside it. Collections has no count. On phones counts hide, the strip scrolls with an edge fade, and Upload takes the next line. Local routing only.",
+    note: "One row of links for each media page, with NJ Spotlight News originals current and the shared Upload control beside it. On phones counts hide, the strip scrolls with an edge fade, and Upload takes the next line. Local routing only.",
     render: () => <MediaTabsSpecimen />,
   },
   {
@@ -3821,19 +3679,6 @@ export const SHOTS: Shot[] = [
     render: () => <MediaSurfaceToolbarSpecimen surface="video" popover="display" />,
   },
   {
-    id: "media-favorites-toolbar",
-    title: "Media library — Favorites toolbar",
-    note: "Favorites offers Type and labels its client filter On this page. Local state only.",
-    render: () => <MediaSurfaceToolbarSpecimen surface="favorites" />,
-  },
-  {
-    id: "media-collections-filter",
-    title: "Media library — Collections filters",
-    note: "Collections offers Status and Scope through the shared Filter popover. Local state only.",
-    isolateDocument: true,
-    render: () => <MediaSurfaceToolbarSpecimen surface="collections" popover="filter" />,
-  },
-  {
     id: "media-voiceovers-toolbar",
     title: "Media library — Audio toolbar",
     note: "Audio uses shared search, Filter and applied chips while keeping its fixed table. Local state only.",
@@ -3871,14 +3716,14 @@ export const SHOTS: Shot[] = [
   {
     id: "media-tile",
     title: "Media library — media card",
-    note: "The shared card for images and video, in the gallery only. The mark shows on hover, focus and selection and always on phones. Favorite, Add to collection and More sit on the chrome layer and hide in selection mode; a narrow card keeps only More. Badges use words and a glyph. Hover facts open after 600 ms. Local state only.",
+    note: "The shared card for images and video, in the gallery only. The mark shows on hover, focus and selection and always on phones. More sits on the chrome layer and hides in selection mode. Badges use words and a glyph. Hover facts open after 600 ms. Local state only.",
     isolateDocument: true,
     render: () => <MediaTileSpecimen />,
   },
   {
     id: "media-list-row",
     title: "Media library — list row",
-    note: "The shared images list row, in the gallery only: mark, thumbnail, name, the Display fields plus Updated, then Favorite and More. Under 70rem the wide columns move into the name's meta line; under 43rem the row is mark, thumbnail, name with meta, and More. Local state only.",
+    note: "The shared images list row, in the gallery only: mark, thumbnail, name, the Display fields plus Updated, then More. Under 70rem the wide columns move into the name's meta line; under 43rem the row is mark, thumbnail, name with meta, and More. Local state only.",
     isolateDocument: true,
     render: () => <MediaListRowSpecimen />,
   },
@@ -3899,7 +3744,7 @@ export const SHOTS: Shot[] = [
   {
     id: "media-selection-bar",
     title: "Media library — selection bar",
-    note: "The shared selection bar in the gallery only: the images bar with its info tooltip, the video bar with the 100-video cap and the off-page count, Add to collection disabled past 30, and results under 21rem. Local state only.",
+    note: "The shared selection bar in the gallery only: the images bar with its info tooltip, the video bar with the 100-video cap and the off-page count, and results under 21rem. Local state only.",
     isolateDocument: true,
     render: () => <MediaSelectionBarSpecimen />,
   },
@@ -3990,7 +3835,7 @@ export const SHOTS: Shot[] = [
   {
     id: "video-viewer-inspector",
     title: "Media library — video viewer details",
-    note: "The video viewer uses the shared media header for result navigation, Favorite, Save details and Download, with the real inspector docked beside it. Unsaved changes and pending saves guard Close and stepping. Rights, Tags, private review and staff comments use the real shared controls. File information and Delete from library start closed. Production tools stay under the player. Under 62rem the inspector stacks below the player. Browser-local API fixture only.",
+    note: "The video viewer uses the shared media header for result navigation, Save details and Download, with the real inspector docked beside it. Unsaved changes and pending saves guard Close and stepping. Rights, Tags, private review and staff comments use the real shared controls. File information and Delete from library start closed. Production tools stay under the player. Under 62rem the inspector stacks below the player. Browser-local API fixture only.",
     isolateDocument: true,
     render: () => <VideoViewerInspectorGallery />,
   },

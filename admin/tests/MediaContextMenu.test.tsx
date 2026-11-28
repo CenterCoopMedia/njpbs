@@ -16,7 +16,7 @@ const asset = imageAsset();
 function menu(overrides: Partial<MediaContextMenuProps> & { selected?: boolean; selectionMode?: boolean } = {}) {
   const { selected = false, selectionMode = false, ...rest } = overrides;
   const props: MediaContextMenuProps = {
-    tile: { surface: "images", name: asset.name, favorite: false, available: true, selected, canDelete: true, copyFileAddress: true },
+    tile: { surface: "images", name: asset.name, selected, canDelete: true, copyFileAddress: true },
     selectionCount: selected ? 1 : 0,
     onAction: vi.fn(),
     onSelectionAction: vi.fn(),
@@ -26,10 +26,8 @@ function menu(overrides: Partial<MediaContextMenuProps> & { selected?: boolean; 
   const tile = (
     <MediaTile
       asset={asset}
-      available={props.tile.available}
       canDelete={props.tile.canDelete}
       categoryLabel={categoryLabel}
-      favorite={props.tile.favorite}
       fields={DEFAULT_MEDIA_DISPLAY.fields}
       onAction={props.onAction}
       onOpen={() => {}}
@@ -61,7 +59,7 @@ describe("MediaContextMenu", () => {
     fireEvent.click(screen.getByRole("button", { name: "More actions: Sunset over Newark" }));
     const fromMore = labels();
     expect(fromMore).toEqual([
-      "Open details", "Add to favorites", "Add to collection", "Select", "Copy link", "Copy file address", "Delete from library",
+      "Open details", "Select", "Copy link", "Copy file address", "Delete from library",
     ]);
     fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
 
@@ -81,18 +79,12 @@ describe("MediaContextMenu", () => {
 
   it("hidden items are absent, not dimmed", () => {
     const { container } = menu({
-      tile: { surface: "images", name: asset.name, favorite: false, available: false, selected: false, canDelete: false },
+      tile: { surface: "images", name: asset.name, selected: false, canDelete: false },
     });
     fireEvent.contextMenu(container.querySelector(".media-tile-thumb") as HTMLElement);
-    expect(labels()).toEqual(["Open details", "Add to collection", "Select", "Copy link"]);
+    expect(labels()).toEqual(["Open details", "Select", "Copy link"]);
     expect(screen.queryByRole("menuitem", { name: "Delete from library" })).toBeNull();
     expect(screen.getByRole("menu").querySelector("[aria-disabled], [disabled]")).toBeNull();
-  });
-
-  it("leaves Favorite out while the favorite state loads or saves", () => {
-    const { container } = menu({ favoriteSettled: false });
-    fireEvent.contextMenu(container.querySelector(".media-tile-thumb") as HTMLElement);
-    expect(labels()).toEqual(["Open details", "Add to collection", "Select", "Copy link", "Copy file address", "Delete from library"]);
   });
 
   it("Delete is last in danger ink", () => {
@@ -111,8 +103,8 @@ describe("MediaContextMenu", () => {
     fireEvent.contextMenu(container.querySelector(".media-tile-thumb") as HTMLElement);
     expect(fetch).not.toHaveBeenCalled();
     expect(props.onAction).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("menuitem", { name: "Add to collection" }));
-    expect(props.onAction).toHaveBeenCalledWith("collect");
+    fireEvent.click(screen.getByRole("menuitem", { name: "Select" }));
+    expect(props.onAction).toHaveBeenCalledWith("select");
     expect(fetch).not.toHaveBeenCalled();
   });
 
@@ -125,33 +117,33 @@ describe("MediaContextMenu", () => {
     expect(openControl()).toHaveFocus();
   });
 
-  it("a multi-selection is titled N items and offers batch favorites for images", () => {
+  it("a multi-selection is titled N items and offers the image selection actions", () => {
     const { container, props } = menu({ selected: true, selectionMode: true, selectionCount: 5 });
     fireEvent.contextMenu(container.querySelector(".media-tile-thumb") as HTMLElement);
     const surface = screen.getByRole("menu", { name: "5 items" });
     expect(surface.querySelector(".ui-menu-title")).toHaveTextContent("5 items");
-    expect(labels()).toEqual(["Add to favorites", "Remove from favorites", "Add to collection", "Clear selection"]);
+    expect(labels()).toEqual(["Clear selection"]);
     fireEvent.click(screen.getByRole("menuitem", { name: "Clear selection" }));
     expect(props.onSelectionAction).toHaveBeenCalledWith("clear-selection");
     expect(props.onAction).not.toHaveBeenCalled();
   });
 
-  it("uses the caller's selection actions when a heart save should hide batch favorites", () => {
+  it("uses the caller's selection actions when the caller passes them", () => {
     const { container } = menu({
       selected: true,
       selectionMode: true,
       selectionCount: 5,
       selectionActions: [
-        { id: "clear-selection", label: "Clear selection", icon: "close", group: "organize", hidden: false },
+        { id: "edit-tags", label: "Edit tags", icon: "tag", group: "organize", hidden: false },
       ],
     });
     fireEvent.contextMenu(container.querySelector(".media-tile-thumb") as HTMLElement);
-    expect(labels()).toEqual(["Clear selection"]);
+    expect(labels()).toEqual(["Edit tags"]);
   });
 
-  it("past the collection cap the multi-selection menu hides Add to collection", () => {
+  it("a video multi-selection menu offers Edit selected when the role can edit", () => {
     const { container } = menu({
-      tile: { surface: "video", name: "Studio B walkthrough", favorite: false, available: true, selected: true, canDelete: true, uploader: videoAsset().uploadedBy },
+      tile: { surface: "video", name: "Studio B walkthrough", selected: true, canDelete: true, uploader: videoAsset().uploadedBy },
       selected: true,
       selectionMode: true,
       selectionCount: 31,
@@ -159,6 +151,6 @@ describe("MediaContextMenu", () => {
     });
     fireEvent.contextMenu(container.querySelector(".media-tile-thumb") as HTMLElement);
     expect(screen.getByRole("menu", { name: "31 items" })).toBeInTheDocument();
-    expect(labels()).toEqual(["Add to favorites", "Remove from favorites", "Edit selected", "Clear selection"]);
+    expect(labels()).toEqual(["Edit selected", "Clear selection"]);
   });
 });

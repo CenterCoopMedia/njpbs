@@ -109,23 +109,6 @@ export function cacheMediaList(uid: string, query: MediaListQuery, result: ListM
   if (currentUid === uid && revision === requestRevision) remember(mediaLists, listKey(uid, query), result, MAX_MEDIA_LISTS);
 }
 
-let favoritesChangeRevision = 0;
-const favoritesChangeListeners = new Set<() => void>();
-
-/** A favorite batch changed membership. Open libraries reload, including one the user opened during the request. */
-export function publishFavoritesChange() {
-  favoritesChangeRevision += 1;
-  invalidateMediaLists();
-  for (const listener of [...favoritesChangeListeners]) listener();
-}
-
-export function favoritesChangeRevisionValue() { return favoritesChangeRevision; }
-
-export function subscribeFavoritesChange(listener: () => void) {
-  favoritesChangeListeners.add(listener);
-  return () => { favoritesChangeListeners.delete(listener); };
-}
-
 export function invalidateMediaLists() {
   revision += 1;
   mediaLists.clear();
@@ -150,7 +133,6 @@ export function invalidateMediaLists() {
  */
 export interface MediaTabCounts {
   images?: number;
-  favorites?: number;
   voiceovers?: number;
   audio?: number;
   sources?: Readonly<Record<string, number>>;
@@ -190,7 +172,7 @@ function parseTabCounts(value: unknown): MediaTabCounts {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   const raw = value as Record<string, unknown>;
   const parsed: { -readonly [K in keyof MediaTabCounts]: MediaTabCounts[K] } = {};
-  for (const key of ["images", "favorites", "voiceovers", "audio"] as const) {
+  for (const key of ["images", "voiceovers", "audio"] as const) {
     if (exactCount(raw[key])) parsed[key] = raw[key];
   }
   if (raw.sources && typeof raw.sources === "object" && !Array.isArray(raw.sources)) {
@@ -203,7 +185,6 @@ function parseTabCounts(value: unknown): MediaTabCounts {
 
 export function mediaTabCounts(): MediaTabCounts { return tabCounts; }
 
-export function mediaTabCountsRevision() { return tabCountsRevision; }
 
 export function subscribeMediaTabCounts(listener: () => void) {
   tabCountListeners.add(listener);
@@ -260,13 +241,6 @@ export function setMediaSourceCount(sourceId: string, count: number | null) {
   const sources = count === null ? others : { ...others, [sourceId]: count };
   const { sources: _sources, ...rest } = tabCounts;
   setTabCounts(Object.keys(sources).length > 0 ? { ...rest, sources } : rest);
-}
-
-/** The caller's own favorite changes move a known favorites count by that many. */
-export function adjustMediaFavoritesCount(delta: number, countsRevision: number) {
-  if (!Number.isSafeInteger(delta) || delta === 0) return;
-  if (countsRevision !== tabCountsRevision || tabCounts.favorites === undefined) return;
-  setTabCounts({ ...tabCounts, favorites: Math.max(0, tabCounts.favorites + delta) });
 }
 
 /** Account changes, sign-out and denied requests forget every count. */

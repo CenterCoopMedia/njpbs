@@ -1,8 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router";
 import { ComponentEditorDialog } from "./ComponentEditorDialog";
-import { MediaCollectionPicker } from "./MediaCollectionPicker";
-import { useSuccessNotice } from "./ui/SuccessNoticeRegion";
 import { Button, InlineMessage, Select, TextInput, Textarea } from "./ui/Primitives";
 import { cmsUpdateMediaMetadata, type MediaAssetSummary } from "../lib/functions";
 import type { MediaSourceSummary, SourceMediaAssetSummary } from "../lib/source-media";
@@ -15,17 +12,13 @@ import {
   type ImageBulkPatch, type MetadataPatch, type TextField,
 } from "../lib/source-media-bulk";
 import "./SourceMediaBulkEditor.css";
-import { mediaCollectionsPath } from "../lib/routes";
 import { SelectionBar } from "./media/SelectionBar";
 import {
-  VIDEO_SELECTION_CAP, collectionCapError, emptySelection, offPageCount, pageSelectionState, refreshSelected,
+  VIDEO_SELECTION_CAP, emptySelection, offPageCount, pageSelectionState, refreshSelected,
   removeSelected, selectionSummary, setPageSelection, type MediaSelection, type SelectionRules,
 } from "../lib/media-selection";
 import { mediaBarActions, mediaSelectionActions, type MediaTileActionId } from "../lib/media-tile-actions";
 import { MediaBulkInspector } from "./media/MediaBulkInspector";
-import { setMediaFavorites } from "../lib/media-favorites";
-import type { useMediaFavorites } from "../lib/use-media-favorites";
-import { markMediaTabCountsStale, publishFavoritesChange } from "../lib/media-session-cache";
 
 interface NavigationGuard {
   navigationBlocked: boolean;
@@ -299,28 +292,17 @@ function BulkEditorCore<T extends ReviewAsset, P extends object>({
 /**
  * Selection stays local to one user/source and never expands an unloaded query. The shared
  * grid (MediaGrid) changes the selection through changeSelection and rules; this hook owns the
- * shared SelectionBar, the collection picker and the batch editor.
+ * shared SelectionBar and the batch editor.
  */
-export function useSourceMediaBulkEditing({ source, userId, records, favorites, pageTags = [], recentTags = [], getIdToken, disabled, onRefresh, onTagsSaved, returnFocus }: {
+export function useSourceMediaBulkEditing({ source, userId, records, pageTags = [], recentTags = [], getIdToken, disabled, onRefresh, onTagsSaved, returnFocus }: {
   source: MediaSourceSummary; userId: string; records: SourceMediaAssetSummary[];
-  favorites: Pick<ReturnType<typeof useMediaFavorites>, "retryDisabled" | "reconcile">;
   pageTags?: readonly string[]; recentTags?: readonly string[];
   getIdToken: () => Promise<string>; disabled: boolean; onRefresh: () => void;
   onTagsSaved?: (tags: readonly string[]) => void;
   /** Decision 3: after Clear selection or a bulk action. Defaults to the search field. */
   returnFocus?: () => void;
 }) {
-  const navigate = useNavigate();
-  const notice = useSuccessNotice();
   const scope = `${userId}:${source.id}`;
-  const currentScope = useRef({ scope });
-  if (currentScope.current.scope !== scope) currentScope.current = { scope };
-  const mounted = useRef(true);
-  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
-  const favoriteRequest = useRef<symbol>();
-  const [favoriteFeedback, setFavoriteFeedback] = useState({ scope, saving: false, status: "", error: "" });
-  const favoriteState = favoriteFeedback.scope === scope ? favoriteFeedback : undefined;
-  const favoritesSaving = favoriteState?.saving === true;
   const [scoped, setScoped] = useState<{ scope: string; selection: MediaSelection<SourceMediaAssetSummary> }>({ scope, selection: emptySelection() });
   const [session, setSession] = useState<{ scope: string; assets: SourceMediaAssetSummary[]; reviewing: boolean; draft?: BulkMetadataDraft }>();
   const [inspectorDirty, setInspectorDirty] = useState(false);
@@ -331,20 +313,13 @@ export function useSourceMediaBulkEditing({ source, userId, records, favorites, 
   const [batchOpenScope, setBatchOpenScope] = useState<string>();
   const batchOpen = batchOpenScope === scope && source.canEditMetadata;
   const submitted = useRef<{ operationKey: number; entries: Map<string, string[]> }>();
-  // A card's Add to collection names its one video and keeps the selection; the bar's names
-  // the selection and clears it once the videos are added.
-  const [pickerTarget, setPickerTarget] = useState<{
-    assets: SourceMediaAssetSummary[]; bulk: boolean; opener: Element | null;
-  }>();
-  const [collectionSuccess, setCollectionSuccess] = useState("");
   const selection = scoped.scope === scope ? scoped.selection : emptySelection<SourceMediaAssetSummary>();
   const assets = selection.items;
   const visible = records.filter(asset => asset.sourceId === source.id);
   const editing = Boolean(session && session.scope === scope && source.canEditMetadata);
   const open = editing || batchOpen;
   const reviewOpen = editing && session?.reviewing === true;
-  const pickerOpen = Boolean(pickerTarget);
-  const selectionBusy = open || pickerOpen || favoritesSaving;
+  const selectionBusy = open;
   const locked = disabled || selectionBusy;
   const rules = useMemo<SelectionRules<SourceMediaAssetSummary>>(() => ({
     cap: VIDEO_SELECTION_CAP,
@@ -355,14 +330,8 @@ export function useSourceMediaBulkEditing({ source, userId, records, favorites, 
     setScoped({ scope, selection: emptySelection() });
     setSession(undefined);
     setBatchOpenScope(undefined);
-    setPickerTarget(undefined);
-    setCollectionSuccess("");
     submitted.current = undefined;
   }, [scope, source.canEditMetadata]);
-  useEffect(() => {
-    favoriteRequest.current = undefined;
-    setFavoriteFeedback({ scope, saving: false, status: "", error: "" });
-  }, [scope]);
   useEffect(() => {
     if (selectionBusy || !records.length) return;
     setScoped(previous => {
@@ -375,7 +344,6 @@ export function useSourceMediaBulkEditing({ source, userId, records, favorites, 
   function changeSelection(next: MediaSelection<SourceMediaAssetSummary>) {
     if (locked) return;
     setScoped({ scope, selection: next });
-    setCollectionSuccess("");
   }
   function clear() {
     if (selectionBusy) return;
@@ -390,12 +358,6 @@ export function useSourceMediaBulkEditing({ source, userId, records, favorites, 
   }
   function removeAsset(id: string) {
     setScoped(previous => ({ ...previous, selection: removeSelected(previous.selection, id) }));
-  }
-  function collect(target?: SourceMediaAssetSummary) {
-    if (locked) return;
-    const opener = document.activeElement;
-    if (target) setPickerTarget({ assets: [target], bulk: false, opener });
-    else if (assets.length && !collectionCapError(assets.length, "videos")) setPickerTarget({ assets: [...assets], bulk: true, opener });
   }
   function edit() {
     if (locked || !assets.length || !source.canEditMetadata) return;
@@ -417,55 +379,8 @@ export function useSourceMediaBulkEditing({ source, userId, records, favorites, 
       setBatchOpenScope(scope);
     } });
   }
-  async function favoriteSelection(favorite: boolean) {
-    if (locked || favorites.retryDisabled || favoriteRequest.current || !userId || !assets.length || assets.length > 100) return;
-    const request = Symbol();
-    const requestScope = currentScope.current;
-    const isCurrent = () => mounted.current && currentScope.current === requestScope && favoriteRequest.current === request;
-    favoriteRequest.current = request;
-    // A prior single-item Undo must not race this selection's new intent.
-    notice.show("Saving favorites.");
-    setFavoriteFeedback({ scope, saving: true, status: "", error: "" });
-    try {
-      const token = await getIdToken();
-      if (!isCurrent()) return;
-      const result = await setMediaFavorites(token, assets.map(asset => ({ backend: "s3", sourceId: asset.sourceId, id: asset.id })), favorite);
-      if (!isCurrent()) return;
-      const saved = result.results.filter(item => "changed" in item);
-      const changed = saved.filter(item => item.changed).length;
-      const unchanged = saved.length - changed;
-      const failed = result.results.length - saved.length;
-      const savedIds = new Set(saved.map(item => item.ref.id));
-      setScoped(previous => previous.scope !== scope ? previous : {
-        scope, selection: { ...previous.selection, items: previous.selection.items.filter(asset => !savedIds.has(asset.id)), error: "" },
-      });
-      const message = [
-        `${favorite ? "Added" : "Removed"} ${changed} ${favorite ? "to" : "from"} favorites.`,
-        unchanged ? `${unchanged} already ${favorite ? "a favorite" : "not a favorite"}.` : "",
-        failed ? `${failed} could not be changed. They remain selected; try again.` : "",
-      ].filter(Boolean).join(" ");
-      setFavoriteFeedback({ scope, saving: true, status: failed ? "" : message, error: failed ? message : "" });
-      notice.show(message, failed ? { tone: "error" } : undefined);
-      if (!failed) requestAnimationFrame(() => { if (mounted.current && currentScope.current === requestScope) (returnFocus ?? focusVideoSearch)(); });
-    } catch {
-      if (!isCurrent()) return;
-      markMediaTabCountsStale();
-      const message = "The favorite changes were not confirmed. Check the refreshed hearts before trying again.";
-      setFavoriteFeedback({ scope, saving: true, status: "", error: message });
-      notice.show(message, { tone: "error" });
-    } finally {
-      if (isCurrent()) {
-        favorites.reconcile();
-        publishFavoritesChange();
-        favoriteRequest.current = undefined;
-        setFavoriteFeedback(previous => ({ ...previous, saving: false }));
-      }
-    }
-  }
   function selectionAction(id: MediaTileActionId) {
-    if (id === "favorite-add" || id === "favorite-remove") void favoriteSelection(id === "favorite-add");
     if (id === "clear-selection") clear();
-    if (id === "collect") collect();
     if (id === "edit-selected") edit();
   }
   function close() {
@@ -504,48 +419,28 @@ export function useSourceMediaBulkEditing({ source, userId, records, favorites, 
   }
   const offPage = offPageCount(assets, visible);
   const pageState = pageSelectionState(assets, visible);
-  const selectionActions = mediaSelectionActions({ surface: "video", count: assets.length, canEdit: source.canEditMetadata }).map(action =>
-    favorites.retryDisabled && (action.id === "favorite-add" || action.id === "favorite-remove")
-      ? { ...action, hidden: true, disabledReason: "Wait for the favorite save to finish." }
-      : action);
+  const selectionActions = mediaSelectionActions({ surface: "video", count: assets.length, canEdit: source.canEditMetadata });
   return {
     open, reviewOpen, dirty: editing && (reviewOpen ? reviewDirty : inspectorDirty),
-    saving: (editing && saving) || (batchOpen && (recovery.activity === "saving" || recovery.activity === "canceling")) || favoritesSaving,
+    saving: (editing && saving) || (batchOpen && (recovery.activity === "saving" || recovery.activity === "canceling")),
     discard, refreshAsset, removeAsset,
     selectionActions, selectionBusy,
-    selection, rules, changeSelection, clear, collect, edit, selectionAction,
+    selection, rules, changeSelection, clear, edit, selectionAction,
     /** The list header's Select this page: the same state and change as the bar's. */
     pageSelection: {
       state: pageState,
       disabled: locked || !visible.length,
       onChange: (checked: boolean) => changeSelection(setPageSelection(selection, visible, checked, rules)),
     },
-    /** Selecting and card actions wait while the viewer, the batch editor or the picker is open. */
-    locked, pickerOpen,
+    /** Selecting and card actions wait while the viewer or the batch editor is open. */
+    locked,
     /** The always-mounted announcement of the count; the bar has no live region of its own. */
     summary: assets.length ? selectionSummary({ count: assets.length, offPage, cap: MAX_BULK_VIDEOS }) : "",
-    notice: <>{collectionSuccess ? <InlineMessage tone="success" title="Items added to collection">{collectionSuccess}</InlineMessage> : null}
-      {source.canEditMetadata && (recovery.batch || recovery.error) ? <div>
+    notice: <>{source.canEditMetadata && (recovery.batch || recovery.error) ? <div>
         <Button disabled={locked || Boolean(recovery.activity)} onClick={inspectBatch}>{recovery.batch ? "Latest video batch" : "Check video batch"}</Button>
       </div> : null}
-      {!notice.available && favoritesSaving ? <p role="status">Saving favorites…</p> : null}
-      {!notice.available && favoriteState?.status ? <InlineMessage tone="success" title="Favorites updated">{favoriteState.status}</InlineMessage> : null}
-      {!notice.available && favoriteState?.error ? <InlineMessage tone="error" title="Favorites need attention">{favoriteState.error}</InlineMessage> : null}
       {/* A refused change with nothing selected has no bar to carry its message. */}
-      {!assets.length && selection.error ? <p className="source-bulk-selection-error" role="alert">{selection.error}</p> : null}
-      {pickerTarget ? <MediaCollectionPicker open userId={userId}
-        refs={pickerTarget.assets.map(asset => ({ backend: "s3" as const, sourceId: asset.sourceId, id: asset.id }))}
-        getIdToken={getIdToken}
-        onClose={() => setPickerTarget(undefined)}
-        focusOpener={pickerTarget.opener}
-        onFocusFallback={returnFocus ?? focusVideoSearch}
-        onOpenCollections={() => navigate(mediaCollectionsPath())}
-        onAdded={collection => {
-          const count = pickerTarget.assets.length;
-          setPickerTarget(undefined);
-          if (pickerTarget.bulk) setScoped({ scope, selection: emptySelection() });
-          if (!notice.available) setCollectionSuccess(`${count} ${count === 1 ? "video was" : "videos were"} added to ${collection.name}.`);
-        }} /> : null}</>,
+      {!assets.length && selection.error ? <p className="source-bulk-selection-error" role="alert">{selection.error}</p> : null}</>,
     bar: <SelectionBar
       actions={mediaBarActions(selectionActions)}
       actionsDisabled={locked}

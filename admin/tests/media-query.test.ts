@@ -1,15 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
-  DEFAULT_COLLECTIONS_MEDIA_LOCATION,
-  DEFAULT_FAVORITES_MEDIA_LOCATION,
   DEFAULT_MEDIA_QUERY,
   DEFAULT_VIDEO_MEDIA_QUERY,
-  encodeCollectionsMediaLocation,
-  encodeFavoritesMediaLocation,
   encodeMediaLocation,
   encodeVideoMediaLocation,
-  parseCollectionsMediaLocation,
-  parseFavoritesMediaLocation,
   parseMediaLocation,
   parseVideoMediaLocation,
 } from "../src/lib/media-query";
@@ -120,51 +114,5 @@ describe("video media location query", () => {
     const encoded = encodeVideoMediaLocation(query, null, "interviews").toString();
     expect(parseVideoMediaLocation(encoded)).toEqual({ query, selectedId: null, view: "interviews" });
     expect(parseVideoMediaLocation("view=bad%2Fid")).not.toHaveProperty("view");
-  });
-});
-
-describe("Favorites and Collections media location queries", () => {
-  it("keeps equal backend ids distinct by round-tripping the full reference", () => {
-    const favoriteR2 = parseFavoritesMediaLocation(
-      encodeFavoritesMediaLocation("image", { backend: "r2", id: "same-id" }).toString(),
-    );
-    const favoriteS3 = parseFavoritesMediaLocation(
-      encodeFavoritesMediaLocation("video", { backend: "s3", sourceId: "source-one", id: "same-id" }).toString(),
-    );
-    expect(favoriteR2.selectedRef).toEqual({ backend: "r2", id: "same-id" });
-    expect(favoriteS3.selectedRef).toEqual({ backend: "s3", sourceId: "source-one", id: "same-id" });
-
-    const collectionS3 = parseCollectionsMediaLocation(
-      encodeCollectionsMediaLocation("archived", "all_staff", favoriteS3.selectedRef).toString(),
-    );
-    expect(collectionS3).toEqual({
-      show: "archived",
-      scope: "all_staff",
-      selectedRef: { backend: "s3", sourceId: "source-one", id: "same-id" },
-    });
-  });
-
-  it("drops malformed or oversized full references and unsupported filters", () => {
-    for (const asset of ["same-id", "r2:bad/id", `r2:${"a".repeat(129)}`, "s3:source-only", "s3:source:bad/id"]) {
-      expect(parseFavoritesMediaLocation(`asset=${encodeURIComponent(asset)}`).selectedRef).toBeNull();
-      expect(parseCollectionsMediaLocation(`asset=${encodeURIComponent(asset)}`).selectedRef).toBeNull();
-    }
-    expect(parseFavoritesMediaLocation("kind=unsupported")).toEqual(DEFAULT_FAVORITES_MEDIA_LOCATION);
-    expect(parseFavoritesMediaLocation("kind=audio")).toEqual({ kind: "audio", selectedRef: null });
-    expect(parseCollectionsMediaLocation("show=deleted&scope=public")).toEqual(DEFAULT_COLLECTIONS_MEDIA_LOCATION);
-  });
-
-  it("omits default values from clean URLs", () => {
-    expect(encodeFavoritesMediaLocation(null, null).toString()).toBe("");
-    expect(encodeCollectionsMediaLocation("active", null, null).toString()).toBe("");
-  });
-
-  it("keeps bounded personal view references outside Favorites and Collections filters", () => {
-    expect(parseFavoritesMediaLocation(encodeFavoritesMediaLocation("video", null, "videos").toString()))
-      .toEqual({ kind: "video", selectedRef: null, view: "videos" });
-    expect(parseCollectionsMediaLocation(encodeCollectionsMediaLocation("archived", "private", null, "mine").toString()))
-      .toEqual({ show: "archived", scope: "private", selectedRef: null, view: "mine" });
-    expect(parseFavoritesMediaLocation("view=bad%2Fid")).not.toHaveProperty("view");
-    expect(parseCollectionsMediaLocation("view=bad%2Fid")).not.toHaveProperty("view");
   });
 });

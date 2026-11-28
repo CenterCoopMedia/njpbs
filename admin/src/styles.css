@@ -4993,24 +4993,11 @@
 .media-picker-card-item {
   min-width: 0;
   display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
-  gap: var(--space-1);
+  grid-template-rows: minmax(0, 1fr);
 }
 
 .media-picker-card-item .media-picker-card {
   height: auto;
-}
-
-.media-picker-favorite {
-  justify-self: start;
-}
-
-.media-favorite-button {
-  flex: none;
-}
-
-.media-favorite-button[aria-pressed="true"] svg {
-  fill: currentColor;
 }
 
 .media-picker-card {

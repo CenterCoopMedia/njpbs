@@ -94,14 +94,10 @@ describe("ActionControl", () => {
         "view-options",
         "media-display",
         "media-more",
-        "media-favorite",
-        "media-collect",
         "media-select",
       ]),
     );
     expect(ICON_CONTROL_REGISTRY["media-more"]).toMatchObject({ label: "More actions", icon: "ellipsis", state: "disclosure", alwaysIcon: true });
-    expect(ICON_CONTROL_REGISTRY["media-favorite"]).toMatchObject({ label: "Favorite", icon: "heart", state: "toggle", alwaysIcon: true });
-    expect(ICON_CONTROL_REGISTRY["media-collect"]).toMatchObject({ label: "Add to collection", icon: "folder-plus", state: "action", alwaysIcon: true });
     expect(ICON_CONTROL_REGISTRY["media-select"]).toMatchObject({ label: "Select", icon: "check-square", state: "toggle", alwaysIcon: true });
     // Delete and Upload stay unregistered; they are not low-risk controls.
     expect(ICON_CONTROL_REGISTRY).not.toHaveProperty("media-delete");

@@ -1,10 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
-  COLLECTION_CHANGE_LIMIT,
   VIDEO_SELECTION_CAP,
   changeSelection,
   clearSelection,
-  collectionCapError,
   emptySelection,
   offPageCount,
   pageSelectionState,
@@ -77,13 +75,6 @@ describe("media selection model", () => {
     const scoped = changeSelection(emptySelection<Item>(), [item("a1"), item("b1", "s2")], true, { accepts: (entry) => entry.sourceId === "s1" });
     expect(ids(scoped)).toEqual(["a1"]);
     expect(VIDEO_SELECTION_CAP.max).toBe(100);
-  });
-
-  it("reports the collection cap at 31", () => {
-    expect(COLLECTION_CHANGE_LIMIT).toBe(30);
-    expect(collectionCapError(30, "items")).toBeNull();
-    expect(collectionCapError(31, "items")).toBe("Select no more than 30 items for one collection change.");
-    expect(collectionCapError(31, "videos")).toBe("Select no more than 30 videos for one collection change.");
   });
 
   it("summarizes as 7 of 100 selected · 3 not on this page and 5 selected", () => {

@@ -887,6 +887,23 @@ describe("media feedback API", () => {
     expect((await db.collection("mediaReviews").get()).empty).toBe(true);
   });
 
+  it("hides a voiceover from an active reader whose email is unverified", async () => {
+    const grants = [{ role: "contributor", sections: ["news"], registeredMediaSections: ["news"] }];
+    const reader = actor("voiceover-reviewer", grants);
+    const unverified = { ...reader, emailVerified: false };
+    const verifiedReview = await getReview(VOICEOVER_REF, reader);
+    expect(verifiedReview.statusCode, JSON.stringify(verifiedReview.body)).toBe(200);
+
+    const review = await invoke(createCmsSaveMediaReviewHandler, {
+      schemaVersion: 1, ref: VOICEOVER_REF, baseVersion: 0, moreLikeThis: true, notes: "Unverified note",
+    }, unverified);
+    const comment = await mutateComment({ ref: VOICEOVER_REF, action: "create", text: "Unverified comment" }, unverified);
+    for (const result of [await getReview(VOICEOVER_REF, unverified), review, comment]) {
+      expect(result.statusCode).toBe(404);
+      expect(result.body).toEqual({ error: "Media asset is unavailable" });
+    }
+  });
+
   it("supports an authorized S3 item and rejects a source identity mismatch", async () => {
     const saved = await invoke(createCmsSaveMediaReviewHandler, {
       schemaVersion: 1,

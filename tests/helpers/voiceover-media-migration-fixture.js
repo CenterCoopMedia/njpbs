@@ -1,8 +1,3 @@
-import { Timestamp } from "firebase-admin/firestore";
-import favoriteContract from "../../functions/lib/media-favorites.js";
-
-const { canonicalFavoriteRef, favoriteDocumentId } = favoriteContract;
-
 export const FIXTURE_CATEGORY = "brand";
 export const FIXTURE_NOW = "2026-10-04T15:00:00.000Z";
 export const FIXTURE_CREATED_AT = "2026-09-10T18:00:00.000Z";
@@ -68,7 +63,6 @@ export async function seedVoiceoverMediaFixture(
     mutateReview = (value) => value,
     mutateTake = (take) => take,
     takeCount = 196,
-    seedExistingFavorite = true,
     seedReviews = true,
   } = {},
 ) {
@@ -155,18 +149,6 @@ export async function seedVoiceoverMediaFixture(
     );
   }
 
-  let existingFavoritePath = null;
-  if (seedExistingFavorite && reviews.length > 0) {
-    const existing = reviews[2];
-    const ref = { backend: "r2", id: `voiceover-${existing.takeId}` };
-    existingFavoritePath =
-      `mediaFavorites/${existing.uid}/items/${favoriteDocumentId(ref)}`;
-    batch.create(firestore.doc(existingFavoritePath), {
-      ref,
-      canonicalRef: canonicalFavoriteRef(ref),
-      createdAt: Timestamp.fromDate(new Date("2026-09-13T12:00:00.000Z")),
-    });
-  }
   await batch.commit();
-  return { category, takes, reviews, existingFavoritePath };
+  return { category, takes, reviews };
 }

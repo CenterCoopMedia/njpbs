@@ -32,10 +32,6 @@ import {
 import { Button, EmptyState, InlineMessage } from "./ui/Primitives";
 import { LoadingIndicator, Spinner } from "./ui/LoadingIndicator";
 import { LeaveGuardDialog } from "../routes/LeaveGuardDialog";
-import { MediaFavoriteButton } from "./MediaFavoriteButton";
-import { useMediaFavorites } from "../lib/use-media-favorites";
-import type { MediaFavoriteRef } from "../lib/media-favorites";
-import { useOptionalShell } from "../routes/ShellContext";
 import { reusedUploadMessage } from "../lib/media-upload";
 import { MediaPaging } from "./media/MediaPaging";
 
@@ -62,7 +58,6 @@ interface PickerQuery {
 
 // Match the library's bounded-scan pause so ordinary typing produces one request.
 const MEDIA_SEARCH_IDLE_MS = 300;
-const noFavoriteSession = async () => null;
 
 function focusableWithin(container: HTMLElement | null): HTMLElement[] {
   if (!container) return [];
@@ -102,7 +97,6 @@ export function MediaPickerDialog({
   const noun = pdf ? "PDF" : "image";
   const plural = pdf ? "PDFs" : "images";
   const pagingLabel = pdf ? "PDF pages" : "Image pages";
-  const shell = useOptionalShell();
   const overlayOwner = useOverlayOwner();
   const workspace = useEditorWorkspaceView();
   const titleId = useId();
@@ -152,14 +146,6 @@ export function MediaPickerDialog({
       : state.status === "ready"
         ? state.error
         : undefined;
-  const favoriteRefs: MediaFavoriteRef[] = state.status === "ready"
-    ? state.result.records.map(asset => ({ backend: "r2", id: asset.id }))
-    : [];
-  const favorites = useMediaFavorites(
-    shell?.user.uid ?? "",
-    favoriteRefs,
-    shell?.getIdToken ?? noFavoriteSession,
-  );
 
   useEffect(() => workspace?.kind ? workspace.retainPane("details") : undefined, [workspace?.kind, workspace?.retainPane]);
   useLayoutEffect(() => {
@@ -603,17 +589,6 @@ export function MediaPickerDialog({
               </InlineMessage>
             ) : null}
 
-            {favorites.loadError || favorites.saveError ? (
-              <InlineMessage tone="error" title="Favorites need attention">
-                <span>{favorites.loadError || favorites.saveError}</span>
-                {favorites.loadError ? (
-                  <Button disabled={favorites.retryDisabled} onClick={favorites.retry}>
-                    Try again
-                  </Button>
-                ) : null}
-              </InlineMessage>
-            ) : null}
-
             {state.status === "loading" ? (
               <div className="media-picker-status">
                 <LoadingIndicator
@@ -706,13 +681,6 @@ export function MediaPickerDialog({
                           ) : null}
                         </span>
                       </button>
-                      <MediaFavoriteButton
-                        className="media-picker-favorite"
-                        name={asset.name}
-                        favorite={favorites.value({ backend: "r2", id: asset.id })}
-                        pending={favorites.pending({ backend: "r2", id: asset.id })}
-                        onToggle={() => void favorites.toggle({ backend: "r2", id: asset.id })}
-                      />
                     </li>
                     ))}
                   </ul>

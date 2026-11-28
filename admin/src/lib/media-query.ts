@@ -4,8 +4,6 @@ import type {
   MediaSortDirection,
   MediaSortField,
 } from "./functions";
-import type { MediaCollectionLifecycle, MediaCollectionScope } from "./media-collections";
-import type { MediaAssetRef } from "./media-identity";
 import type { SourceMediaQuery } from "./source-media";
 import { MEDIA_METADATA_BOUND_FIELDS, mediaAspect, parseMediaRange, type MediaMetadataBounds } from "./media-browse-metadata";
 
@@ -47,8 +45,6 @@ const VIDEO_SORTS = new Set<NonNullable<SourceMediaQuery["sort"]>>([
   "size_asc",
 ]);
 const VIDEO_LIMITS = new Set<VideoPageSize>([24, 48, 96]);
-const FAVORITE_KINDS = new Set<FavoriteMediaKind>(["image", "document", "audio", "video"]);
-const COLLECTION_SCOPES = new Set<MediaCollectionScope>(["private", "all_staff"]);
 
 function uniqueBounded(values: string[], max: number): string[] {
   return [...new Set(values)].slice(0, max);
@@ -155,32 +151,6 @@ export const DEFAULT_VIDEO_MEDIA_QUERY: VideoMediaLocationQuery = Object.freeze(
   limit: 24,
 });
 
-export type FavoriteMediaKind = MediaKind | "video";
-
-export interface FavoritesMediaLocationState {
-  kind: FavoriteMediaKind | null;
-  selectedRef: MediaAssetRef | null;
-  view?: string;
-}
-
-export const DEFAULT_FAVORITES_MEDIA_LOCATION: FavoritesMediaLocationState = Object.freeze({
-  kind: null,
-  selectedRef: null,
-});
-
-export interface CollectionsMediaLocationState {
-  show: MediaCollectionLifecycle;
-  scope: MediaCollectionScope | null;
-  selectedRef: MediaAssetRef | null;
-  view?: string;
-}
-
-export const DEFAULT_COLLECTIONS_MEDIA_LOCATION: CollectionsMediaLocationState = Object.freeze({
-  show: "active",
-  scope: null,
-  selectedRef: null,
-});
-
 function oneParam(params: URLSearchParams, name: string): string | null {
   const values = params.getAll(name);
   return values.length === 1 ? values[0] : null;
@@ -268,70 +238,3 @@ export function encodeVideoMediaLocation(
   return params;
 }
 
-function parseMediaAssetReference(value: string | null): MediaAssetRef | null {
-  if (!value) return null;
-  const parts = value.split(":");
-  if (parts[0] === "r2" && parts.length === 2 && isBoundedId(parts[1])) {
-    return { backend: "r2", id: parts[1] };
-  }
-  if (parts[0] === "s3" && parts.length === 3 && isBoundedId(parts[1]) && isBoundedId(parts[2])) {
-    return { backend: "s3", sourceId: parts[1], id: parts[2] };
-  }
-  return null;
-}
-
-function encodeMediaAssetReference(ref: MediaAssetRef): string | null {
-  if (!isBoundedId(ref.id)) return null;
-  if (ref.backend === "r2") return `r2:${ref.id}`;
-  return isBoundedId(ref.sourceId) ? `s3:${ref.sourceId}:${ref.id}` : null;
-}
-
-export function parseFavoritesMediaLocation(search: string): FavoritesMediaLocationState {
-  const params = new URLSearchParams(search);
-  const kindCandidate = oneParam(params, "kind") as FavoriteMediaKind | null;
-  return {
-    kind: kindCandidate && FAVORITE_KINDS.has(kindCandidate) ? kindCandidate : null,
-    selectedRef: parseMediaAssetReference(oneParam(params, "asset")),
-    ...viewParam(params),
-  };
-}
-
-export function encodeFavoritesMediaLocation(
-  kind: FavoriteMediaKind | null,
-  selectedRef: MediaAssetRef | null,
-  view?: string | null,
-): URLSearchParams {
-  const params = new URLSearchParams();
-  if (kind) params.set("kind", kind);
-  const asset = selectedRef && encodeMediaAssetReference(selectedRef);
-  if (asset) params.set("asset", asset);
-  if (view && isBoundedId(view)) params.set("view", view);
-  return params;
-}
-
-export function parseCollectionsMediaLocation(search: string): CollectionsMediaLocationState {
-  const params = new URLSearchParams(search);
-  const showCandidate = oneParam(params, "show");
-  const scopeCandidate = oneParam(params, "scope") as MediaCollectionScope | null;
-  return {
-    show: showCandidate === "archived" ? "archived" : "active",
-    scope: scopeCandidate && COLLECTION_SCOPES.has(scopeCandidate) ? scopeCandidate : null,
-    selectedRef: parseMediaAssetReference(oneParam(params, "asset")),
-    ...viewParam(params),
-  };
-}
-
-export function encodeCollectionsMediaLocation(
-  show: MediaCollectionLifecycle,
-  scope: MediaCollectionScope | null,
-  selectedRef: MediaAssetRef | null,
-  view?: string | null,
-): URLSearchParams {
-  const params = new URLSearchParams();
-  if (show === "archived") params.set("show", show);
-  if (scope) params.set("scope", scope);
-  const asset = selectedRef && encodeMediaAssetReference(selectedRef);
-  if (asset) params.set("asset", asset);
-  if (view && isBoundedId(view)) params.set("view", view);
-  return params;
-}

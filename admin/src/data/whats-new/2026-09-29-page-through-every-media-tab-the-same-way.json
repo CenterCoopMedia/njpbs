@@ -2,7 +2,7 @@
   "date": "2026-09-29",
   "kind": "improved",
   "title": "Page through every media tab the same way",
-  "body": "Images, Videos, Audio, Favorites and Collections now share the same toolbar, page controls and viewer. Move between pages with the buttons or the keyboard, and your place stays the same in each tab.",
+  "body": "Images, Videos and Audio now share the same toolbar, page controls and viewer. Move between pages with the buttons or the keyboard, and your place stays the same in each tab.",
   "prs": [
     2419,
     2423,

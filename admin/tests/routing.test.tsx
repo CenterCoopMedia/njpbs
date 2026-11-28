@@ -376,7 +376,7 @@ describe("admin routing shell", () => {
         direction: "desc",
         page: 1,
         paging: "cursor",
-      }, undefined, { counts: true, favorites: true });
+      }, undefined, { counts: true });
     });
   });
 

@@ -1,12 +1,11 @@
 import { ControlSizingProvider } from "../../context/ControlSizingContext";
-import { useContext, useLayoutEffect, useRef, useState, type ComponentProps, type ReactNode } from "react";
+import { useContext, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { MediaDialogContext } from "../../context/MediaDialogContext";
 import { Menu, type MenuItem } from "../ui/Menu";
 import { useToolbarNavigation } from "../ui/useToolbarNavigation";
 import { ActionControl } from "../ui/ActionControl";
 import { OverflowToolbar, type OverflowToolbarItem } from "../ui/OverflowToolbar";
-import { MediaFavoriteButton } from "../MediaFavoriteButton";
 import { CopyMediaLinkPanel } from "./CopyMediaLink";
 import "./MediaPreviewHeaderActions.css";
 
@@ -15,7 +14,6 @@ export interface MediaPreviewHeaderActionsProps {
   bookmarks?: ReactNode;
   transcript?: { onSelect: () => void; expanded: boolean; controls: string };
   clip?: { onSelect: () => void; expanded: boolean; controls: string };
-  favorite?: Pick<ComponentProps<typeof MediaFavoriteButton>, "favorite" | "pending" | "disabled" | "onToggle" | "name">;
   copyLink: string | (() => string);
 }
 
@@ -23,7 +21,7 @@ export function MediaPreviewHeaderActions(props: MediaPreviewHeaderActionsProps)
   return <ControlSizingProvider size="standard"><MediaPreviewHeaderActionsContent {...props} /></ControlSizingProvider>;
 }
 
-function MediaPreviewHeaderActionsContent({ downloads, bookmarks, transcript, clip, favorite, copyLink }: MediaPreviewHeaderActionsProps) {
+function MediaPreviewHeaderActionsContent({ downloads, bookmarks, transcript, clip, copyLink }: MediaPreviewHeaderActionsProps) {
   const root = useRef<HTMLDivElement>(null);
   const copyButton = useRef<HTMLButtonElement>(null);
   const frame = useContext(MediaDialogContext);
@@ -54,19 +52,6 @@ function MediaPreviewHeaderActionsContent({ downloads, bookmarks, transcript, cl
       node: <ActionControl action={key === "transcript" ? "media-transcript" : "media-clip"} presentation="text"
         aria-controls={action.controls} aria-expanded={action.expanded} onClick={action.onSelect} />,
       menuItem: { key, label: key === "transcript" ? "Transcript" : "Create clip", onSelect: action.onSelect },
-    });
-  }
-  if (favorite) {
-    const { name, onToggle, favorite: pressed, pending, disabled } = favorite;
-    items.push({
-      key: "favorite", priority: 2, zone: "trailing",
-      node: <ActionControl action="media-favorite" presentation="icons" contextLabel={name} aria-pressed={pressed === true}
-        label={pending ? "Saving favorite" : "Favorite"} aria-busy={pending || undefined}
-        aria-disabled={pending || disabled || undefined} disabled={disabled || pressed === undefined}
-        onClick={() => { if (!pending) onToggle(); }} />,
-      menuItem: { key: "favorite", checked: pressed === true, label: "Favorite", icon: "heart",
-        hidden: disabled, disabledReason: pending ? "Saving favorite." : pressed === undefined ? "Checking favorite state." : undefined,
-        onSelect: () => { if (!pending && !disabled && pressed !== undefined) onToggle(); } },
     });
   }
   items.push({ key: "copy", priority: 1, zone: "trailing",

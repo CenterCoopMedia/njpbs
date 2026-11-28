@@ -37,8 +37,6 @@ export const ROUTE_PATHS = {
   mediaLibrary: "/media",
   mediaImages: "/media/images",
   mediaVideos: "/media/videos",
-  mediaFavorites: "/media/favorites",
-  mediaCollections: "/media/collections",
   mediaVoiceovers: "/media/voiceovers",
   mediaSubmissions: "/media/submissions",
   voiceovers: "/voiceovers",
@@ -133,16 +131,6 @@ export function mediaVideosPath(sourceId?: string): string {
     : `${ROUTE_PATHS.mediaVideos}/${encodeURIComponent(sourceId)}`;
 }
 
-export function mediaFavoritesPath(): string {
-  return ROUTE_PATHS.mediaFavorites;
-}
-
-export function mediaCollectionsPath(collectionId?: string): string {
-  return collectionId === undefined
-    ? ROUTE_PATHS.mediaCollections
-    : `${ROUTE_PATHS.mediaCollections}/${encodeURIComponent(collectionId)}`;
-}
-
 export function mediaVoiceoversPath(): string {
   return ROUTE_PATHS.mediaVoiceovers;
 }
@@ -159,8 +147,6 @@ export type MediaWorkspaceRoute =
   | { kind: "entry" }
   | { kind: "images" }
   | { kind: "videos"; sourceId: string | null }
-  | { kind: "favorites" }
-  | { kind: "collections"; collectionId: string | null }
   | { kind: "voiceovers" }
   | { kind: "submissions" }
   | { kind: "not-found" };
@@ -170,28 +156,16 @@ export function parseMediaWorkspacePath(pathname: string): MediaWorkspaceRoute {
   if (path === ROUTE_PATHS.mediaLibrary) return { kind: "entry" };
   if (path === ROUTE_PATHS.mediaImages) return { kind: "images" };
   if (path === ROUTE_PATHS.mediaVideos) return { kind: "videos", sourceId: null };
-  if (path === ROUTE_PATHS.mediaFavorites) return { kind: "favorites" };
-  if (path === ROUTE_PATHS.mediaCollections) return { kind: "collections", collectionId: null };
   if (path === ROUTE_PATHS.mediaVoiceovers) return { kind: "voiceovers" };
   if (path === ROUTE_PATHS.mediaSubmissions) return { kind: "submissions" };
 
-  const prefixes = [
-    [ROUTE_PATHS.mediaVideos, "videos"],
-    [ROUTE_PATHS.mediaCollections, "collections"],
-  ] as const;
-  const match = prefixes.find(([base]) => path.startsWith(`${base}/`));
-  if (!match) return { kind: "not-found" };
-  const encodedId = path.slice(match[0].length + 1);
+  if (!path.startsWith(`${ROUTE_PATHS.mediaVideos}/`)) return { kind: "not-found" };
+  const encodedId = path.slice(ROUTE_PATHS.mediaVideos.length + 1);
   if (!encodedId || encodedId.includes("/")) return { kind: "not-found" };
   try {
     const id = decodeURIComponent(encodedId);
     if (!id || id.includes("/")) return { kind: "not-found" };
-    if (match[1] === "collections" && !/^[a-f0-9]{64}$/.test(id)) {
-      return { kind: "not-found" };
-    }
-    return match[1] === "videos"
-      ? { kind: "videos", sourceId: id }
-      : { kind: "collections", collectionId: id };
+    return { kind: "videos", sourceId: id };
   } catch {
     return { kind: "not-found" };
   }

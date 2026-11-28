@@ -114,8 +114,6 @@ describe("Admin performance mark inventory", () => {
     expect(routeCategoryForPath("/content/pages/home/edit")).toBe("content");
     expect(routeCategoryForPath("/content/post/abc123/edit")).toBe("content");
     expect(routeCategoryForPath("/media")).toBe("media");
-    expect(routeCategoryForPath("/media/favorites")).toBe("media");
-    expect(routeCategoryForPath("/media/collections")).toBe("media");
     expect(routeCategoryForPath("/media/videos/archive-originals")).toBe("media");
     expect(routeCategoryForPath("/voiceovers")).toBe("voiceovers");
     expect(routeCategoryForPath("/staff-access")).toBe("staff-access");
@@ -137,15 +135,9 @@ describe("Admin performance mark inventory", () => {
     expect(operationCategoryForEndpoint("cmsGetVoiceoverAudio")).toBe("voiceover-read");
     expect(operationCategoryForEndpoint("cmsVoiceoverReview")).toBe("voiceover-write");
     expect(operationCategoryForEndpoint("cmsListMediaCategories")).toBe("media-read");
-    expect(operationCategoryForEndpoint("cmsListMediaFavorites")).toBe("media-read");
-    expect(operationCategoryForEndpoint("cmsListMediaCollections")).toBe("media-read");
-    expect(operationCategoryForEndpoint("cmsListMediaCollectionItems")).toBe("media-read");
     expect(operationCategoryForEndpoint("cmsListBinnedMedia")).toBe("media-read");
     expect(operationCategoryForEndpoint("cmsRestoreMedia")).toBe("media-write");
     expect(operationCategoryForEndpoint("cmsMutateMediaCategory")).toBe("media-write");
-    expect(operationCategoryForEndpoint("cmsSetMediaFavorite")).toBe("media-write");
-    expect(operationCategoryForEndpoint("cmsMutateMediaCollection")).toBe("media-write");
-    expect(operationCategoryForEndpoint("cmsSetMediaCollectionItems")).toBe("media-write");
     expect(operationCategoryForEndpoint("registerStaffProfile")).toBe(
       "admission",
     );

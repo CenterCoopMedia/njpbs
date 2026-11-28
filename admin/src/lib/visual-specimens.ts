@@ -68,19 +68,6 @@ export const VISUAL_SPECIMEN_IDS: readonly string[] = [
   "media-video-filter", // video-only structured filter properties
   "media-video-sort", // video name, update and file-size directions
   "media-video-display", // video display rows and bounded page sizes
-  "media-favorites-toolbar", // Type chip and on-page filter scope
-  "media-favorites-grid", // mixed available and unavailable Favorites in the shared grid
-  "media-favorites-list", // the same page through the shared list rows
-  "media-favorites-selection", // bounded mixed selection with an unavailable ref
-  "media-favorites-viewer-image", // image body in the mixed full viewer
-  "media-favorites-viewer-document", // document body in the same full viewer
-  "media-favorites-viewer-video", // video body and backend-specific tools
-  "media-collections-filter", // Status and Scope properties
-  "media-collections-list", // applied Status and loaded-page Scope filters on deterministic folder cards
-  "media-collections-detail", // mixed image, private video, PDF and unavailable membership in the shared grid
-  "media-collections-viewer-image", // image body in the mixed collection viewer
-  "media-collections-viewer-video", // cross-backend step target with private-video tools and access
-  "media-collections-viewer-document", // PDF fallback after another body change in the same viewer shell
   "media-voiceovers-toolbar", // shared search, Filter and chips without unrelated actions
   "media-voiceovers-filter", // five filter properties without Display
   "media-inspector", // details inspector beside the results, and its modal sheet under 62rem

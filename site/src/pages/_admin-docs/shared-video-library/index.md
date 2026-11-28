@@ -39,42 +39,16 @@ Premiere. See [Premiere Pro panel](/guide/premiere-panel).
 The **Videos** tab is separate from **Images**. Available video sources depend
 on the configured integrations.
 
-Select the heart on a video card to save it to your account without opening
-the video. On a phone, open the card's **More** menu and choose **Add to
-favorites**. The same control appears in the video's preview dialog. Open
-**Media library → Favorites** to review saved videos with your saved images,
-documents and audio. Select the filled heart to remove an item. A favorite does not change who
-can open the source, and it does not publish the video. Voiceover favorites use
-the same shared heart and appear in **Favorites**.
-
-To change several favorites at once, select up to 100 videos and choose **Add
-to favorites** or **Remove from favorites** in the selection bar. The same
-actions appear in a selected card's menu. Wait for the save to finish before
-opening a video. Any videos that could not be changed stay selected for retry;
-if the result is unconfirmed, check the refreshed hearts before trying again.
-
-## Add videos to a collection
+## Select videos
 
 Select the checkbox on a video card or list row. A selection bar appears at
 the bottom of the results. It shows how many videos you selected, out of 100,
 and how many are on other pages. Use **Select this page** in the bar to add
-every video on the page, then select **Add to collection**. You can select
-across pages and filters. One collection change accepts up to 30 videos. Choose
-a private collection or one shared with all active staff. After the add
-finishes, focus returns to the card you last used.
-
-To add one video without changing your selection, select **Add to collection**
-on its card, or choose it from the card's **More** menu.
+every video on the page. You can select across pages and filters.
 
 On the keyboard, use the arrow keys to move between cards (Up and Down in the
 list), Space to select the current video, Shift+Arrow to extend a selection, and Ctrl+A (Command+A on a Mac)
 to select the page. Press Escape or select **Clear selection** to clear it.
-
-This action saves references to the existing videos. It does not upload another
-copy, change uploader attribution, publish a video, or grant source access.
-Open **Media library → Collections** to rename, remove references, archive, or
-restore the package. Any approved active staff member can organize an all-staff
-collection. Only its owner can open a private collection.
 
 ### Preview with Quick Look
 
@@ -328,8 +302,8 @@ The same control also accepts JPEG, PNG, WebP, GIF, AVIF, and PDF files. Those
 files open the image upload form on this page. Boardwalk stays on this video
 library. After an image or PDF upload finishes, a notice names **Images** and
 offers to open that tab. A file that is not an image, PDF, or
-video is listed on its own. The other files continue. Favorites, Collections,
-and Audio use this same control.
+video is listed on its own. The other files continue. Audio uses this same
+control.
 
 Boardwalk derives the first title from the filename and sets **Rights review**
 to **Needs review**. The upload creates a private library asset. It does not add

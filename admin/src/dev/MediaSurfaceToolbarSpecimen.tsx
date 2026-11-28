@@ -4,7 +4,7 @@ import type { MediaFilterChipModel } from "../components/media/MediaFilterChips"
 import type { MediaFilterPropertyModel } from "../components/media/MediaFilterPopover";
 import type { MediaDisplayConfiguration } from "../components/media/MediaDisplayPopover";
 
-type Surface = "video" | "favorites" | "collections" | "voiceovers";
+type Surface = "video" | "voiceovers";
 type Choice = { value: string; label: string };
 type Property = { id: string; label: string; options: readonly Choice[] };
 
@@ -13,13 +13,6 @@ const FILTERS: Record<Surface, readonly Property[]> = {
     { id: "tag", label: "Tag", options: [{ value: "interview", label: "Interview" }, { value: "news", label: "News" }] },
     { id: "rights", label: "Rights review", options: [{ value: "pending", label: "Needs review" }, { value: "complete", label: "Rights recorded" }] },
     { id: "by", label: "Uploader", options: [{ value: "gallery-user", label: "Me" }] },
-  ],
-  favorites: [
-    { id: "kind", label: "Type", options: [{ value: "image", label: "Images" }, { value: "document", label: "Documents" }, { value: "video", label: "Videos" }] },
-  ],
-  collections: [
-    { id: "show", label: "Status", options: [{ value: "active", label: "Active" }, { value: "archived", label: "Archived" }] },
-    { id: "scope", label: "Scope", options: [{ value: "private", label: "Private" }, { value: "all_staff", label: "All staff" }] },
   ],
   voiceovers: [
     { id: "style", label: "Style", options: [{ value: "news", label: "News" }, { value: "promo", label: "Promo" }] },
@@ -32,8 +25,6 @@ const FILTERS: Record<Surface, readonly Property[]> = {
 
 const INITIAL: Record<Surface, Record<string, string>> = {
   video: { tag: "interview" },
-  favorites: { kind: "image" },
-  collections: {},
   voiceovers: { style: "news" },
 };
 
@@ -61,7 +52,6 @@ export function MediaSurfaceToolbarSpecimen({ surface, popover }: { surface: Sur
       field: property.id,
       value,
       label: `${property.label}: ${label}`,
-      scopeLabel: surface === "favorites" || (surface === "collections" && property.id === "scope") ? "On this page" : undefined,
     }] : [];
   });
   const display: MediaDisplayConfiguration = {
@@ -86,10 +76,6 @@ export function MediaSurfaceToolbarSpecimen({ surface, popover }: { surface: Sur
         options: ["24", "48", "96"].map(value => ({ value, label: value })), onChange: setPageSize },
     ],
     onReset: () => { setLayout("grid"); setPageSize("24"); setFields(["type", "size", "duration", "rights", "tags"]); },
-  };
-  const favoritesDisplay: MediaDisplayConfiguration = {
-    rows: display.rows.filter((row) => row.id === "layout" || row.id === "thumbnail" || row.id === "density"),
-    onReset: () => setLayout("grid"),
   };
   const searchConfig = {
     value: search,
@@ -133,19 +119,13 @@ export function MediaSurfaceToolbarSpecimen({ surface, popover }: { surface: Sur
     case "video":
       configuration = { surface, search: searchConfig, filter: filterConfig, sort: videoSort, display, upload: uploadConfig, moreItems: selectionMore, shortcuts: null };
       break;
-    case "favorites":
-      configuration = { surface, search: null, filter: filterConfig, sort: null, display: favoritesDisplay, upload: null, moreItems: selectionMore, shortcuts: null };
-      break;
-    case "collections":
-      configuration = { surface, view: "list", search: null, filter: filterConfig, sort: null, display: null, upload: null, moreItems: [], shortcuts: null };
-      break;
     case "voiceovers":
       configuration = { surface, search: searchConfig, filter: filterConfig, sort: null, display: null, upload: null, moreItems: [], shortcuts: null };
       break;
   }
 
   return <section className="panel" style={{ display: "grid", gap: "var(--cms-space-4)" }}>
-    <h2>{surface === "video" ? "Videos" : surface === "favorites" ? "Favorites" : surface === "collections" ? "Collections" : "Audio"}</h2>
+    <h2>{surface === "video" ? "Videos" : "Audio"}</h2>
     <MediaToolbar configuration={configuration} initialPopover={popover} />
   </section>;
 }

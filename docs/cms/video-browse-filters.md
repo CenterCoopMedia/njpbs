@@ -16,9 +16,8 @@ filters for its tab or video source and reopens on the first page.
 In Videos, choose one filter property at a time. Either range counts as one
 property. A name-prefix search can be combined with any one property. In Images
 and Audio, metadata filters can be combined with one another and with the
-existing search and browse filters. Favorites and collections have their own
-membership filters. Related image and video search uses the active metadata
-filters when showing or opening a result.
+existing search and browse filters. Related image and video search uses the
+active metadata filters when showing or opening a result.
 
 Browse APIs apply filters on the server before returning each page. A bounded
 page can have no matches and still offer **Next**. Video name search uses name

@@ -65,7 +65,6 @@ function actor(grants, overrides = {}) {
 function counted(call) {
   if (call.path === "media_assets") return call.filters.some(([field]) => field === "kind") ? 4 : 1204;
   if (call.path === "mediaSourceAssets") return 412;
-  if (call.path === "mediaFavorites/staff-1/items") return 9;
   throw new Error(`unexpected count ${call.path}`);
 }
 
@@ -85,7 +84,6 @@ describe("computeMediaTabCounts", () => {
     expect(counts).toEqual({
       images: 1200,
       audio: 4,
-      favorites: 9,
       voiceovers: 4,
       sources: { "video-library": 412 },
     });
@@ -101,12 +99,6 @@ describe("computeMediaTabCounts", () => {
       path: "mediaSourceAssets",
       filters: [["sourceId", "==", "video-library"], ["lifecycle", "==", "active"]],
       order: [["updatedAtSort", "desc"]],
-    });
-    expect(firestore.calls).toContainEqual({
-      type: "count",
-      path: "mediaFavorites/staff-1/items",
-      filters: [],
-      order: [],
     });
     expect(firestore.calls.filter((call) => call.type === "get")).toEqual([]);
     expect(firestore.calls.filter((call) =>
@@ -158,7 +150,7 @@ describe("computeMediaTabCounts", () => {
       approvedActive: true,
       registry: new Map([["video-library", videoSource()]]),
     });
-    expect(staff).toEqual({ audio: 4, favorites: 9, voiceovers: 4, sources: { "video-library": 412 } });
+    expect(staff).toEqual({ audio: 4, voiceovers: 4, sources: { "video-library": 412 } });
 
     const inactiveStore = fakeFirestore({ count: counted });
     const inactive = await computeMediaTabCounts({
@@ -167,10 +159,8 @@ describe("computeMediaTabCounts", () => {
       approvedActive: false,
       registry: new Map([["video-library", videoSource()]]),
     });
-    expect(inactive).not.toHaveProperty("favorites");
     expect(inactive).not.toHaveProperty("sources");
     expect(inactiveStore.calls.some((call) => call.path === "mediaSourceAssets")).toBe(false);
-    expect(inactiveStore.calls.some((call) => call.path.startsWith("mediaFavorites"))).toBe(false);
   });
 
   it("counts only audio site-wide for a read-only contributor", async () => {
@@ -180,7 +170,6 @@ describe("computeMediaTabCounts", () => {
           expect(call.filters).toContainEqual(["kind", "==", "audio"]);
           return 2;
         }
-        if (call.path === "mediaFavorites/staff-1/items") return 0;
         throw new Error(`unexpected count ${call.path}`);
       },
     });
@@ -233,7 +222,6 @@ describe("computeMediaTabCounts", () => {
   it("uses site-wide Editor media rights independently of an unverified staff grant", async () => {
     const firestore = fakeFirestore({
       count: (call) => {
-        if (call.path === "mediaFavorites/staff-1/items") return 0;
         if (call.path !== "media_assets") throw new Error(`unexpected count ${call.path}`);
         expect(call.filters.some(([field]) => field === "category")).toBe(false);
         return call.filters.some(([field]) => field === "kind") ? 2 : 10;
@@ -248,7 +236,7 @@ describe("computeMediaTabCounts", () => {
       approvedActive: true,
       registry: new Map(),
     });
-    expect(counts).toEqual({ audio: 2, voiceovers: 2, images: 8, favorites: 0 });
+    expect(counts).toEqual({ audio: 2, voiceovers: 2, images: 8 });
     expect(firestore.calls.filter((call) => call.path === "media_assets"))
       .toHaveLength(2);
   });
@@ -314,7 +302,7 @@ describe("computeMediaTabCounts", () => {
       count: (call) => {
         if (call.path === "mediaSourceAssets") throw new Error("index missing");
         if (call.path === "media_assets") return -1;
-        return 3;
+        throw new Error(`unexpected count ${call.path}`);
       },
     });
     const counts = await computeMediaTabCounts({
@@ -324,7 +312,7 @@ describe("computeMediaTabCounts", () => {
       registry: new Map([["video-library", videoSource()]]),
       log,
     });
-    expect(counts).toEqual({ favorites: 3 });
+    expect(counts).toEqual({});
     expect(log.warn).toHaveBeenCalledTimes(1);
     expect(log.warn.mock.calls[0][1]).toMatchObject({
       failed: expect.arrayContaining(["audio", "images", "voiceovers", "sources.video-library"]),

@@ -65,8 +65,6 @@ export type IconControlId =
   | "media-clip"
   | "media-copy-link"
   | "media-bookmarks"
-  | "media-favorite"
-  | "media-collect"
   | "media-select";
 
 interface IconControlSpec {
@@ -421,22 +419,6 @@ export const ICON_CONTROL_REGISTRY: Record<IconControlId, IconControlSpec> = {
   "media-clip": { iconEligible: true, label: "Create clip", icon: "video", risk: "low", state: "disclosure" },
   "media-copy-link": { iconEligible: true, label: "Copy link", icon: "link", risk: "low", state: "action" },
   "media-bookmarks": { iconEligible: true, label: "Bookmarks", icon: "flag", risk: "low", state: "disclosure" },
-  "media-favorite": {
-    alwaysIcon: true,
-    iconEligible: true,
-    label: "Favorite",
-    icon: "heart",
-    risk: "low",
-    state: "toggle",
-  },
-  "media-collect": {
-    alwaysIcon: true,
-    iconEligible: true,
-    label: "Add to collection",
-    icon: "folder-plus",
-    risk: "low",
-    state: "action",
-  },
   "media-select": {
     alwaysIcon: true,
     iconEligible: true,

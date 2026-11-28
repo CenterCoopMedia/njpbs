@@ -6,7 +6,7 @@ import { useResolvedMediaAsset, useResolvedMediaAssets } from "../src/components
 import type { MediaPickerLoader } from "../src/components/MediaPickerDialog";
 import type { MediaAssetSummary, ListMediaResponse } from "../src/lib/functions";
 import type { AdminBlock } from "../src/lib/block-factory";
-import { invalidateMediaLists, publishFavoritesChange, setMediaCachePrincipal, setMediaCacheUser } from "../src/lib/media-session-cache";
+import { invalidateMediaLists, setMediaCachePrincipal, setMediaCacheUser } from "../src/lib/media-session-cache";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -92,7 +92,6 @@ describe("media preview request ownership", () => {
     await act(async () => {});
     expect(loader).toHaveBeenCalledTimes(1);
     await act(async () => invalidateMediaLists());
-    await act(async () => publishFavoritesChange());
     expect(second.result.current).toBe(shelfImage);
     expect(loader).toHaveBeenCalledTimes(1);
     renderHook(() => useResolvedMediaAsset(shelfImage.id, loader));

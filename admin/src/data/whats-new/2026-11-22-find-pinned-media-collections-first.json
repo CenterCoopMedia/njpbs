@@ -1,8 +1,0 @@
-{
-  "date": "2026-11-22",
-  "kind": "improved",
-  "title": "Find pinned media collections first",
-  "body": "Pin a collection to keep it at the top of Collections whenever it matches your filters, even if it would usually appear on a later page. Your pins are personal. Sharing a collection or file still uses its existing access settings.",
-  "prs": [],
-  "order": 1795380003000
-}

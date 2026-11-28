@@ -28,7 +28,6 @@ function Body({ context }: { context: MediaFullViewerBodyContext }) {
   const linked = parseMediaPermalink(location);
   const [asset, setAsset] = useState(() => initial.fileVersion && location.has("replacement")
     ? { ...initial, fileVersion: "synthetic-replacement-version" } : initial);
-  const [favorite, setFavorite] = useState(false);
   return <VideoViewerBody asset={asset} getIdToken={token}
     initialSeek={linked.assetId === asset.id ? linked.seconds : 0}
     principal={{ id: location.has("other-editor") ? "local-frame-editor-2" : "local-frame-editor", grants: [{ role: "editor" }] }}
@@ -36,7 +35,6 @@ function Body({ context }: { context: MediaFullViewerBodyContext }) {
     onDeleted={() => undefined} onUpdated={setAsset}
     onDirtyChange={context.onDirtyChange} onSavingChange={context.onSavingChange} onBusyChange={context.onBusyChange}
     navigationBlocked={false} onDiscardNavigation={() => undefined} onKeepNavigation={() => undefined}
-    favorite={{ favorite, onToggle: () => setFavorite(value => !value), name: asset.name }}
     closePrompt={context.dirtyPrompt} deleteConfirmationId="local-media-frame-delete"
     headerTarget={context.headerActionsTarget} factsTarget={context.headerFactsTarget}
     footerTarget={context.footerActionsTarget} />;

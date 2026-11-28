@@ -569,7 +569,7 @@ describe("cmsListMedia handler", () => {
     const actor = { ...principal([{ role: "editor", sections: ["news"], registeredMediaSections: ["news"] }]), approvedActive: true };
     const requirePrincipalFn = vi.fn(async () => actor);
     const registry = new Map();
-    const computeTabCountsFn = vi.fn(async () => ({ images: 2, favorites: 4, sources: { "video-library": 7 } }));
+    const computeTabCountsFn = vi.fn(async () => ({ images: 2, audio: 4, sources: { "video-library": 7 } }));
     const isApprovedActiveAccountFn = vi.fn();
     const handler = createCmsListMediaHandler({
       requirePrincipalFn,
@@ -588,7 +588,7 @@ describe("cmsListMedia handler", () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.body).toMatchObject({ total: 0, allCount: 2 });
-    expect(res.body.counts).toEqual({ images: 2, favorites: 4, sources: { "video-library": 7 } });
+    expect(res.body.counts).toEqual({ images: 2, audio: 4, sources: { "video-library": 7 } });
     expect(requirePrincipalFn).toHaveBeenCalledWith(expect.anything(), { includeAccountStatus: true });
     expect(isApprovedActiveAccountFn).not.toHaveBeenCalled();
     expect(computeTabCountsFn).toHaveBeenCalledWith(expect.objectContaining({
@@ -641,69 +641,6 @@ describe("cmsListMedia handler", () => {
     expect(res.statusCode).toBe(400);
     expect(readRecordsFn).not.toHaveBeenCalled();
     expect(computeTabCountsFn).not.toHaveBeenCalled();
-  });
-
-  it("returns favorite states for the listed page when asked, from one projection read", async () => {
-    const readFavoriteProjectionFn = vi.fn(async (_firestore, _uid, refs) => refs.map((ref) => ({ ref, favorite: ref.id === "news-one" })));
-    const requirePrincipalFn = vi.fn(async () => ({ ...principal([{ role: "editor" }]), approvedActive: true }));
-    const handler = createCmsListMediaHandler({
-      requirePrincipalFn,
-      readRecordsFn: vi.fn(async () => ({ records: [stored("news-one", "news"), stored("arts-one", "arts")], overflow: false })),
-      readCategoryLabelsFn: vi.fn(async () => ({})),
-      readFavoriteProjectionFn,
-    });
-    const res = makeRes();
-
-    await handler(makeReq({ body: { favorites: true } }), res);
-
-    expect(res.statusCode).toBe(200);
-    expect(requirePrincipalFn).toHaveBeenCalledWith(expect.anything(), { includeAccountStatus: true });
-    expect(readFavoriteProjectionFn).toHaveBeenCalledTimes(1);
-    const ids = res.body.records.map((asset) => asset.id);
-    expect(res.body.favoriteStates).toEqual(ids.map((id) => ({ ref: { backend: "r2", id }, favorite: id === "news-one" })));
-  });
-
-  it.each([
-    ["an inactive account", { approvedActive: false }, async () => []],
-    ["a failed favorites read", { approvedActive: true }, async () => { throw new Error("private detail"); }],
-  ])("lists media without favorite states for %s", async (_label, status, read) => {
-    const log = { warn: vi.fn(), error: vi.fn() };
-    const readFavoriteProjectionFn = vi.fn(read);
-    const handler = createCmsListMediaHandler({
-      requirePrincipalFn: vi.fn(async () => ({ ...principal([{ role: "editor" }]), ...status })),
-      readRecordsFn: vi.fn(async () => ({ records: [stored("news-one", "news")], overflow: false })),
-      readCategoryLabelsFn: vi.fn(async () => ({})),
-      readFavoriteProjectionFn,
-      log,
-    });
-    const res = makeRes();
-
-    await handler(makeReq({ body: { favorites: true } }), res);
-
-    expect(res.statusCode).toBe(200);
-    expect(res.body.allCount).toBe(1);
-    expect(res.body).not.toHaveProperty("favoriteStates");
-    expect(JSON.stringify(res.body)).not.toContain("private detail");
-    if (!status.approvedActive) expect(readFavoriteProjectionFn).not.toHaveBeenCalled();
-  });
-
-  it.each([
-    [{ favorites: false }],
-    [{ favorites: "yes" }],
-    [{ favorites: true, profilePhotoScope: "self", categories: ["author-photos"], kinds: ["image"] }],
-  ])("rejects an invalid favorites request %j before Firestore", async (body) => {
-    const readRecordsFn = vi.fn();
-    const handler = createCmsListMediaHandler({
-      requirePrincipalFn: vi.fn(async () => principal([{ role: "editor" }])),
-      readRecordsFn,
-      readSelfProfileRecordsFn: readRecordsFn,
-    });
-    const res = makeRes();
-
-    await handler(makeReq({ body }), res);
-
-    expect(res.statusCode).toBe(400);
-    expect(readRecordsFn).not.toHaveBeenCalled();
   });
 
   it("reads requested ids across categories without scanning or returning missing assets", async () => {

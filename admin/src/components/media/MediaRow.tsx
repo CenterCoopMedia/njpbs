@@ -16,9 +16,8 @@ import { formatMediaDuration, formatMediaUpdated, formatVideoBytes, viewingCopyS
 import { imageHoverFacts, MEDIA_HOVER_DELAY_MS, videoHoverFacts } from "../../lib/media-hover-facts";
 import { mediaImageSources } from "../../lib/media-image";
 import type { PageSelectionState } from "../../lib/media-selection";
-import { lockedMenuActions, mediaMenuItems, mediaTileActions, settledMenuActions, type MediaTileAction, type MediaTileActionId } from "../../lib/media-tile-actions";
+import { lockedMenuActions, mediaMenuItems, mediaTileActions, type MediaTileAction, type MediaTileActionId } from "../../lib/media-tile-actions";
 import type { SourceMediaAssetSummary } from "../../lib/source-media";
-import { ActionControl } from "../ui/ActionControl";
 import { AssetImage } from "../ui/AssetImage";
 import { Checkbox } from "../ui/Checkbox";
 import { HoverCard } from "../ui/HoverCard";
@@ -31,7 +30,7 @@ import { mediaTileOpenLabel } from "./MediaTile";
 import "./MediaRow.css";
 
 // One row of the images or video list layout:
-// the mark, a thumbnail, the name, the columns, then Favorite and More. Images take their
+// the mark, a thumbnail, the name, the columns, then More. Images take their
 // columns from Display's fields plus Updated last. Video columns follow
 // that surface's Display fields. Each row is its own size container, so the header and every row
 // collapse at the same widths: under 70rem the wide columns move into the name's meta line,
@@ -112,7 +111,7 @@ function template(thumb: string, columns: readonly RowColumn[]): string {
     thumb,
     "minmax(10rem, 1fr)",
     ...columns.map((column) => column.width),
-    "calc(2 * var(--cms-control-compact-target) + var(--cms-space-2))",
+    "var(--cms-control-compact-target)",
   ].join(" ");
 }
 
@@ -256,10 +255,6 @@ export function MediaRowHeader({ fields, pageSelection, sort, surface = "images"
 }
 
 interface MediaRowCommonProps extends Omit<HTMLAttributes<HTMLDivElement>, "children" | "onSelect"> {
-  /** Undefined while favorites load: the heart is disabled and says so. */
-  favorite: boolean | undefined;
-  favoritePending?: boolean;
-  available?: boolean;
   selected: boolean;
   selectionMode?: boolean;
   opened?: boolean;
@@ -270,12 +265,10 @@ interface MediaRowCommonProps extends Omit<HTMLAttributes<HTMLDivElement>, "chil
   openFullSize?: boolean;
   onSelectChange: (checked: boolean, modifiers: { shiftKey: boolean }) => void;
   onAction: (id: MediaTileActionId) => void;
-  /** A mixed surface can supply its own bounded action set. */
-  actionOverride?: readonly MediaTileAction[];
   /** The current multi-selection's actions for this selected row's visible More button. */
   selectionMenu?: { count: number; actions: readonly MediaTileAction[]; onAction: (id: MediaTileActionId) => void };
   /**
-   * True while details or an upload hold unsaved work: the mark and Favorite are disabled and
+   * True while details or an upload hold unsaved work: the mark is disabled and
    * More offers only Open details. The name still opens, through the leave prompt.
    */
   actionsDisabled?: boolean;
@@ -301,8 +294,6 @@ export interface MediaVideoRowProps extends MediaRowCommonProps {
   asset: SourceMediaAssetSummary;
   /** Display's video fields; the list uses the same visible facts as the cards. */
   fields: Record<VideoMediaCardField, boolean>;
-  /** A mixed Favorites list uses the image list's common column contract. */
-  mixedFields?: Record<MediaCardField, boolean>;
   /** The poster. Reading it needs a request, so the library owns it, not the row. */
   thumbnail: ReactNode;
 }
@@ -350,32 +341,13 @@ function videoCells(asset: SourceMediaAssetSummary, fields: Record<VideoMediaCar
   return videoColumns(fields).map((column) => ({ column, ...cells[column.key as MediaVideoColumn] }));
 }
 
-function mixedVideoCells(asset: SourceMediaAssetSummary, fields: Record<MediaCardField, boolean>): RowCell[] {
-  const values: Record<MediaCardField, string | null> = {
-    type: "Video",
-    category: null,
-    size: formatVideoBytes(asset.sizeBytes),
-    dimensions: null,
-    updated: formatMediaUpdated(asset.updatedAt),
-    tags: asset.tags.length > 0 ? asset.tags.join(", ") : null,
-  };
-  return imageColumns(fields).map(column => {
-    const value = values[column.key as MediaCardField];
-    return { column, cell: value, meta: value ? [value] : [] };
-  });
-}
-
 export function MediaRow(props: MediaRowProps | MediaVideoRowProps) {
   const {
     actionsDisabled = false,
     asset,
-    available = true,
     canDelete,
     className,
-    favorite,
-    favoritePending = false,
     onAction,
-    actionOverride,
     onOpen,
     onSelectChange,
     quickLook = false,
@@ -393,7 +365,7 @@ export function MediaRow(props: MediaRowProps | MediaVideoRowProps) {
   } = props;
   // Strip the variant props so they never reach the root element.
   const rootProps = { ...rest } as Record<string, unknown>;
-  for (const key of ["fields", "categoryLabel", "thumbnail", "mixedFields"]) delete rootProps[key];
+  for (const key of ["fields", "categoryLabel", "thumbnail"]) delete rootProps[key];
   const name = asset.name;
   const tabIndex = tabbable ? undefined : -1;
 
@@ -404,11 +376,11 @@ export function MediaRow(props: MediaRowProps | MediaVideoRowProps) {
   let rowStyle: RowColumnStyle;
   let kind: string;
   if (props.surface === "video") {
-    cells = props.mixedFields ? mixedVideoCells(props.asset, props.mixedFields) : videoCells(props.asset, props.fields);
+    cells = videoCells(props.asset, props.fields);
     thumbnail = props.thumbnail;
     hoverFacts = videoHoverFacts(props.asset);
-    openLabel = mediaTileOpenLabel({ surface: "video", asset: props.asset, favorite });
-    rowStyle = props.mixedFields ? mediaRowColumnStyle(props.mixedFields) : videoRowColumnStyle(props.fields);
+    openLabel = mediaTileOpenLabel({ surface: "video", asset: props.asset });
+    rowStyle = videoRowColumnStyle(props.fields);
     kind = "video";
   } else {
     const image = props.asset;
@@ -423,7 +395,7 @@ export function MediaRow(props: MediaRowProps | MediaVideoRowProps) {
       />
     ) : <Icon name={image.kind === "audio" ? "microphone" : "file"} />;
     hoverFacts = imageHoverFacts(image, props.categoryLabel);
-    openLabel = mediaTileOpenLabel({ surface: "images", asset: image, favorite });
+    openLabel = mediaTileOpenLabel({ surface: "images", asset: image });
     rowStyle = mediaRowColumnStyle(props.fields);
     kind = image.kind;
   }
@@ -450,11 +422,9 @@ export function MediaRow(props: MediaRowProps | MediaVideoRowProps) {
     ? factLine(cells.filter((cell) => cell.column.wide || cell.column.narrow))
     : null;
   const videoStatus = props.surface === "video" ? viewingCopyStatus(props.asset) : null;
-  const actions = actionOverride ?? mediaTileActions({
+  const actions = mediaTileActions({
     surface,
     name,
-    favorite: favorite === true,
-    available,
     selected,
     canDelete,
     quickLook,
@@ -462,13 +432,7 @@ export function MediaRow(props: MediaRowProps | MediaVideoRowProps) {
     copyFileAddress: props.surface !== "video" && props.asset.kind === "image" && Boolean(props.asset.url),
     uploader: props.surface === "video" && showUploaderFilter ? props.asset.uploadedBy : undefined,
   });
-  const showFavorite = actions.some((action) => action.id === "favorite" && !action.hidden);
-  const menuActions = lockedMenuActions(settledMenuActions([...actions], favorite !== undefined && !favoritePending), actionsDisabled);
-  const favoriteLabel = favorite === undefined
-    ? "Loading favorite"
-    : favoritePending
-      ? "Saving favorite"
-      : favorite ? "Remove from favorites" : "Add to favorites";
+  const menuActions = lockedMenuActions([...actions], actionsDisabled);
 
   const track = (
     <div className="media-row-track">
@@ -504,22 +468,14 @@ export function MediaRow(props: MediaRowProps | MediaVideoRowProps) {
             {name}
           </button>
         </HoverCard>
-        {props.surface === "video" && props.mixedFields ? <StatusBadge tone="neutral">{originalStatusLabel(props.asset.original)}</StatusBadge> : null}
-        {sub || favorite || videoStatus || (props.surface === "images" && props.asset.kind === "audio" && audioTakeFacts(props.asset).length > 0) ? (
+        {sub || videoStatus || (props.surface === "images" && props.asset.kind === "audio" && audioTakeFacts(props.asset).length > 0) ? (
           <span className="media-row-sub">
             {props.surface === "images" && props.asset.kind === "audio" ? <span className="media-row-audio-facts">
               {audioTakeFacts(props.asset).join(" · ")}
             </span> : null}
             {videoStatus ? <span className="media-row-sub-status"><StatusBadge tone={videoStatus.tone}>{videoStatus.label}</StatusBadge>
-              {props.surface === "video" && !props.mixedFields ? <StatusBadge tone="neutral">{originalStatusLabel(props.asset.original)}</StatusBadge> : null}
+              {props.surface === "video" ? <StatusBadge tone="neutral">{originalStatusLabel(props.asset.original)}</StatusBadge> : null}
               {videoStatus.detail ? ` ${videoStatus.detail}` : null}</span> : null}
-            {favorite ? (
-              <span className="media-row-sub-favorite">
-                <Icon name="heart" />
-                <span className="sr-only">Favorite</span>
-                {sub ? " " : null}
-              </span>
-            ) : null}
             <span className="media-row-sub-medium">{subMedium}</span>
             {subNarrow ? <span className="media-row-sub-narrow">{subNarrow}</span> : null}
             <span className="media-row-sub-small">{sub}</span>
@@ -532,24 +488,6 @@ export function MediaRow(props: MediaRowProps | MediaVideoRowProps) {
         </span>
       ))}
       <span className="media-row-actions" role="gridcell">
-        {showFavorite ? (
-          <ActionControl
-            action="media-favorite"
-            size="compact"
-            aria-busy={favoritePending || undefined}
-            aria-pressed={favorite === true}
-            className="media-row-action media-row-favorite"
-            contextLabel={name}
-            disabled={favorite === undefined || actionsDisabled}
-            key="favorite"
-            label={favoriteLabel}
-            onClick={() => {
-              if (!favoritePending) onAction("favorite");
-            }}
-            tabIndex={tabIndex}
-            variant="ghost"
-          />
-        ) : null}
         <Menu
           className="media-row-action media-row-more"
           items={selectionMenu ? mediaMenuItems(selectionMenu.actions, selectionMenu.onAction) : mediaMenuItems(menuActions, onAction)}
@@ -570,7 +508,7 @@ export function MediaRow(props: MediaRowProps | MediaVideoRowProps) {
       data-opened={opened || undefined}
       data-selected={selected || undefined}
       data-selection-mode={selectionMode || undefined}
-      data-surface={props.surface === "video" ? props.mixedFields ? "mixed-video" : "video" : undefined}
+      data-surface={props.surface === "video" ? "video" : undefined}
       role="row"
       style={{ ...style, ...rowStyle }}
     >

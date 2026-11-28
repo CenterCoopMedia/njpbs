@@ -566,9 +566,6 @@ describe("built _redirects", () => {
     expect(resolve(rules, "/media")).toBe("/");
     expect(resolve(rules, "/media/images")).toBe("/");
     expect(resolve(rules, "/media/videos/archive-originals")).toBe("/");
-    expect(resolve(rules, "/media/favorites")).toBe("/");
-    expect(resolve(rules, "/media/collections")).toBe("/");
-    expect(resolve(rules, `/media/collections/${"a".repeat(64)}`)).toBe("/");
     expect(resolve(rules, "/media/voiceovers")).toBe("/");
     expect(resolve(rules, "/voiceovers")).toBe("/");
     expect(resolve(rules, "/guide")).toBe("/");

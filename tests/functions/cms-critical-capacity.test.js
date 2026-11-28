@@ -4,8 +4,6 @@ import authorProfilesPkg from "../../functions/author-profiles.js";
 import settingsPkg from "../../functions/settings.js";
 import listMediaPkg from "../../functions/list-media.js";
 import mediaCategoriesPkg from "../../functions/media-categories.js";
-import mediaCollectionsPkg from "../../functions/media-collections.js";
-import mediaFavoritesPkg from "../../functions/media-favorites.js";
 import mediaFeedbackPkg from "../../functions/media-feedback.js";
 import sourceMediaPkg from "../../functions/source-media.js";
 import staffProfilePkg from "../../functions/staff-profile.js";
@@ -19,8 +17,6 @@ const { cmsVoiceoverReview } = voiceoverReviewPkg;
 const { cmsGetPublishedPost } = publishedPostReaderPkg;
 const { cmsListMedia } = listMediaPkg;
 const { cmsListMediaCategories } = mediaCategoriesPkg;
-const { cmsListMediaCollections, cmsListMediaCollectionItems } = mediaCollectionsPkg;
-const { cmsListMediaFavorites } = mediaFavoritesPkg;
 const { cmsGetMediaReview, cmsListMediaComments } = mediaFeedbackPkg;
 const { cmsCreateSourceMediaRead, cmsListMediaSources, cmsListSourceMedia } = sourceMediaPkg;
 
@@ -33,8 +29,8 @@ it("keeps the approved deployed Function capacity plan", () => {
   }
   expect(cmsListBylineAuthors.__endpoint.cpu).toBe(1);
   expect(cmsListBylineAuthors.__endpoint.concurrency).toBe(80);
-  for (const fn of [cmsListMedia, cmsListMediaCategories, cmsListMediaCollections, cmsListMediaCollectionItems,
-    cmsListMediaFavorites, cmsGetMediaReview, cmsListMediaComments, cmsListMediaSources, cmsListSourceMedia, cmsCreateSourceMediaRead]) {
+  for (const fn of [cmsListMedia, cmsListMediaCategories, cmsGetMediaReview, cmsListMediaComments,
+    cmsListMediaSources, cmsListSourceMedia, cmsCreateSourceMediaRead]) {
     expect(fn.__endpoint.cpu).toBe(1);
     expect(fn.__endpoint.concurrency).toBe(80);
   }

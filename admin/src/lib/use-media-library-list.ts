@@ -1,6 +1,5 @@
-import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import { useEffect, useRef, type Dispatch, type SetStateAction } from "react";
 import { HttpError, type ListMediaResponse, type MediaListQuery } from "./functions";
-import { mediaFavoriteWriteEpoch } from "./media-favorites";
 import { cacheMediaList, cachedMediaList, invalidateMediaLists, mediaListRevision } from "./media-session-cache";
 
 export type MediaLibraryListState =
@@ -46,15 +45,10 @@ export function useMediaLibraryList({
 }: MediaLibraryListOptions) {
   const stateUserId = useRef(userId);
   const statePrincipal = useRef(mediaIdentity);
-  // Each list response sets a new seed, with or without states. While a list load is in flight the
-  // favorites hook waits for it instead of making its own lookup.
-  const [favoriteSeed, setFavoriteSeed] = useState<{ states?: ListMediaResponse["favoriteStates"] }>();
-  const awaitingFavoriteSeed = useRef(false);
 
   useEffect(() => {
     if (locationPage !== 1) return;
     let current = true;
-    awaitingFavoriteSeed.current = true;
     const cached = cachedMediaList(userId, requestQuery);
     if (stateUserId.current !== userId || statePrincipal.current !== mediaIdentity) {
       stateUserId.current = userId;
@@ -74,9 +68,8 @@ export function useMediaLibraryList({
             ? { ...previous, error: undefined }
             : previous,
         );
-        const favoriteEpoch = mediaFavoriteWriteEpoch();
         void loadMedia(requestQuery, { tabCounts: true })
-          .then(({ favoriteStates, ...result }) => {
+          .then((result) => {
             if (!current) return;
             setCursorRestartRequired(false);
             if (mediaListRevision() !== requestRevision) {
@@ -87,18 +80,12 @@ export function useMediaLibraryList({
             cacheMediaList(userId, requestQuery, result, requestRevision);
             if (result.allCount !== null) onCountChange(result.allCount, requestRevision);
             setState({ status: "ready", result, query: requestQuery });
-            // Set in the same render as the records, so the hearts use it instead of a second read.
-            // States from a read that overlapped a favorite write are dropped; the hook reads them again.
-            awaitingFavoriteSeed.current = false;
-            setFavoriteSeed({ states: favoriteEpoch !== null && favoriteEpoch === mediaFavoriteWriteEpoch() ? favoriteStates : undefined });
             onLoaded(result);
             setUpdating(false);
             onCorrectPage(result);
           })
           .catch((loadError: unknown) => {
             if (!current) return;
-            awaitingFavoriteSeed.current = false;
-            setFavoriteSeed({});
             onFailed();
             const message =
               loadError instanceof Error
@@ -130,6 +117,4 @@ export function useMediaLibraryList({
     // The request key tracks the list query. Selection changes do not reload the page.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [attempt, loadMedia, requestKey, userId, mediaIdentity, locationPage]);
-
-  return { favoriteSeed, awaitingFavoriteSeed };
 }

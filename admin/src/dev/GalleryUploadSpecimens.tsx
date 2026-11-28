@@ -70,8 +70,7 @@ export function MediaUploadTrayGallery() {
           <SelectionBar
             actions={[]}
             count={3}
-            error="Add to collection accepts no more than 30 items at a time. Clear part of the selection and try again."
-            label="Collection selection"
+            label="Image selection"
             offPage={0}
             onAction={() => undefined}
             onClear={() => undefined}
