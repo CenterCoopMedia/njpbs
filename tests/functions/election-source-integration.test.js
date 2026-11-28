@@ -456,10 +456,14 @@ describe("Election source Auth/HTTP/Firestore and publication boundaries", () =>
     expect(providerCalls).toEqual([]);
     expect(await poll(current.id)).toMatchObject({ skipped: true });
   });
-  it("gives a stored section-scoped editor grant no publish authority", async () => {
+  it.each([
+    ["on top of a Contributor level", { accessTier: "contributor" }],
+    ["without an access level", {}],
+  ])("gives a stored section-scoped editor grant no publish authority %s", async (_label, level) => {
     const current = await connect("cmsPosts");
     await db.doc("sections/arts").set({ name: "Arts", active: true });
-    await db.doc(`users/${actors.writer.uid}`).update({ grants: [{ role: "editor", sections: ["arts"] }] });
+    await db.doc(`users/${actors.writer.uid}`).set({ ...level, active: true, email: actors.writer.email,
+      displayName: "Results writer", grants: [{ role: "editor", sections: ["arts"] }] });
     const response = await call("sources", { action: "pause", ...address("cmsPosts"), baseVersion: 1 }, actors.writer);
     expect(response.status).toBe(403);
     expect((await connection(current.id)).paused).toBe(false);
