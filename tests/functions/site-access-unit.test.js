@@ -14,7 +14,7 @@ async function check(profile, user = {}, failure) {
 }
 const ACTIVATION = { schema: 1, state: "active", cleanScan: true };
 const profile = { email: "staff@example.org", active: true, accessTier: "publisher" };
-const { accessTier: _tier, ...noTier } = profile;
+const noTier = { email: profile.email, active: profile.active };
 describe("site access uses current staff authority", () => {
   it("admits approved CMS staff", async () => { expect(await check(profile)).toBe(204); });
   it.each([null, { ...profile, active: false }, noTier,
