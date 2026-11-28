@@ -762,6 +762,16 @@ describe("MediaRoute", () => {
     expect(screen.getByRole("link", { name: /^Images/ })).toHaveAttribute("href", "/media/images?q=harbor");
   });
 
+  it("carries a search typed during the typing pause to the next tab", async () => {
+    const { router } = renderRoute("/media/images?q=harbor");
+    await screen.findByRole("heading", { name: "Images" });
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: " dusk harbor " } });
+
+    fireEvent.click(screen.getByRole("link", { name: /^Videos/ }));
+    await screen.findByRole("heading", { name: "Videos" });
+    expect(router.state.location.search).toBe("?q=dusk+harbor");
+  });
+
   it("keeps each fixed source in the URL and restores it through history", async () => {
     const { router } = renderRoute("/media/images");
     await screen.findByRole("button", { name: /^Studio control room/ });

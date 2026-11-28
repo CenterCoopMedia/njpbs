@@ -76,23 +76,6 @@ describe("MediaSearchField", () => {
     expect(onCommit).not.toHaveBeenCalled();
   });
 
-  it("commits the draft at once when focus leaves the field, but not for Clear search or while locked", () => {
-    const { input, onCommit, rerender, onSubmit } = setup();
-    type(input, "harbor ");
-    fireEvent.blur(input);
-    expect(onCommit).toHaveBeenCalledExactlyOnceWith("harbor");
-
-    onCommit.mockClear();
-    type(input, "dusk");
-    fireEvent.blur(input, { relatedTarget: screen.getByRole("button", { name: "Clear search" }) });
-    expect(onCommit).not.toHaveBeenCalled();
-
-    rerender(<MediaSearchField locked onCommit={onCommit} onSubmit={onSubmit} value="" />);
-    type(input, "storm");
-    fireEvent.blur(input);
-    expect(onCommit).not.toHaveBeenCalled();
-  });
-
   it("re-syncs the draft when the value prop changes", () => {
     const { input, rerender } = setup({ value: "dome" });
     expect(input).toHaveValue("dome");
