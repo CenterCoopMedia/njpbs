@@ -182,7 +182,7 @@ describe("CMS deploy versus the live publisher catalog", () => {
     const result = await workflowGate();
     expect(result.code).toBe(0);
     expect(result.output).toContain(`publisher ${currentSha} supports the deploy catalog`);
-    expect(result.output).toContain("editor-lock contract v9 verified");
+    expect(result.output).toContain("editor-lock contract v10 verified");
   });
 
   it("fails the trusted workflow command when the public receipt is unavailable", async () => {
