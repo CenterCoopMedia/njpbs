@@ -6,6 +6,7 @@
 // be safe to retry. Network failures stay "unknown" so an ambiguous provider
 // result cannot cause an automatic duplicate.
 
+const logger = require("firebase-functions/logger");
 const { defineSecret, defineString } = require("firebase-functions/params");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { admin, db } = require("./lib/firebase");
@@ -354,7 +355,7 @@ function createCloudflareEmailSender(deps = {}) {
       subject,
       html,
       text,
-      ...(bcc ? { bcc } : {}),
+      ...(bcc?.length ? { bcc } : {}),
       ...(attachments?.length ? { attachments } : {}),
     };
     const requestBody = JSON.stringify(payload);
@@ -407,6 +408,17 @@ function createCloudflareEmailSender(deps = {}) {
       response.status === 429 || response.status >= 500
         ? "retryable"
         : "terminal";
+    if (response.status >= 400 && response.status < 500) {
+      // Provider text can echo an address; keep only its code and redacted message.
+      const errors = Array.isArray(result?.errors) ? result.errors.slice(0, 5) : [];
+      logger.warn("Email provider refused the message", {
+        status: response.status,
+        errors: errors.map(error => ({
+          code: error?.code ?? null,
+          message: String(error?.message ?? "").replace(/\S+@\S+/g, "[address]").slice(0, 300),
+        })),
+      });
+    }
     throw new EmailDeliveryError("Email provider refused the message", {
       kind,
       status: response.status,

@@ -1093,7 +1093,7 @@ async function deliverOutboxRow(id, deps = {}) {
         to: row.record.reporter?.email,
         ...rendered,
         bcc: process.env.CMS_BUG_REPORT_EMAIL_BCC?.trim()
-          ? BUG_REPORT_EMAIL_BCC.value()
+          ? BUG_REPORT_EMAIL_BCC.value().map(address => address.trim()).filter(Boolean)
           : [],
       });
       if (!receipt?.delivered && !receipt?.queued) {

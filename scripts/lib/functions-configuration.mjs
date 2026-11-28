@@ -172,8 +172,15 @@ export function runtimeParameters(input, discovery = {}, target = cmsTarget()) {
       row.format === "discovery" ? discovery[key] : row.input ? values[row.input]
       : key === "CMS_MEDIA_PUBLIC_ORIGIN" ? target.mediaOrigin : row.value;
     if (typeof value !== "string") configurationFailure(`Missing discovery parameter: ${key}`);
-    return [key, value];
+    return [key, row.encoding === "firebase-list" ? firebaseListText(value) : value];
   }));
+}
+
+// Firebase splits list text on commas, so a blank input would serve [""].
+// Comma lists drop blank items; JSON list text is kept as written.
+export function firebaseListText(value) {
+  if (value.includes("[")) return value;
+  return value.split(",").map(item => item.trim()).filter(Boolean).join(",") || "[]";
 }
 
 // Firebase writes SDK list parameters as JSON in its serving environment.

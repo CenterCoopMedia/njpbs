@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-28",
+  "kind": "fixed",
+  "order": 1795868654500,
+  "title": "Problem report emails send again",
+  "body": "Since Nov. 20, Boardwalk did not send the email that confirms a problem report or tells you its status changed. Those emails send again for new reports and status changes. Emails that failed during that time were not sent again.",
+  "prs": []
+}
