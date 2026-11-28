@@ -339,7 +339,8 @@ function validateRuntimeContext(buildRevision, deploymentEnvironment) {
 
 function runtimeContextReader(deps) {
   const environmentFn = deps.deploymentEnvironment ?? deploymentEnvironment;
-  const buildRevisionFn = deps.buildRevision ?? (() => readDeployedRevision({ fetchFn: deps.fetchFn }));
+  const buildRevisionFn = deps.buildRevision ??
+    (() => readDeployedRevision({ fetchFn: deps.fetchFn, environment: environmentFn() }));
   return async () => {
     const buildRevision = await buildRevisionFn();
     const deploymentEnvironment = environmentFn();

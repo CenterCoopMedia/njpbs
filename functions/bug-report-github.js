@@ -1227,7 +1227,8 @@ async function processGithubOutboxRow(id, deps = {}) {
         },
       },
     );
-    if (row.pullRepository) result.pullRepository ??= row.pullRepository;
+    // A sync that moved to the fix repository names that repository itself.
+    if (row.pullRepository) Object.assign(result, { pullRepository: row.pullRepository, ...result });
     await settleGithubSuccess(row, result, { firestore, now });
     return { state: "delivered" };
   } catch (error) {

@@ -93,7 +93,7 @@ function deploymentEnvironment() {
 // The revision this environment serves: the live production Admin build, or the
 // revision a non-production deploy configured.
 async function readDeployedRevision(deps = {}) {
-  if (deploymentEnvironment() === "production") return readLiveAdminBuildRevision(deps);
+  if ((deps.environment ?? deploymentEnvironment()) === "production") return readLiveAdminBuildRevision(deps);
   const local = configuredValue(BUILD_REVISION, "CMS_ADMIN_BUILD_REVISION");
   if (!BUILD_REVISION_PATTERN.test(local)) throw new AdminStatusRevisionError();
   return local;
