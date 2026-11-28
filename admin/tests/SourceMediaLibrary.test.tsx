@@ -2011,6 +2011,14 @@ describe("private video library", () => {
     expect(screen.queryByRole("region", { name: "Upload progress" })).not.toBeInTheDocument();
     fireEvent.click(within(sheet).getByRole("button", { name: "Close upload" }));
     await waitFor(() => expect(screen.getByRole("region", { name: "Upload progress" })).toContainElement(document.activeElement as HTMLElement));
+    // The upload shortcut from a tray control also returns focus to the tray.
+    const trayControl = within(screen.getByRole("region", { name: "Upload progress" }))
+      .getByRole("button", { name: "Review details for studio.mp4" });
+    trayControl.focus();
+    fireEvent.keyDown(trayControl, { key: "u", metaKey: true });
+    expect(sheet).not.toHaveAttribute("hidden");
+    fireEvent.click(within(sheet).getByRole("button", { name: "Close upload" }));
+    await waitFor(() => expect(screen.getByRole("region", { name: "Upload progress" })).toContainElement(document.activeElement as HTMLElement));
   });
 
   it("routes a video dropped on the library toolbar instead of letting the browser open it", async () => {

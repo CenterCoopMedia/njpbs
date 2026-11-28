@@ -1509,7 +1509,8 @@ export function SourceMediaLibrary({ principal, source, getIdToken, userId, onEx
   }, [trayFocusRequest, uploadTrayTarget]);
   function showVideoUpload() {
     if (uploadOpenBlockedReason) return;
-    openedFromTray.current = Boolean(uploadTrayTarget?.contains(document.activeElement));
+    // Read the live focus, not a captured tray element: the shortcut handler can hold an older closure.
+    openedFromTray.current = Boolean(document.activeElement?.closest(".source-video-upload-tray"));
     setUploadOpen(true);
   }
   function routeVideoDrop(files: readonly File[]) {
