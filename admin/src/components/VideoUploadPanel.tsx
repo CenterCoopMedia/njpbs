@@ -458,7 +458,6 @@ export function VideoUploadPanel({ sourceId, userId, getIdToken, onUploaded, onA
     return { ...row, draft: { ...draft,
       name: draft.name.trim() ? draft.name : assignmentRef.current.name,
       description: draft.description.trim() ? draft.description : assignmentRef.current.description,
-      tags: uploadMediaTagsText(draft.tags).trim() ? draft.tags : assignmentRef.current.tags,
     } };
   }
   function requestStart(row: Transfer, file: File) {

@@ -98,6 +98,9 @@ describe("video upload panel", () => {
   });
 
   it("applies batch tags to new and waiting videos unless a video has its own tags", async () => {
+    // Finished transfers free their slots, so every start in this test reaches the server.
+    vi.mocked(transferVideo).mockResolvedValue({ id: "asset", sourceId: props.sourceId, name: "Clip",
+      viewingCopy: { state: "processing" } } as Awaited<ReturnType<typeof transferVideo>>);
     render(<VideoUploadPanel {...props} />);
     await waitFor(() => expect(screen.getByRole("button", { name: "Upload media" })).toBeEnabled());
     fireEvent.change(screen.getByRole("combobox", { name: "Batch tags default" }), { target: { value: "storm" } });
@@ -110,10 +113,15 @@ describe("video upload panel", () => {
     fireEvent.change(screen.getByRole("combobox", { name: "Batch tags default" }), { target: { value: "night" } });
     expect(first.getByRole("combobox", { name: "Tags" })).toHaveValue("night");
     expect(second.getByRole("combobox", { name: "Tags" })).toHaveValue("traffic");
+    // Clearing a video's tags uploads no tags; the batch value does not come back unseen.
+    act(() => routeChosenFiles([new File(["data"], "third.mp4", { type: "video/mp4", lastModified: 42 })]));
+    const third = within(await screen.findByRole("group", { name: "Details before upload: third.mp4" }));
+    expect(third.getByRole("combobox", { name: "Tags" })).toHaveValue("night");
+    fireEvent.change(third.getByRole("combobox", { name: "Tags" }), { target: { value: "" } });
     fireEvent.click(screen.getByRole("button", { name: "Start all uploads" }));
-    await waitFor(() => expect(startVideoUpload).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(startVideoUpload).toHaveBeenCalledTimes(3));
     expect(vi.mocked(startVideoUpload).mock.calls.map(call => [call[2].name, call[3].tags]))
-      .toEqual([["first.mp4", ["night"]], ["second.mp4", ["traffic"]]]);
+      .toEqual([["first.mp4", ["night"]], ["second.mp4", ["traffic"]], ["third.mp4", undefined]]);
   });
 
   it("clears an upload confirmation after the success notice time unless the pointer rests on it", async () => {
