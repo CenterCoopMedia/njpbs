@@ -224,7 +224,7 @@ export function scenarioPath(entry, values = {}) {
 }
 
 // Where a scenario's surface settles. Most land on their own path; Media redirects to its
-// Images tab.
+// Videos tab in a fresh browser.
 export function surfaceLandingPath(entry, path = entry.path) {
   return entry.landingPath ?? path;
 }
@@ -232,7 +232,7 @@ export function surfaceLandingPath(entry, path = entry.path) {
 // The stable page an in-app journey starts from before it clicks the scenario's link. A
 // document boot at `/` can restore the tab's remembered destination after admission, so
 // sources are non-root routes. Reports itself needs a different source to create a history
-// entry; that source is Media, which lands on its Images tab.
+// entry; that source is Media, which lands on its Videos tab in a fresh browser.
 export function journeySource(path) {
   const source = (linkPath, heading, landingPath = linkPath) => ({ path: linkPath, landingPath, heading });
   if (path === "/") return source("/content/library", null);
