@@ -88,7 +88,11 @@ function restoredDraft(value: unknown, fileName: string): TransferDraft {
     metadataRequestOverridden: candidate.metadataRequestOverridden === true,
     nameOverridden: candidate.nameOverridden !== false,
     descriptionOverridden: candidate.descriptionOverridden !== false,
-    tagsOverridden: candidate.tagsOverridden !== false,
+    // Drafts saved before batch tags existed have no flag: their own nonempty tags stay theirs,
+    // and empty tags can take the batch tags visibly.
+    tagsOverridden: typeof candidate.tagsOverridden === "boolean"
+      ? candidate.tagsOverridden
+      : Boolean(uploadMediaTagsText({ committed: restoredTagText(tags?.committed), draft: restoredTagText(tags?.draft) }).trim()),
     rightsStatus: candidate.rightsStatus === "complete" ? "complete" : "pending",
     collection: restoredCollection(candidate.collection),
   };

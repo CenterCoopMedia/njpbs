@@ -81,6 +81,22 @@ describe("video upload panel", () => {
     expect(screen.queryByText(problem)).not.toBeInTheDocument();
   });
 
+  it("lets older saved videos without their own tags take the batch tags visibly", async () => {
+    localStorage.setItem("boardwalk-video-transfers:staff:video-library", JSON.stringify([
+      { id: "old-empty", name: "old-empty.mp4", size: 4, lastModified: 42, startRequested: false,
+        draft: { name: "Old empty", description: "", credit: "", license: "", tags: { committed: "", draft: "" }, rightsStatus: "pending" } },
+      { id: "old-tagged", name: "old-tagged.mp4", size: 4, lastModified: 42, startRequested: false,
+        draft: { name: "Old tagged", description: "", credit: "", license: "", tags: { committed: "", draft: "studio" }, rightsStatus: "pending" } },
+    ]));
+    render(<VideoUploadPanel {...props} />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Upload media" })).toBeEnabled());
+    const empty = within(await screen.findByRole("group", { name: "Details before upload: old-empty.mp4" }));
+    const tagged = within(await screen.findByRole("group", { name: "Details before upload: old-tagged.mp4" }));
+    fireEvent.change(screen.getByRole("combobox", { name: "Batch tags default" }), { target: { value: "storm" } });
+    expect(empty.getByRole("combobox", { name: "Tags" })).toHaveValue("storm");
+    expect(tagged.getByRole("combobox", { name: "Tags" })).toHaveValue("studio");
+  });
+
   it("applies batch tags to new and waiting videos unless a video has its own tags", async () => {
     render(<VideoUploadPanel {...props} />);
     await waitFor(() => expect(screen.getByRole("button", { name: "Upload media" })).toBeEnabled());
