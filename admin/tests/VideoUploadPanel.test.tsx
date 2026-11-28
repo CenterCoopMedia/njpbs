@@ -31,7 +31,7 @@ describe("video upload panel", () => {
 
   it("clears an upload confirmation after the success notice time unless the pointer rests on it", async () => {
     const asset = { id: "asset", sourceId: props.sourceId, name: "Storm footage",
-      collectionPlacement: "none", viewingCopy: { state: "processing" },
+      viewingCopy: { state: "processing" },
     } as Awaited<ReturnType<typeof transferVideo>>;
     vi.mocked(transferVideo).mockResolvedValueOnce(asset);
     render(<VideoUploadPanel {...props} />);
