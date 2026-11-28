@@ -33,7 +33,8 @@ describe("alignment queue persistence", () => {
       { method: "DELETE" });
     expect(response.ok).toBe(true);
     // Transcript edits recheck the editor's current staff record.
-    await db.collection("users").doc(actor.uid).set({ active: true, grants: [{ role: "staff" }] });
+    await db.collection("users").doc(actor.uid).set({ active: true, accessTier: "contributor" });
+    await db.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true });
   });
 
   async function queue(assetId, order = 0) {

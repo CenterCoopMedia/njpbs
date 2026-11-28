@@ -6,6 +6,7 @@ import { accessStateFromUserDoc, principalFromUserDoc, type CmsUserDoc } from ".
 import { staffOffboarding } from "../lib/staff-offboarding";
 import type { ReactivateStaffRequest, StaffAccessLevelRequest } from "../lib/functions";
 import { Button, EmptyState, InlineMessage, Select, StatusBadge, TableFrame, TextInput } from "./ui/Primitives";
+import "../routes/StaffRoute.css";
 
 export interface AdminUserRecord extends CmsUserDoc {
   id: string;

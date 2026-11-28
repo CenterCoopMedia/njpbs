@@ -137,8 +137,9 @@ beforeEach(async () => {
   vi.stubEnv("CMS_DEPLOYMENT_ENVIRONMENT", "development");
   vi.stubEnv("FUNCTIONS_EMULATOR", "true");
   await clearEmulatorFirestore(`http://${process.env.FIRESTORE_EMULATOR_HOST}/emulator/v1/projects/${project}/databases/(default)/documents`, { method: "DELETE" });
-  await db.doc(`users/${actors.editor.uid}`).set({ role: "admin", active: true, email: actors.editor.email, displayName: "Results editor" });
-  await db.doc(`users/${actors.writer.uid}`).set({ grants: [{ role: "contributor" }], active: true, email: actors.writer.email, displayName: "Results writer" });
+  await db.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true });
+  await db.doc(`users/${actors.editor.uid}`).set({ accessTier: "admin", active: true, email: actors.editor.email, displayName: "Results editor" });
+  await db.doc(`users/${actors.writer.uid}`).set({ accessTier: "contributor", active: true, email: actors.writer.email, displayName: "Results writer" });
   await seedSystem();
   sourceData = repoFixture();
   providerCalls = [];
@@ -455,7 +456,7 @@ describe("Election source Auth/HTTP/Firestore and publication boundaries", () =>
     expect(providerCalls).toEqual([]);
     expect(await poll(current.id)).toMatchObject({ skipped: true });
   });
-  it("denies an editor whose publish grant belongs to another section", async () => {
+  it("gives a stored section-scoped editor grant no publish authority", async () => {
     const current = await connect("cmsPosts");
     await db.doc("sections/arts").set({ name: "Arts", active: true });
     await db.doc(`users/${actors.writer.uid}`).update({ grants: [{ role: "editor", sections: ["arts"] }] });

@@ -3956,6 +3956,14 @@ export const SHOTS: Shot[] = [
     render: () => <QueueList items={[]} />,
   },
   {
+    id: "users",
+    title: "Staff access — manageable",
+    note: "Owner view: whole-site access levels with level controls and deactivation.",
+    render: () => (
+      <StaffLevelsTable users={USERS} canManage onSetLevel={async () => {}} onDeactivate={() => {}} />
+    ),
+  },
+  {
     id: "users-levels",
     title: "Staff access — six whole-site levels",
     note: "Access levels with an account that has no level, an Owner, and inactive accounts.",

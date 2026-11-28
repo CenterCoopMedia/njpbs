@@ -19,9 +19,10 @@ beforeEach(async () => {
   await clearEmulatorFirestore(`http://${host}/emulator/v1/projects/demo-njpbs/databases/(default)/documents`, {
     method: "DELETE",
   });
-  await db.doc(`users/${ACTOR}`).set({ active: true, role: "admin", grants: [] });
+  await db.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true });
+  await db.doc(`users/${ACTOR}`).set({ active: true, accessTier: "admin" });
   await db.doc("users/author").set({
-    active: true, grants: [{ role: "contributor" }], email: "author@example.test",
+    active: true, accessTier: "contributor", email: "author@example.test",
   });
   // Replace only external identity verification. Principal resolution and all
   // authorization decisions use the real stored user and production code.
@@ -39,7 +40,7 @@ async function revoke(kind) {
   const ref = db.doc(`users/${ACTOR}`);
   if (kind === "deleted") await ref.delete();
   else if (kind === "inactive") await ref.update({ active: false });
-  else await ref.update({ role: null, grants: [{ role: "contributor" }] });
+  else await ref.update({ accessTier: "contributor" });
 }
 
 async function profileRequest(action) {

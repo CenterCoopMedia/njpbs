@@ -15,7 +15,8 @@ beforeEach(async () => {
   auth.resetAuthTokenCache();
   // Only replace external token verification; stored staff and permissions remain real.
   vi.spyOn(firebase.admin.auth(), "verifyIdToken").mockResolvedValue({ uid: "editor", email: "editor@example.test", email_verified: true });
-  await db.doc("users/editor").set({ role: "admin", active: true, email: "editor@example.test" });
+  await db.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true });
+  await db.doc("users/editor").set({ accessTier: "admin", active: true, email: "editor@example.test" });
 });
 afterEach(() => { vi.restoreAllMocks(); auth.resetAuthTokenCache(); });
 afterAll(async () => { await Promise.all(admin.apps.map(app => app.delete())); });

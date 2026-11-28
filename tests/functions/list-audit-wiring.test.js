@@ -62,7 +62,8 @@ describe("cmsListAudit emulator wiring", () => {
       clientAuth, "audit-admin@example.com", "password123",
     );
     const adminUid = adminCredential.user.uid;
-    await db.collection("users").doc(adminUid).set({ role: "admin", grants: [] });
+    await db.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true });
+    await db.collection("users").doc(adminUid).set({ accessTier: "admin" });
     await db.collection("admin_logs").doc("log-1").set({
       actorUid: adminUid,
       actorEmail: "audit-admin@example.com",
@@ -101,10 +102,7 @@ describe("cmsListAudit emulator wiring", () => {
       clientAuth, "audit-editor@example.com", "password123",
     );
     const editorUid = editorCredential.user.uid;
-    await db.collection("users").doc(editorUid).set({
-      role: null,
-      grants: [{ role: "editor" }],
-    });
+    await db.collection("users").doc(editorUid).set({ accessTier: "publisher" });
     const editorToken = await editorCredential.user.getIdToken();
     await signOut(clientAuth);
 
@@ -133,7 +131,8 @@ describe("cmsListAudit emulator wiring", () => {
       clientAuth, "audit-integrity@example.com", "password123",
     );
     const uid = credential.user.uid;
-    await db.collection("users").doc(uid).set({ role: "admin", grants: [] });
+    await db.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true });
+    await db.collection("users").doc(uid).set({ accessTier: "admin" });
     await db.collection("admin_logs").doc("legacy-without-at").set({
       actorUid: uid,
       action: "cms.save",

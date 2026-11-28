@@ -58,7 +58,8 @@ afterAll(async () => { vi.unstubAllGlobals(); await new Promise((resolve, reject
 beforeEach(async () => {
   requests.length = 0;
   await clearEmulatorFirestore(`http://${process.env.FIRESTORE_EMULATOR_HOST}/emulator/v1/projects/${process.env.GCLOUD_PROJECT}/databases/(default)/documents`, { method: "DELETE" }, db, nativeFetch);
-  await db.doc(`users/${actor.uid}`).set({ role: "admin", active: true });
+  await db.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true });
+  await db.doc(`users/${actor.uid}`).set({ accessTier: "admin", active: true });
   await db.doc("system/publicDeployment").set({ ...deployment.initialPublicDeploymentPointer(), activeGeneration: 1,
     activeCommitSha: sha, activeDeploymentId: "fixture-deployment", lastReservedGeneration: 1,
     newestEligibleGeneration: 1, newestEligibleBuildBatchId: "fixture-build", mediaLifecycleReady: true });

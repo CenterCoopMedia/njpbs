@@ -95,13 +95,13 @@ beforeEach(async () => {
   vi.spyOn(admin.auth(), "verifyIdToken").mockImplementation(async (uid) => ({
     uid, email: `${uid}@example.test`, email_verified: uid !== "unverified",
   }));
+  await db.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true });
   for (const uid of ["viewer", "other", "inactive", "unverified"]) {
-    await db.collection("users").doc(uid).set({
-      active: uid !== "inactive", role: null, grants: [{ role: "staff" }],
-    });
+    await db.collection("users").doc(uid).set({ active: uid !== "inactive", accessTier: "viewer" });
   }
-  await db.collection("users").doc("empty-scope").set({
-    active: true, role: null, grants: [{ role: "editor", sections: [] }],
+  // A stored role grant without an access level confers nothing (#746).
+  await db.collection("users").doc("legacy-grant").set({
+    active: true, role: null, grants: [{ role: "editor" }],
   });
 });
 
@@ -119,10 +119,8 @@ describe("isolated development report intake", () => {
     fetchStatus = vi.fn(() => { throw new Error("Production status fetch forbidden"); });
     // The target gate sees the dev tuple; all durable writes use the local demo DB.
     handler = devIntake.createDevCmsSubmitBugReportHandler({ firestore: db, fetchFn: fetchStatus });
-    for (const role of ["contributor", "editor", "admin", "super_admin"]) {
-      await db.collection("users").doc(role).set(["admin", "super_admin"].includes(role)
-        ? { active: true, role, grants: [] }
-        : { active: true, role: null, grants: [{ role }] });
+    for (const [uid, accessTier] of [["contributor", "contributor"], ["editor", "publisher"], ["admin", "admin"], ["super_admin", "owner"]]) {
+      await db.collection("users").doc(uid).set({ active: true, accessTier });
     }
   });
   afterEach(() => {
@@ -130,7 +128,7 @@ describe("isolated development report intake", () => {
     vi.stubEnv("GCLOUD_PROJECT", PROJECT);
   });
 
-  it.each(["viewer", "empty-scope", "contributor", "editor", "admin", "super_admin"])("stores a private durable %s receipt and normalized evidence without delivery jobs", async (uid) => {
+  it.each(["viewer", "contributor", "editor", "admin", "super_admin"])("stores a private durable %s receipt and normalized evidence without delivery jobs", async (uid) => {
     const screenshot = await sharp({ create: { width: 2000, height: 1000, channels: 3, background: "#abcdef" } }).png().toBuffer();
     const first = await submitDev(uid, { screenshot, report: {
       ...submission, route: "/guide?token=never-store-this#private", happened: "Contact user@example.test about the guide error.",
@@ -159,7 +157,7 @@ describe("isolated development report intake", () => {
     }
   });
 
-  it.each(["inactive", "unverified", "raw"])("refuses %s without creating durable state", async (uid) => {
+  it.each(["inactive", "unverified", "raw", "legacy-grant"])("refuses %s without creating durable state", async (uid) => {
     expect((await submitDev(uid)).statusCode).toBe(403);
     for (const collection of ["bug_reports", "bugReportEvidence", "admin_logs", "bugReportRateLimits", "bugReportDeliveryOutbox"]) {
       expect((await db.collection(collection).get()).size).toBe(0);
@@ -247,7 +245,7 @@ describe("Viewer problem reports at the HTTP and storage boundaries", () => {
     expect((await db.collection("bugReportDeliveryOutbox").get()).size).toBe(2);
   });
 
-  it("lists and opens only the Viewer's own reports without administration access", async () => {
+  it("lists the Viewer's own reports and opens another report only as the shared projection", async () => {
     for (const [reportId, uid] of [[OWN_ID, "viewer"], [OTHER_ID, "other"]]) {
       // A report remains readable after its author moves from Editor to Viewer.
       await db.collection("bug_reports").doc(reportId).set(contract.composeBugReport(submission, {
@@ -265,22 +263,15 @@ describe("Viewer problem reports at the HTTP and storage boundaries", () => {
     expect(detail.body.report).not.toHaveProperty("delivery");
     const other = await read(triage.createCmsGetBugReportHandler(), "viewer", { reportId: OTHER_ID });
     const missing = await read(triage.createCmsGetBugReportHandler(), "viewer", { reportId: MISSING_ID });
-    expect(other.statusCode).toBe(404);
+    // With the activation receipt, staff open another report only as the shared projection.
+    expect(other.statusCode).toBe(200);
+    expect(other.body).toMatchObject({ report: { id: OTHER_ID, shared: true }, audit: [], canAdminister: false });
+    expect(other.body.report).not.toHaveProperty("reporter");
+    expect(other.body.report).not.toHaveProperty("delivery");
     expect(missing.statusCode).toBe(404);
-    expect(other.body).toEqual(missing.body);
   });
 
-  it("accepts an empty-scope Editor report without granting report-reading access", async () => {
-    const created = await submit("empty-scope");
-    expect(created.statusCode).toBe(201);
-    expect(created.body.report.reporter).toMatchObject({ uid: "empty-scope", role: "editor" });
-    expect((await read(triage.createCmsListBugReportsHandler(), "empty-scope", { view: "mine" })).statusCode).toBe(403);
-    expect((await read(triage.createCmsGetBugReportHandler(), "empty-scope", { reportId: created.body.report.id })).statusCode).toBe(403);
-    expect((await db.collection("bug_reports").get()).size).toBe(1);
-    expect((await db.collection("bugReportDeliveryOutbox").get()).size).toBe(2);
-  });
-
-  it.each(["inactive", "unverified", "raw"])("refuses %s accounts without persisting a report", async (uid) => {
+  it.each(["inactive", "unverified", "raw", "legacy-grant"])("refuses %s accounts without persisting a report", async (uid) => {
     expect((await submit(uid)).statusCode).toBe(403);
     expect((await read(triage.createCmsListBugReportsHandler(), uid, {})).statusCode).toBe(403);
     expect((await db.collection("bug_reports").get()).size).toBe(0);

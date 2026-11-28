@@ -20,7 +20,8 @@ const attempt = { schemaVersion: 2, operationId: "initial-install", environment:
 async function seed() {
   await clearEmulatorFirestore(`http://${process.env.FIRESTORE_EMULATOR_HOST}/emulator/v1/projects/demo-njpbs/databases/(default)/documents`, { method: "DELETE" }, db);
   await db.doc("system/publicDeployment").set(pointer);
-  await db.doc(`users/${actor.uid}`).set({ role: "admin", active: true });
+  await db.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true });
+  await db.doc(`users/${actor.uid}`).set({ accessTier: "admin", active: true });
   await db.doc("system/cmsPublicationRuntime").set({ schemaVersion: 1, phase: "ready", commitSha: pointer.activeCommitSha,
     serializerId: "node-compute", cloud: { phase: "ready", commitSha: pointer.activeCommitSha, serializerId: "cloudflare-publisher" } });
   await db.doc("system/publicDeployment/contexts/public").set({ schemaVersion: 1, revision: 1 });

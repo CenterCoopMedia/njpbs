@@ -8,8 +8,9 @@ import sharp from "sharp";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import admin from "../helpers/firebase-admin.js";
 
-// Role templates land separately. Supply only their capability table here;
-// all capability decisions, source admission and transactions use production code.
+// Synthetic access levels with one media capability each. Supply only their
+// capability table here; all capability decisions, source admission and
+// transactions use production code. Stored role grants confer nothing (#746).
 // Do not add an injected positive permission result to an endpoint.
 const roles = {
   video_manager: ["media.video.read", "media.video.manage"],
@@ -37,8 +38,8 @@ function load(relativePath) {
   modules.set(filename, loaded);
   let source = readFileSync(filename, "utf8");
   if (filename === resolve(functionsRoot, "lib/rbac.js")) {
-    const marker = "const ROLE_CAPABILITIES = Object.freeze({";
-    if (!source.includes(marker)) throw new Error("RBAC role table moved");
+    const marker = "const TIER_CAPABILITIES = Object.freeze({";
+    if (!source.includes(marker)) throw new Error("RBAC tier table moved");
     source = source.replace(marker, `${marker}\n...${JSON.stringify(roles)},`);
   }
   loaded._compile(source, filename);
@@ -62,7 +63,7 @@ let db;
 function actor(role, uid = role) {
   return {
     uid, email: `${uid}@example.org`, emailVerified: true, approvedActive: true,
-    principal: principalFromUserDoc(uid, { active: true, grants: [{ role }] }),
+    principal: principalFromUserDoc(uid, { active: true, accessTier: role }, true),
   };
 }
 
@@ -100,8 +101,9 @@ beforeAll(() => {
 
 beforeEach(async () => {
   await clearEmulatorFirestore(`http://${process.env.FIRESTORE_EMULATOR_HOST}/emulator/v1/projects/demo-njpbs/databases/(default)/documents`, { method: "DELETE" }, db);
+  await db.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true });
   await Promise.all(Object.keys(roles).map(uid => db.doc(`users/${uid}`).set({
-    active: true, displayName: uid, grants: [{ role: uid }],
+    active: true, displayName: uid, accessTier: uid,
   })));
 });
 

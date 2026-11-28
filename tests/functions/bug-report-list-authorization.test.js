@@ -36,6 +36,7 @@ beforeEach(async () => {
   await admin.auth().updateUser(uid, { emailVerified: true });
   const signin = await fetch(`http://${authHost}/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=synthetic`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(credentials) });
   token = (await signin.json()).idToken;
+  await db.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true });
   for (const [id, reporterUid] of [[owned, uid], [other, "other-reporter"]]) {
     await db.collection("bug_reports").doc(id).set({ id, reporter: { uid: reporterUid, email: "private@example.test", role: "editor" },
       status: "open", severity: "minor", category: "bug", tryingToDo: "Save a draft", happened: "Save stopped", createdAt: "2026-10-13T16:00:00Z",
@@ -46,8 +47,8 @@ afterEach(() => { vi.unstubAllEnvs(); });
 afterAll(async () => { await Promise.all(admin.apps.map((app) => app.delete())); });
 
 describe("report list authorization with real Auth and Firestore", () => {
-  it.each(["admin", "super_admin"])("allows %s all reports but keeps mine scoped", async (role) => {
-    await db.collection("users").doc(uid).set({ role, active: true });
+  it.each(["admin", "owner"])("allows %s all reports but keeps mine scoped", async (accessTier) => {
+    await db.collection("users").doc(uid).set({ accessTier, active: true });
     const all = await list({ view: "all" });
     expect(all.statusCode).toBe(200);
     expect(all.headers["Cache-Control"]).toBe("private, no-store");
@@ -61,18 +62,18 @@ describe("report list authorization with real Auth and Firestore", () => {
     }
     expect((await list({ view: "mine" })).body.reports.map((report) => report.id)).toEqual([owned]);
   });
-  it.each(["editor", "staff"])("keeps %s own-only and refuses all", async (role) => {
-    await db.collection("users").doc(uid).set({ grants: [{ role }], active: true });
-    expect((await list({})).body.reports.map((report) => report.id)).toEqual([owned]);
-    expect((await list({ view: "mine" })).body.reports.map((report) => report.id)).toEqual([owned]);
-    expect((await list({ view: "all" })).statusCode).toBe(403);
+  // A stored role or grant without an access level confers nothing (#746).
+  it.each([
+    ["editor grant", { grants: [{ role: "editor" }] }],
+    ["staff grant", { grants: [{ role: "staff" }] }],
+    ["admin role", { role: "admin" }],
+  ])("refuses every view to a stored %s without an access level", async (_label, access) => {
+    await db.collection("users").doc(uid).set({ ...access, active: true });
+    for (const view of [{}, { view: "mine" }, { view: "all" }]) expect((await list(view)).statusCode).toBe(403);
   });
   it.each([
-    ["legacy editor", { grants: [{ role: "editor" }] }],
-    ["legacy staff", { grants: [{ role: "staff" }] }],
     ...["viewer", "contributor", "editor", "publisher"].map((accessTier) => [accessTier, { accessTier }]),
   ])("gives activated %s only the safe shared projection with real authentication", async (_label, access) => {
-    await db.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true });
     await db.collection("users").doc(uid).set({ ...access, active: true });
     const all = await list({ view: "all" });
     expect(all.statusCode).toBe(200);
@@ -86,12 +87,17 @@ describe("report list authorization with real Auth and Firestore", () => {
     expect(JSON.stringify(shared)).not.toMatch(/private@example|private-owner|Private diagnostic|Private context|Save a draft|Save stopped/);
     expect((await list({ view: "mine" })).body.reports.map((report) => report.id)).toEqual([owned]);
   });
-  it("checks the current stored role on every all-reports read", async () => {
+  it("checks the current stored access level on every all-reports read", async () => {
     const account = db.collection("users").doc(uid);
-    await account.set({ role: "admin", active: true });
-    expect((await list({ view: "all" })).statusCode).toBe(200);
-    await account.set({ grants: [{ role: "editor" }], active: true });
-    expect((await list({ view: "all" })).statusCode).toBe(403);
+    await account.set({ accessTier: "admin", active: true });
+    const admin = await list({ view: "all" });
+    expect(admin.statusCode).toBe(200);
+    expect(admin.body.repository).toBe(repository);
+    await account.set({ accessTier: "editor", active: true });
+    const editor = await list({ view: "all" });
+    expect(editor.statusCode).toBe(200);
+    expect(editor.body).not.toHaveProperty("repository");
+    expect(editor.body.reports.find((report) => report.id === other).shared).toBe(true);
     expect((await list({ view: "mine" })).body.reports.map((report) => report.id)).toEqual([owned]);
   });
 });

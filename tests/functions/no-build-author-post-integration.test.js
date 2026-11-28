@@ -171,9 +171,9 @@ beforeEach(async () => {
   await db.doc("system/cmsPublicationRuntime").set({ schemaVersion: 1, phase: "ready", commitSha: sha,
     serializerId: "node-compute-publisher", cloud: { phase: "ready", commitSha: sha, serializerId: "cloudflare-publisher" } });
   await db.doc("sections/news").set({ label: "News" });
-  for (const actor of [editor, admin]) {
-    await db.doc(`users/${actor.uid}`).set({ email: actor.email, displayName: "Ada Reporter", active: true,
-      role: actor.role ?? null, grants: actor.role ? [] : actor.principal.grants });
+  await db.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true });
+  for (const [actor, accessTier] of [[editor, "publisher"], [admin, "owner"]]) {
+    await db.doc(`users/${actor.uid}`).set({ email: actor.email, displayName: "Ada Reporter", active: true, accessTier });
   }
   await authorStore.ensureAuthorIdentity({ firestore: db, uid: editor.uid, nowIso: publishedAt,
     actorUid: editor.uid, actorEmail: editor.email, randomHex: "1".repeat(32), requireAuthoringAccess: true });

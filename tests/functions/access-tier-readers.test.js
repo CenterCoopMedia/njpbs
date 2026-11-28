@@ -194,14 +194,14 @@ describe("tier readers through real Auth and Firestore", () => {
     });
     expect((await call(staff.list, {})).statusCode).toBe(403);
   });
-  it("before activation, a planted tier does not change an unverified legacy Owner's staff list access", async () => {
+  it("before activation, neither a stored Owner role nor a planted tier gives staff list access", async () => {
     await database.doc("system/staffAccessActivation").delete();
     await signIn(false);
     const staff = staffAccess.createStaffAccessHandlers({ firestore: database, verifyAppCheckTokenFn: async () => true });
     await database.collection("users").doc(uid).set({ email, role: "super_admin", active: true });
-    expect((await call(staff.list, {})).statusCode).toBe(200);
-    await database.collection("users").doc(uid).set({ email, role: "super_admin", active: true, accessTier: "viewer" });
-    expect((await call(staff.list, {})).statusCode).toBe(200);
+    expect((await call(staff.list, {})).statusCode).toBe(403);
+    await database.collection("users").doc(uid).set({ email, role: "super_admin", active: true, accessTier: "owner" });
+    expect((await call(staff.list, {})).statusCode).toBe(403);
   });
   it.each(["contributor", "editor", "publisher", "admin", "owner"])("unverified %s cannot mint, edit or publish an author profile", async (tier) => {
     await setTier(tier);

@@ -80,9 +80,9 @@ describe("export orchestration with the real operation store", () => {
     expect(provider.objects.stories[0].description).toContain("Edited summary");
   });
   it("requires edit access to the selected Post", async () => {
-    await fixture.ref("users", "staff").update({ role: "staff" });
+    await fixture.ref("users", "staff").update({ accessTier: "viewer" });
     await expect(flow.prepareExport(await fixture.request("post", true))).rejects.toMatchObject({ code: "not_authorized" });
-    await fixture.ref("users", "staff").update({ role: "staff", grants: [{ role: "contributor", sections: ["news"] }] });
+    await fixture.ref("users", "staff").update({ accessTier: "contributor" });
     await fixture.ref("cmsPosts", "post").update({ authorUid: "another-editor", createdBy: "another-editor" });
     await expect(flow.prepareExport(await fixture.request("post", true))).rejects.toMatchObject({ code: "not_authorized" });
     await fixture.ref("cmsPosts", "post").update({ authorUid: "staff", createdBy: "staff" });

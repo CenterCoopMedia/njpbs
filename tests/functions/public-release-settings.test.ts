@@ -46,7 +46,8 @@ beforeEach(async () => {
   await seedSwitch(firestore, { admittedContract: contract });
   await db.doc(`${a.CONTRACTS}/${p.publicReleaseDigest(contract)}`).set(contract);
   await db.doc(`${a.ADMISSIONS}/controls/adoption`).set({ schemaVersion: 2, enabled: true });
-  await db.doc(`users/${actor.uid}`).set({ role: "admin", active: true });
+  await db.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true });
+  await db.doc(`users/${actor.uid}`).set({ accessTier: "admin", active: true });
   for (const [id, setting] of Object.entries(values)) await db.doc(`cmsSettings/${id}`).set({ schemaVersion: 1, version: 1, values: setting });
   const image = { source: "upload", lifecycle: "active", mimeType: "image/png", sizeBytes: 99, width: 800, height: 300,
     url: "https://media.njpbs.org/cms-media/fixture/brand.png", altText: "NJ Decides" };

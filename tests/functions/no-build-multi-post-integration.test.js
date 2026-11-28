@@ -223,7 +223,8 @@ describe("multi-Post admission and retained ownership", () => {
     expect((await publish("first")).code).toBe(200);
     expect((await publish("second")).code).toBe(200);
     const adminActor = { uid: "archive-admin", principal: { id: "archive-admin", grants: [{ role: "admin" }] } };
-    await db.doc("users/archive-admin").set({ active: true, role: "admin" });
+    await db.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true });
+    await db.doc("users/archive-admin").set({ active: true, accessTier: "admin" });
     const result = await invoke(bulk.createCmsBulkArchiveHandler({ firestore: db, requireAdminFn: async () => adminActor, log: quiet }),
       { items: [{ id: "first", baseVersion: 2 }, { id: "second", baseVersion: 2 }] });
     expect(result.code, JSON.stringify(result.body)).toBe(200);

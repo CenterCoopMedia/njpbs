@@ -37,7 +37,8 @@ export async function boardwalkFixture(db) {
     sourceSizeBytes: asset.sizeBytes, ...settings, phase: "ready", editRevision: 0,
     outputs: { "segments.json": "segments-v1", txt: "text-v1" }, speakerNames: { spk_0: "Reporter" } };
   await Promise.all([
-    ref("users", "staff").set({ active: true, role: "admin", emailVerified: true }),
+    ref("users", "staff").set({ active: true, accessTier: "admin", emailVerified: true }),
+    ref("system", "staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true }),
     ref("mediaSourceAssets", "asset").set(asset), ref("mediaSourceClipJobs", clip.id).set(clip),
     ref("mediaSourceTranscriptJobs", transcript.id).set(transcript),
     ref("media_assets", "image").set({ name: "Image", originalName: "image.png", lifecycle: "active", version: 1,

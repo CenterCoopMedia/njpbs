@@ -24,8 +24,9 @@ beforeAll(() => {
 beforeEach(async () => {
   await clearEmulatorFirestore(`http://${HOST}/emulator/v1/projects/${PROJECT}/databases/(default)/documents`, { method: "DELETE" }, db);
   const batch = db.batch();
-  batch.set(db.doc("users/writer"), { active: true, email: "writer@example.test", grants: [{ role: "contributor", sections: ["news"] }] });
-  batch.set(db.doc("users/editor"), { active: true, email: "editor@example.test", grants: [{ role: "editor", sections: ["news"] }] });
+  batch.set(db.doc("system/staffAccessActivation"), { schema: 1, state: "active", cleanScan: true });
+  batch.set(db.doc("users/writer"), { active: true, email: "writer@example.test", accessTier: "contributor" });
+  batch.set(db.doc("users/editor"), { active: true, email: "editor@example.test", accessTier: "publisher" });
   batch.set(db.doc("cmsPosts/story"), { createdBy: "writer", section: "news", status: "draft" });
   batch.set(db.doc(`cmsPreviewQueue/${queueId}`), { collection: "cmsPosts", pageId: "story", status: "ready", expiresAt: admin.firestore.Timestamp.fromMillis(NOW + 60_000) });
   await batch.commit();
@@ -79,7 +80,7 @@ describe("preview access with stored emulator records", () => {
     await db.doc("cmsPosts/story").update({ section: "watch" });
     expect((await admission("editor")).code).toBe(204);
     expect((await admission("editor", target, { ownerId: "writer", section: "news" })).code).toBe(204);
-    await db.doc("users/editor").update({ grants: [{ role: "editor", sections: ["watch"] }] });
+    await db.doc("users/editor").update({ accessTier: "editor" });
     expect((await admission("editor")).code).toBe(204);
     await db.doc("cmsPosts/story").update({ deleted: true });
     expect((await admission("editor")).code).toBe(404);
@@ -97,8 +98,9 @@ describe("preview access with stored emulator records", () => {
     expect((await admission("writer", retained)).code).toBe(404);
   });
   it.each([
-    [{}, 204, 3], [{ published: {} }, 204, 3], [{ published: null }, 204, 3],
-    [{ status: "archived" }, 404, 3], [{ deleted: true }, 404, 3],
+    // Four reads: profile, activation receipt, queue and record.
+    [{}, 204, 4], [{ published: {} }, 204, 4], [{ published: null }, 204, 4],
+    [{ status: "archived" }, 404, 4], [{ deleted: true }, 404, 4],
   ])("checks the current unassigned Post lifecycle %j", async (change, code, count) => {
     await db.doc("cmsPosts/story").set({ type: "post", status: "draft", createdBy: "writer",
       unassignedDraft: true, ...change });
@@ -126,7 +128,7 @@ describe("preview access with stored emulator records", () => {
         headers: { cookie: "__Host-njpbs-staff=writer" },
       }), deps)).status).toBe(200);
     }
-    expect(reads).toHaveLength(33);
+    expect(reads).toHaveLength(44);
     console.log(JSON.stringify({ measurement: "Preview page emulator reads", contentRequests: paths.length,
       reads: reads.length, genericReads: paths.length, addedReads: reads.length - paths.length,
       returnedDataJsonBytes: readBytes.reduce((total, bytes) => total + bytes, 0),
@@ -142,7 +144,7 @@ describe("preview access with stored emulator records", () => {
         headers: { cookie: "__Host-njpbs-staff=writer" },
       }), deps)).status).toBe(200);
     }
-    expect(reads).toHaveLength(33);
+    expect(reads).toHaveLength(44);
     console.log(JSON.stringify({ measurement: "Retained page emulator reads", contentRequests: paths.length,
       reads: reads.length, returnedDataJsonBytes: readBytes.reduce((total, bytes) => total + bytes, 0),
       perRequestDataJsonBytes: readBytes.slice(0, 3) }));

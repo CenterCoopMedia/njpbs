@@ -161,7 +161,9 @@ beforeEach(async () => {
     outputs: { "segments.json": "original-segments", txt: "original-txt", vtt: "original-vtt" } };
   ref = db.collection(jobs.TRANSCRIPT_JOBS).doc(job.id);
   await Promise.all([ref.set(job), db.collection("mediaSourceAssets").doc(asset.id).set(asset),
-    db.collection("users").doc(actor.uid).set({ active: true, grants: [{ role: "staff" }] })]);
+    // Tier accounts change shared transcripts with media.video.manage (Contributor and above).
+    db.collection("users").doc(actor.uid).set({ active: true, accessTier: "contributor" }),
+    db.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true })]);
 });
 
 afterAll(async () => {

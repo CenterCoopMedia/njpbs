@@ -388,7 +388,8 @@ beforeEach(async () => {
   vi.stubEnv("FUNCTIONS_EMULATOR", "true");
   await clearEmulatorFirestore(`http://${process.env.FIRESTORE_EMULATOR_HOST}/emulator/v1/projects/${project}/databases/(default)/documents`,
     { method: "DELETE" });
-  await db.doc(`users/${actor.uid}`).set({ active: true, role: "admin", email: actor.email, displayName: "Dataset approver" });
+  await db.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true });
+  await db.doc(`users/${actor.uid}`).set({ active: true, accessTier: "admin", email: actor.email, displayName: "Dataset approver" });
   await seedSystem();
 });
 
