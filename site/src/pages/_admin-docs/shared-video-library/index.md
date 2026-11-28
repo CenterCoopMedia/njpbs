@@ -147,6 +147,9 @@ The card and list search starts at the beginning of the video name. Related
 transcript results above them also find words within saved passages and start
 only after you search. Filtered cards show the number on the current page.
 
+**All media** under the search box matches whole words in video names,
+descriptions and tags, and also shows matching images and audio.
+
 Transcript results are grouped by video. Each group shows its poster, file name
 and match count. Passages show their start time and nearby words, with the search
 text highlighted. Select a passage to open the file at that time. Select the

@@ -1,0 +1,118 @@
+/* The "All media" results under a media tab's search box: a title, a kind filter and one
+   short list of links per kind. The groups stack at phone width. */
+.media-search-all {
+  display: grid;
+  gap: var(--cms-space-2);
+  margin: var(--cms-space-2) 0 var(--cms-space-3);
+  padding: var(--cms-space-3);
+  border: var(--cms-border-width) solid var(--cms-line);
+  border-radius: var(--cms-radius-panel);
+  background: var(--cms-surface);
+}
+
+.media-search-all-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--cms-space-2);
+}
+
+.media-search-all-title,
+.media-search-all-group-title {
+  margin: 0;
+  color: var(--cms-ink);
+  font-size: var(--cms-font-sm);
+  font-weight: 600;
+}
+
+.media-search-all-group-title {
+  color: var(--cms-ink-secondary);
+  font-size: var(--cms-font-xs);
+}
+
+.media-search-all-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  gap: var(--cms-space-3);
+}
+
+.media-search-all-group {
+  display: grid;
+  align-content: start;
+  gap: var(--cms-space-1);
+  min-width: 0;
+}
+
+.media-search-all-note {
+  margin: 0;
+  color: var(--cms-ink-muted);
+  font-size: var(--cms-font-sm);
+}
+
+.media-search-all-list {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.media-search-all-hit {
+  display: flex;
+  align-items: center;
+  gap: var(--cms-space-2);
+  min-height: var(--cms-control-standard-target);
+  padding: var(--cms-space-1);
+  border-radius: var(--cms-radius-control);
+  color: var(--cms-ink);
+  text-decoration: none;
+}
+
+.media-search-all-hit:hover {
+  background: var(--cms-action-quiet-hover);
+}
+
+.media-search-all-hit:focus-visible {
+  outline: var(--cms-focus-outline);
+  outline-offset: calc(-1 * var(--cms-focus-width));
+}
+
+.media-search-all-thumb {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  overflow: hidden;
+  border-radius: var(--cms-radius-small);
+  background: var(--cms-surface-muted);
+  color: var(--cms-ink-muted);
+}
+
+.media-search-all-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.media-search-all-thumb .icon {
+  width: 18px;
+  height: 18px;
+}
+
+.media-search-all-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--cms-font-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.media-search-all-kind {
+  flex: none;
+  color: var(--cms-ink-muted);
+  font-size: var(--cms-font-xs);
+}

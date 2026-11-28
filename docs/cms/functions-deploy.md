@@ -264,6 +264,13 @@ this order and each postcondition:
 | 7 | `backfill-byline-projections.mjs` | Byline projection matches validated public/working owner rules. |
 | 8 | `backfill-media-discovery.mjs` | Eligible current media have bounded discovery projections with source provenance. |
 
+`backfill-video-search-tokens.mjs` is a manual repair outside this automated
+order. Run it once after the `searchTokens` index is READY. It writes the
+derived `searchTokens` word list on existing shared-video records, so word
+search finds videos added before the field existed. It is a dry run that prints
+counts only, unless `--apply` is given. It reads the credential JSON from
+stdin, or uses a local `FIRESTORE_EMULATOR_HOST`. It is safe to run again.
+
 The scripts remain under [scripts/](../../scripts/); this consolidation changes
 none of them. A one-time done bit cannot protect records created later. Keep
 ongoing writer invariants or the explicit idempotent repair. Partial failures

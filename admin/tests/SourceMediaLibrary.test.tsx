@@ -23,6 +23,8 @@ const { getIdToken, productionTranscriptReads, productionClipReads, loadSavedVie
   mutateSavedViews: vi.fn(),
 }));
 vi.mock("../src/lib/source-media", () => ({ createSourceMediaRead: vi.fn(), deleteSourceMedia: vi.fn(), listSourceMedia: vi.fn(), updateSourceMediaMetadata: vi.fn() }));
+// The "All media" strip has its own tests and must not send real requests here.
+vi.mock("../src/components/media/MediaSearchAll", () => ({ MediaSearchAll: () => null }));
 vi.mock("../src/lib/source-media-upload", () => ({
   UploadFileMismatchError: class extends Error {},
   startVideoUpload: vi.fn(),

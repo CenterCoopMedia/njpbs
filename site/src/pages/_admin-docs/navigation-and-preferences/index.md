@@ -146,7 +146,8 @@ or **Audio**. **Images** also holds PDF
 documents. **Public submissions** holds files from the public and appears only for site-wide
 media managers. Tabs are links, so Enter opens the focused tab. **Media library**
 opens the tab you used last in this browser, or **Videos** the first time. A search
-stays when you switch tabs. An existing
+stays when you switch tabs. While a search is active, **All media** under the search
+box shows matching images, videos and audio together. An existing
 `/voiceovers` bookmark opens Media library with the **Audio** tab selected.
 
 The order and available destinations depend on your account. Capability rules

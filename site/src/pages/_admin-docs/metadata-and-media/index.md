@@ -251,6 +251,8 @@ station-managed images and documents. For private station video, use
    meaning, not only matching words. It starts closed so the results do not
    move; its line shows how far that search has read. Select it to see the
    matches.
+   **All media** under the search box shows a few matching images, videos and
+   audio. Choose a kind to narrow it. Select a result to open it on its tab.
 2. Use **Filter** to add a Type or Category, remove a chip to undo it, and use
    **Sort** or **Display** to change the order. **Clear all** removes every
    filter chip and the search text; the sort stays. When nothing matches,

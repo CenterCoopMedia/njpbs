@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-27",
+  "kind": "improved",
+  "order": 1795784401000,
+  "title": "One search for images, videos and audio",
+  "body": "A search in the Media library now shows matching images, videos and audio together under the search box. Choose a kind to narrow the list, and select a result to open it on its own tab. Video search now matches whole words in the name, description and tags.",
+  "prs": []
+}

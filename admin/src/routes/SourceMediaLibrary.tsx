@@ -58,6 +58,7 @@ import type { MediaToolbarSurfaceConfiguration } from "../components/media/Media
 import { videoFilterProperties } from "../components/media/video-filter-properties";
 import { mediaAspect } from "../lib/media-browse-metadata";
 import { SourceMediaLibraryBrowse } from "./SourceMediaLibraryBrowse";
+import { MediaSearchAll } from "../components/media/MediaSearchAll";
 import { DEFAULT_VIDEO_MEDIA_QUERY, parseVideoMediaLocation, encodeVideoMediaLocation, type VideoMediaLocationQuery, type VideoMediaSort } from "../lib/media-query";
 import { clearVideoFilterChips, setVideoStructuredFilter, videoFilterChips, type VideoStructuredFilter } from "../lib/media-filters";
 import { useMediaDisplay } from "../lib/use-media-display";
@@ -1854,6 +1855,7 @@ export function SourceMediaLibrary({ principal, source, getIdToken, userId, onEx
         onMissing: removeMissingSavedView,
         onResetFilters: resetSavedViewDefaults,
       } }}
+      searchAll={<MediaSearchAll getIdToken={getIdToken} principal={principal ?? null} query={search} />}
       searchError={searchError} linkError={linkError} deletedName={deletedName}
       originals={{ sourceId: source.id, getIdToken,
         onDismissed: () => document.getElementById("video-library-title")?.focus(),

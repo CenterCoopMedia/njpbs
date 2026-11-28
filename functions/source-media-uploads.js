@@ -22,6 +22,7 @@ const {
   parseSourceMediaAsset,
   sourceMediaAssetDetail,
 } = require("./lib/source-media-contract");
+const { sourceMediaSearchTokens } = require("./lib/source-media-search-tokens");
 const {
   VIDEO_MIME_EXTENSIONS,
   choosePartSize,
@@ -329,6 +330,7 @@ function completedAsset(session, head, now) {
     description: session.metadata.description,
     metadataUpdateRequested: session.metadata.metadataUpdateRequested === true,
     nameSort: normalizeSourceMediaNameSort(session.metadata.name),
+    searchTokens: sourceMediaSearchTokens(session.metadata),
     updatedAtSort: now,
     mimeType: session.mimeType,
     kind: "video",
@@ -923,6 +925,9 @@ function writeSourceMetadata({ transaction, firestore, ref, current, patch, acto
   const changes = {
     ...patch,
     ...(patch.name ? { nameSort: normalizeSourceMediaNameSort(patch.name) } : {}),
+    // Every name, tag or description edit rewrites the word list that video search reads.
+    ...(["name", "description", "tags"].some((field) => field in patch)
+      ? { searchTokens: sourceMediaSearchTokens({ ...current, ...patch }) } : {}),
     version: current.version + 1,
     updatedAt: now,
     updatedAtSort: now,

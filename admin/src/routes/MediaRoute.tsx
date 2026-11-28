@@ -1,5 +1,6 @@
 import { readLastMediaTab, writeLastMediaTab } from "../lib/media-last-tab";
 import { mediaPermalink, parseMediaPermalink, unavailableMediaMessage } from "../lib/media-permalink";
+import { MediaSearchAll } from "../components/media/MediaSearchAll";
 import { MediaMeaningResults } from "../components/MediaMeaningResults";
 import { can, hasCapability } from "../../../packages/content-core/src/rbac";
 import { clearFilterChips, filterChips, selectionAnnouncement } from "../lib/media-filters";
@@ -1278,6 +1279,7 @@ export function MediaLibrarySurface({
         uploadFocusRequest={uploadFocusRequest}
         uploadOpen={showUpload}
       />
+      <MediaSearchAll getIdToken={getIdToken} principal={principal} query={location.query.q} />
 
       {uploadReceipt ? (
         <div ref={uploadReceiptRef} tabIndex={-1}>
