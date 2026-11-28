@@ -301,10 +301,33 @@ describe("public fix pull requests on a report filed in the private tracker", ()
     await db.collection("bugReportGithubOutbox").doc(`${next.id}--sync`).set({ reportId: next.id,
       operation: "sync", targetNumber: null, state: "pending", attemptCount: 0, nextAttemptAt: NOW });
     const api = boundary({ issueState: "closed", timeline: [reference(FIX.repository, 734)], pulls: { 734: merged }, compare: "behind" });
-    expect(await run(`${next.id}--sync`, api, { deployedRevision: async () => "d".repeat(40) })).toEqual({ state: "delivered" });
+    expect(await run(`${next.id}--sync`, api, { deployedRevision: async () => RELEASE })).toEqual({ state: "delivered" });
     const later = (await db.collection("bug_reports").doc(next.id).get()).data();
     expect(later.links.pullRequests[0]).toMatchObject({ live: true, liveRevision: RELEASE });
     expect(api.requests.some(({ path }) => path.includes("/compare/"))).toBe(false);
+  });
+  it("clears live evidence after production rolls back to a build without the fix", async () => {
+    const { next } = await sync({ pulls: { 734: merged }, compare: "ahead" });
+    await db.collection("bugReportGithubOutbox").doc(`${next.id}--sync`).set({ reportId: next.id,
+      operation: "sync", targetNumber: null, state: "pending", attemptCount: 0, nextAttemptAt: NOW });
+    const rollback = "d".repeat(40);
+    const api = boundary({ issueState: "closed", timeline: [reference(FIX.repository, 734)], pulls: { 734: merged }, compare: "behind" });
+    expect(await run(`${next.id}--sync`, api, { deployedRevision: async () => rollback })).toEqual({ state: "delivered" });
+    const later = (await db.collection("bug_reports").doc(next.id).get()).data();
+    expect(later.links.pullRequests[0].live).toBeUndefined();
+    expect(api.requests).toContainEqual({ method: "GET", path: `/repos/${FIX.repository}/compare/${MERGE}...${rollback}` });
+    expect(contract.reportForReporter(later, "editor-1").progress)
+      .toMatchObject({ phase: "merged", label: "Merged; live verification pending" });
+  });
+  it("skips the timeline when ten manual pull requests fill the links", async () => {
+    const stored = relayReport();
+    const numbers = Array.from({ length: 10 }, (_, index) => 30 + index);
+    stored.links = { ...stored.links, pullRequestNumbers: numbers, discoveredPullRequestNumbers: [],
+      pullRequests: numbers.map((number) => pull(ISSUE.repository, number)) };
+    const api = boundary({ issueState: "closed", timeline: [reference(FIX.repository, 734)] });
+    expect(await run(await seed(stored), api, { deployedRevision: async () => RELEASE })).toEqual({ state: "delivered" });
+    expect(api.requests.some(({ path }) => path.endsWith("/timeline"))).toBe(false);
+    expect((await db.collection("bug_reports").doc(stored.id).get()).data()).toMatchObject(identityFields(ISSUE));
   });
   it("leaves live verification pending when the production revision cannot be read", async () => {
     const { view } = await sync({ pulls: { 734: merged } }, { deployedRevision: async () => { throw new Error("offline"); } });

@@ -69,26 +69,33 @@ async function readReports(firestore) {
   return reportsByIssue;
 }
 
+// A rerun finds the jobs an earlier run created. A failed job is reported, not
+// requeued: an administrator retries it from the report (Retry GitHub).
+async function readExistingJobs(firestore, plan) {
+  for (const entry of plan.filter((row) => row.jobId)) {
+    const snapshot = await firestore.collection("bugReportGithubOutbox").doc(entry.jobId).get();
+    if (snapshot.exists) entry.existing = snapshot.data().state ?? "unknown";
+  }
+}
+
 async function applyPlan(firestore, plan, now) {
   const results = [];
-  for (const entry of plan.filter((row) => row.jobId)) {
-    const ref = firestore.collection("bugReportGithubOutbox").doc(entry.jobId);
-    try {
-      await ref.create(outboxJob(entry, now));
-      results.push({ jobId: entry.jobId, result: "created" });
-    } catch (error) {
-      if (error?.code !== 6) throw error; // ALREADY_EXISTS
-      results.push({ jobId: entry.jobId, result: "exists" });
-    }
+  for (const entry of plan.filter((row) => row.jobId && !row.existing)) {
+    await firestore.collection("bugReportGithubOutbox").doc(entry.jobId).create(outboxJob(entry, now));
+    results.push(`created ${entry.jobId}`);
   }
   return results;
 }
 
-function describe(entry) {
+export function describe(entry) {
   const report = entry.reportId ? `${entry.reportId.slice(0, 11)}… (${entry.status})` : "-";
-  const action = entry.skip ? `skip: ${entry.skip}` : `attach PR #${entry.pullNumber}`;
+  const action = entry.skip ? `skip: ${entry.skip}`
+    : entry.existing ? `attach PR #${entry.pullNumber} queued earlier, job ${entry.existing}`
+      : `attach PR #${entry.pullNumber}`;
   return `issue ${entry.issueNumber}  report ${report}  ${action}`;
 }
+
+export const FAILED_JOB_STATES = new Set(["retryable_failed", "terminal_failed", "unknown"]);
 
 async function main(argv) {
   const apply = argv.includes("--apply");
@@ -101,9 +108,15 @@ async function main(argv) {
   try {
     const firestore = getFirestore(app);
     const plan = planLinks(await readReports(firestore), fixRepository);
-    console.log(`${apply ? "Apply" : "Dry run"}: ${plan.filter((row) => row.jobId).length} attach jobs planned`);
+    await readExistingJobs(firestore, plan);
+    console.log(`${apply ? "Apply" : "Dry run"}: ${plan.filter((row) => row.jobId && !row.existing).length} attach jobs planned`);
     for (const entry of plan) console.log(describe(entry));
-    if (apply) for (const row of await applyPlan(firestore, plan, new Date())) console.log(`${row.result} ${row.jobId}`);
+    if (apply) for (const line of await applyPlan(firestore, plan, new Date())) console.log(line);
+    const failed = plan.filter((row) => FAILED_JOB_STATES.has(row.existing));
+    if (failed.length) {
+      console.error(`${failed.length} earlier jobs failed; retry each from its report with Retry GitHub`);
+      process.exitCode = 1;
+    }
   } finally {
     await deleteApp(app);
   }

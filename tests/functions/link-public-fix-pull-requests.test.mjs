@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { jobId, outboxJob, planLinks, SYSTEM_ACTOR } from "../../scripts/link-public-fix-pull-requests.mjs";
+import { describe as describeEntry, jobId, outboxJob, planLinks, SYSTEM_ACTOR } from "../../scripts/link-public-fix-pull-requests.mjs";
 
 const FIX = "example-owner/public-code";
 const report = (id, overrides = {}) => ({ id, status: "acknowledged",
@@ -23,5 +23,11 @@ describe("public fix backfill plan", () => {
     const job = outboxJob({ reportId: "br_a", pullNumber: 7 }, now);
     expect(job).toEqual({ reportId: "br_a", operation: "attach_pull_request", targetNumber: 7, requestedBy: SYSTEM_ACTOR,
       state: "pending", attemptCount: 0, nextAttemptAt: now, leaseUntil: null, lastError: null, createdAt: now, updatedAt: now });
+  });
+
+  it("shows a job from an earlier run with its state instead of planning it again", () => {
+    const entry = { issueNumber: 41, reportId: "br_" + "a".repeat(32), status: "open", pullNumber: 7,
+      jobId: jobId("br_a", 7), existing: "terminal_failed" };
+    expect(describeEntry(entry)).toContain("attach PR #7 queued earlier, job terminal_failed");
   });
 });

@@ -45,11 +45,12 @@ A merged fix-repository pull request is live when its merge commit is the
 deployed revision or an ancestor of it. Production reads the revision from the
 live Admin status (`build.revision`); other environments use
 `CMS_ADMIN_BUILD_REVISION`. The sync compares the two commits through the fix
-repository, records `live` and `liveRevision` on the pull request row and does
-not compare that commit again. Staff progress then shows "Fix live" on the Live
-verification step. An unreadable revision or comparison leaves the fix at "Merged;
-live verification pending". Marking the report resolved stays an administrator
-action.
+repository and records `live` and `liveRevision` on the pull request row. It
+compares again when the deployed revision changes, so a rollback to an older
+build clears `live`; a failed read keeps the stored evidence. Staff progress
+shows "Fix live" on the Live verification step. A fix not yet verified stays at
+"Merged; live verification pending" while the revision or comparison cannot be
+read. Marking the report resolved stays an administrator action.
 
 Before enabling the CMS autofix host service, deploy this reader, supply and
 read back the four production settings in the switch packet's F09 table, and

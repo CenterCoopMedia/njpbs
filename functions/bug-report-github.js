@@ -658,6 +658,8 @@ async function timelineEventPullRequests(client, event, issueNumber) {
 async function discoverIssuePullRequests(client, issues, manualNumbers, pullRepositories) {
   const repositories = pullRepositories.map((repository) => repository.toLowerCase());
   const found = new Map(repositories.map((repository) => [repository, []]));
+  // Ten manual links leave no room for discovery; skip the timeline reads.
+  if (manualNumbers.length >= 10) return found;
   const manual = new Set(manualNumbers.map((number) => `${repositories[0]}#${number}`));
   const references = new Map();
   let sequence = 0;
@@ -692,45 +694,45 @@ async function discoverIssuePullRequests(client, issues, manualNumbers, pullRepo
     const [repository, number] = key.split("#");
     found.get(repository).push(Number(number));
   }
-  if (manualNumbers.length >= 10) found.set(repositories[0], []);
   return new Map([...found].map(([repository, numbers]) => [repository, numbers.slice(0, 10)]));
 }
 
 // Production serves one revision of the fix repository. A merged fix is live
-// when its merge commit is that revision or one of its ancestors. Production
-// moves forward only, so a verified row stays verified for the same commit.
+// when its merge commit is that revision or one of its ancestors. A rollback can
+// serve an older revision, so stored evidence holds only for the revision it was
+// checked against; a read that fails keeps the stored evidence unchanged.
 async function markLivePullRequests(row, pullClient, pulls, deps) {
   if (!deps.deployedRevision || !row.fixRepository ||
       pullClient.repository?.toLowerCase() !== row.fixRepository.repository.toLowerCase()) return;
-  const merged = pulls.filter((entry) => entry.pullRequest.merged && !entry.pullRequest.unavailable &&
-    entry.pullRequest.mergeCommitSha);
+  const merged = pulls.map((entry) => entry.pullRequest)
+    .filter((pull) => pull.merged && !pull.unavailable && pull.mergeCommitSha);
   if (!merged.length) return;
   const previous = new Map((row.record.links?.pullRequests ?? []).map((pull) => [pull.number, pull]));
-  const unverified = [];
-  for (const { pullRequest } of merged) {
-    const known = previous.get(pullRequest.number);
-    if (known?.live === true && known.mergeCommitSha === pullRequest.mergeCommitSha) {
-      Object.assign(pullRequest, { live: true, liveRevision: known.liveRevision });
-    } else unverified.push(pullRequest);
-  }
-  if (!unverified.length) return;
+  const known = (pull) => {
+    const stored = previous.get(pull.number);
+    return stored?.live === true && stored.mergeCommitSha === pull.mergeCommitSha ? stored : null;
+  };
+  const keep = (pull) => {
+    if (known(pull)) Object.assign(pull, { live: true, liveRevision: known(pull).liveRevision });
+  };
   let revision;
   try {
     revision = await deps.deployedRevision();
   } catch (error) {
-    // Unknown live state leaves the fix at live verification pending.
     logger.warn("Production revision unavailable for live fix verification", { error: error?.name ?? "Error" });
+    merged.forEach(keep);
     return;
   }
-  await Promise.all(unverified.map(async (pullRequest) => {
+  await Promise.all(merged.map(async (pull) => {
+    if (known(pull)?.liveRevision === revision) return keep(pull);
     try {
-      const comparison = await pullClient.compareCommits(pullRequest.mergeCommitSha, revision);
+      const comparison = await pullClient.compareCommits(pull.mergeCommitSha, revision);
       if (["ahead", "identical"].includes(comparison?.status)) {
-        Object.assign(pullRequest, { live: true, liveRevision: revision });
+        Object.assign(pull, { live: true, liveRevision: revision });
       }
     } catch (error) {
-      // The next sync retries; the fix stays at live verification pending.
-      logger.warn("Live fix verification read failed", { pullRequest: pullRequest.number, status: error?.status ?? null });
+      logger.warn("Live fix verification read failed", { pullRequest: pull.number, status: error?.status ?? null });
+      keep(pull);
     }
   }));
 }
