@@ -77,9 +77,10 @@ export async function activateStaffTierReaders(options) {
 
 async function main() {
   const args = process.argv.slice(2);
-  if (args.length !== 3 || !["--check", "--activate"].includes(args[0]) || args[1] !== "--project" || args[2] !== "njpbs-site" ||
+  if (args.length !== 3 || !["--check", "--activate"].includes(args[0]) || args[1] !== "--project" ||
+      !["njpbs-site", "njpbs-site-dev"].includes(args[2]) ||
       process.env.FIRESTORE_EMULATOR_HOST || process.env.FIREBASE_AUTH_EMULATOR_HOST) {
-    throw new Error("Use --check or the separately approved --activate with --project njpbs-site");
+    throw new Error("Use --check or the separately approved --activate with --project njpbs-site or njpbs-site-dev");
   }
   let key;
   try { key = JSON.parse(readFileSync(0, "utf8")); } catch { throw new Error("Approved credential JSON is required on stdin"); }
@@ -97,5 +98,8 @@ async function main() {
   } finally { await deleteApp(app); }
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  main().catch(() => { console.error("Staff tier reader activation stopped; no activation evidence written"); process.exitCode = 1; });
+  main().catch((error) => {
+    console.error(`Staff tier reader activation stopped; no activation evidence written: ${error?.message ?? "unknown error"}`);
+    process.exitCode = 1;
+  });
 }
