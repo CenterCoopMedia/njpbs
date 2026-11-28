@@ -1,15 +1,21 @@
 "use strict";
 
+const { defineString } = require("firebase-functions/params");
+
 const ADMIN_STATUS_URL = "https://admin.njpbs.org/admin-status.json";
 const BUILD_REVISION_PATTERN = /^[0-9a-f]{40}$/;
 const MAX_ADMIN_STATUS_BYTES = 256 * 1024;
 const TIMEOUT_MS = 5_000;
+const BUILD_REVISION = defineString("CMS_ADMIN_BUILD_REVISION", { default: "" });
+const DEPLOYMENT_ENVIRONMENT = defineString("CMS_DEPLOYMENT_ENVIRONMENT", { default: "" });
 
 class AdminStatusRevisionError extends Error {
   constructor(message = "The deployed Admin revision could not be read") {
     super(message);
     this.name = "AdminStatusRevisionError";
     this.status = 503;
+    // Served revisions that were read before this one failed.
+    this.knownRevisions = [];
   }
 }
 
@@ -76,9 +82,52 @@ async function readLiveAdminBuildRevision(deps = {}) {
   return parseProductionAdminRevision(payload);
 }
 
+function configuredValue(param, envName) {
+  // config-input: CMS_ADMIN_BUILD_REVISION, CMS_DEPLOYMENT_ENVIRONMENT
+  const local = process.env[envName]?.trim();
+  return local || param.value().trim();
+}
+
+function deploymentEnvironment() {
+  return configuredValue(DEPLOYMENT_ENVIRONMENT, "CMS_DEPLOYMENT_ENVIRONMENT");
+}
+
+// The revision this environment serves: the live production Admin build, or the
+// revision a non-production deploy configured.
+function configuredRevision() {
+  const local = configuredValue(BUILD_REVISION, "CMS_ADMIN_BUILD_REVISION");
+  if (!BUILD_REVISION_PATTERN.test(local)) throw new AdminStatusRevisionError();
+  return local;
+}
+
+async function readDeployedRevision(deps = {}) {
+  if ((deps.environment ?? deploymentEnvironment()) === "production") return readLiveAdminBuildRevision(deps);
+  return configuredRevision();
+}
+
+// Every revision a fix must reach to be live. Admin can deploy on its own, so
+// production adds the live Admin build to the release revision these Functions
+// run (the release sets CMS_ADMIN_BUILD_REVISION to its deploy SHA). Site and
+// Workers releases are not covered.
+async function readServedRevisions(deps = {}) {
+  const functionsRevision = configuredRevision();
+  if ((deps.environment ?? deploymentEnvironment()) !== "production") return [functionsRevision];
+  let adminRevision;
+  try {
+    adminRevision = await readLiveAdminBuildRevision(deps);
+  } catch (error) {
+    if (error instanceof AdminStatusRevisionError) error.knownRevisions = [functionsRevision];
+    throw error;
+  }
+  return [...new Set([adminRevision, functionsRevision])].sort();
+}
+
 module.exports = {
   ADMIN_STATUS_URL,
   AdminStatusRevisionError,
+  deploymentEnvironment,
   parseProductionAdminRevision,
+  readDeployedRevision,
   readLiveAdminBuildRevision,
+  readServedRevisions,
 };

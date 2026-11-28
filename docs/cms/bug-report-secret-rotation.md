@@ -77,7 +77,9 @@ unfinished release still needs it.
    GitHub account. Select the issue repository and the separate fix repository.
    The common runtime token serves both clients. Use Issues write for report
    creation/comments, and Pull requests, Checks, Commit statuses and Deployments
-   read for linked-fix progress. Preserve required Metadata read. Do not add
+   read for linked-fix progress. Contents read on the fix repository lets the
+   sync compare a merged fix with the production revision. Preserve required
+   Metadata read. Do not add
    source-write, workflow, administration or webhook-management permission.
    GitHub's fine-grained token model applies the chosen permissions to selected
    repositories; this runbook does not claim different per-repository scopes.

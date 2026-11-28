@@ -52,6 +52,7 @@
   "tests/functions/get-content.test.js",
   "tests/functions/home-editor-boundary.test.js",
   "tests/functions/joined-records.test.ts",
+  "tests/functions/link-public-fix-pull-requests.test.mjs",
   "tests/functions/list-audit.test.js",
   "tests/functions/list-media-usage.test.js",
   "tests/functions/list-media.test.js",

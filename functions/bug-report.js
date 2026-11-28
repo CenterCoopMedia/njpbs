@@ -3,7 +3,6 @@
 const { createHash } = require("node:crypto");
 const Busboy = require("busboy");
 const sharp = require("sharp");
-const { defineString } = require("firebase-functions/params");
 const logger = require("firebase-functions/logger");
 const { cmsOnRequest } = require("./lib/cms-edge");
 const { requestHeader } = require("./lib/http-json");
@@ -22,17 +21,7 @@ const {
   parsePremiereReport, premiereIncidentFingerprint, premiereReportSubmission,
   premiereRequestFingerprint,
 } = require("./lib/premiere-report-contract");
-const {
-  AdminStatusRevisionError,
-  readLiveAdminBuildRevision,
-} = require("./lib/admin-status-revision");
-const BUG_REPORT_BUILD_REVISION = defineString("CMS_ADMIN_BUILD_REVISION", {
-  default: "",
-});
-const BUG_REPORT_DEPLOYMENT_ENVIRONMENT = defineString(
-  "CMS_DEPLOYMENT_ENVIRONMENT",
-  { default: "" },
-);
+const { AdminStatusRevisionError, deploymentEnvironment, readDeployedRevision } = require("./lib/admin-status-revision");
 
 const ALLOWED_FIELDS = new Set(["report", "clientRequestId", "website"]);
 const UUID_PATTERN =
@@ -83,12 +72,6 @@ class BugReportRateLimitError extends BugReportRequestError {
     this.name = "BugReportRateLimitError";
     this.retryAfterSeconds = retryAfterSeconds;
   }
-}
-
-function configuredValue(param, envName) {
-  // config-input: CMS_ADMIN_BUILD_REVISION, CMS_DEPLOYMENT_ENVIRONMENT
-  const local = process.env[envName]?.trim();
-  return local || param.value().trim();
 }
 
 function validateMultipartRequest(req) {
@@ -355,15 +338,9 @@ function validateRuntimeContext(buildRevision, deploymentEnvironment) {
 }
 
 function runtimeContextReader(deps) {
-  const environmentFn = deps.deploymentEnvironment ?? (() => configuredValue(
-    BUG_REPORT_DEPLOYMENT_ENVIRONMENT, "CMS_DEPLOYMENT_ENVIRONMENT",
-  ));
-  const buildRevisionFn = deps.buildRevision ?? (async () => {
-    if (environmentFn() === "production") return readLiveAdminBuildRevision({ fetchFn: deps.fetchFn });
-    const local = configuredValue(BUG_REPORT_BUILD_REVISION, "CMS_ADMIN_BUILD_REVISION");
-    if (!BUILD_REVISION_PATTERN.test(local)) throw new AdminStatusRevisionError();
-    return local;
-  });
+  const environmentFn = deps.deploymentEnvironment ?? deploymentEnvironment;
+  const buildRevisionFn = deps.buildRevision ??
+    (() => readDeployedRevision({ fetchFn: deps.fetchFn, environment: environmentFn() }));
   return async () => {
     const buildRevision = await buildRevisionFn();
     const deploymentEnvironment = environmentFn();

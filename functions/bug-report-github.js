@@ -23,6 +23,7 @@ const GITHUB_WEBHOOK_SECRET = defineSecret(
   "CMS_BUG_REPORT_GITHUB_WEBHOOK_SECRET",
 );
 const { githubIssueRepository, githubFixRepository, repositoryIdentity } = require("./lib/bug-report-github-config");
+const { readServedRevisions } = require("./lib/admin-status-revision");
 
 const API_VERSION = "2022-11-28";
 const MAX_ATTEMPTS = 5;
@@ -38,6 +39,7 @@ const GITHUB_DELIVERY_PATTERN = /^[A-Za-z0-9-]{1,100}$/;
 const GITHUB_SIGNATURE_PATTERN = /^sha256=[0-9a-f]{64}$/;
 const GITHUB_ISSUE_STATES = new Set(["open", "closed", "all"]);
 const MAX_GITHUB_NUMBER = 2_147_483_647;
+const COMMIT_SHA_PATTERN = /^[0-9a-f]{40}$/;
 const MAX_WEBHOOK_BODY_BYTES = 1024 * 1024;
 const WEBHOOK_REPORT_LIMIT = 50;
 const MAX_ISSUE_BODY = 20_000;
@@ -322,6 +324,10 @@ function createGithubClient(deps = {}) {
     ),
     getIssue: (number) => request("GET", `/issues/${number}`),
     getPullRequest: (number) => request("GET", `/pulls/${number}`),
+    compareCommits: (base, head) => request(
+      "GET",
+      `/compare/${encodeURIComponent(base)}...${encodeURIComponent(head)}?per_page=1`,
+    ),
     listChecks: (sha) => request("GET", `/commits/${encodeURIComponent(sha)}/check-runs?per_page=100`),
     getCommitStatus: (sha) => request("GET", `/commits/${encodeURIComponent(sha)}/status?per_page=100`),
     listDeployments: (sha) => request("GET", `/deployments?sha=${encodeURIComponent(sha)}&per_page=30`),
@@ -500,6 +506,8 @@ async function pullRequestState(client, number) {
       state: pull.state === "closed" ? "closed" : "open",
       draft: pull.draft === true,
       merged: pull.merged === true,
+      mergeCommitSha: pull.merged === true && COMMIT_SHA_PATTERN.test(pull.merge_commit_sha ?? "")
+        ? pull.merge_commit_sha : null,
       headSha: pull.head.sha,
       reviewState: reviewState(reviews),
       checksState: combinedChecksState(checks, status),
@@ -599,6 +607,7 @@ async function syncPullRequestState(row, client, number) {
         state: "closed",
         draft: current?.draft ?? false,
         merged: current?.merged ?? false,
+        mergeCommitSha: current?.mergeCommitSha ?? null,
         headSha: current?.headSha ?? "",
         reviewState: current?.reviewState ?? "none",
         checksState: current?.checksState ?? "none",
@@ -611,19 +620,21 @@ async function syncPullRequestState(row, client, number) {
   }
 }
 
-function timelinePullRequestNumber(issue, repository) {
+const PULL_REQUEST_API_URL =
+  /^https:\/\/api\.github\.com\/repos\/([A-Za-z0-9_.-]{1,100}\/[A-Za-z0-9_.-]{1,100})\/pulls\/([1-9]\d*)$/i;
+
+function timelinePullRequest(issue) {
   const number = issue?.number;
   if (!Number.isSafeInteger(number) || number < 1 || number > MAX_GITHUB_NUMBER ||
       !issue.pull_request) return null;
-  const expected = `https://api.github.com/repos/${repository}/pulls/${number}`;
-  return issue.pull_request.url?.toLowerCase() === expected.toLowerCase()
-    ? number : null;
+  const match = PULL_REQUEST_API_URL.exec(issue.pull_request.url ?? "");
+  return match && Number(match[2]) === number ? { repository: match[1].toLowerCase(), number } : null;
 }
 
-async function timelineEventPullRequestNumbers(client, event, issueNumber, pullRepository) {
+async function timelineEventPullRequests(client, event, issueNumber) {
   if (event?.event === "cross-referenced") {
-    const number = timelinePullRequestNumber(event.source?.issue, pullRepository);
-    return number ? [number] : [];
+    const pull = timelinePullRequest(event.source?.issue);
+    return pull ? [pull] : [];
   }
   if (!["connected", "disconnected"].includes(event?.event) || typeof event.node_id !== "string" ||
       !event.node_id || event.node_id.length > 200) return [];
@@ -636,19 +647,25 @@ async function timelineEventPullRequestNumbers(client, event, issueNumber, pullR
     node.number === issueNumber && isConfiguredRepo(node));
   if (!belongsToIssue) return [];
   return endpoints.filter((node) => node?.__typename === "PullRequest" &&
-    node?.repository?.nameWithOwner?.toLowerCase() === pullRepository.toLowerCase() &&
+    typeof node?.repository?.nameWithOwner === "string" &&
     Number.isSafeInteger(node.number) && node.number > 0 && node.number <= MAX_GITHUB_NUMBER)
-    .map((node) => node.number);
+    .map((node) => ({ repository: node.repository.nameWithOwner.toLowerCase(), number: node.number }));
 }
 
-async function discoverIssuePullRequests(client, issues, manualNumbers, pullRepository = client.repository) {
-  if (manualNumbers.length >= 10) return [];
-  const manual = new Set(manualNumbers);
+// One timeline read serves every requested repository. The result maps each
+// repository to its referenced pull requests, newest reference first. Manual
+// numbers belong to the first repository, the report's current namespace.
+async function discoverIssuePullRequests(client, issues, manualNumbers, pullRepositories) {
+  const repositories = pullRepositories.map((repository) => repository.toLowerCase());
+  const found = new Map(repositories.map((repository) => [repository, []]));
+  // Ten manual links leave no room for discovery; skip the timeline reads.
+  if (manualNumbers.length >= 10) return found;
+  const manual = new Set(manualNumbers.map((number) => `${repositories[0]}#${number}`));
   const references = new Map();
   let sequence = 0;
-  const remember = (target, number, rank) => {
-    const previous = target.get(number);
-    if (!previous || rank.at >= previous.at) target.set(number, rank);
+  const remember = (target, key, rank) => {
+    const previous = target.get(key);
+    if (!previous || rank.at >= previous.at) target.set(key, rank);
   };
   for (const issue of issues) {
     if (issue.unavailable) continue;
@@ -658,22 +675,70 @@ async function discoverIssuePullRequests(client, issues, manualNumbers, pullRepo
       const events = await client.listIssueTimeline(issue.number, page);
       if (!Array.isArray(events)) throw new GithubHandoffError("The GitHub timeline response is invalid");
       for (const event of events) {
-        const numbers = await timelineEventPullRequestNumbers(client, event, issue.number, pullRepository);
+        const pulls = await timelineEventPullRequests(client, event, issue.number);
         const at = timestampMillis(event?.created_at ?? event?.updated_at);
         const rank = { at: Number.isFinite(at) ? at : 0, sequence: ++sequence };
-        for (const number of numbers) {
-          if (manual.has(number)) continue;
-          if (event.event === "disconnected") connections.delete(number);
-          else remember(event.event === "connected" ? connections : mentions, number, rank);
+        for (const pull of pulls) {
+          const key = `${pull.repository}#${pull.number}`;
+          if (!found.has(pull.repository) || manual.has(key)) continue;
+          if (event.event === "disconnected") connections.delete(key);
+          else remember(event.event === "connected" ? connections : mentions, key, rank);
         }
       }
       if (events.length < 100) break;
     }
-    for (const [number, rank] of [...mentions, ...connections]) remember(references, number, rank);
+    for (const [key, rank] of [...mentions, ...connections]) remember(references, key, rank);
   }
-  return [...references].sort((left, right) =>
-    right[1].at - left[1].at || right[1].sequence - left[1].sequence)
-    .map(([number]) => number).slice(0, 10);
+  for (const [key] of [...references].sort((left, right) =>
+    right[1].at - left[1].at || right[1].sequence - left[1].sequence)) {
+    const [repository, number] = key.split("#");
+    found.get(repository).push(Number(number));
+  }
+  return new Map([...found].map(([repository, numbers]) => [repository, numbers.slice(0, 10)]));
+}
+
+// A merged fix is live when its merge commit is each served revision of the fix
+// repository or an ancestor of it. A rollback can serve an older revision, so
+// stored evidence holds only for the revisions it was checked against. When a
+// revision is unreadable, stored evidence stays only if it covers every revision
+// that could be read; a failed comparison leaves the fix pending.
+async function markLivePullRequests(row, pullClient, pulls, deps) {
+  if (!deps.servedRevisions || !row.fixRepository ||
+      pullClient.repository?.toLowerCase() !== row.fixRepository.repository.toLowerCase()) return;
+  const merged = pulls.map((entry) => entry.pullRequest)
+    .filter((pull) => pull.merged && !pull.unavailable && pull.mergeCommitSha);
+  if (!merged.length) return;
+  const previous = new Map((row.record.links?.pullRequests ?? []).map((pull) => [pull.number, pull]));
+  const known = (pull) => {
+    const stored = previous.get(pull.number);
+    return stored?.live === true && stored.mergeCommitSha === pull.mergeCommitSha ? stored : null;
+  };
+  const keep = (pull) => {
+    if (known(pull)) Object.assign(pull, { live: true, liveRevisions: known(pull).liveRevisions });
+  };
+  let revisions;
+  try {
+    revisions = await deps.servedRevisions();
+  } catch (error) {
+    logger.warn("Production revision unavailable for live fix verification", { error: error?.name ?? "Error" });
+    const readable = error?.knownRevisions ?? [];
+    merged.filter((pull) => readable.every((revision) => known(pull)?.liveRevisions?.includes(revision)))
+      .forEach(keep);
+    return;
+  }
+  await Promise.all(merged.map(async (pull) => {
+    if (String(known(pull)?.liveRevisions) === String(revisions)) return keep(pull);
+    try {
+      const comparisons = await Promise.all(revisions.map((revision) =>
+        pullClient.compareCommits(pull.mergeCommitSha, revision)));
+      if (comparisons.every((comparison) => ["ahead", "identical"].includes(comparison?.status))) {
+        Object.assign(pull, { live: true, liveRevisions: revisions });
+      }
+    } catch (error) {
+      // Evidence for an earlier revision does not cover this one: stay pending.
+      logger.warn("Live fix verification read failed", { pullRequest: pull.number, status: error?.status ?? null });
+    }
+  }));
 }
 
 async function executeGithubOperation(row, client, origin = ADMIN_ORIGIN, deps = {}) {
@@ -742,6 +807,7 @@ async function executeGithubOperation(row, client, origin = ADMIN_ORIGIN, deps =
       "pull request",
     );
     const pull = await pullRequestState(pullClient, row.targetNumber);
+    await markLivePullRequests(row, pullClient, [pull], deps);
     return { issues: [], pullRequests: [pull.pullRequest], manualPullRequestNumber: row.targetNumber, workflowRunUrls: pull.workflowRunUrls, deploymentRunUrls: pull.deploymentRunUrls };
   }
   if (row.operation === "sync") {
@@ -758,11 +824,25 @@ async function executeGithubOperation(row, client, origin = ADMIN_ORIGIN, deps =
       }
     }
     const manualNumbers = manualPullRequestNumbers(row.record.links);
-    const discoveredPullRequestNumbers = await discoverIssuePullRequests(client, issues, manualNumbers, pullClient.repository);
-    const pullNumbers = [...manualNumbers, ...discoveredPullRequestNumbers.slice(0, 10 - manualNumbers.length)];
+    // Fixes merge in the fix repository. A report without manual links follows
+    // its issue's references there, which moves its pull request namespace.
+    const namespace = String(row.originalPullRepository?.repository ?? pullClient.repository).toLowerCase();
+    const fixRepository = row.fixRepository?.repository.toLowerCase();
+    const followFix = Boolean(fixRepository && deps.fixPullRequestClient) && manualNumbers.length === 0 &&
+      fixRepository !== namespace;
+    const discovered = await discoverIssuePullRequests(client, issues, manualNumbers,
+      [namespace, ...(followFix ? [fixRepository] : [])]);
+    const fixNumbers = followFix ? discovered.get(fixRepository) : [];
+    const targetClient = fixNumbers.length ? deps.fixPullRequestClient() : pullClient;
+    const discoveredPullRequestNumbers = fixNumbers.length ? fixNumbers
+      : discovered.get(namespace);
+    const pullNumbers = [...(fixNumbers.length ? [] : manualNumbers),
+      ...discoveredPullRequestNumbers.slice(0, 10 - manualNumbers.length)];
     const pulls = await Promise.all(pullNumbers
-      .map((number) => syncPullRequestState(row, pullClient, number)));
+      .map((number) => syncPullRequestState(row, targetClient, number)));
+    await markLivePullRequests(row, targetClient, pulls, deps);
     return {
+      ...(fixNumbers.length ? { pullRepository: row.fixRepository } : {}),
       issues,
       pullRequests: pulls.map((entry) => entry.pullRequest),
       discoveredPullRequestNumbers,
@@ -859,7 +939,7 @@ function existingGithubStateChanged(current = {}, next = {}) {
   if (firstIssueState || firstManualPullState) return true;
   const fieldsByKind = {
     githubIssues: ["state", "unavailable", "reopenedAt"],
-    pullRequests: ["state", "unavailable", "draft", "merged", "reviewState", "checksState", "deploymentState"],
+    pullRequests: ["state", "unavailable", "draft", "merged", "reviewState", "checksState", "deploymentState", "live"],
   };
   return Object.entries(fieldsByKind).some(([kind, fields]) =>
     (current[kind] ?? []).some((before) => {
@@ -887,8 +967,9 @@ async function settleGithubSuccess(row, result, deps = {}) {
     const currentRepository = result.pullRepository
       ? reportPullRepository(current, row.issueRepository, row.fixRepository) : null;
     const sameCurrentRepository = currentRepository && sameRepository(currentRepository, result.pullRepository);
+    // A job may move the namespace it read; a namespace changed since then is stale.
     const stalePulls = currentRepository && !sameCurrentRepository &&
-      (row.operation !== "attach_pull_request" || !sameRepository(currentRepository, row.originalPullRepository));
+      !sameRepository(currentRepository, row.originalPullRepository);
     const switchingRepository = currentRepository && !sameCurrentRepository && !stalePulls;
     let currentLinks = currentRepository ? pullLinksForRepository(current.links, currentRepository.repository) : current.links;
     if (switchingRepository) {
@@ -1128,12 +1209,18 @@ async function processGithubOutboxRow(id, deps = {}) {
         : deps.pullRequestClient ?? createGithubClient({ ...deps, ...row.pullRepository });
       row.record = { ...row.record, links: pullLinksForRepository(row.record.links, row.originalPullRepository.repository) };
     }
+    // Built only when a sync finds a fix pull request outside its namespace.
+    let fixClient;
+    const fixPullRequestClient = () => fixClient ??= sameRepository(row.fixRepository, row.issueRepository) ? client
+      : deps.pullRequestClient ?? createGithubClient({ ...deps, ...row.fixRepository });
     const result = await executeGithubOperation(
       row,
       client,
       deps.adminOrigin ?? ADMIN_ORIGIN,
       {
         pullRequestClient,
+        fixPullRequestClient,
+        servedRevisions: deps.servedRevisions ?? (() => readServedRevisions({ fetchFn: deps.fetchFn })),
         onReusableIssueSelected: async (number) => {
           const at = now();
           await row.ref.update({
@@ -1144,7 +1231,8 @@ async function processGithubOutboxRow(id, deps = {}) {
         },
       },
     );
-    if (row.pullRepository) result.pullRepository = row.pullRepository;
+    // A sync that moved to the fix repository names that repository itself.
+    if (row.pullRepository) Object.assign(result, { pullRepository: row.pullRepository, ...result });
     await settleGithubSuccess(row, result, { firestore, now });
     return { state: "delivered" };
   } catch (error) {

@@ -16,6 +16,14 @@ describe("evidence-based progress sequence", () => {
     expect(screen.getByText("Fix in review").closest("li")).toHaveAttribute("data-state", "ahead");
     expect(screen.getByText("Fix released").closest("li")).toHaveAttribute("data-state", "ahead");
   });
+  it("completes live verification for a live fix and leaves release to an administrator", () => {
+    const view = render(<ReportProgressSteps progress={{ ...base, phase: "live", stage: "live", label: "Live in Boardwalk", deployment: "verified" }} />);
+    const live = view.container.querySelector('[aria-current="step"]')!;
+    expect(live).toHaveTextContent("Live in Boardwalk");
+    expect(live).toHaveAttribute("data-state", "done");
+    expect(screen.queryByText("Live verification")).not.toBeInTheDocument();
+    expect(screen.getByText("Fix released").closest("li")).toHaveAttribute("data-state", "ahead");
+  });
   it("keeps administrative closure separate from evidence that a fix was released", () => {
     render(<ReportProgressSteps progress={{ ...base, phase: "dismissed", label: "Closed", active: false }} />);
     expect(screen.queryByText("Fix released")).not.toBeInTheDocument();

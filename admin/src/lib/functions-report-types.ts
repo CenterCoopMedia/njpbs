@@ -33,8 +33,8 @@ export interface BugReportResolution {
 }
 
 export interface BugReportProgress {
-  stage?: "received" | "investigating" | "fixing" | "review" | "awaiting_live" | "closed";
-  phase: "received" | "acknowledged" | "queued" | "in_progress" | "ready_for_review" | "changes_requested" | "checks_failed" | "merged" | "closed" | "resolved" | "dismissed" | "blocked" | "needs_attention" | "reopened";
+  stage?: "received" | "investigating" | "fixing" | "review" | "awaiting_live" | "live" | "closed";
+  phase: "received" | "acknowledged" | "queued" | "in_progress" | "ready_for_review" | "changes_requested" | "checks_failed" | "merged" | "live" | "closed" | "resolved" | "dismissed" | "blocked" | "needs_attention" | "reopened";
   label: string;
   detail: string;
   active: boolean;
@@ -47,10 +47,11 @@ export interface BugReportProgress {
     state: "open" | "closed" | "unavailable";
     draft: boolean;
     merged: boolean;
+    live: boolean;
     reviewState: "approved" | "changes_requested" | "pending" | "none";
     checksState: "success" | "failure" | "pending" | "none";
   }>;
-  deployment: "unverified";
+  deployment: "verified" | "unverified";
 }
 
 export interface BugReportRecord {

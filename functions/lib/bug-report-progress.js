@@ -12,6 +12,7 @@ const LABELS = Object.freeze({
   changes_requested: ["Changes requested", "The proposed fix needs changes before it can proceed."],
   checks_failed: ["Checks need attention", "The proposed fix has a failed check and needs attention."],
   merged: ["Merged; live verification pending", "The code change is merged. The live fix has not been verified."],
+  live: ["Live in Boardwalk", "The fix is in the live Boardwalk Admin and Functions release. Public site and Workers releases are not checked. An administrator confirms the fix before resolving this report."],
   closed: ["Engineering work closed", "The linked engineering work is closed. This does not confirm a live fix or resolve this report."],
   resolved: ["Resolved", "An administrator marked this report resolved."],
   dismissed: ["Closed", "An administrator closed this report without marking it resolved."],
@@ -62,7 +63,7 @@ function progressEvidence(record) {
     resolution: record?.actionableResolution ?? null,
     fixStatus: record?.githubDelivery?.fixStatus ?? "not_requested",
     issues: numberedRows(record?.links?.githubIssues).map(({ number, state, reopenedAt, unavailable }) => ({ number, state, reopenedAt, unavailable: unavailable === true })),
-    pulls: numberedRows(record?.links?.pullRequests).map(({ number, state, draft, merged, reviewState, checksState, unavailable }) => ({ number, state, draft, merged, reviewState, checksState, unavailable: unavailable === true })),
+    pulls: numberedRows(record?.links?.pullRequests).map(({ number, state, draft, merged, reviewState, checksState, unavailable, live }) => ({ number, state, draft, merged, reviewState, checksState, unavailable: unavailable === true, live: live === true })),
   });
 }
 
@@ -104,6 +105,7 @@ function reportProgress(record, { now = new Date() } = {}) {
     state: pull.unavailable ? "unavailable" : pull.state,
     draft: pull.draft === true,
     merged: pull.merged === true,
+    live: pull.merged === true && pull.live === true,
     reviewState: ["approved", "changes_requested", "pending", "none"].includes(pull.reviewState)
       ? pull.reviewState : "none",
     checksState: ["success", "failure", "pending", "none"].includes(pull.checksState)
@@ -123,7 +125,9 @@ function reportProgress(record, { now = new Date() } = {}) {
   else if (openPulls.some((pull) => pull.checksState === "failure")) phase = "checks_failed";
   else if (openPulls.some((pull) => pull.draft)) phase = "in_progress";
   else if (openPulls.length) phase = "ready_for_review";
-  else if (!reopened && pullRequests.some((pull) => pull.merged)) phase = "merged";
+  else if (!reopened && pullRequests.some((pull) => pull.merged)) {
+    phase = pullRequests.every((pull) => !pull.merged || pull.live) ? "live" : "merged";
+  }
   else if (delivery.fixStatus === "running") phase = "in_progress";
   else if (delivery.fixStatus === "pending") phase = "queued";
   else if (reopened) phase = "reopened";
@@ -146,7 +150,8 @@ function reportProgress(record, { now = new Date() } = {}) {
     (record?.links?.pullRequestNumbers ?? []).some((number) => !pullRequests.some((item) => item.number === number))) syncState = "pending";
   return {
     phase,
-    stage: ["resolved", "dismissed"].includes(phase) ? "closed" : phase === "merged" ? "awaiting_live"
+    stage: ["resolved", "dismissed"].includes(phase) ? "closed" : phase === "live" ? "live"
+      : phase === "merged" ? "awaiting_live"
       : ["ready_for_review", "changes_requested", "checks_failed"].includes(phase) ? "review"
         : phase === "in_progress" && (pullRequests.length || ["running", "draft_pr_open"].includes(delivery.fixStatus)) ? "fixing"
           : phase === "received" ? "received" : "investigating",
@@ -158,7 +163,7 @@ function reportProgress(record, { now = new Date() } = {}) {
     syncState,
     issues,
     pullRequests,
-    deployment: "unverified",
+    deployment: phase === "live" ? "verified" : "unverified",
   };
 }
 
