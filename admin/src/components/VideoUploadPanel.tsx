@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Button, InlineMessage, Select, Textarea, TextInput } from "./ui/Primitives";
 import { Icon } from "./ui/Icon";
+import { SUCCESS_NOTICE_TIMEOUT_MS } from "./ui/SuccessNoticeRegion";
 import { VideoRightsFields } from "./media/VideoRightsFields";
 import { MediaUploadTagInput } from "./media/MediaTagInput";
 import { EMPTY_UPLOAD_MEDIA_TAGS, uploadMediaTagsText, type UploadMediaTagDraft } from "../lib/media-tags";
@@ -177,6 +178,9 @@ export function VideoUploadPanel({ sourceId, userId, getIdToken, onUploaded, onA
   const [cancelingIds, setCancelingIds] = useState<string[]>([]);
   const [states, setStates] = useState<Record<string, { phase: Phase; bytes: number; error?: string }>>({});
   const [notice, setNotice] = useState("");
+  // An upload confirmation clears itself like other success notices; problem notices stay.
+  const completionNotice = useRef("");
+  const [noticeHeld, setNoticeHeld] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
   const input = useRef<HTMLInputElement>(null);
   const uploadButton = useRef<HTMLButtonElement>(null);
@@ -374,7 +378,8 @@ export function VideoUploadPanel({ sourceId, userId, getIdToken, onUploaded, onA
       onMoreWorkRef.current?.(routedLeft);
       if (alive.current) {
         recordUpload?.(row.name, asset);
-        setNotice(videoUploadCompletionMessage(asset));
+        completionNotice.current = videoUploadCompletionMessage(asset);
+        setNotice(completionNotice.current);
         onUploadedRef.current(asset);
       }
     } catch (error) {
@@ -639,6 +644,11 @@ export function VideoUploadPanel({ sourceId, userId, getIdToken, onUploaded, onA
   const acceptsFiles = ownsQueue && !isClearing && transfers.length < MAX_TRANSFERS;
   useEffect(() => { onIntakeChangeRef.current?.(acceptsFiles); }, [acceptsFiles]);
   useEffect(() => () => onIntakeChangeRef.current?.(false), []);
+  useEffect(() => {
+    if (!notice || notice !== completionNotice.current || noticeHeld) return;
+    const timer = window.setTimeout(() => setNotice(current => current === notice ? "" : current), SUCCESS_NOTICE_TIMEOUT_MS);
+    return () => window.clearTimeout(timer);
+  }, [notice, noticeHeld]);
   const trayRows: readonly UploadTrayRow[] = transfers.map(row => {
     const state = states[row.id];
     const running = active.includes(row.id);
@@ -766,7 +776,7 @@ export function VideoUploadPanel({ sourceId, userId, getIdToken, onUploaded, onA
     {canChooseCollection && collectionPicker.error ? <InlineMessage tone="warning" title="Some collections could not be loaded">
       <Button disabled={collectionPicker.loading} onClick={collectionPicker.loadMore}>Retry loading collections</Button>
     </InlineMessage> : null}
-    {notice ? <p role="status">{notice}</p> : null}
+    {notice ? <p role="status" onMouseEnter={() => setNoticeHeld(true)} onMouseLeave={() => setNoticeHeld(false)}>{notice}</p> : null}
     <ul>{transfers.map(row => {
       const state = states[row.id];
       const running = active.includes(row.id);

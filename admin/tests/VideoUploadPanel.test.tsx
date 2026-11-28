@@ -2,6 +2,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HttpError, RequestNotDispatchedError } from "../src/lib/functions";
 import { VideoUploadPanel } from "../src/components/VideoUploadPanel";
+import { SUCCESS_NOTICE_TIMEOUT_MS } from "../src/components/ui/SuccessNoticeRegion";
 import { startVideoUpload, transferVideo, cancelVideoUpload } from "../src/lib/source-media-upload";
 import { installTestLockManager } from "./helpers/web-locks";
 import { finishVideoUpload, resetUploadRouter, routeChosenFiles, uploadRouterSnapshot } from "../src/lib/upload-router";
@@ -27,6 +28,32 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 describe("video upload panel", () => {
+
+  it("clears an upload confirmation after the success notice time unless the pointer rests on it", async () => {
+    const asset = { id: "asset", sourceId: props.sourceId, name: "Storm footage",
+      collectionPlacement: "none", viewingCopy: { state: "processing" },
+    } as Awaited<ReturnType<typeof transferVideo>>;
+    vi.mocked(transferVideo).mockResolvedValueOnce(asset);
+    render(<VideoUploadPanel {...props} />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Upload media" })).toBeEnabled());
+    act(() => routeChosenFiles([new File(["data"], "storm.mp4", { type: "video/mp4", lastModified: 42 })]));
+    await screen.findByRole("group", { name: "Details before upload: storm.mp4" });
+    fireEvent.click(screen.getByRole("button", { name: "Start upload storm.mp4" }));
+    const message = await screen.findByText("Storm footage uploaded. Its viewing copy is processing.");
+    vi.useFakeTimers();
+    try {
+      fireEvent.mouseEnter(message);
+      act(() => { vi.advanceTimersByTime(SUCCESS_NOTICE_TIMEOUT_MS + 1_000); });
+      expect(message).toBeInTheDocument();
+      fireEvent.mouseLeave(message);
+      act(() => { vi.advanceTimersByTime(SUCCESS_NOTICE_TIMEOUT_MS - 1); });
+      expect(message).toBeInTheDocument();
+      act(() => { vi.advanceTimersByTime(1); });
+      expect(screen.queryByText("Storm footage uploaded. Its viewing copy is processing.")).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
   it("retains a failed file's collection through reopening while its batch peer finishes in a different collection", async () => {
     const privateId = "a".repeat(64);
     const sharedId = "b".repeat(64);
