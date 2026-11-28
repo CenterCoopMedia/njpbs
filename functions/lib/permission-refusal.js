@@ -1,33 +1,42 @@
 "use strict";
 
-const { linkedRequests } = require("./session-refusal");
+const { AsyncLocalStorage } = require("node:async_hooks");
 const { usageHash } = require("./usage-person");
 
-const callers = new WeakMap();
+const records = new AsyncLocalStorage();
 
-// The shared auth helpers record who is calling and, when they refuse, the level that was
-// required. The CMS edge reads it back if the response is a 403 (functions/lib/cms-edge.js).
-// Only the usage-analytics digest of the uid is kept.
-function markCaller(req, { uid, accessTier, required } = {}) {
-  if (!req || typeof req !== "object") return;
-  const fields = {
-    ...(typeof uid === "string" ? { caller: usageHash(uid) } : {}),
-    ...(accessTier !== undefined ? { accessTier } : {}),
-    ...(required !== undefined ? { required } : {}),
-  };
-  for (const target of linkedRequests(req)) callers.set(target, { ...callers.get(target), ...fields });
+// The outermost CMS edge wrapper opens one record per request; a nested wrapper gets null and
+// reuses the outer record, so a refusal is logged once.
+function openRefusalRecord() {
+  return records.getStore() ? null : {};
 }
 
-function permissionRefusal(req, functionName, requestId) {
-  const caller = callers.get(req) ?? {};
+function runWithRefusalRecord(record, run) {
+  return record ? records.run(record, run) : run();
+}
+
+/**
+ * The shared auth helpers record who is calling and, when they refuse, the level that was
+ * required. Only the usage-analytics digest of the uid is kept.
+ * @param {{ uid?: string, accessTier?: string, required?: string }} fields
+ */
+function markCaller({ uid, accessTier, required }) {
+  const record = records.getStore();
+  if (!record) return;
+  if (typeof uid === "string") record.caller = usageHash(uid);
+  if (accessTier !== undefined) record.accessTier = accessTier;
+  if (required !== undefined) record.required = required;
+}
+
+function permissionRefusal(record, functionName, requestId) {
   return {
     event: "permission_refused",
     function: functionName ?? null,
-    required: caller.required ?? null,
-    accessTier: caller.accessTier ?? null,
-    caller: caller.caller ?? null,
+    required: record.required ?? null,
+    accessTier: record.accessTier ?? null,
+    caller: record.caller ?? null,
     requestId: requestId ?? null,
   };
 }
 
-module.exports = { markCaller, permissionRefusal };
+module.exports = { markCaller, openRefusalRecord, permissionRefusal, runWithRefusalRecord };

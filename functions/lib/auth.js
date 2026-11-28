@@ -123,6 +123,8 @@ async function verifyAuthToken(authHeader, { checkRevoked = true, cacheRevocatio
   if (sessionOutlivedMaximum(decoded.auth_time)) {
     throw new AuthError("This session ended. Sign in again");
   }
+  // Every verified caller, including handlers that verify the token themselves.
+  markCaller({ uid: decoded.uid });
 
   return {
     uid: decoded.uid,
@@ -195,9 +197,7 @@ async function isAdmin(uid, emailVerified = true, authTime = null) {
 
 async function requireAuth(req, options = {}) {
   try {
-    const user = await verifyAuthToken(req.headers.authorization, options);
-    markCaller(req, { uid: user.uid });
-    return user;
+    return await verifyAuthToken(req.headers.authorization, options);
   } catch (error) {
     if (error instanceof AuthError && error.code === SESSION_EXPIRED_CODE) markSessionRefused(req, error.reason);
     throw error;
@@ -216,7 +216,7 @@ async function requirePrincipal(req, options = {}) {
   const user = await requireAuth(req, authOptions);
   const snapshot = await firestore.collection("users").doc(user.uid).get();
   const profile = snapshot.exists ? snapshot.data() : null;
-  markCaller(req, { accessTier: accessTierOf(profile) });
+  markCaller({ accessTier: accessTierOf(profile) });
   if (sessionPredatesWatermark(user.authTime, profile)) {
     markSessionRefused(req);
     throw new AuthError("This session was revoked. Sign in again");
@@ -225,12 +225,12 @@ async function requirePrincipal(req, options = {}) {
   if (tiersActive &&
       (user.emailVerified !== true || !isAccessTier(profile.accessTier) ||
         (profile.active !== undefined && profile.active !== true))) {
-    markCaller(req, { required: "active_staff" });
+    markCaller({ required: "active_staff" });
     throw new ForbiddenError("An active, verified staff access level is required");
   }
   const actor = { ...user, principal: await registeredPrincipalFromUserDoc(firestore, user.uid, profile, undefined, tiersActive) };
   if (previewStaff && !isApprovedPreviewStaff(user, profile, actor.principal)) {
-    markCaller(req, { required: "preview_staff" });
+    markCaller({ required: "preview_staff" });
     throw new ForbiddenError("An active, verified staff account is required");
   }
   return includeAccountStatus
@@ -241,9 +241,9 @@ async function requirePrincipal(req, options = {}) {
 async function requireAdmin(req) {
   const user = await requireAuth(req);
   const { role, accessTier } = await administrativeAccess(user.uid, user.emailVerified, user.authTime);
-  markCaller(req, { accessTier });
+  markCaller({ accessTier });
   if (role !== "admin" && role !== "super_admin") {
-    markCaller(req, { required: "admin" });
+    markCaller({ required: "admin" });
     throw new ForbiddenError(ADMIN_ACCESS_REQUIRED);
   }
   return user;
@@ -252,9 +252,9 @@ async function requireAdmin(req) {
 async function requireSuperAdmin(req) {
   const user = await requireAuth(req);
   const { role, accessTier } = await administrativeAccess(user.uid, user.emailVerified, user.authTime);
-  markCaller(req, { accessTier });
+  markCaller({ accessTier });
   if (role !== "super_admin") {
-    markCaller(req, { required: "owner" });
+    markCaller({ required: "owner" });
     throw new ForbiddenError(OWNER_ACCESS_REQUIRED);
   }
   return user;

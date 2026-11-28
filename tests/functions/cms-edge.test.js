@@ -99,6 +99,28 @@ describe("CMS Function edge boundary", () => {
     });
   });
 
+  it("logs once through nested edge wrappers and records a caller who verified the token directly", async () => {
+    vi.stubEnv("FUNCTION_TARGET", "cmsSyntheticReader");
+    vi.spyOn(firebasePkg.admin.auth(), "verifyIdToken").mockResolvedValue({ uid: "staff-editor", email_verified: true });
+    const logger = { error: vi.fn(), warn: vi.fn() };
+    const edge = { logger, readSecret: () => "expected-secret" };
+    const inner = withCmsEdge(async (req, res) => {
+      await authPkg.verifyAuthToken(req.headers.authorization);
+      res.status(403).json({ error: "Unavailable" });
+    }, edge);
+    const outer = withCmsEdge((req, res) => inner(req, res), edge);
+    await outer({ headers: { "x-njpbs-cms-edge": "expected-secret", authorization: "Bearer nested-token" } }, responseDouble());
+    expect(logger.warn).toHaveBeenCalledOnce();
+    expect(logger.warn).toHaveBeenCalledWith("permission_refused", {
+      event: "permission_refused",
+      function: "cmsSyntheticReader",
+      required: null,
+      accessTier: null,
+      caller: "2f82f25ec33a07569fe10ecedd1d9044ed20f9880e63721c05a3c731080d5b26",
+      requestId: null,
+    });
+  });
+
   it("logs nothing for a permitted call", async () => {
     const { logger, run } = refusalFixture("staff-admin", "admin");
     await run();
