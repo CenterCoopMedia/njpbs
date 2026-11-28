@@ -1908,7 +1908,7 @@ export function SourceMediaLibrary({ principal, source, getIdToken, userId, onEx
           onAdmissionFailed={message => notice.show(message, { tone: "error" })}
           onCanceled={message => notice.show(message)} onIntakeChange={setUploadCanIntake} onOpenSheet={showVideoUpload}
           onTrayEmptyFocus={() => setUploadFocusRequest(value => value + 1)} onTransferStarted={() => setUploadOpen(false)}
-          openSheetBlockedReason={uploadOpenBlockedReason} presentation="sheet" rejectedFiles={routedRejectedFiles} trayTarget={uploadTrayTarget}
+          openSheetBlockedReason={uploadOpenBlockedReason} presentation="sheet" rejectedFiles={routedRejectedFiles} trayTarget={visibleUploadOpen ? null : uploadTrayTarget}
           onUploaded={asset => { notice.show(videoUploadCompletionMessage(asset), { preserveOnNextRoute: true }); setMediaSourceCount(source.id, null); resetFilters(); setAttempt(value => value + 1); }} />,
       } : null}
     />

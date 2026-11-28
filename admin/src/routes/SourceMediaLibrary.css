@@ -25,6 +25,28 @@
    bottom of the results. Phones show one column of cards, two from 35rem. */
 .source-video-results { position: relative; display: grid; gap: var(--cms-space-4); min-width: 0; }
 .source-video-upload-tray { grid-column: 1 / -1; min-width: 0; }
+/* With few results the tray still sits at the bottom edge of the screen: the results fill the
+   visible height and the tray takes the space left below them. Longer results already scroll
+   past the screen, where the tray's sticky dock keeps it on the bottom edge. */
+.source-video-results:not([data-bulk-open]):has(> .source-video-upload-tray .media-upload-tray-dock) {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100dvh - var(--workspace-header-height, 0px) - var(--media-chrome-height, 0px) - var(--cms-space-6));
+}
+.source-video-results:not([data-bulk-open]) > .source-video-upload-tray { margin-top: auto; }
+/* The portal wrapper is exactly the dock's height, so the dock's own sticky position has no
+   room to move. Pin the wrapper to the bottom edge instead; it yields to the selection bar
+   and to focused results through the shared dock rules. */
+.source-video-results > .source-video-upload-tray:has(.media-upload-tray-dock) {
+  position: sticky;
+  z-index: var(--cms-z-selection-bar);
+  bottom: var(--cms-space-4);
+  pointer-events: none;
+}
+.source-video-results:has(.media-selection-dock) > .source-video-upload-tray,
+.source-video-results:has(:focus):not(:has(.media-upload-tray-dock :focus)):not(:has(.media-selection-dock :focus)) > .source-video-upload-tray {
+  position: static;
+}
 @media (min-width: 62rem) {
   .source-video-results[data-bulk-open] { grid-template-columns: minmax(0, 1fr) auto; align-items: start; }
   .source-video-results[data-bulk-open] > .ui-inspector { grid-column: 2; grid-row: 1; }

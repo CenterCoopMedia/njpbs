@@ -1998,6 +1998,9 @@ describe("private video library", () => {
     expect(sheet).not.toHaveAttribute("hidden");
     expect(within(sheet).getByText("studio.mp4")).toBeInTheDocument();
     expect(startVideoUpload).not.toHaveBeenCalled();
+    // The open sheet already lists the queue, so the page shows no second copy in the tray.
+    expect(screen.queryByRole("region", { name: "Upload progress" })).not.toBeInTheDocument();
+    fireEvent.click(within(sheet).getByRole("button", { name: "Close upload" }));
     expect(within(screen.getByRole("region", { name: "Upload progress" }))
       .getByRole("button", { name: "Review details for studio.mp4" })).toBeEnabled();
   });
@@ -2168,6 +2171,8 @@ describe("private video library", () => {
     const sheet = screen.getByRole("complementary", { name: "Upload media" });
     expect(within(sheet).getByText("saved-0.mp4")).toBeInTheDocument();
     expect(within(sheet).getByRole("button", { name: "Upload media" })).toBeDisabled();
+    expect(screen.queryByRole("region", { name: "Upload progress" })).not.toBeInTheDocument();
+    fireEvent.click(within(sheet).getByRole("button", { name: "Close upload" }));
     expect(screen.getByRole("region", { name: "Upload progress" })).toHaveTextContent("20 video transfers");
   });
 
