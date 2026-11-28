@@ -180,7 +180,7 @@ describe("Admin benchmark profile", () => {
 
   it("opens Media from its /media rail link and waits on the /media/videos landing path", () => {
     const media = scenario("media-library");
-    expect(media).toMatchObject({ path: "/media", landingPath: "/media/videos" });
+    expect(media).toMatchObject({ path: "/media", landingPath: "/media/videos", heading: "Videos" });
     expect(surfaceLandingPath(media)).toBe("/media/videos");
   });
 
@@ -196,7 +196,7 @@ describe("Admin benchmark profile", () => {
     expect(journeySource("/reports")).toEqual({
       path: "/media",
       landingPath: "/media/videos",
-      heading: "Media library",
+      heading: "Videos",
     });
     expect(journeySource("/")).toEqual({ path: "/content/library", landingPath: "/content/library", heading: null });
     expect(journeySource("/content/pages/home/edit")).toEqual({ path: "/content", landingPath: "/content", heading: null });

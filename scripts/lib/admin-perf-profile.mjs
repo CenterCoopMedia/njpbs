@@ -74,7 +74,7 @@ export const ADMIN_PERF_PROFILE = Object.freeze({
     Object.freeze({
       id: "media-library",
       label: "Media library",
-      heading: "Media library",
+      heading: "Videos",
       // The rail link is /media. A fresh browser has no last-used tab, so it opens Videos.
       // The harness clicks the link and waits on the landing path, so refresh and history
       // visits can capture.
@@ -239,6 +239,6 @@ export function journeySource(path) {
   if (path.startsWith("/content/pages/")) return source("/content", null);
   if (path.startsWith("/content/post/")) return source("/content/post", null);
   return path === "/reports"
-    ? source("/media", "Media library", surfaceLandingPath(scenario("media-library")))
+    ? source("/media", "Videos", surfaceLandingPath(scenario("media-library")))
     : source("/reports", "Reports");
 }
