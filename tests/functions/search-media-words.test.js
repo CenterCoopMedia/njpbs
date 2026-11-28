@@ -95,6 +95,33 @@ describe("cmsSearchMedia word search in Firestore", () => {
     expect((await search({ q: "harbor" })).body.records.map(record => record.id)).toEqual(["legacy"]);
   });
 
+  it("halves a backfill transaction that Firestore rejects as too big", async () => {
+    const records = {};
+    for (const id of ["a", "b", "c"]) {
+      records[id] = stored(id, `Harbor ${id}`);
+      delete records[id].searchTokens;
+    }
+    await seed(records);
+    const sizes = [];
+    const limited = {
+      collection: (...args) => db.collection(...args),
+      runTransaction: (update) => db.runTransaction(async (transaction) => {
+        const getAll = transaction.getAll.bind(transaction);
+        transaction.getAll = async (...refs) => {
+          sizes.push(refs.length);
+          if (refs.length > 1) throw Object.assign(new Error("Transaction too big. Decrease transaction size."), { code: 3 });
+          return getAll(...refs);
+        };
+        return update(transaction);
+      }),
+    };
+    expect(await backfillVideoSearchTokens({ firestore: limited, apply: true })).toMatchObject({ eligible: 3, updated: 3 });
+    expect(sizes).toEqual([3, 2, 1, 1, 1]);
+    for (const id of ["a", "b", "c"]) {
+      expect((await db.collection("mediaSourceAssets").doc(id).get()).data().searchTokens).toEqual(["harbor", id]);
+    }
+  });
+
   it("targets only the project that the configured target names", () => {
     const development = { emulator: false, targetProject: () => "njpbs-site-dev" };
     expect(parseBackfillArgs(["--project", "njpbs-site-dev", "--apply"], development))

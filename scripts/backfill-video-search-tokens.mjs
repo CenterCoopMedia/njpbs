@@ -30,6 +30,30 @@ function expectedTokens(data) {
   return sourceMediaSearchTokens(data);
 }
 
+// Each transaction re-reads its records, so a concurrent metadata edit keeps its own token list
+// and a repeated run writes nothing new. Firestore counts index entries toward its commit limit,
+// and a long token list adds many entries, so a group that is too big is halved and each half
+// runs in its own transaction.
+async function writeTokens(firestore, refs) {
+  try {
+    return await firestore.runTransaction(async (transaction) => {
+      const fresh = await transaction.getAll(...refs);
+      let written = 0;
+      for (const snapshot of fresh) {
+        const expected = snapshot.exists ? expectedTokens(snapshot.data()) : null;
+        if (!expected || isDeepStrictEqual(snapshot.data().searchTokens, expected)) continue;
+        transaction.update(snapshot.ref, { searchTokens: expected });
+        written += 1;
+      }
+      return written;
+    });
+  } catch (error) {
+    if (refs.length < 2 || error?.code !== 3 || !/Transaction too big/.test(String(error.message))) throw error;
+    const half = Math.ceil(refs.length / 2);
+    return await writeTokens(firestore, refs.slice(0, half)) + await writeTokens(firestore, refs.slice(half));
+  }
+}
+
 export async function backfillVideoSearchTokens({ firestore, apply = false, pageSize = PAGE_SIZE } = {}) {
   if (!Number.isSafeInteger(pageSize) || pageSize < 1 || pageSize > 200) {
     throw new Error("Page size must be a whole number from 1 through 200");
@@ -54,21 +78,7 @@ export async function backfillVideoSearchTokens({ firestore, apply = false, page
         stale.push(document.ref);
       }
     }
-    if (apply && stale.length) {
-      // One bounded transaction per page re-reads each record, so a concurrent metadata edit
-      // keeps its own token list and a repeated run writes nothing new.
-      result.updated += await firestore.runTransaction(async (transaction) => {
-        const fresh = await transaction.getAll(...stale);
-        let written = 0;
-        for (const snapshot of fresh) {
-          const expected = snapshot.exists ? expectedTokens(snapshot.data()) : null;
-          if (!expected || isDeepStrictEqual(snapshot.data().searchTokens, expected)) continue;
-          transaction.update(snapshot.ref, { searchTokens: expected });
-          written += 1;
-        }
-        return written;
-      });
-    }
+    if (apply && stale.length) result.updated += await writeTokens(firestore, stale);
     cursor = page.docs.at(-1).id;
     if (page.docs.length < pageSize) break;
   }
