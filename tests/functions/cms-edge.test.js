@@ -3,7 +3,6 @@ import cmsEdge from "../../functions/lib/cms-edge.js";
 import { cmsEdgeFetch } from "../setup/cms-edge-fetch.js";
 import authPkg from "../../functions/lib/auth.js";
 import firebasePkg from "../../functions/lib/firebase.js";
-import usagePerson from "../../functions/lib/usage-person.js";
 
 const {
   CMS_EDGE_ORIGIN_SECRET,
@@ -94,7 +93,8 @@ describe("CMS Function edge boundary", () => {
       function: "cmsSyntheticAdminAction",
       required: "admin",
       accessTier: "editor",
-      caller: usagePerson.usageHash("staff-editor"),
+      // SHA-256 of "staff-editor", the digest usage analytics keys people by.
+      caller: "2f82f25ec33a07569fe10ecedd1d9044ed20f9880e63721c05a3c731080d5b26",
       requestId: "request-1",
     });
   });

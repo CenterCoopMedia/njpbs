@@ -39,7 +39,7 @@ function secretsMatch(expected, supplied) {
 }
 
 // Cloud Functions sets FUNCTION_TARGET to the exported function name.
-const deployedFunctionName = () => process.env.FUNCTION_TARGET || process.env.K_SERVICE || null;
+const deployedFunctionName = () => process.env.FUNCTION_TARGET || null;
 
 function withCmsEdge(handler, deps = {}) {
   const readSecret = deps.readSecret ?? configuredEdgeSecret;
@@ -86,7 +86,9 @@ function withCmsEdge(handler, deps = {}) {
       await handler(req, res);
     } finally {
       res.json = originalJson;
-      // Every staff refusal on a CMS Function ends here, whichever check refused it.
+      // Every 403 from a CMS Function is logged here, whichever check refused it. `required` names
+      // the level a shared auth helper refused; a check inside a handler leaves it null. A refusal
+      // that a handler masks as 404 is not logged (issue #745 scope).
       if (res.statusCode === 403) {
         log.warn("permission_refused", permissionRefusal(req, deployedFunctionName(), requestHeader(req, "x-njpbs-request-id")));
       }
