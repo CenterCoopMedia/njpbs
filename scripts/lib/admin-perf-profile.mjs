@@ -75,10 +75,11 @@ export const ADMIN_PERF_PROFILE = Object.freeze({
       id: "media-library",
       label: "Media library",
       heading: "Media library",
-      // The rail link is /media, which redirects to the Images tab. The harness clicks the
-      // link and waits on the landing path, so refresh and history visits can capture.
+      // The rail link is /media. A fresh browser has no last-used tab, so it opens Videos.
+      // The harness clicks the link and waits on the landing path, so refresh and history
+      // visits can capture.
       path: "/media",
-      landingPath: "/media/images",
+      landingPath: "/media/videos",
       route: "media",
       kind: "read",
     }),

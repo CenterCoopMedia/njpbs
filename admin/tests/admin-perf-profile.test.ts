@@ -178,10 +178,10 @@ describe("Admin benchmark profile", () => {
     expect(result.stderr).toBe("Non-loopback host; use --allow-untrusted-host to opt in.\n");
   });
 
-  it("opens Media from its /media rail link and waits on the /media/images landing path", () => {
+  it("opens Media from its /media rail link and waits on the /media/videos landing path", () => {
     const media = scenario("media-library");
-    expect(media).toMatchObject({ path: "/media", landingPath: "/media/images" });
-    expect(surfaceLandingPath(media)).toBe("/media/images");
+    expect(media).toMatchObject({ path: "/media", landingPath: "/media/videos" });
+    expect(surfaceLandingPath(media)).toBe("/media/videos");
   });
 
   it("lands every other scenario on its own path", () => {
@@ -192,10 +192,10 @@ describe("Admin benchmark profile", () => {
     }
   });
 
-  it("starts the Reports journey from Media and waits on /media/images", () => {
+  it("starts the Reports journey from Media and waits on /media/videos", () => {
     expect(journeySource("/reports")).toEqual({
       path: "/media",
-      landingPath: "/media/images",
+      landingPath: "/media/videos",
       heading: "Media library",
     });
     expect(journeySource("/")).toEqual({ path: "/content/library", landingPath: "/content/library", heading: null });
