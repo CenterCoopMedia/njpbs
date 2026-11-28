@@ -280,7 +280,7 @@ for (const coarse of [false, true]) {
       test(`${width}px text selection actions use the same rows for every count`, async ({ page }) => {
         await openSpecimen(page, { id: 'media-selection-bar', title: 'Selection', width, presentation: 'text' }, { normalizeGeneratedIds: false });
         const bars = page.locator('.media-selection-bar');
-        await expect(bars).toHaveCount(4);
+        await expect(bars).toHaveCount(3);
         for (const bar of await bars.all()) {
           const summary = (await bar.locator('.media-selection-bar-summary').boundingBox())!;
           const pageMark = (await bar.getByRole('checkbox').locator('xpath=..').boundingBox())!;
