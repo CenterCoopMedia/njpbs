@@ -1,6 +1,7 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { firebaseListText, servingRuntimeParameters } from "../../scripts/lib/functions-configuration.mjs";
 
 // The deploy writes every Functions parameter into the runtime .env, using the table default when
 // no variable is set. A code default that differs from the table default is therefore never used,
@@ -21,6 +22,9 @@ function codeDefaults(dir = "functions") {
       for (const match of source.matchAll(/defineString\(\s*"([A-Z0-9_]+)"\s*,\s*\{[^}]*?default:\s*"([^"]*)"/gs)) {
         found.set(match[1], [...(found.get(match[1]) ?? []), { value: match[2], path }]);
       }
+      for (const match of source.matchAll(/defineList\(\s*"([A-Z0-9_]+)"\s*,\s*\{[^}]*?default:\s*(\[[^\]]*\])/gs)) {
+        found.set(match[1], [...(found.get(match[1]) ?? []), { list: JSON.parse(match[2]), path }]);
+      }
     }
   }
   return found;
@@ -33,8 +37,12 @@ describe("Functions parameter defaults", () => {
       const row = table.inputs[name];
       // Only rows filled from a GitHub variable fall back to the table default when it is unset.
       if (!row?.variable || row.required === true) continue;
-      for (const { value, path } of defaults) {
-        if (row.default !== value) mismatches.push(`${name}: table "${row.default}", ${path} "${value}"`);
+      for (const { value, list, path } of defaults) {
+        // A list default reaches the code as the list Firebase serves from the table default.
+        const served = list && servingRuntimeParameters({ [name]: firebaseListText(row.default) })[name];
+        if (list ? served !== JSON.stringify(list) : row.default !== value) {
+          mismatches.push(`${name}: table "${row.default}", ${path} ${JSON.stringify(list ?? value)}`);
+        }
       }
     }
     expect(mismatches).toEqual([]);

@@ -174,7 +174,10 @@ describe("selective Functions releases", () => {
       return resolverOutput(script);
     });
     expect(expected.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP).toBe('{"456":"test-admin"}');
-    expect(expected.CMS_BUG_REPORT_EMAIL_BCC).toBe('[""]');
+    expect(expected.CMS_BUG_REPORT_EMAIL_BCC).toBe("[]");
+    const listed = await desiredRuntimeParameters({ ...env, CMS_BUG_REPORT_EMAIL_BCC: " first@example.test, ,second@example.test " },
+      (_program, [script]) => resolverOutput(script));
+    expect(listed.CMS_BUG_REPORT_EMAIL_BCC).toBe('["first@example.test","second@example.test"]');
     expect(JSON.parse(expected.CMS_STUDIO_TITLE_FILES)).toEqual({ headline: "Synthetic headline.gtzip", name_title: "Synthetic name.gtzip" });
     const live = () => [{ serviceConfig: { environmentVariables: { ...expected } } }];
     expect(runtimeParametersMatch(live(), expected)).toBe(true);

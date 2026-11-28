@@ -878,6 +878,47 @@ describe("durable delivery", () => {
     }));
   });
 
+  it("sends a blank configured BCC list to the provider without a bcc field", async () => {
+    vi.stubEnv("CMS_BUG_REPORT_EMAIL_BCC", '[""]');
+    const stored = report();
+    await db.collection("bug_reports").doc(stored.id).set(stored);
+    await db.collection("bugReportDeliveryOutbox").doc("email").set({
+      reportId: stored.id,
+      eventType: "report_received",
+      reportVersion: 1,
+      channel: "email",
+      state: "pending",
+      attemptCount: 0,
+      nextAttemptAt: NOW,
+      leaseUntil: null,
+      createdAt: NOW,
+      updatedAt: NOW,
+    });
+    const fetchFn = vi.fn(async () => new Response(JSON.stringify({
+      success: true,
+      errors: [],
+      result: { delivered: ["editor@example.org"], queued: [] },
+    }), { status: 200, headers: { "content-type": "application/json" } }));
+
+    await expect(delivery.deliverOutboxRow("email", {
+      firestore: db,
+      now: () => new Date(NOW),
+      fetchFn,
+      accountId: "fixture-account",
+      emailApiToken: "fixture-token",
+      emailFrom: "Boardwalk <reports@example.org>",
+      emailReplyTo: "support@example.org",
+      adminOrigin: "https://admin.njpbs.org",
+    })).resolves.toEqual({ state: "delivered" });
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+    const [url, request] = fetchFn.mock.calls[0];
+    expect(url).toBe("https://api.cloudflare.com/client/v4/accounts/fixture-account/email/sending/send");
+    const body = JSON.parse(request.body);
+    expect(body.to).toBe("editor@example.org");
+    expect(body.subject).toBe("We received your problem report: Publish the evening story");
+    expect(body).not.toHaveProperty("bcc");
+  });
+
   it("renders a status email from the status stored with that event", async () => {
     const stored = report({
       status: "dismissed",
