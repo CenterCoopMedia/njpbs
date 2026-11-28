@@ -85,6 +85,23 @@ describe("staff access levels table", () => {
     expect(screen.getByRole("button", { name: "Confirm level for Target person" })).toBeDisabled();
     expect(view.onSetLevel).not.toHaveBeenCalled();
   });
+  it("filters the roster by name or email, shows no-match, and restores it with Clear the search", () => {
+    const other = { ...legacy, id: "other", displayName: "Other person", email: "other@example.test", accessTier: "viewer" };
+    setup([legacy, other]);
+    const search = screen.getByRole("searchbox", { name: "Find a staff member" });
+    expect(screen.getByText("2 of 2 shown")).toBeTruthy();
+    fireEvent.change(search, { target: { value: "other@" } });
+    expect(screen.getByText("1 of 2 shown")).toBeTruthy();
+    expect(screen.getByText("Other person").closest("tr")?.hidden).toBe(false);
+    expect(screen.getByText("Target person").closest("tr")?.hidden).toBe(true);
+    fireEvent.change(search, { target: { value: "nobody" } });
+    expect(screen.getByText("No staff member matches")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Clear the search" }));
+    expect((search as HTMLInputElement).value).toBe("");
+    expect(screen.getByText("2 of 2 shown")).toBeTruthy();
+    expect(screen.queryByText("No staff member matches")).toBeNull();
+  });
+
   it("keeps confirmation and progress visible when search no longer matches", async () => {
     let finish!: () => void;
     const onSetLevel = vi.fn(() => new Promise<void>((resolve) => { finish = resolve; }));

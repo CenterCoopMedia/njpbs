@@ -84,6 +84,24 @@ function handlerFor(harness, overrides = {}) {
   });
 }
 
+describe("deactivateStaff self-deactivation guard", () => {
+  it("refuses an Owner who targets their own account and changes nothing", async () => {
+    const state = harness();
+    const deactivateProfileFn = vi.fn();
+    const handler = handlerFor(state, { deactivateProfileFn });
+    const res = responseRecorder();
+    const req = request();
+    req.body = { ...req.body, targetUid: "actor-1" };
+
+    await handler(req, res);
+
+    expect(res.statusCode).toBe(403);
+    expect(deactivateProfileFn).not.toHaveBeenCalled();
+    expect(state.authClient.updateUser).not.toHaveBeenCalled();
+    expect(state.authClient.revokeRefreshTokens).not.toHaveBeenCalled();
+  });
+});
+
 describe("deactivateStaff Auth reconciliation", () => {
   it("mirrors the revoked-after watermark in token auth_time seconds", async () => {
     const state = harness();

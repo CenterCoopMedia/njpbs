@@ -12,7 +12,8 @@ and account migration are separate operations with separate authorization.
    profile and no CMS authority. Verified status moves `email_verification` to
    `pending` only when the current Firebase token says the email is verified.
 3. An authorized reviewer approves or denies through Staff access. Approval
-   uses existing role choices; it does not silently migrate an account to tiers.
+   chooses one access level (Viewer, Contributor, Editor or Publisher; Viewer
+   by default) and writes it to the profile.
 4. Verify the active profile, expected powers and refused higher powers with
    the actual session. Do not infer authorization from an email notification.
 
@@ -80,18 +81,25 @@ Compare account mappings with the actual closed capability lists in
 Field protection must deploy before activating readers. Browser, Functions,
 direct administrative checks and Firestore rules share the same resolver.
 Without schema 1, `state: active`, `cleanScan: true` at
-`system/staffAccessActivation`, a planted tier cannot change legacy authority.
+`system/staffAccessActivation`, no account has staff access.
 An unavailable receipt read denies authorization; it does not fall back.
-After activation, present valid `accessTier` wins, legacy grants add nothing,
-unknown/malformed values and inactive/unverified sessions have no tier powers.
-An absent field retains legacy behavior, including legacy Editor publication.
+After activation, a valid `accessTier` on an active, verified account is the
+only source of access. Stored `role` and `grants` fields confer nothing, and
+an absent, unknown or malformed tier has no access.
 Clients cannot write the tier or activation receipt.
+
+Order for a project that still has accounts without a tier: activate the
+receipt and give every staff account a tier (an Owner first) while the
+project still runs a release that reads legacy roles. Then deploy a release
+without legacy reads. Production and dev completed this order on Nov. 27,
+2026 (#746).
 
 The operator is [activate-staff-tier-readers.mjs](../../scripts/activate-staff-tier-readers.mjs).
 Run from the exact reviewed checkout in Bash with the approved service-account
 JSON streamed to stdin, a clean credential environment, and explicit project.
-The source supports `--check --project njpbs-site` before the separately
-authorized `--activate --project njpbs-site`; both retain their rules checks.
+The source supports `--check --project <njpbs-site|njpbs-site-dev>` before the
+separately authorized `--activate` with the same project; both retain their
+rules checks and print the refusal reason.
 
 The Rules API must show the exact protected reviewed rules before and after a
 complete scan: pages of 200, only tier projection and document IDs, at most
@@ -103,8 +111,8 @@ Read an existing receipt back and reconcile it; never delete it to rerun.
 After separate activation authorization, the operator repeats these checks and
 creates the receipt once. Read back schema/state/clean scan, activation time,
 count, ruleset identity and digest; confirm the rules remain the approved
-release. Existing Owners see legacy rows and level controls; Admins can read
-the table without assignment controls. A deployed renderer alone proves none
+release. Owners see level controls; Admins can read the table without
+assignment controls. A deployed renderer alone proves none
 of these boundaries. Keep the protected rules and receipt for rollback.
 
 ## Assignment, offboarding and reactivation

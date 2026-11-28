@@ -1128,8 +1128,9 @@ describe("shared navigation items", () => {
     })));
   });
 
-  // Known limit #751: the tier session check pushes this save past the 1000-expression rules limit.
-  it.fails("lets an owner turn ten shared ids on and denies eleven, foreign ids, and custom edits", async () => {
+  // Known limit #751: the tier session check pushes this save past the 1000-expression
+  // rules limit. Remove it.fails when #751 lands.
+  it.fails("lets an owner save ten links with ten shared ids", async () => {
     const links = Array.from({ length: 10 }, (_, index) => item({
       id: `custom:link-${index}`,
       icon: "external-link",
@@ -1140,8 +1141,31 @@ describe("shared navigation items", () => {
     await assertSucceeds(updateDoc(doc(db("regular"), "users/regular"), {
       "preferences.navigation": { ...saved, order: [...saved.order].reverse(), hidden: [shared[0]] },
     }));
+  });
+
+  it("denies eleven shared ids", async () => {
+    const links = Array.from({ length: 10 }, (_, index) => item({
+      id: `custom:link-${index}`,
+      icon: "external-link",
+    }));
+    const shared = Array.from({ length: 10 }, (_, index) => `custom:share-${index}`);
+    const saved = navigation(links, shared);
+    await seedNavigation(saved);
     await assertFails(updateDoc(doc(db("regular"), "users/regular"), {
       "preferences.navigation": { ...saved, shared: [...shared, "custom:share-10"] },
+    }));
+  });
+
+  it("lets an owner reorder shared ids and denies foreign ids, duplicates and custom edits", async () => {
+    const links = Array.from({ length: 2 }, (_, index) => item({
+      id: `custom:link-${index}`,
+      icon: "external-link",
+    }));
+    const shared = ["custom:share-0", "custom:share-1"];
+    const saved = navigation(links, shared);
+    await seedNavigation(saved);
+    await assertSucceeds(updateDoc(doc(db("regular"), "users/regular"), {
+      "preferences.navigation": { ...saved, order: [...saved.order].reverse(), hidden: [shared[0]] },
     }));
     await assertFails(updateDoc(doc(db("regular"), "users/regular"), {
       "preferences.navigation": { ...saved, order: [...saved.order, "custom:missing"] },

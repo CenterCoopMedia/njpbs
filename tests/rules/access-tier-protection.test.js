@@ -22,6 +22,7 @@ beforeEach(async () => {
     await setDoc(doc(db, "system/staffAccessActivation"), { schema: 1, state: "active", cleanScan: true });
     await setDoc(doc(db, "users/staff"), { active: true, accessTier: "viewer" });
     await setDoc(doc(db, "users/admin"), { active: true, accessTier: "admin" });
+    await setDoc(doc(db, "users/untiered"), { active: true });
   });
 });
 function profile(actor, target) {
@@ -31,6 +32,11 @@ describe("server-owned access tier", () => {
   it.each([["staff", "staff"], ["admin", "staff"]])("%s cannot plant a tier on %s", async (actor, target) => {
     await assertFails(updateDoc(profile(actor, target), { accessTier: "owner" }));
     await assertSucceeds(updateDoc(profile(actor, target), { displayName: "Fixture staff" }));
+  });
+  it("admin cannot plant a tier on a profile without one", async () => {
+    await assertFails(updateDoc(profile("admin", "untiered"), { accessTier: "viewer" }));
+    await assertFails(updateDoc(profile("admin", "untiered"), { accessTier: "owner", displayName: "Fixture staff" }));
+    await assertSucceeds(updateDoc(profile("admin", "untiered"), { displayName: "Fixture staff" }));
   });
   it.each([["staff", "staff"], ["admin", "staff"]])("%s cannot replace or delete the protected tier on %s", async (actor, target) => {
     await assertSucceeds(updateDoc(profile(actor, target), { displayName: "Fixture staff" }));

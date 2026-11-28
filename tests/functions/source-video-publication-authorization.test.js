@@ -145,9 +145,11 @@ describe("public video content authorization (#2822)", () => {
     expect((await db.doc(`cmsPublicVideos/${assetId}`).get()).data()).toMatchObject({ publishedBy: uid, assetId });
   });
 
-  it("binds entry videos to the saved Post and refuses withdrawn entries", async () => {
+  const STORED_PUBLISHER = { active: true, accessTier: "publisher" };
+
+  it.each([["a scoped editor", undefined], ["a stored Publisher", STORED_PUBLISHER]])("binds entry videos to the saved Post and refuses withdrawn entries for %s", async (_actor, profile) => {
     const liveBlog = { updates: [{ id: "entry", media: { kind: "library-video", data: video.data } }] };
-    const { handler, storage } = await setup({ content: { blocks: [], liveBlog } });
+    const { handler, storage } = await setup({ content: { blocks: [], liveBlog }, profile });
     expect((await call(handler, body)).status).toBe(200);
     expect(storage.objects.size).toBe(2);
     await db.doc(`cmsPublicVideos/${assetId}`).delete(); storage.objects.clear();
@@ -156,10 +158,10 @@ describe("public video content authorization (#2822)", () => {
     await expectNoPublicCopy(storage);
   });
 
-  it("binds a scroll story video to a visible, readable step in the saved Post", async () => {
+  it.each([["a scoped editor", undefined], ["a stored Publisher", STORED_PUBLISHER]])("binds a scroll story video to a visible, readable step in the saved Post for %s", async (_actor, profile) => {
     const step = { text: "Watch the clip.", assetId: "", alt: "", caption: "", video: video.data };
     const block = { ...video, type: "scroll_story", data: { steps: [step] } };
-    const { handler, storage } = await setup({ content: { blocks: [block] } });
+    const { handler, storage } = await setup({ content: { blocks: [block] }, profile });
     expect((await call(handler, body)).status).toBe(200);
     expect(storage.objects.size).toBe(2);
     await db.doc(`cmsPublicVideos/${assetId}`).delete(); storage.objects.clear();
@@ -189,9 +191,20 @@ describe("public video content authorization (#2822)", () => {
       { ...video, order: 1, layout: { rowId: "hidden-row", column: 0 } },
     ]],
   ])("refuses %s even in an authorized section", async (_name, blocks) => {
-    const { handler, storage } = await setup({ content: { blocks } });
-    expect((await call(handler, body)).status).toBe(403);
-    await expectNoPublicCopy(storage);
+    for (const profile of [undefined, STORED_PUBLISHER]) {
+      const { handler, storage } = await setup({ content: { blocks }, profile });
+      expect((await call(handler, body)).status).toBe(403);
+      await expectNoPublicCopy(storage);
+    }
+  });
+
+  // The two-field request is the old Admin's path. Only a site-wide publisher may use it.
+  it("accepts the unbound compatibility request only from a stored Publisher", async () => {
+    const scoped = await setup();
+    expect((await call(scoped.handler, { sourceId: "video-library", assetId })).status).toBe(400);
+    await expectNoPublicCopy(scoped.storage);
+    const publisher = await setup({ profile: STORED_PUBLISHER });
+    expect((await call(publisher.handler, { sourceId: "video-library", assetId })).status).toBe(200);
   });
 
   it.each([
