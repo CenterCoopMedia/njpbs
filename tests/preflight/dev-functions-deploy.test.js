@@ -134,20 +134,20 @@ describe("dev Functions deployment boundary", () => {
   it("verifies deployed development list values with the native encoding", async () => fixture(async options => {
     const { DEV_FUNCTIONS } = createRequire(import.meta.url)("../../functions/dev-manifest");
     const path = new URL("functions/.env.njpbs-site-dev", options.root);
-    const dotenv = readFileSync(path, "utf8").replace(/^BOOTSTRAP_SUPER_ADMINS=.*$/m, "BOOTSTRAP_SUPER_ADMINS=");
+    const dotenv = readFileSync(path, "utf8").replace(/^CMS_BUG_REPORT_EMAIL_BCC=.*$/m, "CMS_BUG_REPORT_EMAIL_BCC=");
     writeFileSync(path, dotenv);
     const expected = parseEnv(dotenv);
     const request = value => async ({ url }) => ({ data: url.includes("/v1/") ? {} : {
       functions: Object.keys(DEV_FUNCTIONS).map(name => ({
         name: `projects/njpbs-site-dev/locations/us-central1/functions/${name}`, environment: "GEN_2",
         labels: { "firebase-functions-codebase": "dev" }, state: "ACTIVE", buildConfig: { entryPoint: name },
-        serviceConfig: { environmentVariables: { ...expected, BOOTSTRAP_SUPER_ADMINS: value } },
+        serviceConfig: { environmentVariables: { ...expected, CMS_BUG_REPORT_EMAIL_BCC: value } },
       })),
     } });
     const runCommand = () => { throw new Error("Verification attempted a deploy"); };
     await expect(deployDevFunctions({ ...options, verifyOnly: true, request: request('[""]'), runCommand })).resolves.toBeUndefined();
     await expect(deployDevFunctions({ ...options, verifyOnly: true, request: request(""), runCommand }))
-      .rejects.toThrow("Deployed dev Functions runtime parameters differ: BOOTSTRAP_SUPER_ADMINS");
+      .rejects.toThrow("Deployed dev Functions runtime parameters differ: CMS_BUG_REPORT_EMAIL_BCC");
   }));
 
   it("refuses a missing live Function and hides network/process error contents", async () => fixture(async options => {

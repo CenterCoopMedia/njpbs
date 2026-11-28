@@ -61,7 +61,9 @@ describe("clean-checkout emulator environment", () => {
     const current = readFileSync(new URL("../../scripts/fixtures/functions-emulator.env.example", import.meta.url), "utf8");
     const previous = current
       .split("\n# Optional non-secret parameters remain inert in the demo emulator.\n")[0]
-      .replace("CMS_PUBLISH_TRANSPORT=serializer", "CMS_PUBLISH_TRANSPORT=github");
+      .replace("CMS_PUBLISH_TRANSPORT=serializer", "CMS_PUBLISH_TRANSPORT=github")
+      // The previous fixture still carried the retired bootstrap allowlist (#746).
+      .replace("\nBILLING_BUDGET_TOPIC=", '\nBOOTSTRAP_SUPER_ADMINS=["editor-fixture-2@example.org","editor-fixture-1@example.org"]\nBILLING_BUDGET_TOPIC=');
     expect(createHash("sha256").update(previous).digest("hex")).toBe("1be673cbbe1ae41c1772adc2d8d2a15b4778832f7b12f1959167b4ee98ee68bb");
     writeFileSync(join(directory, "scripts/fixtures/functions-emulator.env.example"), current);
     writeFileSync(join(directory, "functions/.env.local"), previous);
