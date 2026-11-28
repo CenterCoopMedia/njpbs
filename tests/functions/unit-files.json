@@ -196,6 +196,7 @@
   "tests/functions/source-media-navigation.test.js",
   "tests/functions/source-media-originals.test.js",
   "tests/functions/source-media-rendition.test.js",
+  "tests/functions/source-media-search-tokens.test.js",
   "tests/functions/source-media-uploader.test.js",
   "tests/functions/source-media-uploads.test.js",
   "tests/functions/source-media.test.js",

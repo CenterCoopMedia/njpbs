@@ -243,6 +243,17 @@
       "fields": [
         { "fieldPath": "sourceId", "order": "ASCENDING" },
         { "fieldPath": "lifecycle", "order": "ASCENDING" },
+        { "fieldPath": "searchTokens", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "nameSort", "order": "ASCENDING" },
+        { "fieldPath": "__name__", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "mediaSourceAssets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "sourceId", "order": "ASCENDING" },
+        { "fieldPath": "lifecycle", "order": "ASCENDING" },
         { "fieldPath": "createdBy", "order": "ASCENDING" },
         { "fieldPath": "updatedAtSort", "order": "DESCENDING" },
         { "fieldPath": "__name__", "order": "DESCENDING" }

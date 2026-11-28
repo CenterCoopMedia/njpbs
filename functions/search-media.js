@@ -12,10 +12,13 @@ const {
   MediaSourceAccessError, authorizeMediaSource, hasActiveArchiveCategory, objectKeyWithinSource,
 } = require("./lib/media-sources");
 const { SourceMediaValidationError, normalizeSearchPrefix, parseSourceMediaAsset } = require("./lib/source-media-contract");
-const { sourceMediaQuery } = require("./lib/source-media-query");
+const { matchesSourceMediaSearch, sourceMediaSearchPlan } = require("./lib/source-media-search-tokens");
 const { safeStorageDiagnostic } = require("./lib/source-original-state");
 
 const MAX_PAGE_SIZE = 30;
+// Extra words filter in memory, so a multi-word search reads a wider window per source.
+const MAX_SCAN_ROWS = 120;
+const SEARCH_FIELDS = ["name", "tags", "description"];
 const ACCESS_DENIED = "You do not have permission to search media.";
 
 function parseSearchRequest(body) {
@@ -55,13 +58,18 @@ async function authorizedSources(firestore, actor, registry) {
   return sources;
 }
 
-async function readSourceWindow(firestore, source, { q, limit, cursor }, documentIdField) {
-  const { query } = sourceMediaQuery(firestore, source.id, { q, cursor }, documentIdField);
-  const { docs } = await query.limit(limit + 1).get();
+async function readSourceWindow(firestore, source, { plan, scan, after }, documentIdField) {
+  let query = firestore.collection("mediaSourceAssets")
+    .where("sourceId", "==", source.id)
+    .where("lifecycle", "==", "active")
+    .where("searchTokens", "array-contains", plan.indexed)
+    .orderBy("nameSort", "asc").orderBy(documentIdField, "asc");
+  if (after) query = query.startAfter(after.sort, after.id);
+  const { docs } = await query.limit(scan + 1).get();
   return docs.flatMap(document => {
     const data = document.data();
     const sort = data.nameSort;
-    if (typeof sort !== "string" || !sort.startsWith(q)) return [];
+    if (typeof sort !== "string") return [];
     return [{ id: document.id, sort, data, source }];
   });
 }
@@ -73,37 +81,52 @@ function compareRows(left, right) {
     Buffer.compare(Buffer.from(left.id), Buffer.from(right.id));
 }
 
+function searchRecord({ id, data, source }, plan) {
+  if (!matchesSourceMediaSearch(data.searchTokens, plan)) return null;
+  const asset = parseSourceMediaAsset(id, data);
+  if (!asset || asset.sourceId !== source.id || !objectKeyWithinSource(source, asset.objectKey)) return null;
+  return { id, sourceId: source.id, kind: asset.kind, name: asset.name };
+}
+
 async function searchVideoSources({ firestore, actor, sources, request, documentIdField, log }) {
   const { q, limit } = request;
+  const plan = sourceMediaSearchPlan(q);
+  const coverageFor = (status) => sources.map(({ id, label }) => ({ id, label, fields: SEARCH_FIELDS, status }));
+  if (!plan) return { success: true, records: [], sources: coverageFor("searched"), nextCursor: null };
   const binding = discoveryDigest({
-    scope: "registered-video-name-prefix", uid: actor.uid, q,
+    scope: "registered-video-search-words", uid: actor.uid, words: plan.words,
     sources: sources.map(source => [source.id, source.prefix]),
   });
   const continuation = request.cursor === undefined ? null : await readCursor(firestore, request.cursor, binding);
+  const scan = plan.rest.length ? Math.min(limit * 4, MAX_SCAN_ROWS) : limit;
   const windows = await Promise.allSettled(sources.map(source =>
-    readSourceWindow(firestore, source, { q, limit, cursor: continuation?.after }, documentIdField)));
+    readSourceWindow(firestore, source, { plan, scan, after: continuation?.after }, documentIdField)));
   const rows = [];
   const coverage = windows.map((window, index) => {
     const { id, label } = sources[index];
     if (window.status === "fulfilled") {
       rows.push(...window.value);
-      return { id, label, fields: ["name"], status: "searched" };
+      return { id, label, fields: SEARCH_FIELDS, status: "searched" };
     }
     log.warn("Media search source unavailable", { sourceId: id, ...safeStorageDiagnostic(window.reason) });
-    return { id, label, fields: ["name"], status: "unavailable", error: "Could not search this source. Retry this page." };
+    return { id, label, fields: SEARCH_FIELDS, status: "unavailable", error: "Could not search this source. Retry this page." };
   });
-  const pageRows = rows.sort(compareRows).slice(0, limit);
-  const records = pageRows.flatMap(({ id, data, source }) => {
-    const asset = parseSourceMediaAsset(id, data);
-    if (!asset || asset.sourceId !== source.id || !objectKeyWithinSource(source, asset.objectKey)) return [];
-    return [{ id, sourceId: source.id, kind: asset.kind, name: asset.name }];
-  });
-  // Use the last consumed index row, including a rejected record, to make sparse pages
-  // advance. A failed source could have rows before this position, so pause on this
-  // page and let the caller retry the same request when any source is unavailable.
+  // Each source read up to scan + 1 rows, so the first scan merged rows are complete. Stop at
+  // the page size; a rejected or non-matching row still counts as consumed.
+  rows.sort(compareRows);
+  const records = [];
+  let consumed = 0;
+  while (consumed < Math.min(scan, rows.length) && records.length < limit) {
+    const record = searchRecord(rows[consumed], plan);
+    if (record) records.push(record);
+    consumed += 1;
+  }
+  // The last consumed row makes sparse pages advance. A failed source could have rows before
+  // this position, so pause on this page and let the caller retry when any source failed.
   const complete = windows.every(window => window.status === "fulfilled");
-  const nextCursor = complete && rows.length > limit
-    ? await writeCursor(firestore, binding, { sort: pageRows.at(-1).sort, id: pageRows.at(-1).id })
+  const last = rows[consumed - 1];
+  const nextCursor = complete && rows.length > consumed
+    ? await writeCursor(firestore, binding, { sort: last.sort, id: last.id })
     : null;
   return { success: true, records, sources: coverage, nextCursor };
 }

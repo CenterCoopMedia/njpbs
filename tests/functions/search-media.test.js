@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import searchMedia from "../../functions/search-media.js";
+import searchTokens from "../../functions/lib/source-media-search-tokens.js";
 
 const { createCmsSearchMediaHandler } = searchMedia;
 const videos = { id: "video-library", label: "Videos", access: "active_staff", prefix: "station/" };
@@ -7,7 +8,9 @@ const originals = { id: "archive-originals", label: "Archive originals", access:
 const working = { id: "archive-working", label: "Archive working files", access: "archive", prefix: "working/" };
 
 function asset(source, id, name = "county meeting", overrides = {}) {
+  const searchFields = { name, description: overrides.description ?? null, tags: overrides.tags ?? [] };
   return { id, data: () => ({
+    searchTokens: searchTokens.sourceMediaSearchTokens(searchFields),
     sourceId: source.id, name, nameSort: name, originalName: `${name}.mp4`,
     lifecycle: "active", kind: "video", mimeType: "video/mp4", sizeBytes: 1024,
     preview: "browser", rightsStatus: "pending", version: 1, tags: [],
@@ -60,6 +63,7 @@ function fixture(documents) {
           const candidates = documents.filter(document => conditions.every(([field, op, value]) => {
             const stored = document.data()[field];
             if (op === "==") return stored === value;
+            if (op === "array-contains") return Array.isArray(stored) && stored.includes(value);
             const comparison = compare(stored, value);
             return op === ">=" ? comparison >= 0 : comparison < 0;
           })).sort((a, b) => compare(a.data().nameSort, b.data().nameSort) || compare(a.id, b.id));
@@ -99,7 +103,7 @@ describe("cross-source media search", () => {
     expect(result.body).toEqual({
       success: true, nextCursor: null,
       records: [{ id: "valid", sourceId: videos.id, kind: "video", name: "county meeting" }],
-      sources: [{ id: videos.id, label: videos.label, fields: ["name"], status: "searched" }],
+      sources: [{ id: videos.id, label: videos.label, fields: ["name", "tags", "description"], status: "searched" }],
     });
     expect(reads.map(read => read.sourceId)).toEqual([videos.id]);
     actor.approvedActive = false;
@@ -172,5 +176,31 @@ describe("cross-source media search", () => {
     actor.principal.grants = [{ tier: "viewer" }];
     expect((await request(body)).code).toBe(409);
     expect(reads).toHaveLength(3);
+  });
+  it("matches whole words in the name, tags and description and filters extra words in memory", async () => {
+    const { request, reads } = fixture([
+      asset(videos, "dusk", "Dusk harbor"), asset(videos, "tagged", "Ferry crossing", { tags: ["Harbor"] }),
+      asset(videos, "described", "Night shot", { description: "Lights over the harbor." }),
+      asset(videos, "partial", "Harborside"), asset(originals, "archive", "Harbor archive"),
+    ]);
+    const single = await request({ q: "Harbor" });
+    expect(single.body.records.map(record => record.id)).toEqual(["dusk", "tagged", "archive", "described"]);
+    expect(reads.at(-1)).toMatchObject({ sourceId: videos.id, limit: 31 });
+    const multi = await request({ q: "harbor fer", limit: 5 });
+    expect(multi.body.records.map(record => record.id)).toEqual(["tagged"]);
+    expect(multi.body.nextCursor).toBeNull();
+    expect(reads.at(-1).limit).toBe(21);
+    const none = await request({ q: "!!" });
+    expect(none.body).toMatchObject({ success: true, records: [], nextCursor: null });
+  });
+
+  it("pages a sparse multi-word search from the last consumed row", async () => {
+    const names = ["a harbor", "b harbor dusk", "c harbor", "d harbor dusk"];
+    const { request } = fixture(names.map((name, index) => asset(videos, `v${index}`, name)));
+    const first = await request({ q: "harbor dusk", limit: 1 });
+    expect(first.body.records.map(record => record.id)).toEqual(["v1"]);
+    const second = await request({ q: "harbor dusk", limit: 1, cursor: first.body.nextCursor });
+    expect(second.body.records.map(record => record.id)).toEqual(["v3"]);
+    expect(second.body.nextCursor).toBeNull();
   });
 });

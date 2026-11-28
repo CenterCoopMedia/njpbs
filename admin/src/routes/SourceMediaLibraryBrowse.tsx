@@ -14,6 +14,8 @@ interface SourceMediaLibraryBrowseProps {
   label: string;
   description: string;
   toolbar: ComponentProps<typeof MediaToolbar>;
+  /** The "All media" results for an active search, shown under the search box. */
+  searchAll?: ReactNode;
   searchError: string;
   linkError: string;
   deletedName: string;
@@ -48,6 +50,7 @@ export function SourceMediaLibraryBrowse({
   label,
   description,
   toolbar,
+  searchAll,
   searchError,
   linkError,
   deletedName,
@@ -79,6 +82,7 @@ export function SourceMediaLibraryBrowse({
     <div className="source-media-library-layout">
       <div className="source-media-library-main">
         <MediaToolbar {...toolbar} />
+        {searchAll}
         {searchError ? <p role="alert">{searchError}</p> : null}
         <VideoOriginalNotices {...originals} />
         {linkError ? <InlineMessage tone="warning" title="Media link">{linkError}</InlineMessage> : null}

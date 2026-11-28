@@ -11,6 +11,7 @@ import searchOutbox from "../functions/lib/video-search-outbox.js";
 import mediaSources from "../functions/lib/media-sources.js";
 import sourceContract from "../functions/lib/source-media-contract.js";
 import uploadContract from "../functions/lib/source-media-upload-contract.js";
+import searchTokens from "../functions/lib/source-media-search-tokens.js";
 
 const PAGE_SIZE = 100;
 const PROFILE = "njpbs";
@@ -136,14 +137,17 @@ function importedAsset(source, assetId, version, head, existing, now) {
     : now;
   const previous = existing?.parsed;
   const name = previous?.name ?? originalName;
+  const description = previous?.description ?? null;
+  const tags = previous?.tags ?? [];
   const data = {
     id: assetId,
     sourceId: source.id,
     lifecycle: "active",
     name,
     originalName,
-    description: previous?.description ?? null,
+    description,
     nameSort: name.normalize("NFKC").toLocaleLowerCase("en-US"),
+    searchTokens: searchTokens.sourceMediaSearchTokens({ name, description, tags }),
     updatedAtSort: now,
     mimeType,
     kind: "video",
@@ -151,7 +155,7 @@ function importedAsset(source, assetId, version, head, existing, now) {
     preview: previewFor(mimeType),
     license: previous?.license ?? null,
     credit: previous?.credit ?? null,
-    tags: previous?.tags ?? [],
+    tags,
     rightsStatus: previous?.rightsStatus ?? "pending",
     version: previous ? previous.version + 1 : 1,
     createdAt: previous?.createdAt ?? lastModified,

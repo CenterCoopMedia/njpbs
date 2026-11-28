@@ -50,6 +50,12 @@ vi.mock("../src/components/MediaMeaningResults", async () => {
   };
 });
 
+// The "All media" strip has its own tests. This stand-in only shows where it mounts and
+// which search it gets, so the request counts here stay about the tab itself.
+vi.mock("../src/components/media/MediaSearchAll", () => ({
+  MediaSearchAll: ({ query }: { query: string }) => <div data-query={query} data-testid="media-search-all" />,
+}));
+
 // Render counters for the typing-isolation test: every card is one MediaTile, and the toolbar
 // renders one Sort control. Both wrap the real components.
 vi.mock("../src/components/media/MediaTile", async (importOriginal) => {
@@ -755,10 +761,12 @@ describe("MediaRoute", () => {
     const { router } = renderRoute("/media/images?q=harbor");
     await screen.findByRole("heading", { name: "Images" });
     expect(screen.getByRole("link", { name: /^Videos/ })).toHaveAttribute("href", "/media/videos?q=harbor");
+    expect(screen.getByTestId("media-search-all")).toHaveAttribute("data-query", "harbor");
 
     fireEvent.click(screen.getByRole("link", { name: /^Videos/ }));
     await screen.findByRole("heading", { name: "Videos" });
     expect(router.state.location.search).toBe("?q=harbor");
+    expect(await screen.findByTestId("media-search-all")).toHaveAttribute("data-query", "harbor");
     expect(screen.getByRole("link", { name: /^Images/ })).toHaveAttribute("href", "/media/images?q=harbor");
   });
 

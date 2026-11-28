@@ -202,6 +202,29 @@ export function listSourceMedia(
   return postFunction<SourceMediaPage | SourceMediaStatusPage>("cmsListSourceMedia", token, query);
 }
 
+export interface MediaSearchRecord {
+  id: string;
+  sourceId: string;
+  kind: "video";
+  name: string;
+}
+
+export interface MediaSearchPage {
+  success: true;
+  records: MediaSearchRecord[];
+  sources: { id: string; label: string; fields: string[]; status: "searched" | "unavailable"; error?: string }[];
+  nextCursor: string | null;
+}
+
+/** Word search across every video source the person may see. It answers 403 when they see none. */
+export function searchMedia(
+  token: string | null,
+  query: { q: string; limit?: number; cursor?: string },
+  signal?: AbortSignal,
+) {
+  return postFunction<MediaSearchPage>("cmsSearchMedia", token, query, {}, { signal });
+}
+
 export async function createSourceMediaRead(
   token: string | null,
   sourceId: string,
