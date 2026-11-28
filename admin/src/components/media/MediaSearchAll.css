@@ -116,3 +116,13 @@
   color: var(--cms-ink-muted);
   font-size: var(--cms-font-xs);
 }
+
+/* Phones put the kind filter on its own row at the full panel width. Wider screens keep it at
+   the right of the title. */
+@media (max-width: 47.99rem) {
+  .media-search-all-header .ui-segmented {
+    display: grid;
+    flex: 1 1 100%;
+    width: 100%;
+  }
+}

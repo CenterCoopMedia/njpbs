@@ -5,7 +5,7 @@ import searchMedia from "../../functions/search-media.js";
 import uploads from "../../functions/source-media-uploads.js";
 import searchTokens from "../../functions/lib/source-media-search-tokens.js";
 import contract from "../../functions/lib/source-media-contract.js";
-import { backfillVideoSearchTokens } from "../../scripts/backfill-video-search-tokens.mjs";
+import { backfillVideoSearchTokens, parseBackfillArgs } from "../../scripts/backfill-video-search-tokens.mjs";
 
 const { createCmsSearchMediaHandler } = searchMedia;
 const videos = { id: "video-library", label: "Videos", access: "active_staff", prefix: "station/" };
@@ -93,5 +93,19 @@ describe("cmsSearchMedia word search in Firestore", () => {
     expect(after).toMatchObject({ searchTokens: ["dusk", "harbor"], version: 1 });
     expect(await backfillVideoSearchTokens({ firestore: db, apply: true })).toMatchObject({ current: 2, updated: 0 });
     expect((await search({ q: "harbor" })).body.records.map(record => record.id)).toEqual(["legacy"]);
+  });
+
+  it("targets only the project that the configured target names", () => {
+    const development = { emulator: false, targetProject: () => "njpbs-site-dev" };
+    expect(parseBackfillArgs(["--project", "njpbs-site-dev", "--apply"], development))
+      .toEqual({ apply: true, project: "njpbs-site-dev" });
+    expect(() => parseBackfillArgs(["--project", "njpbs-site"], development)).toThrow("configured CMS_TARGET project");
+    expect(() => parseBackfillArgs([], development)).toThrow("configured CMS_TARGET project");
+    expect(() => parseBackfillArgs(["--project"], development)).toThrow("configured CMS_TARGET project");
+    expect(() => parseBackfillArgs(["--apply", "--apply", "--project", "njpbs-site-dev"], development)).toThrow("optional --apply");
+    expect(parseBackfillArgs(["--apply"], { emulator: true, targetProject: () => { throw new Error("not read"); } }))
+      .toEqual({ apply: true, project: null });
+    expect(() => parseBackfillArgs(["--project", "njpbs-site-dev"], { emulator: true, targetProject: () => "njpbs-site-dev" }))
+      .toThrow("optional --apply");
   });
 });

@@ -3,8 +3,16 @@
 // Word search for shared videos. Each video asset stores `searchTokens`: the lowercase NFKC
 // words of its name, tags and description, in that order, without repeats. A search reads one
 // word through `array-contains` and checks the other words in memory.
+//
+// Every word of valid metadata is stored. The source-media contract accepts a name of up to
+// 500 characters, up to 30 tags of up to 80 characters and a description of up to 2,000
+// characters. A word needs one character and a separator, so valid metadata gives at most
+// 250 + 30 * 40 + 1,000 = 2,450 words. Each stored word makes one entry in the automatic
+// array index and one in the searchTokens composite index, about 4,900 entries. Firestore
+// allows 40,000 index entries for each document. MAX_SEARCH_TOKENS is only a guard for stored
+// data outside the contract and for NFKC characters that expand to more than one word.
 
-const MAX_SEARCH_TOKENS = 100;
+const MAX_SEARCH_TOKENS = 5_000;
 const MAX_SEARCH_TOKEN_LENGTH = 40;
 const WORD_PATTERN = /[\p{L}\p{M}\p{N}]+/gu;
 
@@ -22,7 +30,7 @@ function searchWords(text) {
   return (normalized.match(WORD_PATTERN) ?? []).map(boundedWord);
 }
 
-/** The stored token list for a video asset. Name words come first so they always fit. */
+/** The stored token list for a video asset. Name words come first. */
 function sourceMediaSearchTokens({ name, description, tags } = {}) {
   const tokens = new Set();
   for (const text of [name, ...(Array.isArray(tags) ? tags : []), description]) {

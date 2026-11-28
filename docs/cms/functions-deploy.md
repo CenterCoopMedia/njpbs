@@ -270,6 +270,15 @@ derived `searchTokens` word list on existing shared-video records, so word
 search finds videos added before the field existed. It is a dry run that prints
 counts only, unless `--apply` is given. It reads the credential JSON from
 stdin, or uses a local `FIRESTORE_EMULATOR_HOST`. It is safe to run again.
+`CMS_TARGET` selects the project through `scripts/lib/cms-target.mjs`.
+`--project` must name that project, and the credential must belong to it. A
+development run also needs the `CMS_DEV_*` values that `cms-target.mjs` reads.
+
+```sh
+node scripts/backfill-video-search-tokens.mjs --project njpbs-site [--apply] < service-account.json
+CMS_TARGET=development node scripts/backfill-video-search-tokens.mjs --project njpbs-site-dev [--apply] < dev-service-account.json
+FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 node scripts/backfill-video-search-tokens.mjs [--apply]
+```
 
 The scripts remain under [scripts/](../../scripts/); this consolidation changes
 none of them. A one-time done bit cannot protect records created later. Keep

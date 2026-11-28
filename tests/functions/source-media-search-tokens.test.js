@@ -15,8 +15,22 @@ describe("video search tokens", () => {
     expect(sourceMediaSearchTokens()).toEqual([]);
   });
 
+  it("stores every word of the largest valid metadata", () => {
+    // Distinct one-character words: each CJK ideograph is a letter that NFKC keeps.
+    let next = 0x4e00;
+    const words = (count) => Array.from({ length: count }, () => String.fromCodePoint(next++)).join(" ");
+    const name = words(250);
+    const tags = Array.from({ length: 30 }, () => words(40));
+    const description = words(1000);
+    expect([name.length, Math.max(...tags.map((tag) => tag.length)), description.length]).toEqual([499, 79, 1999]);
+    const tokens = sourceMediaSearchTokens({ name, tags, description });
+    expect(tokens).toHaveLength(2450);
+    expect(tokens.at(-1)).toBe(String.fromCodePoint(next - 1));
+    expect(MAX_SEARCH_TOKENS).toBeGreaterThan(tokens.length);
+  });
+
   it("bounds the word count and length and keeps name words first", () => {
-    const description = Array.from({ length: 200 }, (_, index) => `word${index}`).join(" ");
+    const description = Array.from({ length: MAX_SEARCH_TOKENS + 50 }, (_, index) => `word${index}`).join(" ");
     const tokens = sourceMediaSearchTokens({ name: "Lead title", description });
     expect(tokens).toHaveLength(MAX_SEARCH_TOKENS);
     expect(tokens.slice(0, 2)).toEqual(["lead", "title"]);

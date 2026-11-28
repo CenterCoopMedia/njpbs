@@ -4,7 +4,7 @@ import { canUseAudioLibrary, canUseMediaLibrary } from "../../lib/access";
 import { cmsListMedia, HttpError, type MediaAssetKind, type MediaAssetSummary } from "../../lib/functions";
 import { DEFAULT_MEDIA_QUERY } from "../../lib/media-query";
 import { mediaImagesPath, mediaVideosPath, mediaVoiceoversPath } from "../../lib/routes";
-import { searchMedia } from "../../lib/source-media";
+import { searchMedia, type MediaSearchPage } from "../../lib/source-media";
 import { Icon, type IconName } from "../ui/Icon";
 import { SegmentedControl } from "../ui/SegmentedControl";
 import "./MediaSearchAll.css";
@@ -12,6 +12,9 @@ import "./MediaSearchAll.css";
 /** The most hits each kind shows. The tab itself lists the rest. */
 export const MEDIA_SEARCH_ALL_HITS = 5;
 const VIDEO_QUERY_LIMIT = 160;
+// A search can answer a short or empty page with a cursor, because each request reads a
+// bounded candidate window. Each kind follows at most this many more pages.
+const MAX_EXTRA_REQUESTS = 4;
 const PRIMARY_VIDEO_SOURCE = "video-library";
 
 export type MediaSearchAllKind = "images" | "videos" | "audio";
@@ -28,7 +31,7 @@ interface Hit {
 
 type KindState =
   | { status: "loading" }
-  | { status: "ready"; hits: Hit[] }
+  | { status: "ready"; hits: Hit[]; complete: boolean; sourcesUnavailable: boolean }
   | { status: "error" }
   | { status: "hidden" };
 
@@ -39,6 +42,12 @@ const EMPTY_MESSAGES: Record<MediaSearchAllKind, string> = {
   videos: "No videos match.",
   audio: "No audio matches.",
 };
+const INCOMPLETE_MESSAGES: Record<MediaSearchAllKind, string> = {
+  images: "Not all images and documents were searched. Add words to narrow the search.",
+  videos: "Not all videos were searched. Add words to narrow the search.",
+  audio: "Not all audio was searched. Add words to narrow the search.",
+};
+const SOURCES_UNAVAILABLE_MESSAGE = "Some video sources could not be searched. Try again.";
 const ERROR_MESSAGES: Record<MediaSearchAllKind, string> = {
   images: "Images could not be searched. Try again later.",
   videos: "Videos could not be searched. Try again later.",
@@ -52,8 +61,36 @@ export interface MediaSearchAllProps {
   getIdToken: () => Promise<string>;
 }
 
-function withQuery(path: string, q: string, key: "selected" | "asset", id: string): string {
-  return `${path}?${new URLSearchParams({ q, [key]: id })}`;
+// The link holds only the search and the item. The tab opens `asset` by its ID, so the item
+// opens even when it is not on the tab's current page.
+function withQuery(path: string, q: string, id: string): string {
+  return `${path}?${new URLSearchParams({ q, asset: id })}`;
+}
+
+interface KindResult { hits: Hit[]; complete: boolean; sourcesUnavailable: boolean }
+
+/**
+ * Reads pages until there are enough records or the search ends. `complete` is false when
+ * the request bound stops the reads before that.
+ */
+async function firstRecords<T, P extends { records: T[]; nextCursor?: string | null }>(
+  load: (cursor?: string) => Promise<P>,
+  signal: AbortSignal,
+): Promise<{ pages: P[]; records: T[]; complete: boolean }> {
+  const pages: P[] = [];
+  const records: T[] = [];
+  let cursor: string | undefined;
+  for (let request = 0; request <= MAX_EXTRA_REQUESTS; request += 1) {
+    signal.throwIfAborted();
+    const page = await load(cursor);
+    pages.push(page);
+    records.push(...page.records);
+    if (records.length >= MEDIA_SEARCH_ALL_HITS || !page.nextCursor) {
+      return { pages, records: records.slice(0, MEDIA_SEARCH_ALL_HITS), complete: true };
+    }
+    cursor = page.nextCursor;
+  }
+  return { pages, records, complete: false };
 }
 
 function libraryHit(asset: MediaAssetSummary, q: string): Hit {
@@ -65,28 +102,40 @@ function libraryHit(asset: MediaAssetSummary, q: string): Hit {
     kindLabel: audio ? "Audio" : image ? "Image" : "Document",
     icon: audio ? "microphone" : image ? "image" : "file",
     thumbnail: image ? asset.thumbnails?.[0]?.url ?? asset.url : null,
-    to: withQuery(audio ? mediaVoiceoversPath() : mediaImagesPath(), q, "selected", asset.id),
+    to: withQuery(audio ? mediaVoiceoversPath() : mediaImagesPath(), q, asset.id),
   };
 }
 
-async function loadLibrary(getIdToken: () => Promise<string>, q: string, kinds: MediaAssetKind[], signal: AbortSignal) {
-  const result = await cmsListMedia(await getIdToken(), {
-    ...DEFAULT_MEDIA_QUERY, q, kinds, pageSize: MEDIA_SEARCH_ALL_HITS,
-  }, signal);
-  return result.records.slice(0, MEDIA_SEARCH_ALL_HITS).map((asset) => libraryHit(asset, q));
+async function loadLibrary(
+  getIdToken: () => Promise<string>, q: string, kinds: MediaAssetKind[], signal: AbortSignal,
+): Promise<KindResult> {
+  type Page = Awaited<ReturnType<typeof cmsListMedia>>;
+  const { records, complete } = await firstRecords<MediaAssetSummary, Page>(async (cursor) => cmsListMedia(
+    await getIdToken(),
+    { ...DEFAULT_MEDIA_QUERY, q, kinds, pageSize: MEDIA_SEARCH_ALL_HITS, ...(cursor ? { cursor } : {}) },
+    signal,
+  ), signal);
+  return { hits: records.map((asset) => libraryHit(asset, q)), complete, sourcesUnavailable: false };
 }
 
-async function loadVideos(getIdToken: () => Promise<string>, q: string, signal: AbortSignal) {
-  const page = await searchMedia(await getIdToken(), { q: q.slice(0, VIDEO_QUERY_LIMIT), limit: MEDIA_SEARCH_ALL_HITS }, signal);
-  return page.records.slice(0, MEDIA_SEARCH_ALL_HITS).map((record): Hit => ({
+async function loadVideos(getIdToken: () => Promise<string>, q: string, signal: AbortSignal): Promise<KindResult> {
+  type VideoRecord = MediaSearchPage["records"][number];
+  const { pages, records, complete } = await firstRecords<VideoRecord, MediaSearchPage>(async (cursor) => searchMedia(
+    await getIdToken(),
+    { q: q.slice(0, VIDEO_QUERY_LIMIT), limit: MEDIA_SEARCH_ALL_HITS, ...(cursor ? { cursor } : {}) },
+    signal,
+  ), signal);
+  // cmsSearchMedia answers 200 when one source fails, and marks that source unavailable.
+  const sourcesUnavailable = pages.some((page) => page.sources.some((source) => source.status === "unavailable"));
+  return { complete, sourcesUnavailable, hits: records.map((record): Hit => ({
     id: record.id,
     name: record.name,
     kindLabel: "Video",
     icon: "video",
     thumbnail: null,
     to: withQuery(record.sourceId === PRIMARY_VIDEO_SOURCE ? mediaVideosPath() : mediaVideosPath(record.sourceId),
-      q, "asset", record.id),
-  }));
+      q, record.id),
+  })) };
 }
 
 // The "All media" results under a media tab's search box. One query finds images,
@@ -109,11 +158,11 @@ export function MediaSearchAll({ getIdToken, principal, query }: MediaSearchAllP
     if (!q) return;
     const controller = new AbortController();
     const token = () => tokenRef.current();
-    const settle = (kind: MediaSearchAllKind, load: () => Promise<Hit[]>, hideOnForbidden = false) => {
+    const settle = (kind: MediaSearchAllKind, load: () => Promise<KindResult>, hideOnForbidden = false) => {
       setResults((current) => ({ ...current, [kind]: { status: "loading" } }));
       load().then(
-        (hits) => {
-          if (!controller.signal.aborted) setResults((current) => ({ ...current, [kind]: { status: "ready", hits } }));
+        (result) => {
+          if (!controller.signal.aborted) setResults((current) => ({ ...current, [kind]: { status: "ready", ...result } }));
         },
         (error: unknown) => {
           if (controller.signal.aborted) return;
@@ -163,9 +212,13 @@ export function MediaSearchAll({ getIdToken, principal, query }: MediaSearchAllP
               <h4 className="media-search-all-group-title" id={groupId}>{KIND_LABELS[kind]}</h4>
               {state.status === "loading" ? <p className="media-search-all-note" role="status">Searching {KIND_LABELS[kind].toLowerCase()}.</p>
                 : state.status === "error" ? <p className="media-search-all-note" role="alert">{ERROR_MESSAGES[kind]}</p>
-                : state.status === "ready" && state.hits.length === 0
-                  ? <p className="media-search-all-note">{EMPTY_MESSAGES[kind]}</p>
-                  : state.status === "ready" ? (
+                : state.status === "ready" && state.hits.length === 0 ? (
+                  <p className="media-search-all-note">
+                    {state.sourcesUnavailable ? SOURCES_UNAVAILABLE_MESSAGE
+                      : state.complete ? EMPTY_MESSAGES[kind] : INCOMPLETE_MESSAGES[kind]}
+                  </p>
+                ) : state.status === "ready" ? (
+                  <>
                     <ul className="media-search-all-list">
                       {state.hits.map((hit) => (
                         <li key={hit.id}>
@@ -180,7 +233,9 @@ export function MediaSearchAll({ getIdToken, principal, query }: MediaSearchAllP
                         </li>
                       ))}
                     </ul>
-                  ) : null}
+                    {state.sourcesUnavailable ? <p className="media-search-all-note">{SOURCES_UNAVAILABLE_MESSAGE}</p> : null}
+                  </>
+                ) : null}
             </div>
           );
         })}
