@@ -146,6 +146,17 @@ describe("MediaSearchAll", () => {
     expect(mocks.search).toHaveBeenCalledTimes(5);
   });
 
+  it("says the search is not complete when the page bound ends it with some hits", async () => {
+    mocks.search.mockImplementation(async (_token: string, body: { cursor?: string }) => ({
+      success: true, nextCursor: "more", sources: [],
+      records: body.cursor ? [] : [{ id: "vid-1", sourceId: "video-library", kind: "video", name: "Harbor ferry" }],
+    }));
+    renderStrip();
+    expect(await within(group("Videos")).findByRole("link", { name: /Harbor ferry/ })).toBeInTheDocument();
+    expect(within(group("Videos")).getByText("Not all videos were searched. Add words to narrow the search.")).toBeInTheDocument();
+    expect(mocks.search).toHaveBeenCalledTimes(5);
+  });
+
   it("stops following pages when the search changes", async () => {
     let releaseFirst: (value: unknown) => void = () => {};
     mocks.search.mockImplementation((_token: string, body: { q: string }) => body.q === "harbor"

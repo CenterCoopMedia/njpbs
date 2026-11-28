@@ -234,6 +234,7 @@ export function MediaSearchAll({ getIdToken, principal, query }: MediaSearchAllP
                       ))}
                     </ul>
                     {state.sourcesUnavailable ? <p className="media-search-all-note">{SOURCES_UNAVAILABLE_MESSAGE}</p> : null}
+                    {state.complete ? null : <p className="media-search-all-note">{INCOMPLETE_MESSAGES[kind]}</p>}
                   </>
                 ) : null}
             </div>
