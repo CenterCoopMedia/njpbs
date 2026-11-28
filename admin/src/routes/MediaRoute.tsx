@@ -1,3 +1,4 @@
+import { readLastMediaTab, writeLastMediaTab } from "../lib/media-last-tab";
 import { mediaPermalink, parseMediaPermalink, unavailableMediaMessage } from "../lib/media-permalink";
 import { MediaMeaningResults } from "../components/MediaMeaningResults";
 import { can, hasCapability } from "../../../packages/content-core/src/rbac";
@@ -1771,7 +1772,12 @@ export function MediaRoute({
   const location = useLocation();
   const navigate = useNavigate();
   const parsedRoute = parseMediaWorkspacePath(location.pathname);
-  const entryPath = canUseMediaLibrary(principal) ? mediaImagesPath() : mediaVideosPath();
+  // /media reopens the tab this account last used in this browser, else Videos. An entry URL
+  // with a query (an image link such as /media?asset=...) still opens Images with that query.
+  const entryPath = location.search && canUseMediaLibrary(principal) ? mediaImagesPath()
+    : readLastMediaTab(user.uid, route =>
+      (route.kind !== "images" || canUseMediaLibrary(principal))
+      && (route.kind !== "submissions" || canReviewUgcSubmissions(principal))) ?? mediaVideosPath();
   const mediaRoute = parsedRoute.kind === "entry"
     ? parseMediaWorkspacePath(entryPath)
     : parsedRoute;
@@ -1780,6 +1786,9 @@ export function MediaRoute({
       navigate({ pathname: entryPath, search: entryPath === mediaImagesPath() ? location.search : "" }, { replace: true });
     }
   }, [entryPath, location.search, navigate, parsedRoute.kind]);
+  useEffect(() => {
+    if (parsedRoute.kind !== "entry") writeLastMediaTab(user.uid, location.pathname);
+  }, [location.pathname, parsedRoute.kind, user.uid]);
   const [sources, setSources] = useState<MediaSourceSummary[]>([]);
   const [sourceError, setSourceError] = useState("");
   const [loading, setLoading] = useState(false);

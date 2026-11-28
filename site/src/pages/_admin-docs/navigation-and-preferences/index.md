@@ -144,7 +144,8 @@ The default rail can include:
 Inside **Media library**, choose a tab: **Images**, **Videos**, **Public submissions**
 or **Audio**. **Images** also holds PDF
 documents. **Public submissions** holds files from the public and appears only for site-wide
-media managers. Tabs are links, so Enter opens the focused tab. An existing
+media managers. Tabs are links, so Enter opens the focused tab. **Media library**
+opens the tab you used last in this browser, or **Videos** the first time. An existing
 `/voiceovers` bookmark opens Media library with the **Audio** tab selected.
 
 The order and available destinations depend on your account. Capability rules

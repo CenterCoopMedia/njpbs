@@ -324,7 +324,7 @@ describe("CMS debug browser", () => {
       "utf8",
     );
     expect(source).toContain("openAuthenticatedCmsBrowser");
-    expect(source).toContain('"Media library": "/media/images"');
+    expect(source).toContain('"Media library": "/media/videos"');
     expect(source).not.toContain("connectOverCDP");
     expect(source).not.toContain("127.0.0.1:9333");
   });

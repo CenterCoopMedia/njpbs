@@ -12,10 +12,11 @@ const routePaths = {
   "All content": "/content/library",
   "Media library": "/media",
 };
-// The rail link can redirect: /media opens the Images tab. Samples wait on and check the
-// landing path, while the link check still proves the rail points where it should.
+// The rail link can redirect: in a fresh browser /media opens the Videos tab. Samples wait
+// on and check the landing path, while the link check still proves the rail points where it
+// should.
 const landingPaths = {
-  "Media library": "/media/images",
+  "Media library": "/media/videos",
 };
 const routes = process.env.BENCH_ROUTES
   ? process.env.BENCH_ROUTES.split(",")
@@ -186,7 +187,7 @@ let phase = "authenticate";
               Pages: 'table[aria-label="Live site pages"]',
               "All content":
                 'table[aria-label="All content results"], .content-library .empty-state',
-              "Media library": '.media-result-bar [role="status"]',
+              "Media library": ".source-video-result-summary, .empty-state",
             };
             const errors = visible(
               '[role="alert"], .inline-message-error, .newsroom-status-retry',
