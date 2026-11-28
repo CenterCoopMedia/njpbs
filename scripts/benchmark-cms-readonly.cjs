@@ -187,7 +187,7 @@ let phase = "authenticate";
               Pages: 'table[aria-label="Live site pages"]',
               "All content":
                 'table[aria-label="All content results"], .content-library .empty-state',
-              "Media library": ".source-video-result-summary",
+              "Media library": ".source-video-result-summary, .empty-state",
             };
             const errors = visible(
               '[role="alert"], .inline-message-error, .newsroom-status-retry',
