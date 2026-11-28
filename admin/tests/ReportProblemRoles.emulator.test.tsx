@@ -24,18 +24,17 @@ const { createFixtureClients, closeFixtureClients, resetFixtureProject, proveFix
 
 const endpoint = "http://127.0.0.1:5001/demo-njpbs/us-central1/cmsSubmitBugReport";
 const roles = [
-  { name: "viewer", grants: [{ role: "staff" }], reporterRole: "staff" },
-  { name: "writer", grants: [{ role: "contributor" }], reporterRole: "contributor" },
-  { name: "scoped-writer", grants: [{ role: "contributor", sections: ["station"] }], reporterRole: "contributor" },
-  { name: "editor", grants: [{ role: "editor", sections: ["station"] }], reporterRole: "editor" },
-  { name: "station-edit-any", grants: [{ role: "editor" }], reporterRole: "editor" },
-  { name: "admin", role: "admin", reporterRole: "admin" },
-  { name: "super-admin", role: "super_admin", reporterRole: "super_admin" },
-  { name: "empty-scope-editor", grants: [{ role: "editor", sections: [] }], reporterRole: "editor", limited: true },
+  { name: "viewer", accessTier: "viewer", reporterRole: "staff" },
+  { name: "contributor", accessTier: "contributor", reporterRole: "contributor" },
+  { name: "editor", accessTier: "editor", reporterRole: "editor" },
+  { name: "publisher", accessTier: "publisher", reporterRole: "editor" },
+  { name: "admin", accessTier: "admin", reporterRole: "admin" },
+  { name: "owner", accessTier: "owner", reporterRole: "super_admin" },
   { name: "pending", profile: false, denied: true },
-  { name: "no-grant", grants: [], denied: true },
-  { name: "inactive", grants: [{ role: "editor" }], active: false, denied: true },
-  { name: "unverified", grants: [{ role: "editor" }], emailVerified: false, denied: true },
+  { name: "no-level", denied: true },
+  { name: "stored-role-grant", grants: [{ role: "editor" }], denied: true },
+  { name: "inactive", accessTier: "editor", active: false, denied: true },
+  { name: "unverified", accessTier: "editor", emailVerified: false, denied: true },
 ];
 
 // jsdom owns the form and Files; Node fetch needs an encoded multipart body.
@@ -89,6 +88,7 @@ describe.skipIf(process.env.REPORT_PROBLEM_ROLE_EMULATORS !== "true")("staff pro
     ({ deliverOutboxRow } = require("../../functions/bug-report-delivery.js"));
     await resetFixtureProject();
     await clients.firestore.collection("contentSections").doc("station").set({ label: "Station", order: 1 });
+    await clients.firestore.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true });
   });
 
   beforeEach(() => { submitted = undefined; intakeResult = undefined; });
@@ -108,7 +108,8 @@ describe.skipIf(process.env.REPORT_PROBLEM_ROLE_EMULATORS !== "true")("staff pro
     await clients.auth.createUser({ uid, email, password, emailVerified: entry.emailVerified !== false });
     if (entry.profile !== false) await clients.firestore.collection("users").doc(uid).set({
       email, displayName: entry.name, active: entry.active !== false,
-      role: entry.role ?? null, grants: entry.grants ?? [],
+      ...(entry.accessTier ? { accessTier: entry.accessTier } : {}),
+      ...(entry.grants ? { grants: entry.grants } : {}),
     });
     render(<AuthProvider><App /></AuthProvider>);
     let token = "";
@@ -143,16 +144,6 @@ describe.skipIf(process.env.REPORT_PROBLEM_ROLE_EMULATORS !== "true")("staff pro
     await waitFor(() => expect(intakeResult).toBeDefined());
     if (intakeResult?.status !== 201) throw new Error(`Intake HTTP ${intakeResult?.status}: ${intakeResult?.error}`);
     expect(await screen.findByText("Report received")).toBeVisible();
-    if (entry.limited) {
-      expect(screen.queryByRole("link", { name: "Open this report" })).not.toBeInTheDocument();
-      expect(screen.queryByRole("navigation", { name: "Primary" })).not.toBeInTheDocument();
-      const headers = { authorization: `Bearer ${token}`, "content-type": "application/json",
-        "x-njpbs-cms-edge": "local-cms-edge-only" };
-      const list = await nativeFetch(endpoint.replace("cmsSubmitBugReport", "cmsListBugReports"), {
-        method: "POST", headers, body: JSON.stringify({ view: "mine" }),
-      });
-      expect(list.status).toBe(403);
-    }
     const records = await clients.firestore.collection("bug_reports").where("reporter.uid", "==", uid).get();
     expect(records.size).toBe(1);
     const doc = records.docs[0];

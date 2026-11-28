@@ -3,6 +3,7 @@ import { useAuth } from "../context/AuthContext";
 import {
   decideStaffAccessRequest,
   listStaffAccessRequests,
+  type ApprovalAccessTier,
   type PendingStaffAccessRequest,
 } from "../lib/functions";
 import {
@@ -14,10 +15,9 @@ import {
 } from "./ui/Primitives";
 import { LoadingIndicator } from "./ui/LoadingIndicator";
 
-import { ROLE_TEXT } from "../lib/role-text";
-import { RoleExplanation } from "./RoleExplanation";
+import { ACCESS_TIER_TEXT } from "../lib/access-tier-text";
 
-type ApprovalRole = "staff" | "editor" | "contributor";
+const APPROVAL_TIERS: readonly ApprovalAccessTier[] = ["viewer", "contributor", "editor", "publisher"];
 type Confirmation = {
   request: PendingStaffAccessRequest;
   decision: "approve" | "deny";
@@ -33,10 +33,10 @@ function requestTime(value: string | null): string {
   });
 }
 
-export function StaffAccessRequestsPanel({ tiersActive = false }: { tiersActive?: boolean }) {
+export function StaffAccessRequestsPanel() {
   const { getIdToken } = useAuth();
   const [requests, setRequests] = useState<PendingStaffAccessRequest[]>([]);
-  const [roles, setRoles] = useState<Record<string, ApprovalRole>>({});
+  const [tiers, setTiers] = useState<Record<string, ApprovalAccessTier>>({});
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
   const [loading, setLoading] = useState(true);
   const [hasLoaded, setHasLoaded] = useState(false);
@@ -52,10 +52,10 @@ export function StaffAccessRequestsPanel({ tiersActive = false }: { tiersActive?
       const response = await listStaffAccessRequests(token);
       setRequests(response.requests);
       setHasLoaded(true);
-      setRoles((current) => {
+      setTiers((current) => {
         const next = { ...current };
         for (const request of response.requests) {
-          next[request.uid] ??= "staff";
+          next[request.uid] ??= "viewer";
         }
         return next;
       });
@@ -82,19 +82,19 @@ export function StaffAccessRequestsPanel({ tiersActive = false }: { tiersActive?
     setSuccess(null);
     try {
       const token = await getIdToken();
-      const role = roles[request.uid] ?? "staff";
+      const accessTier = tiers[request.uid] ?? "viewer";
       await decideStaffAccessRequest(token, {
         targetUid: request.uid,
         requestVersion: request.requestVersion,
         decision,
-        ...(decision === "approve" ? { role } : {}),
+        ...(decision === "approve" ? { accessTier } : {}),
       });
       setRequests((current) =>
         current.filter((item) => item.uid !== request.uid),
       );
       setSuccess(
         decision === "approve"
-          ? `${request.email} now has ${ROLE_TEXT[role].name} access.`
+          ? `${request.email} now has ${ACCESS_TIER_TEXT[accessTier].name} access.`
           : `${request.email} was not approved.`,
       );
       setConfirmation(null);
@@ -118,9 +118,8 @@ export function StaffAccessRequestsPanel({ tiersActive = false }: { tiersActive?
         <div>
           <h2 id="staff-request-heading">Account requests</h2>
           <p>
-            Approve staff guide access or a CMS authoring role. {tiersActive ? "An Owner" : "A Site owner"} makes this decision.
+            Approve a request at one whole-site access level. An Owner makes this decision.
           </p>
-          {tiersActive ? <p>Approvals use existing roles. After approval, use Edit in the staff directory to choose one whole-site level. The existing Editor role can publish; the Editor level cannot.</p> : null}
         </div>
         <StatusBadge
           tone={
@@ -160,7 +159,7 @@ export function StaffAccessRequestsPanel({ tiersActive = false }: { tiersActive?
 
       <div className="staff-request-list">
         {requests.map((request) => {
-          const role = roles[request.uid] ?? "staff";
+          const tier = tiers[request.uid] ?? "viewer";
           const confirming = confirmation?.request.uid === request.uid;
           return (
             <Panel className="staff-request-card" key={request.uid}>
@@ -188,37 +187,29 @@ export function StaffAccessRequestsPanel({ tiersActive = false }: { tiersActive?
               <div className="staff-request-decision">
                 <div className="staff-request-role-field">
                   <label htmlFor={`request-role-${request.uid}`}>
-                    {tiersActive ? "Existing role on approval" : "Approved role"}
+                    Access level on approval
                   </label>
                   <Select
                     aria-describedby={`request-role-help-${request.uid}`}
                     disabled={Boolean(pendingUid)}
                     id={`request-role-${request.uid}`}
                     onChange={(event) =>
-                      setRoles((current) => ({
+                      setTiers((current) => ({
                         ...current,
-                        [request.uid]: event.target.value as ApprovalRole,
+                        [request.uid]: event.target.value as ApprovalAccessTier,
                       }))
                     }
-                    value={role}
+                    value={tier}
                   >
-                    <option value="staff">
-                      {ROLE_TEXT.staff.name} — guide and audio
-                    </option>
-                    <option value="contributor">
-                      {ROLE_TEXT.contributor.name} — create own drafts
-                    </option>
-                    <option value="editor">
-                      {ROLE_TEXT.editor.name} — edit and publish site content
-                    </option>
+                    {APPROVAL_TIERS.map((option) => (
+                      <option key={option} value={option}>
+                        {ACCESS_TIER_TEXT[option].name}
+                      </option>
+                    ))}
                   </Select>
                   <small id={`request-role-help-${request.uid}`}>
-                    {ROLE_TEXT[role].summary}
+                    {ACCESS_TIER_TEXT[tier].summary}
                   </small>
-                  <details>
-                    <summary>Can and cannot</summary>
-                    <RoleExplanation role={role} headingLevel={4} />
-                  </details>
                 </div>
                 <div className="button-row staff-request-actions">
                   <Button
@@ -246,15 +237,13 @@ export function StaffAccessRequestsPanel({ tiersActive = false }: { tiersActive?
                   tone="warning"
                   title={
                     confirmation.decision === "approve"
-                      ? `Confirm ${ROLE_TEXT[role].name} access`
+                      ? `Confirm ${ACCESS_TIER_TEXT[tier].name} access`
                       : "Confirm rejection"
                   }
                 >
                   <p>
                     {confirmation.decision === "approve"
-                      ? role === "staff"
-                        ? `${request.email} will be able to open the private Boardwalk guide and browse audio in authorized categories. No CMS authoring or administration permission will be created.`
-                        : `${request.email} will be able to sign in with ${ROLE_TEXT[role].name} permissions. No Manager or Site owner role will be created.`
+                      ? `${request.email} will be able to sign in with ${ACCESS_TIER_TEXT[tier].name} access. No Admin or Owner access will be created.`
                       : `${request.email} will not receive staff access.`}
                   </p>
                   <div className="button-row">

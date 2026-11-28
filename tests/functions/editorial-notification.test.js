@@ -9,16 +9,17 @@ const { editorialNotice } = notices;
 it("routes committed Page and Post notices to eligible participants once per transition", async () => {
   const firestore = isolatedFirestore("editorial-notification.test.js");
   const profiles = {
-    writer: { grants: [{ role: "contributor", sections: ["news"] }] },
-    assigned: { grants: [{ role: "editor", sections: ["news"] }] },
-    reviewer: { grants: [{ role: "editor", sections: ["news"] }] },
-    otherDesk: { grants: [{ role: "editor", sections: ["station"] }] },
-    inactive: { grants: [{ role: "editor" }], active: false },
-    unverified: { grants: [{ role: "editor" }] },
-    disabled: { grants: [{ role: "editor" }] },
-    automated: { grants: [{ role: "editor" }] },
+    writer: { accessTier: "contributor" },
+    assigned: { accessTier: "editor" },
+    reviewer: { accessTier: "editor" },
+    otherDesk: { accessTier: "editor" },
+    inactive: { accessTier: "editor", active: false },
+    unverified: { accessTier: "editor" },
+    disabled: { accessTier: "editor" },
+    automated: { accessTier: "editor" },
   };
   const batch = firestore.batch();
+  batch.set(firestore.doc("system/staffAccessActivation"), { schema: 1, state: "active", cleanScan: true });
   for (const [uid, profile] of Object.entries(profiles)) batch.set(firestore.doc(`users/${uid}`), profile);
   batch.set(firestore.doc("cmsAutomationAccounts/automated"), {});
   await batch.commit();

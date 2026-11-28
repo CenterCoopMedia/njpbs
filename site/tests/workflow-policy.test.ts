@@ -656,14 +656,15 @@ describe("cms staging deploy surface", () => {
     }
   });
 
-  it("writes explicit bootstrap and account-email values without admission lists", () => {
+  it("writes explicit account-email values without admission lists", () => {
     const stagingDeployWorkflow = readCmsDeployWorkflow();
 
     const table = JSON.parse(read("../../config/functions-configuration.json"));
-    for (const key of ["BOOTSTRAP_SUPER_ADMINS", "CMS_STAFF_EMAIL_FROM", "CMS_STAFF_EMAIL_REPLY_TO"]) {
+    for (const key of ["CMS_STAFF_EMAIL_FROM", "CMS_STAFF_EMAIL_REPLY_TO"]) {
       expect(table.parameters[key].input).toBe(key);
       expect(table.inputs[key].variable).toBe(key);
     }
+    expect(table.parameters).not.toHaveProperty("BOOTSTRAP_SUPER_ADMINS");
     expect(table.inputs.CMS_STAFF_EMAIL_ADMIN_ORIGIN.default).toBe("https://admin.njpbs.org");
     expect(stagingDeployWorkflow).toContain("component-runner.mjs functions configure");
     expect(stagingDeployWorkflow).toContain("CMS_DEPLOYMENT_VARIABLES_JSON: ${{ toJSON(vars) }}");

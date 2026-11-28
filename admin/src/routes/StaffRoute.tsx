@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { UsersTab } from "../components/UsersTab";
 import { StaffAccessRequestsPanel } from "../components/StaffAccessRequestsPanel";
 import { RequireCapability } from "./RequireCapability";
@@ -13,7 +12,6 @@ import "./StaffRoute.css";
 export function StaffRoute() {
   const { principal } = useShell();
   const canManage = canManageRoles(principal);
-  const [tiersActive, setTiersActive] = useState(false);
   return (
     <RequireCapability
       allowed={canViewUsers}
@@ -37,14 +35,14 @@ export function StaffRoute() {
               <dd>Active or deactivated</dd>
             </div>
             <div>
-              <dt>{tiersActive ? "Owner controls" : "Site owner controls"}</dt>
+              <dt>Owner controls</dt>
               <dd>Access changes and offboarding</dd>
             </div>
           </dl>
         </header>
         <div className="staff-access-workspace">
-          {canManage ? <StaffAccessRequestsPanel tiersActive={tiersActive} /> : null}
-          <UsersTab canManage={canManage} onActivationChange={setTiersActive} />
+          {canManage ? <StaffAccessRequestsPanel /> : null}
+          <UsersTab canManage={canManage} />
         </div>
       </div>
     </RequireCapability>

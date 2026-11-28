@@ -525,7 +525,6 @@ describe("shared navigation settings", () => {
       principal: staff,
       user: { uid: "st", email: "account-26@example.org", displayName: "Staff Member" },
       userDoc: {
-        role: null,
         preferences: { navigation: stored({ order: ["custom:desk"], shared: ["custom:desk"] }) },
       },
       signOut: vi.fn(),
@@ -590,7 +589,6 @@ describe("shared navigation rail", () => {
       principal: staff,
       user: { uid: "st", email: "account-26@example.org", displayName: "Staff Member" },
       userDoc: {
-        role: null,
         preferences: {
           navigation: stored({
             order: ["custom:handbook", "custom:analytics"],

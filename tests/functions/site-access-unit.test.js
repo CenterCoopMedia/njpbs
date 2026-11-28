@@ -5,18 +5,20 @@ async function check(profile, user = {}, failure) {
   const verify = failure ? vi.fn().mockRejectedValue(failure) : vi.fn().mockResolvedValue({
     uid: "staff-1", email: "staff@example.org", emailVerified: true, ...user,
   });
-  const firestore = { collection: () => ({ doc: () => ({ get: async () => ({
-    exists: Boolean(profile), data: () => profile,
-  }) }) }) };
+  const firestore = { collection: (name) => ({ doc: () => ({ get: async () => name === "system"
+    ? { exists: true, data: () => ACTIVATION }
+    : { exists: Boolean(profile), data: () => profile } }) }) };
   const res = { code: null, set: vi.fn(), status(code) { this.code = code; return this; }, end() {} };
   await createSiteAccessHandler({ verify, firestore })({ method: "POST", headers: { authorization: "Bearer token" } }, res);
   return res.code;
 }
-const profile = { email: "staff@example.org", active: true, grants: [{ role: "editor" }] };
+const ACTIVATION = { schema: 1, state: "active", cleanScan: true };
+const profile = { email: "staff@example.org", active: true, accessTier: "publisher" };
+const noTier = { email: profile.email, active: profile.active };
 describe("site access uses current staff authority", () => {
   it("admits approved CMS staff", async () => { expect(await check(profile)).toBe(204); });
-  it.each([null, { ...profile, active: false }, { ...profile, grants: [] },
-    { ...profile, email: "someone@example.org" }, { ...profile, grants: [{ role: "unknown" }] },
+  it.each([null, { ...profile, active: false }, noTier,
+    { ...profile, email: "someone@example.org" }, { ...profile, accessTier: "unknown" },
   ])("refuses missing, disabled or invalid profiles", async (value) => {
     expect(await check(value)).toBe(403);
   });
@@ -34,6 +36,7 @@ const previewBody = { preview: { schemaVersion: 1, queueId, persistent: false } 
 function previewHarness() {
   const rows = new Map([
     ["users/staff-1", profile],
+    ["system/staffAccessActivation", ACTIVATION],
     [`cmsPreviewQueue/${queueId}`, { collection: "cmsPosts", pageId: "story", status: "ready",
       expiresAt: { toMillis: () => now + 60_000 } }],
     ["cmsPosts/story", { createdBy: "writer", section: "news", status: "draft" }],
@@ -71,7 +74,7 @@ describe("preview Function record boundary", () => {
   it("acknowledges a current record decision and reads identity only from the queue", async () => {
     const h = previewHarness();
     expect(await h.run()).toMatchObject({ code: 204, headers: { "x-njpbs-preview-access": "1" } });
-    expect(h.reads).toEqual(["users/staff-1", `cmsPreviewQueue/${queueId}`, "cmsPosts/story"]);
+    expect(h.reads).toEqual(["users/staff-1", "system/staffAccessActivation", `cmsPreviewQueue/${queueId}`, "cmsPosts/story"]);
   });
   it("reads only queue and current record access fields", async () => {
     const h = previewHarness();
@@ -81,7 +84,7 @@ describe("preview Function record boundary", () => {
       { path: "cmsPosts/story", fields: ["status", "deleted"] },
     ]);
   });
-  it.each([null, { ...profile, active: false }, { ...profile, grants: [] },
+  it.each([null, { ...profile, active: false }, noTier,
     { ...profile, email: "other@example.org" }])("uniformly denies current account changes %j", async value => {
     const h = previewHarness();
     if (value === null) h.rows.delete("users/staff-1"); else h.rows.set("users/staff-1", value);
@@ -112,13 +115,11 @@ describe("preview Function record boundary", () => {
     expect((await h.run()).code).toBe(204);
     expect(h.masks[1]).toEqual({ path: "cmsPages/contact", fields: ["status", "deleted"] });
   });
-  it("admits active Editors from either area for legacy Page queues", async () => {
+  it.each(["editor", "publisher"])("admits active %s accounts for legacy Page queues", async (accessTier) => {
     const h = previewHarness();
     h.rows.set(`cmsPreviewQueue/${queueId}`, { pageId: "contact", status: "ready", expiresAt: { toMillis: () => now + 1 } });
     h.rows.set("cmsPages/contact", { status: "draft", createdBy: "writer", section: "news" });
-    h.rows.set("users/staff-1", { ...profile, grants: [{ role: "editor", sections: ["station"] }] });
-    expect((await h.run()).code).toBe(204);
-    h.rows.set("users/staff-1", { ...profile, grants: [{ role: "editor", sections: ["news"] }] });
+    h.rows.set("users/staff-1", { ...profile, accessTier });
     expect((await h.run()).code).toBe(204);
   });
   it.each([false, true])("bounds legacy ready output to 24 hours for persistent=%s", async persistent => {

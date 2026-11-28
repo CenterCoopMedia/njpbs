@@ -67,7 +67,8 @@ beforeEach(async () => {
   vi.spyOn(admin.auth(), "verifyIdToken").mockResolvedValue({
     uid: ACTOR_UID, email: "triage-admin@example.test", email_verified: true,
   });
-  await changeAccount({ role: "admin", active: true });
+  await db.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true });
+  await changeAccount({ accessTier: "admin", active: true });
   await db.collection("bug_reports").doc(REPORT_ID).set(contract.composeBugReport({
     severity: "work_impaired",
     area: "content_editing",
@@ -100,7 +101,7 @@ describe("bug report triage authorization at the request and storage boundaries"
     const firestore = {
       collection: db.collection.bind(db),
       runTransaction: async (callback) => {
-        await changeAccount({ role: "editor", active: true });
+        await changeAccount({ accessTier: "publisher", active: true });
         return db.runTransaction(callback);
       },
     };
@@ -112,10 +113,12 @@ describe("bug report triage authorization at the request and storage boundaries"
   });
 
   const accounts = [
-    { account: "demoted", profile: { role: null, active: true, grants: [{ role: "editor" }] } },
-    { account: "inactive", profile: { role: "admin", active: false } },
+    { account: "demoted", profile: { active: true, accessTier: "publisher" } },
+    { account: "inactive", profile: { accessTier: "admin", active: false } },
     { account: "deleted", profile: null },
+    // Stored role fields without an access level confer nothing (#746).
     { account: "grant-only admin", profile: { role: null, active: true, grants: [{ role: "admin" }] } },
+    { account: "legacy role admin", profile: { role: "admin", active: true } },
   ];
 
   it.each(accounts.flatMap((account) =>
@@ -152,9 +155,9 @@ describe("bug report triage authorization at the request and storage boundaries"
   );
 
   it.each([
-    { name: "admin", profile: { role: "admin", active: true } },
-    { name: "super admin", profile: { role: "super_admin", active: true } },
-    { name: "legacy admin", profile: { role: "admin" } },
+    { name: "Admin", profile: { accessTier: "admin", active: true } },
+    { name: "Owner", profile: { accessTier: "owner", active: true } },
+    { name: "Admin without an active field", profile: { accessTier: "admin" } },
   ])("allows a current $name to write and replay once", async ({ profile }) => {
     await changeAccount(profile);
 

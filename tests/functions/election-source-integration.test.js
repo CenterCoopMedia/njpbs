@@ -137,8 +137,9 @@ beforeEach(async () => {
   vi.stubEnv("CMS_DEPLOYMENT_ENVIRONMENT", "development");
   vi.stubEnv("FUNCTIONS_EMULATOR", "true");
   await clearEmulatorFirestore(`http://${process.env.FIRESTORE_EMULATOR_HOST}/emulator/v1/projects/${project}/databases/(default)/documents`, { method: "DELETE" });
-  await db.doc(`users/${actors.editor.uid}`).set({ role: "admin", active: true, email: actors.editor.email, displayName: "Results editor" });
-  await db.doc(`users/${actors.writer.uid}`).set({ grants: [{ role: "contributor" }], active: true, email: actors.writer.email, displayName: "Results writer" });
+  await db.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true });
+  await db.doc(`users/${actors.editor.uid}`).set({ accessTier: "admin", active: true, email: actors.editor.email, displayName: "Results editor" });
+  await db.doc(`users/${actors.writer.uid}`).set({ accessTier: "contributor", active: true, email: actors.writer.email, displayName: "Results writer" });
   await seedSystem();
   sourceData = repoFixture();
   providerCalls = [];
@@ -455,10 +456,14 @@ describe("Election source Auth/HTTP/Firestore and publication boundaries", () =>
     expect(providerCalls).toEqual([]);
     expect(await poll(current.id)).toMatchObject({ skipped: true });
   });
-  it("denies an editor whose publish grant belongs to another section", async () => {
+  it.each([
+    ["on top of a Contributor level", { accessTier: "contributor" }],
+    ["without an access level", {}],
+  ])("gives a stored section-scoped editor grant no publish authority %s", async (_label, level) => {
     const current = await connect("cmsPosts");
     await db.doc("sections/arts").set({ name: "Arts", active: true });
-    await db.doc(`users/${actors.writer.uid}`).update({ grants: [{ role: "editor", sections: ["arts"] }] });
+    await db.doc(`users/${actors.writer.uid}`).set({ ...level, active: true, email: actors.writer.email,
+      displayName: "Results writer", grants: [{ role: "editor", sections: ["arts"] }] });
     const response = await call("sources", { action: "pause", ...address("cmsPosts"), baseVersion: 1 }, actors.writer);
     expect(response.status).toBe(403);
     expect((await connection(current.id)).paused).toBe(false);

@@ -77,8 +77,7 @@ export async function openDevAdmission(stream) {
         return value
           ? {
               active: value.active,
-              role: value.role,
-              grants: value.grants,
+              accessTier: value.accessTier,
               email: value.email,
             }
           : null;

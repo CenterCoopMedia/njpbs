@@ -568,7 +568,8 @@ describe("immediate image purge", () => {
       thumbnails: [{ storageKey: thumbnailKey, url: `${origin}/${thumbnailKey}` }] },
     { queuedAt: new Date(NOW - 10_000).toISOString(), eligibleAt: new Date(NOW + bin.MEDIA_RETENTION_MS - 10_000).toISOString() });
     await Promise.all([
-      db.doc(`users/${uid}`).set({ role: "admin" }),
+      db.doc(`users/${uid}`).set({ accessTier: "admin" }),
+      db.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true }),
       db.doc("system/mediaPurge").set({ enabled: true, dryRun: false, immediateDeleteDelegates: [uid] }),
       db.doc("system/publicDeployment").set({ schemaVersion: 1, state: "idle", mediaLifecycleReady: true,
         activeGeneration: 1, lastReservedGeneration: 1, newestEligibleGeneration: 1,

@@ -88,22 +88,23 @@ describe("dev fast publication proof boundary", () => {
     expect(publicEvidence(response, expected)).toBe(false);
   });
 
-  it("rejects broader roles, inactive accounts and the wrong editorial scope", () => {
+  it("rejects broader tiers, inactive accounts and stored role grants", () => {
     const profile = {
       active: true,
-      role: null,
       email: "editor-4@example.org",
-      grants: [{ role: "editor", sections: ["news"] }],
+      accessTier: "publisher",
     };
     expect(assertOrdinaryEditor("fixture-uid", profile)).toEqual({
-      role: "editor",
+      accessTier: "publisher",
       section: "news",
     });
     for (const value of [
-      { ...profile, role: "admin" },
+      { ...profile, accessTier: "admin" },
+      { ...profile, accessTier: "owner" },
+      { ...profile, accessTier: "editor" },
       { ...profile, active: false },
-      { ...profile, grants: [{ role: "contributor" }] },
-      { ...profile, grants: [{ role: "editor", sections: ["politics"] }] },
+      { ...profile, email: "other@example.org" },
+      { active: true, email: profile.email, grants: [{ role: "editor", sections: ["news"] }] },
     ]) {
       expect(() => assertOrdinaryEditor("fixture-uid", value)).toThrow(
         "ordinary_editor_required",

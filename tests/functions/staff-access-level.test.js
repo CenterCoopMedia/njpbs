@@ -20,7 +20,7 @@ beforeAll(() => {
 beforeEach(async () => {
   await clearEmulatorFirestore(`http://${host}/emulator/v1/projects/demo-njpbs/databases/(default)/documents`, { method: "DELETE" }, db);
   await db.doc("system/staffAccessActivation").set(activation);
-  await ref("owner").set({ role: "super_admin", active: true });
+  await ref("owner").set({ accessTier: "owner", active: true });
   await ref("target").set({ role: null, active: true, grants: [{ role: "editor", sections: ["watch"] }] });
 });
 afterAll(async () => { await Promise.all(admin.apps.map((app) => app.delete())); });
@@ -55,9 +55,9 @@ describe("single staff level replacement", () => {
     expect(await audit()).toEqual([]);
   });
   it.each([
-    { role: "admin" }, { accessTier: "admin", role: "super_admin" },
-    { accessTier: "invalid", role: "super_admin" }, { role: "super_admin", active: false },
-    { role: "super_admin", active: "true" },
+    { role: "super_admin" }, { accessTier: "admin", role: "super_admin" },
+    { accessTier: "invalid", role: "super_admin" }, { accessTier: "owner", active: false },
+    { accessTier: "owner", active: "true" },
   ])("rechecks the current actor in the transaction: %j", async (profile) => {
     await ref("owner").set(profile);
     const before = await stored();
@@ -65,8 +65,8 @@ describe("single staff level replacement", () => {
     expect(await stored()).toEqual(before);
     expect(await audit()).toEqual([]);
   });
-  it("accepts an activated Owner without a legacy role", async () => {
-    await ref("owner").set({ accessTier: "owner", role: null, grants: [], active: true });
+  it("accepts an activated Owner without stored role fields", async () => {
+    await ref("owner").set({ accessTier: "owner", active: true });
     expect((await call()).statusCode).toBe(200);
   });
   it("rejects a demotion between request admission and transaction execution", async () => {
@@ -93,9 +93,11 @@ describe("single staff level replacement", () => {
   });
   it("refuses a stale reviewed row and keeps its new access", async () => {
     const expectedAccess = principal.accessStateFromUserDoc(await stored());
-    await ref("target").update({ grants: [{ role: "contributor" }] });
-    expect((await call({ body: { targetUid: "target", accessTier: "owner", expectedAccess } })).statusCode).toBe(409);
-    expect((await stored()).grants).toEqual([{ role: "contributor" }]);
+    await ref("target").update({ accessTier: "contributor" });
+    const stale = await call({ body: { targetUid: "target", accessTier: "owner", expectedAccess } });
+    expect(stale.statusCode).toBe(409);
+    expect(stale.body).toEqual({ error: "This person's access changed. Reload Boardwalk and try again." });
+    expect((await stored()).accessTier).toBe("contributor");
     expect(await audit()).toEqual([]);
   });
   it("allows one of two concurrent changes to the same reviewed row", async () => {

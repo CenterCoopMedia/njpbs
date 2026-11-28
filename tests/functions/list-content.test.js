@@ -1119,6 +1119,7 @@ describe("cmsListContent emulator wiring", () => {
         method: "DELETE",
       },
     );
+    await db.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true });
   });
 
   afterAll(async () => {
@@ -1138,7 +1139,7 @@ describe("cmsListContent emulator wiring", () => {
       clientAuth, "library-admin@example.com", "password123",
     );
     const uid = credential.user.uid;
-    await db.collection("users").doc(uid).set({ role: "admin", grants: [] });
+    await db.collection("users").doc(uid).set({ accessTier: "admin" });
     await Promise.all([
       db.collection("cmsPosts").doc("mine").set({
         type: "article",
@@ -1216,7 +1217,7 @@ describe("cmsListContent emulator wiring", () => {
       clientAuth, "page-status@example.test", "local-status-fixture-password",
     );
     const uid = credential.user.uid;
-    await db.collection("users").doc(uid).set({ role: "admin", grants: [] });
+    await db.collection("users").doc(uid).set({ accessTier: "admin" });
     await Promise.all([
       db.collection("cmsPages").doc("contact").set({ title: "Contact", status: "draft", section: "station",
         version: 44, contentVersion: 3, publiclyVisible: true, publicSourceVersion: 8,
@@ -1248,7 +1249,7 @@ describe("cmsListContent emulator wiring", () => {
     expect(legacy).not.toHaveProperty("publishedContentVersion");
   });
 
-  it("serves a contributor only their records through the real principal resolver", async () => {
+  it("serves a Contributor every readable record through the real principal resolver", async () => {
     await admin.auth().createUser({
       email: "library-contributor@example.com",
       password: "password123",
@@ -1262,8 +1263,7 @@ describe("cmsListContent emulator wiring", () => {
       .collection("users")
       .doc(uid)
       .set({
-        role: null,
-        grants: [{ role: "contributor" }],
+        accessTier: "contributor",
       });
     await Promise.all([
       db.collection("cmsPosts").doc("owned").set({
@@ -1298,11 +1298,11 @@ describe("cmsListContent emulator wiring", () => {
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
       success: true,
-      total: 1,
-      allCount: 1,
+      total: 2,
+      allCount: 2,
       mineCount: 1,
-      records: [{ id: "owned", title: "My post" }],
-      statusCounts: { draft: 1, published: 0 },
+      records: [{ id: "owned", title: "My post" }, { id: "private-to-other", title: "Their program" }],
+      statusCounts: { draft: 1, published: 1 },
     });
   }, 20_000);
 });

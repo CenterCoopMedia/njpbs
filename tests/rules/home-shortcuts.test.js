@@ -7,7 +7,7 @@ import { deleteField, doc, getDoc, setDoc, updateDoc } from "firebase/firestore"
 const recentAuthTime = Math.floor(Date.now() / 1000) - 3600;
 
 let environment;
-const database = uid => environment.authenticatedContext(uid, { auth_time: recentAuthTime }).firestore();
+const database = uid => environment.authenticatedContext(uid, { auth_time: recentAuthTime, email_verified: true }).firestore();
 // Cold rules initialization needs a bounded setup budget.
 // loaded CI exceeded the default 10 s. Give only this startup hook 20 s.
 beforeAll(async () => {
@@ -20,8 +20,9 @@ afterAll(async () => { await environment?.cleanup(); });
 beforeEach(async () => {
   await environment.clearFirestore();
   await environment.withSecurityRulesDisabled(async context => {
-    for (const [uid, role] of [["owner", null], ["other", null], ["admin", "admin"]]) {
-      await setDoc(doc(context.firestore(), "users", uid), { role, grants: [{ role: "staff" }], preferences: { display: { controlPresentation: "text" } } });
+    await setDoc(doc(context.firestore(), "system/staffAccessActivation"), { schema: 1, state: "active", cleanScan: true });
+    for (const [uid, accessTier] of [["owner", "viewer"], ["other", "viewer"], ["admin", "admin"]]) {
+      await setDoc(doc(context.firestore(), "users", uid), { accessTier, preferences: { display: { controlPresentation: "text" } } });
     }
   });
 });
@@ -45,6 +46,8 @@ describe("Home shortcut preferences", () => {
     await assertFails(updateDoc(doc(client, "users/owner"), { "preferences.homeShortcuts": ["recent-edits", "assigned"], role: "admin" }));
     await assertSucceeds(updateDoc(doc(client, "users/owner"), { "preferences.homeShortcuts": ["recent-edits", "assigned"] }));
     await assertFails(getDoc(doc(client, "cmsPosts/private-post")));
-    expect((await getDoc(doc(client, "users/owner"))).data().role).toBeNull();
+    const stored = (await getDoc(doc(client, "users/owner"))).data();
+    expect(stored.role).toBeUndefined();
+    expect(stored.accessTier).toBe("viewer");
   });
 });

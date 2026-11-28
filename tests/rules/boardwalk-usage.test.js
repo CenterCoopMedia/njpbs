@@ -13,7 +13,9 @@ beforeAll(async () => {
   } });
   await environment.withSecurityRulesDisabled(async context => {
     for (const name of collections) await setDoc(doc(context.firestore(), name, "private-row"), { uid: "staff-1" });
-    for (const role of ["staff", "admin", "super_admin"]) await setDoc(doc(context.firestore(), "users", role), { role, active: true });
+    await setDoc(doc(context.firestore(), "system/staffAccessActivation"), { schema: 1, state: "active", cleanScan: true });
+    const tiers = { staff: "viewer", admin: "admin", super_admin: "owner" };
+    for (const role of Object.keys(tiers)) await setDoc(doc(context.firestore(), "users", role), { accessTier: tiers[role], active: true });
   });
 });
 

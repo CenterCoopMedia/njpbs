@@ -66,8 +66,9 @@ beforeEach(async () => {
   pairs = [];
   assetIds = [];
   const email = `${uid}@example.test`;
-  const created = await admin.auth().createUser({ uid, email, password: "local-test-password", displayName: "Test editor" });
-  await db.collection("users").doc(uid).set({ active: true, role: "admin", displayName: "Test editor" });
+  const created = await admin.auth().createUser({ uid, email, emailVerified: true, password: "local-test-password", displayName: "Test editor" });
+  await db.collection("users").doc(uid).set({ active: true, accessTier: "admin", displayName: "Test editor" });
+  await db.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true });
   // The emulator sets the revocation time at account creation, and a sign-in in that same second
   // is refused. This account predates the sign-in.
   const backdated = await fetch(`http://${process.env.FIREBASE_AUTH_EMULATOR_HOST}/identitytoolkit.googleapis.com/v1/accounts:update?key=local-test`, {
@@ -215,14 +216,13 @@ describe("Premiere browser-approved desktop sessions", () => {
     const body = { operation: "session", payload: {} };
     expect((await call(handlers.request, body, sessionToken)).body.capabilities)
       .toMatchObject({ canUpload: true, canEditMetadata: true });
-    await db.collection("users").doc(uid).set({ active: true, grants: [{ role: "staff" }] });
+    await db.collection("users").doc(uid).set({ active: true, accessTier: "viewer" });
     expect((await call(handlers.request, body, sessionToken)).body.capabilities)
       .toMatchObject({ canUpload: false, canEditMetadata: false });
-    await db.doc("sections/news").set({ label: "News" });
-    await db.collection("users").doc(uid).set({ active: true, grants: [{ role: "editor", sections: ["news"] }] });
+    await db.collection("users").doc(uid).set({ active: true, accessTier: "editor" });
     expect((await call(handlers.request, body, sessionToken)).body.capabilities)
       .toMatchObject({ canUpload: true, canEditMetadata: true });
-    await db.doc("sections/news").delete();
+    await db.collection("users").doc(uid).set({ active: true });
     expect((await call(handlers.request, body, sessionToken)).body.capabilities)
       .toMatchObject({ canUpload: false, canEditMetadata: false });
     await db.collection("users").doc(uid).update({ active: false });
@@ -234,7 +234,7 @@ describe("Premiere browser-approved desktop sessions", () => {
 
   it.each([-1, 0])("rejects sessions authenticated %i seconds from Firebase's revocation timestamp", async offset => {
     const sessions = sessionModule.createDesktopSessions({ firestore: db, auth: {
-      getUser: async () => ({ uid, disabled: false, tokensValidAfterTime: new Date((Math.floor(clock / 1000) - 60) * 1000).toUTCString() }),
+      getUser: async () => ({ uid, disabled: false, emailVerified: true, tokensValidAfterTime: new Date((Math.floor(clock / 1000) - 60) * 1000).toUTCString() }),
     } });
     await expect(sessions.activeActor(uid, (Math.floor(clock / 1000) - 60) + offset))
       .rejects.toMatchObject({ status: 401, code: "session_invalid" });
@@ -254,7 +254,7 @@ describe("Premiere browser-approved desktop sessions", () => {
     const watermark = (Math.floor(clock / 1000) - 60);
     await db.collection("users").doc(uid).update({ tokensValidAfter: watermark });
     const sessions = sessionModule.createDesktopSessions({ firestore: db, auth: {
-      getUser: async () => ({ uid, disabled: false, tokensValidAfterTime: new Date((Math.floor(clock / 1000) - 60) * 1000).toUTCString() }),
+      getUser: async () => ({ uid, disabled: false, emailVerified: true, tokensValidAfterTime: new Date((Math.floor(clock / 1000) - 60) * 1000).toUTCString() }),
     } });
     await expect(sessions.activeActor(uid, watermark + 1))
       .resolves.toMatchObject({ uid, authTime: watermark + 1, approvedActive: true });
@@ -318,7 +318,7 @@ describe("Premiere browser-approved desktop sessions", () => {
       expect(saved.body.asset).toMatchObject({ name: "Edited footage", version: 2, markers, parentSource: null });
       expect(saved.body.asset.objectKey).toBeUndefined();
       expect((await call(handlers.request, update, sessionToken)).statusCode).toBe(409);
-      await db.collection("users").doc(uid).set({ active: true, grants: [{ role: "staff" }] });
+      await db.collection("users").doc(uid).set({ active: true, accessTier: "viewer" });
       update.payload.expectedVersion = 2;
       expect((await call(handlers.request, update, sessionToken)).statusCode).toBe(403);
       const read = await call(handlers.request, { operation: "cmsListSourceMedia", payload: { assetId } }, sessionToken);

@@ -32,7 +32,8 @@ beforeAll(async () => {
 });
 beforeEach(async () => {
   fixture = await boardwalkFixture(db);
-  await db.doc(`users/${uid}`).set({ active: true, role: "admin", emailVerified: true });
+  await db.doc(`users/${uid}`).set({ active: true, accessTier: "admin", emailVerified: true });
+  await db.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true });
   await db.doc(api.SETTINGS_PATH).set({ enabled: true, newsdeskId });
   auth.resetAuthTokenCache();
   provider = storydeskProvider();
@@ -99,7 +100,7 @@ describe("default-off StoryDesk endpoints", () => {
       method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email, password, returnSecureToken: true }) });
     const secondUid = (await signup.json()).localId;
     await firebase.admin.auth().updateUser(secondUid, { emailVerified: true });
-    await fixture.ref("users", secondUid).set({ active: true, role: "admin", emailVerified: true });
+    await fixture.ref("users", secondUid).set({ active: true, accessTier: "admin", emailVerified: true });
     const signin = await fetch(`http://${host}/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=synthetic`, {
       method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email, password, returnSecureToken: true }) });
     const secondToken = (await signin.json()).idToken;
@@ -163,7 +164,7 @@ describe("default-off StoryDesk endpoints", () => {
     } finally { await activation.delete(); }
   });
   it.each(["destinations", "candidates", "preview", "confirm"])("refuses %s for base staff without reading the key or StoryDesk", async action => {
-    await db.doc(`users/${uid}`).set({ active: true, role: "staff", emailVerified: true });
+    await db.doc(`users/${uid}`).set({ active: true, accessTier: "viewer", emailVerified: true });
     const result = await invoke(action, {}, { extra: { apiKey: () => { throw new Error("Key must not be read"); } } });
     expect(result).toMatchObject({ statusCode: 403, body: { code: "not_authorized" } });
     expect(provider.calls).toHaveLength(0);
@@ -365,7 +366,7 @@ describe("default-off StoryDesk endpoints", () => {
     expect(state.operations.map(item => item.operationId).sort()).toEqual(ids.toSorted());
   });
   it("enforces selected-resource permissions and refuses client workspace or provider configuration", async () => {
-    await db.doc(`users/${uid}`).set({ active: true, grants: [{ role: "contributor", sections: ["other"] }] });
+    await db.doc(`users/${uid}`).set({ active: true, accessTier: "contributor" });
     expect((await invoke("prepare", { action: "prepare", resource: { kind: "post", id: "post" }, target: { kind: "new-story" } })).statusCode).toBe(403);
     expect((await invoke("destinations", { newsdeskId: "forged" })).statusCode).toBe(400);
     expect(provider.calls).toHaveLength(0);

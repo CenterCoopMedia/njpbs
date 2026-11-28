@@ -78,6 +78,7 @@ describe("cmsAssignContent", () => {
     await fetch(`http://${AUTH_HOST}/emulator/v1/projects/${PROJECT}/accounts`, {
       method: "DELETE",
     });
+    await db.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true });
   });
 
   afterAll(async () => {
@@ -123,16 +124,19 @@ describe("cmsAssignContent", () => {
     })).toBeNull();
   });
 
-  it("recognizes only CMS users who hold a content role", () => {
-    expect(isAssignableUser({ role: "admin", grants: [] })).toBe(true);
-    expect(isAssignableUser({ role: "super_admin", grants: [] })).toBe(true);
-    expect(isAssignableUser({ active: false, role: "admin", grants: [] })).toBe(false);
-    expect(isAssignableUser({ role: null, grants: [{ role: "editor", sections: ["news"] }] }))
-      .toBe(true);
-    expect(isAssignableUser({ role: null, grants: [{ role: "contributor" }] })).toBe(true);
-    expect(isAssignableUser({ role: "editor", grants: [] })).toBe(false);
-    expect(isAssignableUser({ role: null, grants: [{ role: "viewer" }] })).toBe(false);
-    expect(isAssignableUser(null)).toBe(false);
+  it("recognizes only active CMS users whose access level can create content", () => {
+    expect(isAssignableUser({ accessTier: "admin" }, true)).toBe(true);
+    expect(isAssignableUser({ accessTier: "owner" }, true)).toBe(true);
+    expect(isAssignableUser({ accessTier: "publisher" }, true)).toBe(true);
+    expect(isAssignableUser({ accessTier: "editor" }, true)).toBe(true);
+    expect(isAssignableUser({ accessTier: "contributor" }, true)).toBe(true);
+    expect(isAssignableUser({ active: false, accessTier: "admin" }, true)).toBe(false);
+    expect(isAssignableUser({ accessTier: "viewer" }, true)).toBe(false);
+    expect(isAssignableUser({ accessTier: "unknown" }, true)).toBe(false);
+    expect(isAssignableUser({ accessTier: "admin" }, false)).toBe(false);
+    expect(isAssignableUser({ role: "admin", grants: [] }, true)).toBe(false);
+    expect(isAssignableUser({ grants: [{ role: "editor" }] }, true)).toBe(false);
+    expect(isAssignableUser(null, true)).toBe(false);
   });
 
   it("refuses to change the assignment of a record of a retired kind", async () => {
@@ -153,8 +157,7 @@ describe("cmsAssignContent", () => {
       db.collection("users").doc("editor-1").set({
         email: "editor@example.com",
         displayName: "Editorial User",
-        role: null,
-        grants: [{ role: "editor", sections: ["news"] }],
+        accessTier: "editor",
       }),
     ]);
     const handler = createCmsAssignContentHandler({
@@ -192,8 +195,7 @@ describe("cmsAssignContent", () => {
       db.collection("users").doc("editor-1").set({
         email: "editor@example.com",
         displayName: "Editorial User",
-        role: null,
-        grants: [{ role: "editor", sections: ["news"] }],
+        accessTier: "editor",
       }),
     ]);
     const handler = createCmsAssignContentHandler({
@@ -303,8 +305,7 @@ describe("cmsAssignContent", () => {
         version: 6,
       }),
       db.collection("users").doc("viewer-1").set({
-        role: null,
-        grants: [],
+        accessTier: "viewer",
       }),
     ]);
     const handler = createCmsAssignContentHandler({
@@ -356,10 +357,9 @@ describe("cmsAssignContent", () => {
     );
     const uid = credential.user.uid;
     await Promise.all([
-      db.collection("users").doc(uid).set({ role: "admin", grants: [] }),
+      db.collection("users").doc(uid).set({ accessTier: "admin" }),
       db.collection("users").doc("editor-1").set({
-        role: null,
-        grants: [{ role: "editor", sections: ["news"] }],
+        accessTier: "editor",
       }),
       db.collection("cmsPosts").doc("record").set({
         id: "record",

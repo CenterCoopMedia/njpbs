@@ -7,10 +7,11 @@ import { withCmsEdge } from "../../functions/lib/cms-edge.js";
 import { datasetRelease } from "../fixtures/dataset-release.js";
 
 const { db, admin } = firebase;
-let server, origin, owner, contributor, stranger, staff;
+let server, origin, owner, contributor, stranger, staff, viewer;
 async function account(profile) {
   const uid = `datasets-${randomUUID()}`;
   await admin.auth().createUser({ uid, email: `${uid}@example.test`, emailVerified: true });
+  await db.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true });
   await db.doc(`users/${uid}`).set({ active: true, ...profile });
   const response = await fetch(`http://${process.env.FIREBASE_AUTH_EMULATOR_HOST}/identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=synthetic`, {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: await admin.auth().createCustomToken(uid), returnSecureToken: true }),
@@ -34,9 +35,10 @@ async function transition(record, action, actor = owner, extra = {}) {
 }
 beforeAll(async () => {
   if (!process.env.FIRESTORE_EMULATOR_HOST || !process.env.FIREBASE_AUTH_EMULATOR_HOST) throw new Error("Use Auth and Firestore emulators.");
-  [owner, contributor, stranger, staff] = await Promise.all([
-    account({ role: "admin" }), account({ grants: [{ role: "contributor" }] }),
-    account({ grants: [{ role: "contributor" }] }), account({ grants: [{ role: "staff" }] }),
+  [owner, contributor, stranger, staff, viewer] = await Promise.all([
+    account({ accessTier: "admin" }), account({ accessTier: "contributor" }),
+    account({ accessTier: "contributor" }), account({ grants: [{ role: "staff" }] }),
+    account({ accessTier: "viewer" }),
   ]);
   const handler = withCmsEdge(datasets.createDatasetsHandler(), { readSecret: () => "synthetic-edge" });
   server = createServer(async (req, res) => {
@@ -59,13 +61,14 @@ describe("dataset HTTP/Auth/Firestore boundary", () => {
     expect((await call({ action: "list" }, null)).status).toBe(401);
     expect((await call({ action: "list" }, owner, { "x-njpbs-cms-edge": "wrong" })).status).toBe(403);
     expect((await call({ action: "save", title: "Forged", release: datasetRelease(), ownerUid: owner.uid, requestId: randomUUID() })).status).toBe(400);
-    const inactive = await account({ role: "super_admin", active: false });
+    const inactive = await account({ accessTier: "owner", active: false });
     expect((await call({ action: "list" }, inactive)).status).toBe(403);
     expect((await call({ action: "save", title: "Bad source", release: { ...datasetRelease(), approvedBy: owner.uid }, requestId: randomUUID() })).status).toBe(400);
   });
   it("keeps saves private, enforces owner and approval permission, and retains immutable corrections", async () => {
     let record = await save(datasetRelease(), contributor);
     expect(record).toMatchObject({ ownerUid: contributor.uid, state: "draft", approvedReleaseId: null, version: 1, canApprove: false });
+    // A stored role grant without an access level confers no read.
     const staffRead = await call({ action: "get", id: record.id }, staff);
     expect(staffRead.status).toBe(403);
     expect(staffRead.cache).toBe("private, no-store");
@@ -119,6 +122,8 @@ describe("dataset HTTP/Auth/Firestore boundary", () => {
     expect((await call(body, contributor)).status).toBe(403);
     expect((await call({ action: "owners" }, contributor)).status).toBe(403);
     expect((await call({ ...body, ownerUid: staff.uid })).status).toBe(400);
+    // An active Viewer can read but not create, so it cannot own a dataset.
+    expect((await call({ ...body, ownerUid: viewer.uid })).status).toBe(400);
     const assigned = await call(body);
     expect(assigned.status, assigned.body.error).toBe(200);
     record = assigned.body.dataset;

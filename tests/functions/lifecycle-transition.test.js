@@ -191,6 +191,7 @@ describe("cmsTransitionContent", () => {
     await fetch(`http://${AUTH_HOST}/emulator/v1/projects/${PROJECT}/accounts`, {
       method: "DELETE",
     });
+    await db.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true });
   });
 
   afterAll(async () => {
@@ -553,7 +554,7 @@ describe("cmsTransitionContent", () => {
         },
       }),
     ]);
-    await db.doc("users/author-1").set({ grants: [{ role: "contributor" }] });
+    await db.doc("users/author-1").set({ accessTier: "contributor" });
     let committedAtDelivery;
     const sendEmail = vi.fn(async () => {
       committedAtDelivery = {
@@ -1346,8 +1347,7 @@ describe("cmsTransitionContent", () => {
     const uid = credential.user.uid;
     await Promise.all([
       db.collection("users").doc(uid).set({
-        role: null,
-        grants: [{ role: "editor" }],
+        accessTier: "publisher",
       }),
       db.collection("cmsPages").doc("watch").set(publishedPage()),
     ]);

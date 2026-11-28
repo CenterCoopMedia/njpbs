@@ -147,14 +147,14 @@ describe("explicit StoryDesk import through the Post save owner", () => {
     const before = await preview();
     await fixture.ref("users", "staff").update({ active: false });
     await expect(flow.confirmImport(before.operation.operationId)).rejects.toMatchObject({ code: "not_authorized" });
-    await fixture.ref("users", "staff").set({ active: true, role: "viewer", emailVerified: true });
+    await fixture.ref("users", "staff").set({ active: true, accessTier: "viewer", emailVerified: true });
     await expect(flow.confirmImport(before.operation.operationId)).rejects.toMatchObject({ code: "not_authorized" });
     expect((await db.collection("cmsPosts").get()).size).toBe(1);
     expect((await db.collection("cuezMappings").get()).empty).toBe(true);
   });
   it("refuses list, preview, and confirmation for staff without Post create access before reading StoryDesk", async () => {
     const before = await preview();
-    await fixture.ref("users", "staff").set({ active: true, role: "staff", emailVerified: true });
+    await fixture.ref("users", "staff").set({ active: true, accessTier: "viewer", emailVerified: true });
     provider.calls.length = 0;
     await expect(flow.listCandidates()).rejects.toMatchObject({ code: "not_authorized" });
     await expect(preview()).rejects.toMatchObject({ code: "not_authorized" });

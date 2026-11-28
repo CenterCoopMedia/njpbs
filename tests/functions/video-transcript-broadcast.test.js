@@ -40,7 +40,7 @@ describe('broadcast transcript contract', () => {
       sourceBucket: source.bucket, sourceObjectKey: asset.objectKey, sourceObjectVersionId: asset.objectVersionId,
       sourceSizeBytes: asset.sizeBytes, languageCode: request.languageCode, maxSpeakers: request.maxSpeakers,
       phase: 'ready', outputs: { txt: 'original' } };
-    const firestore = { collection: (collection) => ({ doc: (id = 'audit') => ({ collection, id }) }), runTransaction: async (fn) => fn({ get: async (ref) => ({ exists: true, id: ref.id, data: () => ref.collection === 'users' ? { active: true, grants: [{ role: 'staff' }] } : ref.collection === 'mediaSourceAssets' ? asset : current }), update: (_, changes) => { current = { ...current, ...changes }; }, set: () => {}, create: () => {} }) };
+    const firestore = { collection: (collection) => ({ doc: (id = 'audit') => ({ collection, id }) }), runTransaction: async (fn) => fn({ get: async (ref) => ({ exists: true, id: ref.id, data: () => ref.collection === 'users' ? { active: true, accessTier: 'contributor' } : ref.collection === 'system' ? { schema: 1, state: 'active', cleanScan: true } : ref.collection === 'mediaSourceAssets' ? asset : current }), update: (_, changes) => { current = { ...current, ...changes }; }, set: () => {}, create: () => {} }) };
     const options = { firestore, source, request, job: current, actor: { uid: 'staff', displayName: 'Staff editor' }, audit: (entry) => entry };
     const reviewed = await jobs.commitTranscriptEdit(options);
     expect(reviewed).toMatchObject({ editRevision: 1, reviewedRevision: 1, reviewedBy: 'staff', reviewedByName: 'Staff editor', outputs: { txt: 'original' } });

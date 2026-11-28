@@ -270,7 +270,7 @@ it("labels every recorded literal and composed action code", () => {
   const { literal, composedFiles } = collectWrittenActions();
   // Anchors prevent an empty scan from passing.
   expect(literal.size).toBeGreaterThan(15);
-  for (const code of ["cms.save", "cms.publish", "media.upload", "roles.grant", "staff.deactivate"]) {
+  for (const code of ["cms.save", "cms.publish", "media.upload", "staff.level.replace", "staff.deactivate"]) {
     expect([...literal]).toContain(code);
   }
   expect([...literal].filter(code => describeActivityAction(code).known !== true)).toEqual([]);

@@ -16,9 +16,8 @@ const logger = require("firebase-functions/logger");
 const { db } = require("./lib/firebase");
 const { requirePrincipal } = require("./lib/auth");
 const { AUDIT_COLLECTIONS, adminLogEntry } = require("./lib/audit");
-const { can, hasCapability, withRegisteredMediaSections } = require("./lib/rbac");
+const { can, hasCapability } = require("./lib/rbac");
 const { principalFromStoredUserDoc } = require("./lib/principal");
-const { readRegisteredSectionIds } = require("./lib/content-sections");
 const {
   requestHeader,
   validateBoundedJsonRequest,
@@ -456,11 +455,7 @@ function createCmsSetMediaLifecycleHandler(deps = {}) {
 
       const result = await firestore.runTransaction(async (transaction) => {
         const currentUser = await transaction.get(firestore.collection("users").doc(user.uid));
-        let currentPrincipal = await principalFromStoredUserDoc(firestore, user.uid, currentUser.exists ? currentUser.data() : null, transaction);
-        if (currentPrincipal.grants.some((grant) => Array.isArray(grant.sections) && grant.sections.length > 0)) {
-          currentPrincipal = withRegisteredMediaSections(currentPrincipal,
-            await readRegisteredSectionIds(firestore, transaction));
-        }
+        const currentPrincipal = await principalFromStoredUserDoc(firestore, user.uid, currentUser.exists ? currentUser.data() : null, transaction);
         if (!hasCapability(currentPrincipal, "media.manage")) {
           throw new MediaLifecycleRejection(404, NOT_FOUND_MESSAGE);
         }

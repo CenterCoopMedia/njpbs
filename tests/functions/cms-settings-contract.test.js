@@ -705,14 +705,16 @@ describe("CMS settings contract", () => {
     const refs = {
       settings: { path: `cmsSettings/${PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID}` },
       user: { path: "users/admin-1" },
+      activation: { path: "system/staffAccessActivation" },
       history: { path: "cmsVersionHistory/generated" },
       audit: { path: "admin_logs/generated" },
       usage: { path: `cmsSettings/${PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID}/mediaUsage/working` },
     };
     const transaction = {
       get: vi.fn(async (ref) => ({
-        exists: ref === refs.settings || ref === refs.user,
-        data: () => ref === refs.user ? { role: "admin", active: true } : before,
+        exists: ref === refs.settings || ref === refs.user || ref === refs.activation,
+        data: () => ref === refs.user ? { accessTier: "admin", active: true }
+          : ref === refs.activation ? { schema: 1, state: "active", cleanScan: true } : before,
       })),
       set: vi.fn(),
       create: vi.fn(),
@@ -723,9 +725,11 @@ describe("CMS settings contract", () => {
           ? refs.settings
           : name === "users"
             ? refs.user
-            : name === "cmsVersionHistory"
-              ? refs.history
-              : refs.audit),
+            : name === "system"
+              ? refs.activation
+              : name === "cmsVersionHistory"
+                ? refs.history
+                : refs.audit),
       })),
       runTransaction: vi.fn(async (callback) => callback(transaction)),
     };

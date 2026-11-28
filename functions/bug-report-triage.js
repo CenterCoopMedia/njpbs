@@ -156,14 +156,7 @@ function requestFingerprint(body) {
 
 function isActiveStaffRecord(value, tiersActive = false) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-  if (tiersActive && Object.hasOwn(value, "accessTier")) {
-    return hasCapability(principalFromUserDoc("assignment", value, tiersActive), "reports.view");
-  }
-  if (value.active === false) return false;
-  if (value.role === "admin" || value.role === "super_admin") return true;
-  return Array.isArray(value.grants) && value.grants.some((grant) =>
-    grant && typeof grant === "object" &&
-    ["contributor", "editor", "admin", "super_admin"].includes(grant.role));
+  return hasCapability(principalFromUserDoc("assignment", value, tiersActive), "reports.view");
 }
 
 function validateListRequest(body) {

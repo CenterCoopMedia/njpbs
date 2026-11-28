@@ -142,10 +142,13 @@ function noWriteHarness(document) {
   const userRef = { path: "users/admin-1" };
   const auditRef = { path: "admin_logs/generated" };
   const historyRef = { path: "cmsVersionHistory/generated" };
+  const activationRef = { path: "system/staffAccessActivation" };
+  const activation = { schema: 1, state: "active", cleanScan: true };
   const transaction = {
     get: vi.fn(async (ref) => ({
-      exists: ref === userRef || (ref === settingsRef && document !== undefined),
-      data: () => ref === userRef ? { role: "admin", active: true } : document,
+      exists: ref === userRef || ref === activationRef || (ref === settingsRef && document !== undefined),
+      data: () => ref === userRef ? { accessTier: "admin", active: true }
+        : ref === activationRef ? activation : document,
     })),
     set: vi.fn(),
   };
@@ -155,6 +158,8 @@ function noWriteHarness(document) {
         ? settingsRef
         : name === "users"
           ? userRef
+          : name === "system"
+            ? activationRef
           : name === "cmsVersionHistory"
             ? historyRef
             : auditRef),
@@ -174,7 +179,8 @@ beforeEach(async () => {
     `http://${process.env.FIRESTORE_EMULATOR_HOST}/emulator/v1/projects/${PROJECT}/databases/(default)/documents`,
     { method: "DELETE" },
   );
-  await db.collection("users").doc("admin-1").set({ role: "admin", active: true });
+  await db.collection("users").doc("admin-1").set({ accessTier: "admin", active: true });
+  await db.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true });
 });
 
 afterAll(async () => {
@@ -593,8 +599,8 @@ describe("cmsGetPublishedSettings", () => {
 });
 
 describe.each([
-  ["demoted", { role: "staff", active: true }],
-  ["inactive", { role: "admin", active: false }],
+  ["demoted", { accessTier: "viewer", active: true }],
+  ["inactive", { accessTier: "admin", active: false }],
   ["deleted", null],
 ])("settings transactions for a %s administrator", (_state, profile) => {
   it.each(["create", "update", "unchanged save", "publish", "unchanged publish"])(

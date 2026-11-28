@@ -74,10 +74,9 @@ async function createUser(email, profile = null) {
     clientAuth, email, "password123",
   );
   if (profile) {
+    await db.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true });
     await db.collection("users").doc(credential.user.uid).set({
       active: true,
-      role: null,
-      grants: [],
       ...profile,
     });
   }
@@ -134,7 +133,7 @@ describe("bug report endpoint wiring", () => {
 
   it("persists a redacted report before returning its stable receipt", async () => {
     const editor = await createUser("editor@example.org", {
-      grants: [{ role: "editor" }],
+      accessTier: "publisher",
     });
 
     const first = await submit(editor.token, form());
@@ -171,7 +170,7 @@ describe("bug report endpoint wiring", () => {
   it("rejects raw Firebase auth and the honeypot without writing workflow state", async () => {
     const rawUser = await createUser("raw@example.org");
     const editor = await createUser("editor2@example.org", {
-      grants: [{ role: "editor" }],
+      accessTier: "publisher",
     });
 
     const raw = await submit(rawUser.token, form());

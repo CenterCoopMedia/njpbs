@@ -54,8 +54,6 @@ export const ENDPOINTS = Object.freeze({
   cmsGetAnalytics: { contentType: "json", maxBytes: 2 * KIB, rateClass: "read" },
   cmsCollectBoardwalkUsage: { contentType: "json", maxBytes: 8 * KIB, rateClass: "usage" },
   cmsGetBoardwalkUsage: { contentType: "json", maxBytes: 2 * KIB, rateClass: "usageReport" },
-  grantRole: { contentType: "json", maxBytes: 32 * KIB, rateClass: "mutation" },
-  revokeRole: { contentType: "json", maxBytes: 32 * KIB, rateClass: "mutation" },
   setStaffAccessLevel: { contentType: "json", maxBytes: 32 * KIB, rateClass: "mutation" },
   deactivateStaff: { contentType: "json", maxBytes: 8 * KIB, rateClass: "mutation" },
   reactivateStaff: { contentType: "json", maxBytes: 8 * KIB, rateClass: "mutation" },

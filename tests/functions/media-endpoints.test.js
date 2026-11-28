@@ -92,10 +92,8 @@ describe("media endpoint wiring", () => {
       clientAuth, "media-news-editor@example.com", "password123",
     );
     const uid = credential.user.uid;
-    await db.collection("users").doc(uid).set({
-      role: null,
-      grants: [{ role: "editor", sections: ["news"] }],
-    });
+    await db.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true });
+    await db.collection("users").doc(uid).set({ accessTier: "publisher" });
     const news = mediaRecord("news-one", "news");
     const arts = mediaRecord("arts-one", "arts");
     await Promise.all([
@@ -185,9 +183,8 @@ describe("media endpoint wiring", () => {
       clientAuth, "bin-news-editor@example.com", "password123",
     );
     const uid = credential.user.uid;
-    await db.collection("users").doc(uid).set({
-      role: null, grants: [{ role: "editor", sections: ["news"] }],
-    });
+    await db.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true });
+    await db.collection("users").doc(uid).set({ accessTier: "publisher" });
     const news = {
       ...mediaRecord("news-bin", "news"), lifecycle: "purging",
       tombstonedAt: "2026-09-01T00:00:00.000Z", tombstonedBy: "seed-user",
@@ -258,7 +255,8 @@ describe("media endpoint wiring", () => {
     const credential = await signInWithEmailAndPassword(
       clientAuth, "replace-editor@example.com", "password123",
     );
-    await db.collection("users").doc(credential.user.uid).set({ role: null, grants: [{ role: "staff" }] });
+    await db.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true });
+    await db.collection("users").doc(credential.user.uid).set({ accessTier: "viewer" });
     await db.collection("media_assets").doc("arts-one").set(mediaRecord("arts-one", "arts"));
     const token = await credential.user.getIdToken();
     const denied = await fetch(fnUrl("cmsReplaceMediaBinary"), {

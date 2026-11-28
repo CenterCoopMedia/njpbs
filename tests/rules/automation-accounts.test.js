@@ -80,10 +80,18 @@ describe("forced editing lease takeover", () => {
   }
 
   const authorities = [
-    ["an editor grant", { role: "staff", grants: [{ role: "editor" }] }, false],
-    ["an administrator role", { role: "super_admin" }, false],
+    ["an editor tier", { accessTier: "editor" }, true],
+    ["an owner tier", { accessTier: "owner" }, true],
     ["a publisher tier", { accessTier: "publisher" }, true],
   ];
+
+  it("gives a stored editor grant or administrator role no takeover", async () => {
+    for (const profile of [{ role: "staff", grants: [{ role: "editor" }] }, { role: "super_admin" }]) {
+      await seed({ marked: false, profile, tiersActive: true });
+      await assertFails(setDoc(doc(staffContext("actor"), lockPath), claim("actor", true)));
+      expect(await storedOwner()).toBe("person");
+    }
+  });
 
   it.each(authorities)("refuses a marked account with %s", async (_label, profile, tiersActive) => {
     await seed({ marked: true, profile, tiersActive });
@@ -98,12 +106,12 @@ describe("forced editing lease takeover", () => {
   });
 
   it("lets a marked account replace its own live lease", async () => {
-    await seed({ marked: true, profile: { role: "staff", grants: [{ role: "editor" }] }, holder: "actor" });
+    await seed({ marked: true, profile: { accessTier: "editor" }, holder: "actor", tiersActive: true });
     await assertSucceeds(setDoc(doc(staffContext("actor"), lockPath), claim("actor", true)));
   });
 
   it("lets a marked account claim an expired lease without forcing it", async () => {
-    await seed({ marked: true, profile: { role: "staff", grants: [{ role: "editor" }] }, ageMs: 121_000 });
+    await seed({ marked: true, profile: { accessTier: "editor" }, ageMs: 121_000, tiersActive: true });
     await assertSucceeds(setDoc(doc(staffContext("actor"), lockPath), claim("actor")));
     expect(await storedOwner()).toBe("actor");
   });

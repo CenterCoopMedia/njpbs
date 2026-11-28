@@ -97,8 +97,9 @@ beforeEach(async () => {
   vi.stubEnv("CMS_DEPLOYMENT_ENVIRONMENT", "development");
   vi.stubEnv("FUNCTIONS_EMULATOR", "true");
   await clearEmulatorFirestore(`http://${process.env.FIRESTORE_EMULATOR_HOST}/emulator/v1/projects/${project}/databases/(default)/documents`, { method: "DELETE" });
-  await db.doc(`users/${actors.editor.uid}`).set({ role: "admin", active: true, email: actors.editor.email, displayName: "Results editor" });
-  await db.doc(`users/${actors.writer.uid}`).set({ grants: [{ role: "contributor" }], active: true, email: actors.writer.email, displayName: "Results writer" });
+  await db.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true });
+  await db.doc(`users/${actors.editor.uid}`).set({ accessTier: "admin", active: true, email: actors.editor.email, displayName: "Results editor" });
+  await db.doc(`users/${actors.writer.uid}`).set({ accessTier: "contributor", active: true, email: actors.writer.email, displayName: "Results writer" });
   await seedSystem();
 });
 afterEach(() => vi.unstubAllEnvs());

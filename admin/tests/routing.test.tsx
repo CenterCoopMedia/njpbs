@@ -155,10 +155,8 @@ function shellFor(
       email: "account-29@example.org",
       displayName: "Test User",
     } as unknown as ShellData["user"],
-    // In production the principal and this legacy-role field come from the same user document.
-    // Keep the fixture equally coherent because courtesy-lock access still reads the top-level
-    // role even though content navigation itself now follows the principal's capabilities.
-    userDoc: topLevelRole === null ? null : { role: topLevelRole },
+    // In production the principal and this tier come from the same user document.
+    userDoc: topLevelRole === null ? null : { accessTier: topLevelRole === "super_admin" ? "owner" : "admin" },
     signOut: vi.fn(),
     ...overrides,
   };
@@ -488,7 +486,6 @@ describe("admin routing shell", () => {
     renderRouted(
       shellFor(contributorPrincipal, {
         userDoc: {
-          role: null,
           preferences: {
             display: { controlPresentation: "text" },
           },

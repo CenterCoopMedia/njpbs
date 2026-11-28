@@ -23,7 +23,8 @@ const publish = () => call(settings.createCmsPublishSettingsHandler(deps()), { i
 
 beforeEach(async () => {
   await clearEmulatorFirestore(`http://${process.env.FIRESTORE_EMULATOR_HOST}/emulator/v1/projects/demo-njpbs/databases/(default)/documents`, { method: "DELETE" }, db);
-  await db.doc(`users/${actor.uid}`).set({ role: "admin", active: true });
+  await db.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true });
+  await db.doc(`users/${actor.uid}`).set({ accessTier: "admin", active: true });
   await db.doc(`cmsSettings/${id}`).set({ schemaVersion: 1, version: 1, values: { labels: [label] } });
   await db.doc("system/publicDeployment").set({ ...deployment.initialPublicDeploymentPointer(), activeGeneration: 1,
     activeCommitSha: sha, activeDeploymentId: "coverage-fixture", lastReservedGeneration: 1, newestEligibleGeneration: 1,

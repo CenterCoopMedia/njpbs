@@ -26,7 +26,8 @@ describe("live-blog author completeness in the existing directory", () => {
   });
   beforeEach(async () => {
     await clearEmulatorFirestore(`http://${host}/emulator/v1/projects/demo-njpbs/databases/(default)/documents`, { method: "DELETE" }, db);
-    await db.doc("users/reviewer").set({ displayName: "Reviewer", active: true, role: "admin", grants: [] });
+    await db.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true });
+    await db.doc("users/reviewer").set({ displayName: "Reviewer", active: true, accessTier: "admin" });
     await db.doc(`cmsAuthorProfiles/${authorId}`).set(profile());
   });
   afterAll(async () => { await Promise.all(admin.apps.map(app => app.delete())); });
@@ -82,7 +83,7 @@ describe("live-blog author completeness in the existing directory", () => {
   });
 
   it("rechecks stored profile-manager access after reading an exact profile", async () => {
-    await db.doc("users/reviewer").update({ role: null, grants: [{ role: "editor" }] });
+    await db.doc("users/reviewer").update({ accessTier: "editor" });
     const response = await call(authors.createListAuthorProfilesHandler, "admin", { authorId });
     expect(response.statusCode).toBe(403);
     expect(response.body.profiles).toBeUndefined();

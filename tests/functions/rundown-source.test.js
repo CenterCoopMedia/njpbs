@@ -15,7 +15,8 @@ describe("rundown refresh transaction fences", () => {
   beforeEach(async () => {
     if (!process.env.FIRESTORE_EMULATOR_HOST) throw new Error("Use the Firestore emulator.");
     id = randomUUID(); now = 100000;
-    await db.doc("users/rundown-producer").set({ active: true, grants: [{ role: "editor" }] });
+    await db.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true });
+    await db.doc("users/rundown-producer").set({ active: true, accessTier: "publisher" });
     await db.doc(`liveProductionSessions/${id}`).set({ schemaVersion: 1, id, title: "Synthetic show", productionProgramId: "synthetic",
       publicProgramId: null, showPlanId: null, deviceId: "synthetic-device", generation: 1, mappingVersion: 1, state: "active", createdAtMs: now, updatedAtMs: now });
     await request("set_source", { config: sourceConfig, baseConfigVersion: 0 });

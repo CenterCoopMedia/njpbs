@@ -209,10 +209,11 @@ describe("voiceover import identity and persistence", () => {
         disabled: false,
       })),
     };
+    await db.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true });
     await db.doc("users/jules-cms").set({
       email: "jules@example.org",
       displayName: "Jules CMS",
-      role: "super_admin",
+      accessTier: "owner",
       active: true,
     });
     await expect(resolveRecorder({
@@ -221,7 +222,7 @@ describe("voiceover import identity and persistence", () => {
       email: "JULES@example.org",
     })).resolves.toEqual({ uid: "jules-cms", displayName: "Jules CMS" });
 
-    await db.doc("users/jules-cms").update({ role: "editor" });
+    await db.doc("users/jules-cms").update({ accessTier: "editor" });
     await expect(resolveRecorder({
       auth,
       firestore: db,

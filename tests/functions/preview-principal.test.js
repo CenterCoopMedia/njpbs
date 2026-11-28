@@ -79,22 +79,28 @@ beforeEach(async () => {
     uid, email: `${uid}@example.test`, email_verified: true,
   }));
   const batch = db.batch();
-  batch.set(db.doc("users/admin"), { active: true, role: "admin" });
-  batch.set(db.doc("users/super-admin"), { active: true, role: "super_admin" });
-  batch.set(db.doc("users/site-editor"), { active: true, grants: [{ role: "editor" }] });
-  batch.set(db.doc("users/inactive"), { active: false, role: "admin" });
-  batch.set(db.doc("users/viewer"), { active: true, grants: [{ role: "staff" }] });
+  batch.set(db.doc("system/staffAccessActivation"), { schema: 1, state: "active", cleanScan: true });
+  batch.set(db.doc("users/admin"), { active: true, accessTier: "admin" });
+  batch.set(db.doc("users/super-admin"), { active: true, accessTier: "owner" });
+  batch.set(db.doc("users/site-editor"), { active: true, accessTier: "publisher" });
+  batch.set(db.doc("users/inactive"), { active: false, accessTier: "admin" });
+  batch.set(db.doc("users/viewer"), { active: true, accessTier: "viewer" });
   for (const section of ["news", "watch"]) {
     batch.set(db.doc(`sections/${section}`), { label: section });
-    batch.set(db.doc(`users/${section}-editor`), { active: true, grants: [{ role: "editor", sections: [section] }] });
+    batch.set(db.doc(`users/${section}-editor`), { active: true, accessTier: "publisher" });
   }
-  batch.set(db.doc("users/writer"), { active: true, grants: [{ role: "contributor", sections: ["news"] }] });
+  batch.set(db.doc("users/writer"), { active: true, accessTier: "contributor" });
   for (const target of targets) batch.set(db.doc(`${target.collection}/${target.pageId}`), draft(target));
   await batch.commit();
   const users = await db.collection("users").get();
   await Promise.all(users.docs.map(row => row.ref.update({ email: `${row.id}@example.test` })));
 });
 
+// A stored profile with an inactive access level gets the access-level refusal;
+// an account without a profile gets the staff-account refusal.
+const refusalFor = (state) => ["inactive", "deactivated"].includes(state)
+  ? "An active, verified staff access level is required"
+  : "An active, verified staff account is required";
 afterEach(() => { vi.restoreAllMocks(); auth.resetAuthTokenCache(); });
 afterAll(async () => { await Promise.all(admin.apps.map(app => app.delete())); });
 
@@ -196,7 +202,7 @@ describe.each(targets)("preview authorization through stored principals: $collec
   it.each(["inactive", "nonstaff"])("denies %s at request and every status boundary", async uid => {
     const queueId = await accepted(target);
     const refused = await accept(uid, target);
-    expect(refused).toMatchObject({ statusCode: 403, body: { error: "An active, verified staff account is required" } });
+    expect(refused).toMatchObject({ statusCode: 403, body: { error: refusalFor(uid) } });
     for (const body of statusRequests(target, queueId)) {
       expect(await status(uid, body)).toMatchObject({ statusCode: 403, body: refused.body });
     }
@@ -213,7 +219,7 @@ describe.each(targets)("preview authorization through stored principals: $collec
     for (const body of statusRequests(target, queueId)) {
       const response = await status("news-editor", body);
       expect(response.statusCode).toBe(403);
-      expect(response.body).toEqual({ error: "An active, verified staff account is required" });
+      expect(response.body).toEqual({ error: refusalFor(state) });
     }
     expect((await db.collection("cmsPreviewQueue").get()).size).toBe(1);
   });
@@ -248,7 +254,7 @@ describe.each(targets)("preview authorization through stored principals: $collec
     await queueRef.update({ status: "ready", previewUrl: `https://preview.example.test/p/${queueId}/` });
     const response = await pending;
     expect(response.statusCode).toBe(403);
-    expect(response.body).toEqual({ error: "An active, verified staff account is required" });
+    expect(response.body).toEqual({ error: refusalFor(state) });
   });
 
   // Jules's October 17 preview rule is separate from revision-history access.
@@ -273,7 +279,9 @@ describe.each(targets)("preview authorization through stored principals: $collec
     expect(target.collection === "cmsPosts" ? snapshot.published.metadata.title : snapshot.title).toBe("Saved version seven");
     expect((await status("watch-editor", { queueId })).statusCode).toBe(200);
 
-    expect((await revision("news-editor", target)).statusCode).toBe(403);
+    // Every access level reads the whole site, so history is no longer refused by
+    // area; stored scoped grants confer nothing (scope removal: #750).
+    expect((await revision("news-editor", target)).statusCode).toBe(200);
     expect((await accept("news-editor", { ...target, section: "news" })).statusCode).toBe(202);
     expect((await status("news-editor", target)).statusCode).toBe(200);
     expect(await status("news-editor", { queueId })).toMatchObject({

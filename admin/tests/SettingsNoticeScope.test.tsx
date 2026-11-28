@@ -17,7 +17,7 @@ it.each(["Back", "new navigation"])("announces a save across sections and reject
     { path: ROUTE_PATHS.adminCosts, element: <p>Costs</p>, handle: { title: "Costs" } },
   ] }], { initialEntries: [ROUTE_PATHS.adminSettings] });
   const shell: ShellData = { principal: { id: "fixture", grants: [{ role: "super_admin" }] },
-    user: { uid: "fixture", email: "editor@example.org" }, userDoc: { role: "super_admin" }, signOut: () => {}, navigationShares: [] };
+    user: { uid: "fixture", email: "editor@example.org" }, userDoc: { accessTier: "owner" }, signOut: () => {}, navigationShares: [] };
   const view = render(<ShellProvider value={shell}><RouterProvider router={router} /></ShellProvider>);
   fireEvent.click(await screen.findByRole("button", { name: "Start settings save" }));
   await act(async () => { await router.navigate(`${ROUTE_PATHS.adminSettings}?section=nj-decides-brand`); });

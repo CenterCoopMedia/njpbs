@@ -97,8 +97,9 @@ async function reset() {
   await db.collection("cmsPosts").doc("post-1").set(storedPost());
   await db.collection("cmsAutomationAccounts").doc(AGENT).set({ label: "NJ PBS agent" });
   // The lease rules read the caller's staff profile.
-  await db.collection("users").doc(AGENT).set({ role: null, grants: [{ role: "editor" }], active: true, tokensValidAfter: 0 });
-  await db.collection("users").doc(STAFF).set({ role: null, grants: [{ role: "editor" }], active: true, tokensValidAfter: 0 });
+  await db.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true });
+  await db.collection("users").doc(AGENT).set({ accessTier: "publisher", active: true, tokensValidAfter: 0 });
+  await db.collection("users").doc(STAFF).set({ accessTier: "publisher", active: true, tokensValidAfter: 0 });
   await seedAuthor(ADA, "ada", "Ada Reporter");
   await seedAuthor(BEN, "ben", "Ben Producer");
 }

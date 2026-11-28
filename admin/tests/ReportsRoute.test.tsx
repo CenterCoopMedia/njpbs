@@ -86,7 +86,7 @@ function shell(role: "admin" | "editor"): ShellData {
   return {
     principal: { id: `${role}-1`, grants: [{ role }] },
     user: { uid: `${role}-1`, email: `${role}@njpbs.org` } as ShellData["user"],
-    userDoc: role === "admin" ? { role: "admin" } : { grants: [{ role: "editor" }] },
+    userDoc: { accessTier: role === "admin" ? "admin" : "publisher" },
     signOut: vi.fn(),
     getIdToken: vi.fn(async () => "id-token"),
   } as ShellData;

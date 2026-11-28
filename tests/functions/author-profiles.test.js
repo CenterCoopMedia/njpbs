@@ -73,18 +73,19 @@ async function clearFirestore() {
   );
 }
 
+// Staff default to the Publisher level, the tier the old Editor role moved to.
+// A field set to undefined is left out, so a case can seed an account without a level.
 async function seedUser(uid, fields = {}) {
-  await db
-    .collection("users")
-    .doc(uid)
-    .set({
-      email: `${uid}@example.org`,
-      displayName: "Taylor Example",
-      active: true,
-      role: null,
-      grants: [{ role: "editor" }],
-      ...fields,
-    });
+  await db.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true });
+  const profile = {
+    email: `${uid}@example.org`,
+    displayName: "Taylor Example",
+    active: true,
+    accessTier: "publisher",
+    ...fields,
+  };
+  for (const key of Object.keys(profile)) if (profile[key] === undefined) delete profile[key];
+  await db.collection("users").doc(uid).set(profile);
 }
 
 async function ensure(uid, overrides = {}) {
@@ -265,7 +266,7 @@ describe("byline projection", () => {
   });
 
   it("removes a departed author in the first staff deactivation transaction", async () => {
-    await seedUser("uid-admin", { role: "super_admin" });
+    await seedUser("uid-admin", { accessTier: "owner" });
     await seedUser("uid-1", { displayName: "Former Staff" });
     const { profile } = await ensure("uid-1");
 
@@ -326,7 +327,7 @@ describe("byline projection", () => {
   it("backfills redacted tombstones and preserves source pagination", async () => {
     await seedUser("uid-1", { displayName: "Active Staff" });
     await seedUser("uid-2", { displayName: "Departed Staff" });
-    await seedUser("uid-admin", { role: "super_admin" });
+    await seedUser("uid-admin", { accessTier: "owner" });
     const active = (await ensure("uid-1")).profile;
     const archived = await createManagedProfile({
       firestore: db,
@@ -582,7 +583,7 @@ describe("manager-created staff profile lifecycle", () => {
   it("links an approved contributor without changing the author identity", async () => {
     await seedUser("uid-raven", {
       displayName: "Raven Santana",
-      grants: [{ role: "contributor" }],
+      accessTier: "contributor",
     });
     const { profile } = await createManaged();
     const linked = await linkProfileToUser({
@@ -610,7 +611,7 @@ describe("manager-created staff profile lifecycle", () => {
       await seedUser("uid-raven");
       if (existingIdentity) await ensure("uid-raven");
       await db.collection("users").doc("uid-raven").update({
-        grants: [{ role: "staff" }],
+        accessTier: "viewer",
       });
       const { profile } = await createManaged();
 
@@ -651,7 +652,7 @@ describe("manager-created staff profile lifecycle", () => {
         actorUid: "uid-admin",
       });
       await db.collection("users").doc("uid-raven").update({
-        grants: [{ role: "staff" }],
+        accessTier: "viewer",
       });
       const before = await profileStorage();
 
@@ -669,8 +670,7 @@ describe("manager-created staff profile lifecycle", () => {
   );
 
   it("allows an authorized managed published link", async () => {
-    const grants = [{ role: "contributor", sections: ["news"] }];
-    await seedUser("uid-raven", { grants });
+    await seedUser("uid-raven", { accessTier: "contributor" });
     let { profile } = await createManaged();
     ({ profile } = await publishProfile({
       firestore: db,
@@ -697,7 +697,7 @@ describe("manager-created staff profile lifecycle", () => {
   it("replaces an untouched self-created identity when linking a managed profile", async () => {
     await seedUser("uid-raven", {
       displayName: "Raven Santana",
-      grants: [{ role: "contributor" }],
+      accessTier: "contributor",
     });
     const { profile: managed } = await createManaged();
     const { profile: automatic } = await ensure("uid-raven");
@@ -986,7 +986,7 @@ describe("publish and withdraw", () => {
     expect((await db.doc(`cmsAuthorProfilesPublic/${profile.authorId}`).get()).exists).toBe(false);
   });
   it("refuses to publish a linked profile for guide-only staff", async () => {
-    await seedUser("uid-staff", { grants: [{ role: "staff" }] });
+    await seedUser("uid-staff", { accessTier: "viewer" });
     const { profile } = await ensure("uid-staff");
 
     await expect(
@@ -1113,14 +1113,14 @@ describe("publish and withdraw", () => {
   });
 
   it.each([
-    ["guide-only", { grants: [{ role: "staff" }] }],
-    ["empty grants", { grants: [] }],
-    ["empty scope", { grants: [{ role: "contributor", sections: [] }] }],
+    ["guide-only", { accessTier: "viewer" }],
+    ["no level", { accessTier: null }],
+    ["stored contributor grant without a level", { accessTier: null, grants: [{ role: "contributor" }] }],
     ["inactive", { active: false }],
     ["missing account", null],
   ])("refuses published edits for an owner with %s access", async (_label, account) => {
     const profile = await activeProfile();
-    await seedUser("uid-admin", { role: "admin", grants: [] });
+    await seedUser("uid-admin", { accessTier: "admin" });
     const { profile: published } = await publishProfile({
       firestore: db,
       authorId: profile.authorId,
@@ -1146,10 +1146,10 @@ describe("publish and withdraw", () => {
     }
   });
 
-  it("keeps a scoped contributor's published edits working", async () => {
+  it("keeps a contributor's published edits working", async () => {
     const profile = await activeProfile();
     await db.collection("users").doc("uid-1").update({
-      grants: [{ role: "contributor", sections: ["news"] }],
+      accessTier: "contributor",
     });
     const { profile: published } = await publishProfile({
       firestore: db,
@@ -1206,7 +1206,7 @@ describe("publish and withdraw", () => {
   it("keeps a private draft editable after the owner loses authoring access", async () => {
     const profile = await activeProfile();
     await db.collection("users").doc("uid-1").update({
-      grants: [{ role: "staff" }],
+      accessTier: "viewer",
     });
 
     const { profile: updated } = await updateWorkingProfile({
@@ -1784,7 +1784,7 @@ describe("byline directory", () => {
   it("drops a deactivated author from the directory but keeps their credits readable", async () => {
     await seedUser("uid-1", { displayName: "Taylor Example" });
     await seedUser("uid-2", { displayName: "Jordan Example" });
-    await seedUser("uid-admin", { role: "super_admin" });
+    await seedUser("uid-admin", { accessTier: "owner" });
     const { staff: departing } = await ensure("uid-1");
     await ensure("uid-2");
 
@@ -1828,7 +1828,7 @@ describe("byline directory", () => {
 
   it("deactivates the linkage through the real deactivateStaff handler", async () => {
     await seedUser("uid-1", { displayName: "Taylor Example" });
-    await seedUser("uid-admin", { role: "super_admin" });
+    await seedUser("uid-admin", { accessTier: "owner" });
     const { staff } = await ensure("uid-1");
 
     const handler = staffPkg.createDeactivateStaffHandler({
@@ -1924,7 +1924,7 @@ describe("deactivation semantics", () => {
     // wired into the offboarding boundary staff actually use, or a deactivated
     // author keeps a live public page.
     await seedUser("uid-1");
-    await seedUser("uid-admin", { role: "super_admin" });
+    await seedUser("uid-admin", { accessTier: "owner" });
     const { profile } = await ensure("uid-1");
     await publishProfile({
       firestore: db,
@@ -2020,7 +2020,7 @@ describe("deactivation semantics", () => {
 
   it("returns 503 with CMS access disabled when a paused runtime blocks deactivation withdrawal", async () => {
     await seedUser("uid-1");
-    await seedUser("uid-admin", { role: "super_admin" });
+    await seedUser("uid-admin", { accessTier: "owner" });
     const { profile } = await ensure("uid-1");
     await publishProfile({
       firestore: db,
@@ -2303,9 +2303,14 @@ describe("self endpoints", () => {
   }
 
   it.each([
-    { name: "legacy contributor", fields: { grants: [{ role: "contributor" }] } },
-    { name: "contributor tier with stale owner role", fields: { accessTier: "contributor", role: "super_admin" } },
-  ])("refuses $name self publication without changing the saved profile", async ({ fields }) => {
+    // Stored role grants without a level give no authoring access at all.
+    { name: "stored contributor grant without a level", fields: { accessTier: undefined, grants: [{ role: "contributor" }] },
+      code: "author_access_required" },
+    { name: "stored scoped editor grant without a level", fields: { accessTier: undefined, grants: [{ role: "editor", sections: ["news"] }] },
+      code: "author_access_required" },
+    { name: "contributor tier with stale owner role", fields: { accessTier: "contributor", role: "super_admin" },
+      code: "profile_publish_access_required" },
+  ])("refuses $name self publication without changing the saved profile", async ({ fields, code }) => {
     await db.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true });
     await seedUser("uid-contributor", fields);
     const { profile } = await ensure("uid-contributor");
@@ -2315,12 +2320,11 @@ describe("self endpoints", () => {
       { method: "POST", headers: {}, body: { visibility: "published", expectedVersion: profile.version } }, res,
     );
     expect(res.statusCode).toBe(403);
-    expect(res.body.code).toBe("profile_publish_access_required");
+    expect(res.body.code).toBe(code);
     expect(await profileStorage()).toEqual(before);
   });
 
   it.each([
-    { name: "scoped legacy editor", fields: { grants: [{ role: "editor", sections: ["news"] }] } },
     ...["editor", "publisher", "admin", "owner"].map((accessTier) => ({
       name: accessTier, fields: { accessTier, grants: [] },
     })),
@@ -2338,7 +2342,7 @@ describe("self endpoints", () => {
   });
 
   it("keeps contributor self withdrawal available", async () => {
-    await seedUser("uid-contributor", { grants: [{ role: "contributor" }] });
+    await seedUser("uid-contributor", { accessTier: "contributor" });
     const { profile } = await ensure("uid-contributor");
     // An admin may publish this contributor's profile from Staff profiles.
     const { profile: published } = await publishProfile({
@@ -2355,7 +2359,7 @@ describe("self endpoints", () => {
   });
 
   it("refuses every self-profile endpoint for guide-only staff", async () => {
-    await seedUser("uid-staff", { grants: [{ role: "staff" }] });
+    await seedUser("uid-staff", { accessTier: "viewer" });
 
     for (const handler of [
       authorApiPkg.createGetAuthorProfileHandler(selfDeps("uid-staff")),

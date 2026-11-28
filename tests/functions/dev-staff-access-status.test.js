@@ -43,6 +43,7 @@ beforeAll(async () => {
   ({ admin, db } = require("./lib/firebase"));
   const { getStaffAccessStatus } = require("./dev-staff-access-status");
   await db.doc("system/dev-test-readiness").get();
+  await db.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true });
   const app = express();
   app.use(express.json());
   app.post("/status", getStaffAccessStatus);
@@ -61,16 +62,16 @@ afterAll(async () => {
 
 it.each([
   ["missing", true, null, 403],
-  ["inactive", true, { active: false, role: "admin" }, 403],
-  ["unverified", false, { active: true, role: "admin" }, 403],
-  ["mismatched", true, { active: true, role: "admin", email: "someone-else@example.test" }, 403],
-  ["no-grants", true, { active: true }, 403],
-  ["unknown-role", true, { active: true, role: "unknown" }, 403],
-  ["unknown-grant", true, { active: true, grants: [{ role: "unknown" }] }, 403],
-  ["misplaced-admin", true, { active: true, grants: [{ role: "admin" }] }, 403],
-  ["ready", true, { active: true, role: "admin" }, 200],
-  ["staff", true, { active: true, grants: [{ role: "staff" }] }, 200],
-  ["editor", true, { active: true, grants: [{ role: "editor", sections: ["news"] }] }, 200],
+  ["inactive", true, { active: false, accessTier: "admin" }, 403],
+  ["unverified", false, { active: true, accessTier: "admin" }, 403],
+  ["mismatched", true, { active: true, accessTier: "admin", email: "someone-else@example.test" }, 403],
+  ["no-tier", true, { active: true }, 403],
+  ["unknown-tier", true, { active: true, accessTier: "unknown" }, 403],
+  ["legacy-role", true, { active: true, role: "admin" }, 403],
+  ["legacy-grant", true, { active: true, grants: [{ role: "editor" }] }, 403],
+  ["ready", true, { active: true, accessTier: "admin" }, 200],
+  ["viewer", true, { active: true, accessTier: "viewer" }, 200],
+  ["publisher", true, { active: true, accessTier: "publisher" }, 200],
 ])("admits only provisioned verified matching dev staff: %s", async (name, verified, profile, status) => {
   const email = `dev-status-${name}@example.test`;
   const password = "fixture-password";
@@ -114,7 +115,7 @@ it("keeps backend Auth errors retryable and invalid App Check tokens client erro
   const password = "fixture-password";
   const user = await admin.auth().createUser({ email, password, emailVerified: true });
   try {
-    await db.doc(`users/${user.uid}`).set({ email, active: true, role: "admin" });
+    await db.doc(`users/${user.uid}`).set({ email, active: true, accessTier: "admin" });
     const auth = await fetch(`http://${authHost}/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=fixture`, {
       method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify({ email, password, returnSecureToken: true }),

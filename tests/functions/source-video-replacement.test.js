@@ -188,7 +188,8 @@ async function purge(now = clock, dryRun = false, remove = async version => {
 beforeEach(async () => {
   await clearEmulatorFirestore(`http://${process.env.FIRESTORE_EMULATOR_HOST}/emulator/v1/projects/demo-njpbs/databases/(default)/documents`, { method: "DELETE" }, db);
   clock = startTime; assetId = `video-${randomUUID()}`; objects = new Map(); calls = []; completeHook = undefined;
-  await db.doc(`users/${actor.uid}`).set({ active: true, role: "admin" });
+  await db.doc(`users/${actor.uid}`).set({ active: true, accessTier: "admin" });
+  await db.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true });
   const asset = fixture(); await assetRef().set(asset); remember(asset);
 });
 
@@ -1447,21 +1448,21 @@ describe("replacement publication authorization", () => {
     expect((await start({}, scoped("arts"))).statusCode).toBe(403);
     expect((await start({}, scoped("news"))).statusCode).toBe(200);
   });
-  it.each(["scope", "inactive"])("ends a permanently refused promotion (%s), purges its candidate and admits an authorized retry", async reason => {
+  it.each(["publish authority", "inactive"])("ends a permanently refused promotion (%s), purges its candidate and admits an authorized retry", async reason => {
     const before = (await assetRef().get()).data();
     await upload(); await processPreview();
     const candidate = (await replacementRef().get()).data().candidate;
-    if (reason === "scope") {
-      await db.doc(`users/${actor.uid}`).set({ active: true, grants: [{ role: "editor", sections: ["arts"] }] });
-      await db.doc("sections/arts").set({ name: "Arts" }); await scheduled("news");
-    } else await db.doc(`users/${actor.uid}`).set({ active: false, role: "admin" });
+    if (reason === "publish authority") {
+      await db.doc(`users/${actor.uid}`).set({ active: true, accessTier: "editor" });
+      await scheduled("news");
+    } else await db.doc(`users/${actor.uid}`).set({ active: false, accessTier: "admin" });
     await expect(promote()).rejects.toMatchObject({ status: 403 });
     expect((await assetRef().get()).data().objectVersionId).toBe(before.objectVersionId);
     expect((await replacementRef().get()).data()).toMatchObject({ state: "failed", errorCode: "replacement_permission_changed" });
     expect((await replacementRef().get()).data()).not.toHaveProperty("candidate");
     await purge();
     expect(objects.has(candidate.objectKey)).toBe(false); expect(objects.has(before.objectKey)).toBe(true);
-    await db.doc(`users/${actor.uid}`).set({ active: true, role: "admin" });
+    await db.doc(`users/${actor.uid}`).set({ active: true, accessTier: "admin" });
     expect((await start()).statusCode).toBe(200);
   });
   it("releases a refused rollback's previous version for retry and eventual expiry", async () => {

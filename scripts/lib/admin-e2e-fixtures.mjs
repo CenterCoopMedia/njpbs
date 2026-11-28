@@ -24,19 +24,14 @@ export const ADMIN_E2E_IDENTITIES = Object.freeze([
     uid: "admin-e2e-super-admin",
     email: "super-admin@admin-e2e.njpbs.invalid",
     displayName: "E2E super admin",
-    profile: Object.freeze({ role: "super_admin", grants: Object.freeze([]) }),
+    profile: Object.freeze({ accessTier: "owner" }),
   }),
   Object.freeze({
     id: "sectionEditor",
     uid: "admin-e2e-section-editor",
     email: "section-editor@admin-e2e.njpbs.invalid",
     displayName: "E2E section editor",
-    profile: Object.freeze({
-      role: null,
-      grants: Object.freeze([
-        Object.freeze({ role: "editor", sections: Object.freeze(["watch"]) }),
-      ]),
-    }),
+    profile: Object.freeze({ accessTier: "publisher" }),
   }),
   Object.freeze({
     id: "pending",
@@ -197,6 +192,9 @@ export async function seedFixtureProject({ auth, firestore, password }) {
     throw new Error("Admin E2E requires a strong in-memory password.");
   }
 
+  // Access tiers confer access only after the activation receipt exists.
+  await firestore.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true });
+
   for (const identity of ADMIN_E2E_IDENTITIES) {
     await auth.createUser({
       uid: identity.uid,
@@ -213,11 +211,7 @@ export async function seedFixtureProject({ auth, firestore, password }) {
           active: true,
           email: identity.email,
           displayName: identity.displayName,
-          role: identity.profile.role,
-          grants: identity.profile.grants.map((grant) => ({
-            role: grant.role,
-            ...(grant.sections ? { sections: [...grant.sections] } : {}),
-          })),
+          accessTier: identity.profile.accessTier,
           createdAt: FIXTURE_TIMESTAMP,
           updatedAt: FIXTURE_TIMESTAMP,
         });

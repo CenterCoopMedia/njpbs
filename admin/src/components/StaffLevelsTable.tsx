@@ -1,23 +1,26 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { ACCESS_TIERS, ALL_CAPABILITIES, TIER_CAPABILITIES, hasCapability, isAccessTier, withRegisteredMediaSections, type AccessTier } from "../../../packages/content-core/src/rbac";
+import { ACCESS_TIERS, ALL_CAPABILITIES, TIER_CAPABILITIES, hasCapability, isAccessTier, type AccessTier } from "../../../packages/content-core/src/rbac";
 import { ACCESS_TIER_TEXT } from "../lib/access-tier-text";
-import { CAPABILITY_LABELS } from "../lib/access-change";
-import { accessStateFromUserDoc, normalizeGrants, principalFromUserDoc } from "../lib/principal";
-import { roleDisplayName } from "../lib/role-text";
+import { CAPABILITY_LABELS } from "../lib/capability-labels";
+import { accessStateFromUserDoc, principalFromUserDoc, type CmsUserDoc } from "../lib/principal";
 import { staffOffboarding } from "../lib/staff-offboarding";
 import type { ReactivateStaffRequest, StaffAccessLevelRequest } from "../lib/functions";
-import type { AdminUserRecord } from "./UsersTable";
 import { Button, EmptyState, InlineMessage, Select, StatusBadge, TableFrame, TextInput } from "./ui/Primitives";
+import "../routes/StaffRoute.css";
+
+export interface AdminUserRecord extends CmsUserDoc {
+  id: string;
+  accessState?: string;
+}
 
 function currentLevel(user: AdminUserRecord): string {
   if (Object.hasOwn(user, "accessTier")) {
     return isAccessTier(user.accessTier) ? ACCESS_TIER_TEXT[user.accessTier].name : "Invalid level — no access";
   }
-  const roles = [user.role, ...normalizeGrants(user.grants).map((grant) => grant.role)].filter(Boolean);
-  return roles.length ? `Legacy access: ${roles.map((role) => roleDisplayName(role!)).join(", ")}` : "No access assigned";
+  return "No access assigned";
 }
 
-function StaffLevelRow({ user, matches, canManage, currentUserId, onSetLevel, onDeactivate, onReactivate, onPin, focusSearch, sectionIds }: {
+function StaffLevelRow({ user, matches, canManage, currentUserId, onSetLevel, onDeactivate, onReactivate, onPin, focusSearch }: {
   user: AdminUserRecord;
   matches: boolean;
   canManage: boolean;
@@ -27,7 +30,6 @@ function StaffLevelRow({ user, matches, canManage, currentUserId, onSetLevel, on
   onReactivate?: (request: ReactivateStaffRequest) => Promise<void>;
   onPin: (uid: string, pinned: boolean) => void;
   focusSearch: () => void;
-  sectionIds: ReadonlySet<string>;
 }) {
   const [editing, setEditing] = useState<{ expectedAccess: string; tier: AccessTier | "" } | null>(null);
   const [offboarding, setOffboarding] = useState(false);
@@ -71,7 +73,7 @@ function StaffLevelRow({ user, matches, canManage, currentUserId, onSetLevel, on
     else focusSearch();
     setReturnFocus(null);
   }, [returnFocus, matches, focusSearch, active, shutdown.action]);
-  const currentPrincipal = withRegisteredMediaSections(principalFromUserDoc(user.id, user, true), sectionIds);
+  const currentPrincipal = principalFromUserDoc(user.id, user, true);
   const added = editing?.tier ? TIER_CAPABILITIES[editing.tier].filter((capability) => !hasCapability(currentPrincipal, capability)) : [];
   const removed = editing?.tier ? ALL_CAPABILITIES.filter((capability) => hasCapability(currentPrincipal, capability) && !TIER_CAPABILITIES[editing.tier as AccessTier].includes(capability)) : [];
 
@@ -123,8 +125,6 @@ function StaffLevelRow({ user, matches, canManage, currentUserId, onSetLevel, on
     <td data-label="Access level"><div className="staff-level-cell">
       <span className="sr-only" role="status">{submitting ? `${offboarding ? "Shutting down access" : reactivating ? "Reactivating account" : "Saving access"} for ${userLabel}` : ""}</span>
       <strong>{currentLevel(user)}</strong>
-      {!Object.hasOwn(user, "accessTier") && normalizeGrants(user.grants).some((grant) => grant.sections !== undefined)
-        ? <small>Has area limits. A new level applies to the whole site.</small> : null}
       {canManage && !editing ? <Button
         ref={editButton}
         aria-label={`Edit access level for ${userLabel}`}
@@ -143,9 +143,7 @@ function StaffLevelRow({ user, matches, canManage, currentUserId, onSetLevel, on
         </Select>
         {editing.tier ? <>
           <p>{ACCESS_TIER_TEXT[editing.tier].summary}</p>
-          <p>This replaces {currentLevel(user)} and all current roles and area grants with one whole-site level: {ACCESS_TIER_TEXT[editing.tier].name}.</p>
-          {!Object.hasOwn(user, "accessTier") && normalizeGrants(user.grants).some((grant) => grant.sections !== undefined)
-            ? <p>Any area limits are removed. Every ability in the new level applies across the whole site, including abilities previously limited to particular areas.</p> : null}
+          <p>This replaces {currentLevel(user)} with one whole-site level: {ACCESS_TIER_TEXT[editing.tier].name}.</p>
           <details><summary>Review abilities added and removed</summary>
             {added.length ? <><p>Adds across the whole site:</p><ul>{added.map((capability) => <li key={capability}>{CAPABILITY_LABELS[capability]}</li>)}</ul></> : null}
             {removed.length ? <><p>No longer able to:</p><ul>{removed.map((capability) => <li key={capability}>{CAPABILITY_LABELS[capability]}</li>)}</ul></> : null}
@@ -192,7 +190,7 @@ function StaffLevelRow({ user, matches, canManage, currentUserId, onSetLevel, on
           {ACCESS_TIERS.map((tier) => <option key={tier} value={tier}>{ACCESS_TIER_TEXT[tier].name}</option>)}
         </Select>
         <p>Turn sign-in back on and give one whole-site level: {ACCESS_TIER_TEXT[reactivating].name}. {ACCESS_TIER_TEXT[reactivating].summary}</p>
-        <p>Old roles and area grants do not come back. The public author profile and shared navigation stay off until someone restores them.</p>
+        <p>The previous access level does not come back. The public author profile and shared navigation stay off until someone restores them.</p>
         <div className="staff-level-actions">
           <Button aria-label={`${submitting ? "Reactivating account" : "Confirm reactivation"} for ${userLabel}`} disabled={self || submitting} onClick={() => void reactivate()}>
             {submitting ? "Reactivating account" : "Confirm reactivation"}
@@ -204,14 +202,13 @@ function StaffLevelRow({ user, matches, canManage, currentUserId, onSetLevel, on
   </tr>;
 }
 
-export function StaffLevelsTable({ users, sectionIds, ...rowProps }: {
+export function StaffLevelsTable({ users, ...rowProps }: {
   users: AdminUserRecord[];
   canManage: boolean;
   currentUserId?: string;
   onSetLevel: (request: StaffAccessLevelRequest) => Promise<void>;
   onDeactivate?: (targetUid: string) => void | Promise<void>;
   onReactivate?: (request: ReactivateStaffRequest) => Promise<void>;
-  sectionIds: ReadonlySet<string>;
 }) {
   const [filter, setFilter] = useState("");
   const id = useId();
@@ -240,7 +237,7 @@ export function StaffLevelsTable({ users, sectionIds, ...rowProps }: {
     {users.length === 0 ? <EmptyState title="No staff accounts found" description="Staff profiles appear after their first approved sign-in." /> :
       <TableFrame><table className="data-table users-table staff-levels-table" aria-label="Staff access">
         <thead><tr><th scope="col">Staff member</th><th scope="col">Account state</th><th scope="col">Access level</th>{rowProps.canManage ? <th scope="col">Actions</th> : null}</tr></thead>
-        <tbody>{users.map((user) => <StaffLevelRow key={user.id} user={user} matches={matches(user)} onPin={onPin} focusSearch={focusSearch} sectionIds={sectionIds} {...rowProps} />)}</tbody>
+        <tbody>{users.map((user) => <StaffLevelRow key={user.id} user={user} matches={matches(user)} onPin={onPin} focusSearch={focusSearch} {...rowProps} />)}</tbody>
       </table></TableFrame>}
     {users.length > 0 && !users.some(visible) ? <EmptyState title="No staff member matches" description="Try a different name or email." action={<Button onClick={() => setFilter("")}>Clear the search</Button>} /> : null}
   </div>;

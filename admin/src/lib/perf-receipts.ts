@@ -193,9 +193,7 @@ export function operationCategoryForEndpoint(
     endpoint === "decideStaffAccessRequest" ||
     endpoint === "deactivateStaff" ||
     endpoint === "reactivateStaff" ||
-    endpoint === "grantRole" ||
-    endpoint === "setStaffAccessLevel" ||
-    endpoint === "revokeRole"
+    endpoint === "setStaffAccessLevel"
   )
     return "staff-admin";
   if (endpoint === "cmsRestoreRevision") return "revision-write";

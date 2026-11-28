@@ -477,14 +477,9 @@ function EditableAuthorProfileRoute() {
   if (loadState === "archived") {
     const grants = state?.status === "signed-in" ? state.principal.grants : [];
     const tier = grants.find((grant) => grant.tier !== undefined)?.tier;
-    // Accounts without an access tier still hold role grants; name those roles instead.
     const access = tier
       ? `Your access level is ${ACCESS_TIER_TEXT[tier].name}: ${ACCESS_TIER_TEXT[tier].summary}`
-      : grants.length > 0
-        ? `Your access: ${grants.map((grant) => grant.sections === undefined
-          ? grant.role
-          : `${grant.role} (${grant.sections.join(", ")})`).join("; ")}.`
-        : null;
+      : null;
     return (
       <div className="author-profile">
         <Panel aria-labelledby="author-profile-archived-heading">

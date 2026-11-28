@@ -548,11 +548,8 @@ describe("Admin E2E fixture and browser contracts", () => {
       ),
     ).toBe(true);
     expect(
-      ADMIN_E2E_IDENTITIES.map((identity) => identity.profile?.role ?? null),
-    ).toEqual(["super_admin", null, null]);
-    expect(ADMIN_E2E_IDENTITIES[1].profile.grants).toEqual([
-      { role: "editor", sections: ["watch"] },
-    ]);
+      ADMIN_E2E_IDENTITIES.map((identity) => identity.profile?.accessTier ?? null),
+    ).toEqual(["owner", "publisher", null]);
     expect(ADMIN_E2E_IDENTITIES[2].profile).toBeNull();
   });
 

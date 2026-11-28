@@ -617,7 +617,8 @@ describe("cloud Post withdrawal reservation cutoff", () => {
   });
   it("keeps bulk cloud acceptance and legacy refusal independent while primary is paused", async () => {
     await setup();
-    await db.doc(`users/${actor.uid}`).set({ active: true, role: "admin" });
+    await db.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true });
+    await db.doc(`users/${actor.uid}`).set({ active: true, accessTier: "admin" });
     const legacy = { ...(await current()), id: "legacy-post", slug: "legacy-story" };
     legacy.published = { ...legacy.published, metadata: { ...legacy.published.metadata, slug: "legacy-story" } };
     await db.doc("cmsPosts/legacy-post").set(legacy);
@@ -1057,7 +1058,8 @@ describe("one-Post acceptance, ownership and public receipt contracts", () => {
 
   it("returns the native Post owner reason when bulk archive refuses a copied legacy Home card", async () => {
     expect((await publish()).code).toBe(200);
-    await db.doc(`users/${actor.uid}`).set({ active: true, role: "admin" });
+    await db.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true });
+    await db.doc(`users/${actor.uid}`).set({ active: true, accessTier: "admin" });
     await db.doc("cmsPages/home").set({ publiclyVisible: true, published: { metadata: {}, blocks: [
       { id: "legacy", visible: true, type: "prose", data: { html: '<a href="/posts/pilot-story">Copied story</a>' } },
     ] } });
@@ -2944,7 +2946,8 @@ it.each(["unpublish", "archive"])("reports a first-attempt %s dispatch failure w
   // Commit the public visibility that provider confirmation normally records.
   await db.doc(`cmsPosts/${config.postId}`).update({ publiclyVisible: true });
   const published = (await current()).published;
-  await db.doc(`users/${actor.uid}`).set({ active: true, role: "admin" });
+  await db.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true });
+  await db.doc(`users/${actor.uid}`).set({ active: true, accessTier: "admin" });
   const dispatch = vi.spyOn(createRequire(import.meta.url)("../../functions/lib/transitional-post-withdrawal.js"), "enqueuePostWithdrawalBuild")
     .mockRejectedValue(new Error("Post removal could not start. Retry removal."));
   try {

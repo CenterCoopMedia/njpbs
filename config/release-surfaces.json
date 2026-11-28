@@ -200,10 +200,6 @@
           "module": "functions/dev-staff-access-status.js"
         },
         {
-          "name": "grantRole",
-          "module": "functions/roles.js"
-        },
-        {
           "name": "health",
           "module": "functions/health.js"
         },
@@ -244,8 +240,8 @@
           "module": "functions/staff-profile.js"
         },
         {
-          "name": "revokeRole",
-          "module": "functions/roles.js"
+          "name": "setStaffAccessLevel",
+          "module": "functions/staff-access-level.js"
         }
       ]
     },
@@ -785,10 +781,6 @@
           "module": "functions/bug-report-github.js"
         },
         {
-          "name": "grantRole",
-          "module": "functions/roles.js"
-        },
-        {
           "name": "health",
           "module": "functions/health.js"
         },
@@ -935,10 +927,6 @@
         {
           "name": "requestStaffPasswordReset",
           "module": "functions/staff-access.js"
-        },
-        {
-          "name": "revokeRole",
-          "module": "functions/roles.js"
         },
         {
           "name": "setStaffAccessLevel",

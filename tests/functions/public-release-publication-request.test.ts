@@ -23,7 +23,8 @@ const state = async (path: string) => (await db.doc(path).get()).data();
 beforeEach(async () => {
   await clearEmulatorFirestore(`http://${process.env.FIRESTORE_EMULATOR_HOST}/emulator/v1/projects/demo-njpbs/databases/(default)/documents`, { method: "DELETE" }, db);
   await seedSwitch(firestore, { admittedContract: contract });
-  await db.doc(`users/${actor.uid}`).set({ role: "admin", active: true });
+  await db.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true });
+  await db.doc(`users/${actor.uid}`).set({ accessTier: "admin", active: true });
   await db.doc(`${a.CONTRACTS}/${p.publicReleaseDigest(contract)}`).set(contract);
   await db.doc(`${a.ADMISSIONS}/controls/adoption`).set({ schemaVersion: 2, enabled: true });
   await db.doc("system/noBuildPostAdmission").set({ schemaVersion: 2, enabled: true, revision: 1,

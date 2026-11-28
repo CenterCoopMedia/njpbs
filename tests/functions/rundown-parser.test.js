@@ -13,7 +13,8 @@ describe("private deterministic proposal cache", () => {
   beforeEach(async () => {
     if (!process.env.FIRESTORE_EMULATOR_HOST) throw new Error("Use the Firestore emulator.");
     id = randomUUID(); ref = db.doc(`liveProductionSessions/${id}`);
-    await db.doc("users/marker-producer").set({ active: true, grants: [{ role: "editor" }] });
+    await db.doc("users/marker-producer").set({ active: true, accessTier: "editor" });
+    await db.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true });
     await ref.set({ schemaVersion: 1, id, title: "Synthetic show", productionProgramId: "synthetic", publicProgramId: null,
       showPlanId: null, deviceId: null, generation: 1, mappingVersion: 1, state: "draft", createdAtMs: now, updatedAtMs: now });
     await ref.collection("rundown").doc("source").set({ config: sourceConfig, configVersion: 1, generation: 1 });

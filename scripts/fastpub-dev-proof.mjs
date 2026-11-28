@@ -108,18 +108,16 @@ export function publicEvidence(response, expected) {
 }
 
 export function assertOrdinaryEditor(uid, profile) {
+  // Publisher is the narrowest access tier that can publish; any broader tier is refused.
   if (
     !profile ||
     profile.active === false ||
-    profile.role != null ||
     profile.email?.toLowerCase() !== deploymentEmail("CMS_DEV_EDITOR_EMAIL") ||
-    !Array.isArray(profile.grants) ||
-    !profile.grants.length ||
-    profile.grants.some((grant) => grant?.role !== "editor")
+    profile.accessTier !== "publisher"
   ) {
     throw new Error("ordinary_editor_required");
   }
-  const principal = principalFromUserDoc(uid, profile);
+  const principal = principalFromUserDoc(uid, profile, true);
   const resource = { section: "news", ownerId: uid, type: "post" };
   if (
     [
@@ -131,7 +129,7 @@ export function assertOrdinaryEditor(uid, profile) {
   ) {
     throw new Error("ordinary_editor_required");
   }
-  return { role: "editor", section: "news" };
+  return { accessTier: "publisher", section: "news" };
 }
 
 // Mirrors the wire contract in functions/save.js recordIdForCreateAttempt.
@@ -690,7 +688,7 @@ export async function main(args = process.argv.slice(2)) {
   const receipt = {
     schemaVersion: 1,
     mode: options.publish ? "publish" : "dry-run",
-    role: null,
+    accessTier: null,
     adminOrigin: ADMIN_ORIGIN,
     publicOrigin: PUBLIC_ORIGIN,
     startedAt: new Date().toISOString(),
@@ -743,7 +741,7 @@ export async function main(args = process.argv.slice(2)) {
         session.authUid,
         await admission.readEditor(session.authUid),
       );
-      receipt.role = receipt.editor.role;
+      receipt.accessTier = receipt.editor.accessTier;
     }
     await page.getByRole("link", { name: "Posts", exact: true }).click();
     await page.getByRole("link", { name: "New post", exact: true }).waitFor();

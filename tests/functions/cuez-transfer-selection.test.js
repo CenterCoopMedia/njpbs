@@ -66,7 +66,8 @@ beforeEach(async () => {
   const canonicalUrl = "https://outlet.example.test/story";
   aroundId = createHash("sha256").update(canonicalUrl).digest("hex");
   await Promise.all([
-    ref("users", "staff").set({ active: true, role: "admin", emailVerified: true }),
+    ref("users", "staff").set({ active: true, accessTier: "admin", emailVerified: true }),
+    ref("system", "staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true }),
     ref("mediaSourceAssets", "asset").set(asset), ref(clips.CLIP_JOBS, clip.id).set(clip),
     ref("mediaSourceTranscriptJobs", transcript.id).set(transcript),
     ref("media_assets", "image").set({ name: "Image", originalName: "image.png", lifecycle: "active", version: 1,
@@ -143,11 +144,12 @@ describe("server selection preparation", () => {
     await ref("system/media/replacements", "image").set({ active: true });
     await expect(prepare(await request("image"))).rejects.toMatchObject({ code: "selection_changed" });
   });
-  it("rechecks stored account authority and section-scoped Post access", async () => {
+  it("rechecks stored account authority and record-level Post access", async () => {
+    await ref("cmsPosts", "post").update({ createdBy: "another-editor" });
     const input = await request("post");
-    await ref("users", "staff").set({ active: true, grants: [{ role: "contributor", sections: ["other"] }] });
+    await ref("users", "staff").set({ active: true, accessTier: "contributor", emailVerified: true });
     await expect(prepare(input)).rejects.toMatchObject({ code: "not_authorized" });
-    await ref("users", "staff").set({ active: false, role: "admin" });
+    await ref("users", "staff").set({ active: false, accessTier: "admin", emailVerified: true });
     await expect(prepare(await request("video"))).rejects.toMatchObject({ code: "not_authorized" });
   });
   it("refuses absent or expired Around NJ records and mismatched configured newsdesks", async () => {

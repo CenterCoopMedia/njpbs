@@ -17,7 +17,7 @@ const params = new URLSearchParams(location.search);
 const state = params.get("state") ?? "draft";
 const principal: ShellData["principal"] = { id: "fixture-editor", grants: [{ role: "super_admin" }] };
 const shell: ShellData = { principal, user: { uid: "fixture-editor", email: null, displayName: "Example editor" },
-  userDoc: { role: "super_admin", grants: principal.grants, displayName: "Example editor" }, navigationShares: [], signOut() {} };
+  userDoc: { accessTier: "owner", displayName: "Example editor" }, navigationShares: [], signOut() {} };
 const photo: MediaAssetSummary = { id: "entry-photo", name: "Local reporting photo", originalName: "reporting.jpg", category: "news", categories: ["news"], tags: [], description: null,
   altText: "People taking part in a community meeting", license: "Synthetic local specimen", credit: "Example newsroom", mimeType: "image/jpeg", kind: "image", sizeBytes: 2000,
   width: 800, height: 600, url: "https://njpbs.org/brand/spotlight/politics-02.jpg", lifecycle: "active", version: 1, etag: "fixture", createdAt: null, createdBy: null, updatedAt: null, updatedBy: null };

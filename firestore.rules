@@ -30,9 +30,9 @@ service cloud.firestore {
       let profileExists = request.auth != null && exists(currentUserPath());
       let profile = profileExists ? get(currentUserPath()).data : {};
       return profileExists && profile.get('active', true) == true &&
-        (!usesAccessTier(profile) ||
-          (request.auth.token.get('email_verified', false) == true &&
-            profile.get('accessTier', null) in ['viewer', 'contributor', 'editor', 'publisher', 'admin', 'owner'])) &&
+        request.auth.token.get('email_verified', false) == true &&
+        profile.get('accessTier', null) in ['viewer', 'contributor', 'editor', 'publisher', 'admin', 'owner'] &&
+        accessTierReadsActive() &&
         request.auth.token.auth_time > profile.get('tokensValidAfter', 0) &&
         request.auth.token.auth_time * 1000 > request.time.toMillis() - maxSessionAgeSeconds() * 1000;
     }
@@ -59,31 +59,19 @@ service cloud.firestore {
       let tier = profile.get('accessTier', null);
       return usesAccessTier(profile)
         ? (tier == 'owner' ? 'super_admin' : (tier == 'admin' ? 'admin' : null))
-        : profile.get('role', null);
+        : null;
     }
 
     function hasEditorLockEditAny() {
       let profile = get(currentUserPath()).data;
-      let grants = profile.get('grants', []);
-      let tierActive = usesAccessTier(profile);
       return hasValidStaffSession() &&
-        (
-          (tierActive &&
-            profile.get('accessTier', null) in ['editor', 'publisher', 'admin', 'owner']) ||
-          (!tierActive && (
-            profile.get('role', null) in ['admin', 'super_admin'] ||
-            (grants is list && grants.hasAny([{'role': 'editor'}]))))
-        );
+        profile.get('accessTier', null) in ['editor', 'publisher', 'admin', 'owner'];
     }
 
     function isSiteWideContributor() {
       let profile = get(currentUserPath()).data;
-      let grants = profile.get('grants', []);
-      let tierActive = usesAccessTier(profile);
       return hasValidStaffSession() &&
-        ((tierActive && profile.get('accessTier', null) == 'contributor') ||
-          (!tierActive && grants is list &&
-            grants.hasAny([{'role': 'contributor'}])));
+        profile.get('accessTier', null) == 'contributor';
     }
 
     function validEditorLockAddress(data, lockId) {
@@ -285,16 +273,8 @@ service cloud.firestore {
 
     function canForceEditorLockTakeover() {
       let profile = get(currentUserPath()).data;
-      let grants = profile.get('grants', []);
-      let tierActive = usesAccessTier(profile);
       return hasValidStaffSession() &&
-        (
-          (tierActive &&
-            profile.get('accessTier', null) in ['editor', 'publisher', 'admin', 'owner']) ||
-          (!tierActive && (
-            profile.get('role', null) in ['admin', 'super_admin'] ||
-            (grants is list && grants.hasAny([{'role': 'editor'}]))))
-        ) &&
+        profile.get('accessTier', null) in ['editor', 'publisher', 'admin', 'owner'] &&
         // A marked automation account never forces a person off a record (#4717).
         !exists(/databases/$(database)/documents/cmsAutomationAccounts/$(request.auth.uid));
     }

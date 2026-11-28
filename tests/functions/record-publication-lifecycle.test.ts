@@ -51,7 +51,8 @@ beforeEach(async () => {
     terminalOwner: { schemaVersion: 1, rendererSha: sha, transport: "public-context-no-build-v1" } });
   const art = { lifecycle: "active", source: "site_seed", url: asset.url, mimeType: asset.mimeType, width: asset.width, height: asset.height, altText: "Public art" };
   await db.doc("media_assets/record-art").set(art); await db.doc("media_assets_public/record-art").set(media.mediaProjection(art));
-  await db.doc(`users/${actor.uid}`).set({ role: "admin", grants: [] });
+  await db.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true });
+  await db.doc(`users/${actor.uid}`).set({ accessTier: "admin", active: true });
   await seed();
 });
 afterAll(async () => { await deleteApp(app); if (oldEnvironment === undefined) delete process.env.CMS_DEPLOYMENT_ENVIRONMENT; else process.env.CMS_DEPLOYMENT_ENVIRONMENT = oldEnvironment; });

@@ -364,7 +364,7 @@ async function optional(read) {
 
 async function readStaff(firestore) {
   try {
-    const users = await firestore.collection("users").select("role", "accessTier", "grants", "usageAnalyticsExcluded").limit(501).get();
+    const users = await firestore.collection("users").select("accessTier", "usageAnalyticsExcluded").limit(501).get();
     if (users.size > 500) return null;
     const groups = new Map();
     const roles = new Map();
@@ -373,9 +373,7 @@ async function readStaff(firestore) {
       const profile = row.data();
       if (profile.usageAnalyticsExcluded === true) { excluded += 1; continue; }
       if (row.id.startsWith("system:")) continue;
-      if (["staff", "contributor", "editor", "admin", "super_admin"].includes(profile.role) ||
-          ["viewer", "contributor", "editor", "publisher", "admin", "owner"].includes(profile.accessTier) ||
-          (Array.isArray(profile.grants) && profile.grants.some(grant => ["staff", "contributor", "editor", "admin", "super_admin"].includes(grant?.role)))) {
+      if (["viewer", "contributor", "editor", "publisher", "admin", "owner"].includes(profile.accessTier)) {
         groups.set(row.id, groupOf(profile));
         roles.set(row.id, roleOf(profile));
       }

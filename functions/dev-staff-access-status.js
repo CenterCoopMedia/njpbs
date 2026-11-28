@@ -36,7 +36,7 @@ const getStaffAccessStatus = cmsOnRequest({ cors: true }, async (req, res) => {
         state: "ready",
         requestVersion: null,
         reference: null,
-        role: null,
+        accessTier: null,
         requestedAt: null,
         decidedAt: null,
         emailVerified: caller.emailVerified === true,

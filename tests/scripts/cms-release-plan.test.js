@@ -174,7 +174,6 @@ describe("selective Functions releases", () => {
       return resolverOutput(script);
     });
     expect(expected.CMS_BUG_REPORT_TELEGRAM_ADMIN_MAP).toBe('{"456":"test-admin"}');
-    expect(expected.BOOTSTRAP_SUPER_ADMINS).toBe('[""]');
     expect(expected.CMS_BUG_REPORT_EMAIL_BCC).toBe('[""]');
     expect(JSON.parse(expected.CMS_STUDIO_TITLE_FILES)).toEqual({ headline: "Synthetic headline.gtzip", name_title: "Synthetic name.gtzip" });
     const live = () => [{ serviceConfig: { environmentVariables: { ...expected } } }];
@@ -205,9 +204,9 @@ describe("selective Functions releases", () => {
       .rejects.toThrow("Studio feature configuration is unavailable");
   });
   it.each([
-    ["blank list input", "BOOTSTRAP_SUPER_ADMINS", "", '[""]'],
-    ["explicit empty list", "BOOTSTRAP_SUPER_ADMINS", "[]", "[]"],
-    ["one list item", "BOOTSTRAP_SUPER_ADMINS", "first@example.test", '["first@example.test"]'],
+    ["blank list input", "CMS_BUG_REPORT_EMAIL_BCC", "", '[""]'],
+    ["explicit empty list", "CMS_BUG_REPORT_EMAIL_BCC", "[]", "[]"],
+    ["one list item", "CMS_BUG_REPORT_EMAIL_BCC", "first@example.test", '["first@example.test"]'],
     ["several list items", "CMS_BUG_REPORT_EMAIL_BCC", "first@example.test,second@example.test", '["first@example.test","second@example.test"]'],
     ["JSON text", "CMS_PUBLISH_GITHUB_TRUSTED_ACTORS", '[ "fixture-bot" ]', '[ "fixture-bot" ]'],
     ["boolean text", "CMS_PREVIEW_SERIALIZER_READY", "true", "true"],

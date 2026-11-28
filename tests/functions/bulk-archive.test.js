@@ -82,9 +82,10 @@ describe("cmsBulkArchiveContent", () => {
       method: "DELETE",
     });
     await db.collection("users").doc("admin-1").set({
-      role: "admin",
+      accessTier: "admin",
       active: true,
     });
+    await db.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true });
   });
 
   afterAll(async () => {
@@ -584,7 +585,7 @@ describe("cmsBulkArchiveContent", () => {
       runTransaction: async (updateFunction) => {
         transactionCount += 1;
         if (transactionCount === 2) {
-          await db.collection("users").doc("admin-1").update({ role: null });
+          await db.collection("users").doc("admin-1").update({ accessTier: null });
         }
         return db.runTransaction(updateFunction);
       },
@@ -644,7 +645,7 @@ describe("cmsBulkArchiveContent", () => {
       clientAuth, "bulk-admin@example.com", "password123",
     );
     const uid = credential.user.uid;
-    await db.collection("users").doc(uid).set({ role: "admin", grants: [] });
+    await db.collection("users").doc(uid).set({ accessTier: "admin" });
     await db.collection("cmsPosts").doc("record").set({
       id: "record",
       type: "article",
@@ -699,7 +700,7 @@ describe("cmsBulkArchiveContent", () => {
       clientAuth, "bulk-editor@example.com", "password123",
     );
     const uid = credential.user.uid;
-    await db.collection("users").doc(uid).set({ role: "editor", grants: [] });
+    await db.collection("users").doc(uid).set({ accessTier: "editor" });
     await db.collection("cmsPosts").doc("record").set({
       id: "record",
       type: "article",
