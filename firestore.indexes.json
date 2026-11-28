@@ -557,6 +557,7 @@
       ]
     },
     {
+      "collectionGroup": "cmsPages",
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "status", "order": "ASCENDING" },
