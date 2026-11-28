@@ -78,8 +78,6 @@ async function seedUser(uid, data) {
     displayName: null,
     active: true,
     tokensValidAfter: 0,
-    role: null,
-    grants: [],
     createdAt: new Date(),
     updatedAt: new Date(),
     ...data,
@@ -106,6 +104,7 @@ describe("staff access request functions", () => {
       `http://${AUTH_HOST}/emulator/v1/projects/${PROJECT}/accounts`,
       { method: "DELETE" },
     );
+    await db.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true });
   });
 
   afterAll(async () => {
@@ -125,7 +124,7 @@ describe("staff access request functions", () => {
     expect(body.request).toMatchObject({
       state: "email_verification",
       emailVerified: false,
-      role: null,
+      accessTier: null,
     });
     await expect(db.collection("users").doc(requester.uid).get()).resolves.toMatchObject({
       exists: false,
@@ -136,7 +135,7 @@ describe("staff access request functions", () => {
     expect(request).toMatchObject({
       email: "fixture-71afefb297@example.org",
       state: "email_verification",
-      approvedRole: null,
+      approvedAccessTier: null,
     });
     expect(request.expireAt).toBeTruthy();
     await expect(
@@ -223,7 +222,7 @@ describe("staff access request functions", () => {
     expect(body.request).toMatchObject({
       state: "pending",
       emailVerified: true,
-      role: null,
+      accessTier: null,
     });
     const profile = await db.collection("users").doc(requester.uid).get();
     expect(profile.exists).toBe(false);
@@ -310,14 +309,12 @@ describe("staff access request functions", () => {
     });
     await seedUser(requester.uid, {
       email: requester.email,
-      role: null,
-      grants: [],
     });
 
     const sasha = await signInAs("fixture-f5a060311f@example.org");
     await seedUser(sasha.uid, {
       email: sasha.email,
-      role: "admin",
+      accessTier: "admin",
     });
     const deniedList = await callFn("listStaffAccessRequests", sasha.token);
     expect(deniedList.status).toBe(403);
@@ -325,7 +322,7 @@ describe("staff access request functions", () => {
     const jules = await signInAs("fixture-8687437e4c@example.org");
     await seedUser(jules.uid, {
       email: jules.email,
-      role: "super_admin",
+      accessTier: "owner",
     });
     const listResponse = await callFn("listStaffAccessRequests", jules.token);
     expect(listResponse.status).toBe(200);
@@ -341,25 +338,25 @@ describe("staff access request functions", () => {
       targetUid: requester.uid,
       requestVersion: list.requests[0].requestVersion,
       decision: "approve",
-      role: "editor",
+      accessTier: "publisher",
     });
     expect(approveResponse.status).toBe(200);
     await expect(approveResponse.json()).resolves.toMatchObject({
-      request: { state: "ready", role: "editor" },
+      request: { state: "ready", accessTier: "publisher" },
     });
     const profile = (await db.collection("users").doc(requester.uid).get()).data();
     expect(profile).toMatchObject({
       active: true,
       email: requester.email,
-      role: null,
-      grants: [{ role: "editor" }],
+      accessTier: "publisher",
     });
+    expect(profile).not.toHaveProperty("grants");
     const request = (
       await db.collection("staffAccessRequests").doc(requester.uid).get()
     ).data();
     expect(request).toMatchObject({
       state: "ready",
-      approvedRole: "editor",
+      approvedAccessTier: "publisher",
       decision: {
         outcome: "approve",
         actorUid: jules.uid,
@@ -379,7 +376,7 @@ describe("staff access request functions", () => {
     const jules = await signInAs("fixture-39ac0674ef@example.org");
     await seedUser(jules.uid, {
       email: jules.email,
-      role: "super_admin",
+      accessTier: "owner",
     });
     const approveResponse = await callFn(
       "decideStaffAccessRequest",
@@ -388,27 +385,26 @@ describe("staff access request functions", () => {
         targetUid: requester.uid,
         requestVersion: submitted.request.requestVersion,
         decision: "approve",
-        role: "staff",
+        accessTier: "viewer",
       },
     );
 
     expect(approveResponse.status).toBe(200);
     await expect(approveResponse.json()).resolves.toMatchObject({
-      request: { state: "ready", role: "staff" },
+      request: { state: "ready", accessTier: "viewer" },
     });
     const profile = (await db.collection("users").doc(requester.uid).get()).data();
     expect(profile).toMatchObject({
       active: true,
       email: requester.email,
-      role: null,
-      grants: [{ role: "staff" }],
+      accessTier: "viewer",
     });
     const request = (
       await db.collection("staffAccessRequests").doc(requester.uid).get()
     ).data();
     expect(request).toMatchObject({
       state: "ready",
-      approvedRole: "staff",
+      approvedAccessTier: "viewer",
       decision: {
         outcome: "approve",
         actorUid: jules.uid,
@@ -418,7 +414,7 @@ describe("staff access request functions", () => {
 
   it("rejects escalation, self-approval, and stale decisions", async () => {
     const jules = await signInAs("fixture-8687437e4c@example.org");
-    await seedUser(jules.uid, { email: jules.email, role: "super_admin" });
+    await seedUser(jules.uid, { email: jules.email, accessTier: "owner" });
     const requester = await signInAs("requester@example.org");
     const submitResponse = await callFn("submitStaffAccessRequest", requester.token, {
       reason: "I prepare approved station content.",
@@ -429,9 +425,17 @@ describe("staff access request functions", () => {
       targetUid: requester.uid,
       requestVersion: request.requestVersion,
       decision: "approve",
-      role: "admin",
+      accessTier: "admin",
     });
     expect(escalation.status).toBe(400);
+    await expect(escalation.json()).resolves.toMatchObject({ code: "access_tier_invalid" });
+    const legacyRole = await callFn("decideStaffAccessRequest", jules.token, {
+      targetUid: requester.uid,
+      requestVersion: request.requestVersion,
+      decision: "approve",
+      role: "editor",
+    });
+    expect(legacyRole.status).toBe(400);
 
     const stale = await callFn("decideStaffAccessRequest", jules.token, {
       targetUid: requester.uid,
@@ -450,7 +454,7 @@ describe("staff access request functions", () => {
       targetUid: jules.uid,
       requestVersion: selfRequest.requestVersion,
       decision: "approve",
-      role: "editor",
+      accessTier: "publisher",
     });
     expect(selfDecision.status).toBe(403);
   });
@@ -463,13 +467,13 @@ describe("staff access request functions", () => {
     const request = (await submitted.json()).request;
     await admin.auth().updateUser(requester.uid, { disabled: true });
     const jules = await signInAs("fixture-8687437e4c@example.org");
-    await seedUser(jules.uid, { email: jules.email, role: "super_admin" });
+    await seedUser(jules.uid, { email: jules.email, accessTier: "owner" });
 
     const response = await callFn("decideStaffAccessRequest", jules.token, {
       targetUid: requester.uid,
       requestVersion: request.requestVersion,
       decision: "approve",
-      role: "editor",
+      accessTier: "publisher",
     });
 
     expect(response.status).toBe(409);
@@ -479,6 +483,28 @@ describe("staff access request functions", () => {
     expect((await db.collection("users").doc(requester.uid).get()).exists).toBe(false);
   });
 
+  it("refuses approval when the account already has an access level", async () => {
+    const requester = await signInAs("existing-level@example.org");
+    const submitted = await callFn("submitStaffAccessRequest", requester.token, {
+      reason: "I prepare station pages.",
+    });
+    const request = (await submitted.json()).request;
+    await seedUser(requester.uid, { email: requester.email, accessTier: "viewer" });
+    const jules = await signInAs("fixture-8687437e4c@example.org");
+    await seedUser(jules.uid, { email: jules.email, accessTier: "owner" });
+
+    const response = await callFn("decideStaffAccessRequest", jules.token, {
+      targetUid: requester.uid,
+      requestVersion: request.requestVersion,
+      decision: "approve",
+      accessTier: "publisher",
+    });
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({ code: "permissions_changed" });
+    expect((await db.collection("users").doc(requester.uid).get()).data().accessTier).toBe("viewer");
+  });
+
   it("records rejection without creating a CMS profile", async () => {
     const requester = await signInAs("rejected@example.org");
     const submitResponse = await callFn("submitStaffAccessRequest", requester.token, {
@@ -486,7 +512,7 @@ describe("staff access request functions", () => {
     });
     const request = (await submitResponse.json()).request;
     const jules = await signInAs("fixture-8687437e4c@example.org");
-    await seedUser(jules.uid, { email: jules.email, role: "super_admin" });
+    await seedUser(jules.uid, { email: jules.email, accessTier: "owner" });
 
     const response = await callFn("decideStaffAccessRequest", jules.token, {
       targetUid: requester.uid,
@@ -496,7 +522,7 @@ describe("staff access request functions", () => {
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
-      request: { state: "denied", role: null },
+      request: { state: "denied", accessTier: null },
     });
     expect((await db.collection("users").doc(requester.uid).get()).exists).toBe(false);
   });
@@ -509,7 +535,7 @@ describe("staff access request functions", () => {
     expect(firstSubmit.status).toBe(200);
     const first = (await firstSubmit.json()).request;
     const jules = await signInAs("fixture-8687437e4c@example.org");
-    await seedUser(jules.uid, { email: jules.email, role: "super_admin" });
+    await seedUser(jules.uid, { email: jules.email, accessTier: "owner" });
     const firstDecision = await callFn("decideStaffAccessRequest", jules.token, {
       targetUid: requester.uid,
       requestVersion: first.requestVersion,
@@ -542,7 +568,7 @@ describe("staff access request functions", () => {
       requestedAt: new Date(Date.now() - 31 * 24 * 60 * 60 * 1000),
     });
     const jules = await signInAs("fixture-8687437e4c@example.org");
-    await seedUser(jules.uid, { email: jules.email, role: "super_admin" });
+    await seedUser(jules.uid, { email: jules.email, accessTier: "owner" });
 
     const response = await callFn("listStaffAccessRequests", jules.token);
 

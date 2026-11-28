@@ -1027,14 +1027,15 @@ describe("durable delivery", () => {
 });
 
 describe("Telegram callback boundary", () => {
-  it("requires the webhook, chat, mapped user, and current CMS admin role", async () => {
+  it("requires the webhook, chat, mapped user, and current CMS Admin access level", async () => {
     const stored = report();
     await db.collection("bug_reports").doc(stored.id).set(stored);
     await db.collection("users").doc("admin-1").set({
       email: "admin@example.org",
-      role: "admin",
+      accessTier: "admin",
       active: true,
     });
+    await db.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true });
     const client = {
       answerCallbackQuery: vi.fn(async () => null),
       editMessage: vi.fn(async () => null),
@@ -1101,9 +1102,10 @@ describe("Telegram callback boundary", () => {
     await db.collection("bug_reports").doc(stored.id).set(stored);
     await db.collection("users").doc("admin-1").set({
       email: "admin@example.org",
-      role: "admin",
+      accessTier: "admin",
       active: true,
     });
+    await db.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true });
     const client = {
       answerCallbackQuery: vi.fn(async () => null),
       editMessage: vi.fn(async () => {

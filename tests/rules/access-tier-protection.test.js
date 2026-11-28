@@ -19,20 +19,20 @@ beforeEach(async () => {
   await environment.clearFirestore();
   await environment.withSecurityRulesDisabled(async (context) => {
     const db = context.firestore();
-    await setDoc(doc(db, "users/staff"), { active: true, role: null, grants: [{ role: "staff" }] });
-    await setDoc(doc(db, "users/admin"), { active: true, role: "admin", grants: [] });
+    await setDoc(doc(db, "system/staffAccessActivation"), { schema: 1, state: "active", cleanScan: true });
+    await setDoc(doc(db, "users/staff"), { active: true, accessTier: "viewer" });
+    await setDoc(doc(db, "users/admin"), { active: true, accessTier: "admin" });
   });
 });
 function profile(actor, target) {
   return doc(environment.authenticatedContext(actor, { auth_time: recentAuthTime, email_verified: true }).firestore(), `users/${target}`);
 }
-describe("server-owned access tier before reader activation", () => {
+describe("server-owned access tier", () => {
   it.each([["staff", "staff"], ["admin", "staff"]])("%s cannot plant a tier on %s", async (actor, target) => {
     await assertFails(updateDoc(profile(actor, target), { accessTier: "owner" }));
     await assertSucceeds(updateDoc(profile(actor, target), { displayName: "Fixture staff" }));
   });
   it.each([["staff", "staff"], ["admin", "staff"]])("%s cannot replace or delete the protected tier on %s", async (actor, target) => {
-    await environment.withSecurityRulesDisabled(context => updateDoc(doc(context.firestore(), `users/${target}`), { accessTier: "viewer" }));
     await assertSucceeds(updateDoc(profile(actor, target), { displayName: "Fixture staff" }));
     await assertFails(updateDoc(profile(actor, target), { accessTier: "owner" }));
     await assertFails(updateDoc(profile(actor, target), { accessTier: deleteField() }));

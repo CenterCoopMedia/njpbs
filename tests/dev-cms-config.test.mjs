@@ -187,8 +187,8 @@ test("dev preview readiness requires the verified renderer SHA and dev-only serv
 test("dev manifest has exactly the reviewed endpoints and only admitted secrets", () => {
   const expected = [
     "health", "donationHealth", "cmsCollectBoardwalkUsage", "cmsGetBoardwalkUsage",
-    "registerStaffProfile", "getStaffAccessStatus", "grantRole",
-    "revokeRole", "deactivateStaff", "cmsValidateSiteAccess", "cmsGetContent",
+    "registerStaffProfile", "getStaffAccessStatus", "setStaffAccessLevel",
+    "deactivateStaff", "cmsValidateSiteAccess", "cmsGetContent",
     "cmsListContent", "cmsSaveContent", "cmsTransitionContent", "cmsGetRevision",
     "cmsListRevisions", "cmsRestoreRevision", "cmsAssignContent", "cmsListAudit",
     "cmsPostTemplates", "cmsDatasets", "cmsElectionResultsSources", "onElectionResultsSourcePoll", "onDatasetRefresh", "cmsGetNewsroomBanner", "cmsGetSettings", "cmsGetCoverageLabels", "cmsSaveSettings",

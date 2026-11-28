@@ -70,8 +70,6 @@ export const AUTHENTICATED_POST_FUNCTION_NAMES = Object.freeze([
   "cmsCuezConfirmImport",
   "cmsCuezRetry",
   "cmsCuezReconcile",
-  "grantRole",
-  "revokeRole",
   "setStaffAccessLevel",
   "deactivateStaff",
   "reactivateStaff",

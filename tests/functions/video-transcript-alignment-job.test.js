@@ -217,7 +217,8 @@ describe("corrected transcript alignment jobs", () => {
       reviewedRevision: null, alignedOutputRequestId: claimOne.alignment.id,
       alignedOutputs: { "segments.json": "aligned-segments", txt: "aligned-txt", vtt: "aligned-vtt" } });
     expect(processor.selectedTranscriptOutputs(saved).outputs["segments.json"]).toBe("segments-v2");
-    store.rows.set("users/staff", { active: true, grants: [{ role: "staff" }] });
+    store.rows.set("users/staff", { active: true, accessTier: "contributor" });
+    store.rows.set("system/staffAccessActivation", { schema: 1, state: "active", cleanScan: true });
     const reviewed = await transcriptJobs.commitTranscriptEdit({ firestore: store.firestore, source,
       request: { ...request, segments: [], speakerNames: {}, speakerRoles: {}, reviewed: true },
       job: saved, actor: { ...actor, displayName: "Staff" },

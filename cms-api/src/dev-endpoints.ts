@@ -1,7 +1,7 @@
 // The dev Worker cannot proxy unrelated production-only CMS Functions.
 export const DEV_API_ENDPOINTS = new Set([
   "cmsCollectBoardwalkUsage", "cmsGetBoardwalkUsage",
-  "registerStaffProfile", "getStaffAccessStatus", "grantRole", "revokeRole",
+  "registerStaffProfile", "getStaffAccessStatus", "setStaffAccessLevel",
   "deactivateStaff", "cmsGetContent", "cmsListContent", "cmsSaveContent",
   "cmsTransitionContent", "cmsGetRevision", "cmsListRevisions",
   "cmsRestoreRevision", "cmsAssignContent", "cmsListAudit", "cmsPostTemplates", "cmsDatasets", "cmsElectionResultsSources",

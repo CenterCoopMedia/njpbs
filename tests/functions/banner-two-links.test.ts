@@ -46,10 +46,11 @@ describe("two-link banner contract at Admin and Functions boundaries", () => {
 
 async function save(values: Record<string, unknown>, baseVersion = 7) {
   const stored = { schemaVersion: 4, version: 7, values: { ...first, ...second } };
-  const settingsRef = { path: `cmsSettings/${id}` }, userRef = { path: "users/staff" };
-  const transaction = { get: vi.fn(async ref => ({ exists: true, data: () => ref === userRef ? { role: "admin", active: true } : stored })), set: vi.fn(), create: vi.fn() };
+  const settingsRef = { path: `cmsSettings/${id}` }, userRef = { path: "users/staff" }, activationRef = { path: "system/staffAccessActivation" };
+  const transaction = { get: vi.fn(async ref => ({ exists: true, data: () => ref === userRef ? { accessTier: "admin", active: true }
+    : ref === activationRef ? { schema: 1, state: "active", cleanScan: true } : stored })), set: vi.fn(), create: vi.fn() };
   const firestore = {
-    collection: (name: string) => ({ doc: () => name === "cmsSettings" ? settingsRef : name === "users" ? userRef : { path: `${name}/generated` } }),
+    collection: (name: string) => ({ doc: () => name === "cmsSettings" ? settingsRef : name === "users" ? userRef : name === "system" ? activationRef : { path: `${name}/generated` } }),
     runTransaction: async callback => callback(transaction),
   };
   const handler = handlers.createCmsSaveSettingsHandler({ firestore,

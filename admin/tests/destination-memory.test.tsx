@@ -99,7 +99,7 @@ function shellFor(principal: ShellData["principal"]): ShellData {
       email: "account-29@example.org",
       displayName: "Test User",
     } as unknown as ShellData["user"],
-    userDoc: principal.id === "admin" ? { role: "admin" } : null,
+    userDoc: principal.id === "admin" ? { accessTier: "admin" } : null,
     signOut: vi.fn(),
   };
 }

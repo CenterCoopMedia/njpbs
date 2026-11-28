@@ -70,7 +70,7 @@ describe("Boardwalk usage privacy and persistence contract (#4495)", () => {
   it("uses only the profile exclusion for collection, independently of automation guards", async () => {
     const { collect } = handlers();
     await firestore.collection("cmsAutomationAccounts").doc("staff-1").set({});
-    await firestore.collection("users").doc("staff-1").set({ role: "staff", usageAnalyticsExcluded: false });
+    await firestore.collection("users").doc("staff-1").set({ accessTier: "viewer", usageAnalyticsExcluded: false });
     expect((await invoke(collect, batch())).body).toEqual({ collected: true });
     await firestore.collection("users").doc("staff-1").update({ usageAnalyticsExcluded: true });
     expect((await invoke(collect, batch())).body).toEqual({ collected: false });
@@ -238,7 +238,7 @@ describe("Boardwalk usage privacy and persistence contract (#4495)", () => {
   });
 
   it("reuses historical operations and excludes automation and unknown actors", async () => {
-    for (const uid of ["person", "agent"]) await firestore.collection("users").doc(uid).set({ role: "editor" });
+    for (const uid of ["person", "agent"]) await firestore.collection("users").doc(uid).set({ accessTier: "editor" });
     await firestore.collection("cmsAutomationAccounts").doc("person").set({});
     await firestore.collection("users").doc("agent").update({ usageAnalyticsExcluded: true });
     const audit = firestore.collection("admin_logs");
@@ -266,7 +266,7 @@ describe("Boardwalk usage privacy and persistence contract (#4495)", () => {
   });
 
   it("shares concurrent report snapshots per window for 60 seconds and rechecks authority on cache hits", async () => {
-    await firestore.collection("users").doc("person").set({ role: "staff" });
+    await firestore.collection("users").doc("person").set({ accessTier: "viewer" });
     let approvedActive = true;
     const { report } = handlers({ now: () => time++,
       authorize: async () => ({ ...actor(), approvedActive }) });
@@ -480,7 +480,7 @@ describe("Boardwalk usage privacy and persistence contract (#4495)", () => {
   });
 
   it.each([null, "2026-11-02T12:00:00.000Z", 1793620800000])("refuses null and non-native audit timestamps (%#)", async timestamp => {
-    await firestore.collection("users").doc("person").set({ role: "staff" });
+    await firestore.collection("users").doc("person").set({ accessTier: "viewer" });
     await firestore.collection("admin_logs").add({ actorUid: "person", action: "auth.login", timestamp });
     const res = await invoke(handlers().report, { days: 7 });
     expect(res.body.history).toMatchObject({ status: "unavailable", actions: [] });

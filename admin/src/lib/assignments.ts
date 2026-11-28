@@ -13,21 +13,7 @@ export interface AssignableUser {
 }
 
 export function isAssignableUserDoc(user: CmsUserDoc, tiersActive = false): boolean {
-  if (tiersActive && Object.hasOwn(user, "accessTier")) {
-    return hasCapability(principalFromUserDoc("assignment", user, tiersActive), "content.create");
-  }
-  if (user.role === "admin" || user.role === "super_admin") return true;
-  return (
-    Array.isArray(user.grants) &&
-    user.grants.some(
-      (grant) =>
-        grant !== null &&
-        typeof grant === "object" &&
-        !Array.isArray(grant) &&
-        ("role" in grant) &&
-        (grant.role === "editor" || grant.role === "contributor"),
-    )
-  );
+  return hasCapability(principalFromUserDoc("assignment", user, tiersActive), "content.create");
 }
 
 export function assignableUserLabel(id: string, user: CmsUserDoc): string {

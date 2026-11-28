@@ -45,7 +45,8 @@ async function identity() {
   const email = `${uid}@example.test`;
   const created = await admin.auth().createUser({ uid, email, emailVerified: true, password: "local-test-password" });
   users.push(uid);
-  await db.collection("users").doc(uid).set({ active: true, grants: [{ role: "editor" }] });
+  await db.collection("users").doc(uid).set({ active: true, accessTier: "editor" });
+  await db.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true });
   // The emulator sets the revocation time at account creation, and a sign-in in that same second
   // is refused. This account predates the sign-in.
   const backdated = await fetch(`http://${process.env.FIREBASE_AUTH_EMULATOR_HOST}/identitytoolkit.googleapis.com/v1/accounts:update?key=local-test`, {
@@ -215,13 +216,13 @@ describe("Premiere report intake through approved sessions", () => {
     },
   );
 
-  it("checks the current verified email, role, activity, and session before storing a report", async () => {
+  it("checks the current verified email, access level, activity, and session before storing a report", async () => {
     await admin.auth().updateUser(editor.uid, { emailVerified: false });
     expect((await submit(payload("manual"))).statusCode).toBe(403);
     await admin.auth().updateUser(editor.uid, { emailVerified: true });
-    await db.collection("users").doc(editor.uid).update({ grants: [] });
+    await db.collection("users").doc(editor.uid).update({ accessTier: null });
     expect((await submit(payload("manual"))).statusCode).toBe(403);
-    await db.collection("users").doc(editor.uid).update({ grants: [{ role: "editor" }], active: false });
+    await db.collection("users").doc(editor.uid).update({ accessTier: "editor", active: false });
     expect((await submit(payload("manual"))).statusCode).toBe(403);
     await db.collection("users").doc(editor.uid).update({ active: true });
     await call(handlers.revoke, {}, editor.token);

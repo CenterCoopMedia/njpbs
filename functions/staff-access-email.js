@@ -11,7 +11,7 @@ const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { admin, db } = require("./lib/firebase");
 const { accessTierReadsActive } = require("./lib/access-tier-activation");
 const { editorialEmailContent, editorialRecipient } = require("./lib/editorial-notice");
-const approvalRoleNames = require("./lib/staff-approval-role-names.json");
+const approvalTierNames = require("./lib/staff-approval-tier-names.json");
 const {
   njpbsEmailLogoAttachment,
   renderNjpbsEmailHeader,
@@ -238,8 +238,8 @@ function renderStaffAccessEmail(message, { adminOrigin } = {}) {
       };
       break;
     case "approved": {
-      const roleName = Object.hasOwn(approvalRoleNames, message.role)
-        ? approvalRoleNames[message.role]
+      const tierName = Object.hasOwn(approvalTierNames, message.accessTier)
+        ? approvalTierNames[message.accessTier]
         : null;
       subject = "Your NJ PBS Admin account is ready";
       content = {
@@ -247,8 +247,8 @@ function renderStaffAccessEmail(message, { adminOrigin } = {}) {
         heading: "Your NJ PBS Admin account is ready",
         paragraphs: [
           hello,
-          roleName
-            ? `An administrator approved your account with ${roleName} access.`
+          tierName
+            ? `An administrator approved your account with ${tierName} access.`
             : "An administrator approved your account.",
           "Sign in with the same email address that you used for your request.",
         ],
@@ -428,7 +428,7 @@ function queueStaffAccessEmail(transaction, firestore, message, nowValue, { crea
     verificationLink: message.verificationLink ?? null,
     passwordResetLink: message.passwordResetLink ?? null,
     reference: message.reference ?? null,
-    role: message.role ?? null,
+    accessTier: message.accessTier ?? null,
     ...(message.editorialNotice ? { editorialNotice: message.editorialNotice } : {}),
     state: "pending",
     attemptCount: 0,

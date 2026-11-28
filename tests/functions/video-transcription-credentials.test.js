@@ -8,7 +8,7 @@ const request = { scope: 'personal', provider: 'elevenlabs', expectedRevision: 0
 const key = Buffer.alloc(32, 7);
 const audit = (entry) => entry;
 function store() {
-  const rows = new Map([['users/alice', { active: true, grants: [{ role: 'staff' }] }]]); let sequence = 0; let tail = Promise.resolve();
+  const rows = new Map([['users/alice', { active: true, accessTier: 'viewer' }], ['system/staffAccessActivation', { schema: 1, state: 'active', cleanScan: true }]]); let sequence = 0; let tail = Promise.resolve();
   const ref = (collection, id = `audit-${++sequence}`) => ({ path: `${collection}/${id}`, get: async () => {
     const value = rows.get(`${collection}/${id}`);
     return { exists: value !== undefined, data: () => structuredClone(value) };
@@ -100,16 +100,16 @@ describe('encrypted transcription credentials', () => {
     const organizationActor = { uid: 'alice', principal: { grants: [{ role: 'admin' }] } };
     const organizationRequest = { ...request, scope: 'organization' };
     const db = store();
-    db.rows.set('users/alice', { active: true, role: 'admin' });
+    db.rows.set('users/alice', { active: true, accessTier: 'admin' });
     await core.saveCredential(options(db, { actor: organizationActor, request: organizationRequest }));
 
-    db.rows.set('users/alice', { active: true, role: null, grants: [] });
+    db.rows.set('users/alice', { active: true, accessTier: 'viewer' });
     await expect(core.saveCredential(options(db, {
       actor: organizationActor,
       request: { ...organizationRequest, expectedRevision: 1 },
     }))).rejects.toMatchObject({ status: 403 });
 
-    db.rows.set('users/alice', { active: false, role: 'admin' });
+    db.rows.set('users/alice', { active: false, accessTier: 'admin' });
     await expect(core.disconnectCredential(options(db, {
       actor: organizationActor,
       request: { ...organizationRequest, expectedRevision: 1 },

@@ -36,7 +36,7 @@ describe("StaffAccessRequestsPanel", () => {
     functionMocks.decideStaffAccessRequest.mockReset();
   });
 
-  it("defaults to staff guide access and offers no admin role", async () => {
+  it("defaults to Viewer and offers only the four levels below Admin", async () => {
     authMocks.getIdToken.mockResolvedValue("joe-token");
     functionMocks.listStaffAccessRequests.mockResolvedValue({
       success: true,
@@ -46,21 +46,14 @@ describe("StaffAccessRequestsPanel", () => {
     render(<StaffAccessRequestsPanel />);
 
     expect(await screen.findByText("person@example.org")).toBeVisible();
-    const role = screen.getByLabelText("Approved role");
-    expect(role).toHaveValue("staff");
-    expect(screen.getByRole("option", { name: /Viewer/ })).toBeVisible();
-    expect(screen.getByRole("option", { name: /Writer/ })).toBeVisible();
-    expect(screen.getByRole("option", { name: /Editor/ })).toBeVisible();
-    expect(
-      screen.queryByRole("option", { name: /Manager|Site owner/ }),
-    ).not.toBeInTheDocument();
+    const level = screen.getByLabelText("Access level on approval");
+    expect(level).toHaveValue("viewer");
+    expect(within(level).getAllByRole("option").map((option) => option.getAttribute("value")))
+      .toEqual(["viewer", "contributor", "editor", "publisher"]);
+    expect(within(level).getAllByRole("option").map((option) => option.textContent))
+      .toEqual(["Viewer", "Contributor", "Editor", "Publisher"]);
     expect(screen.getByRole("heading", { name: "Person Example", level: 3 })).toBeVisible();
-    fireEvent.click(screen.getByText("Can and cannot"));
-    const explanation = screen.getByRole("heading", { name: "Viewer", level: 4 }).parentElement!;
-    expect(explanation.tagName).toBe("DIV");
-    expect(screen.queryByRole("region", { name: "Viewer permissions" })).not.toBeInTheDocument();
-    expect(within(explanation).getByRole("heading", { name: "Can", level: 5 })).toBeVisible();
-    expect(within(explanation).getByRole("heading", { name: "Cannot", level: 5 })).toBeVisible();
+    expect(screen.getByText(/Read non-admin destinations and shared media/)).toBeVisible();
   });
 
   it("does not report zero requests when the initial queue load fails", async () => {
@@ -78,7 +71,7 @@ describe("StaffAccessRequestsPanel", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("requires confirmation and sends the selected editor role", async () => {
+  it("requires confirmation and sends the selected access level", async () => {
     authMocks.getIdToken.mockResolvedValue("joe-token");
     functionMocks.listStaffAccessRequests.mockResolvedValue({
       success: true,
@@ -87,8 +80,8 @@ describe("StaffAccessRequestsPanel", () => {
     functionMocks.decideStaffAccessRequest.mockResolvedValue({ success: true });
 
     render(<StaffAccessRequestsPanel />);
-    fireEvent.change(await screen.findByLabelText("Approved role"), {
-      target: { value: "editor" },
+    fireEvent.change(await screen.findByLabelText("Access level on approval"), {
+      target: { value: "publisher" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Review approval" }));
 
@@ -102,16 +95,16 @@ describe("StaffAccessRequestsPanel", () => {
           targetUid: "requester-1",
           requestVersion: 3,
           decision: "approve",
-          role: "editor",
+          accessTier: "publisher",
         },
       ),
     );
     expect(
-      await screen.findByText("person@example.org now has Editor access."),
+      await screen.findByText("person@example.org now has Publisher access."),
     ).toBeVisible();
   });
 
-  it("rejects without sending a role", async () => {
+  it("rejects without sending an access level", async () => {
     authMocks.getIdToken.mockResolvedValue("joe-token");
     functionMocks.listStaffAccessRequests.mockResolvedValue({
       success: true,

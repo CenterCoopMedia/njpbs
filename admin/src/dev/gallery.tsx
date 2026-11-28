@@ -141,8 +141,8 @@ import { BootstrapView } from "../components/BootstrapView";
 // they are one prop.
 //
 // It needs no Firebase. Every component below either takes its data as props or is the
-// presentational half of a container that does (QueueList under QueueTab, UsersTable under
-// UsersTab), which is what makes this cheap.
+// presentational half of a container that does (QueueList under QueueTab, StaffLevelsTable
+// under UsersTab), which is what makes this cheap.
 //
 // Dev only. vite serves any root-level .html in dev, but `vite build` only emits the inputs
 // in rollupOptions.input -- which vite.config.ts leaves at its default of index.html alone.
@@ -179,7 +179,7 @@ import { eligibleNavDestinations } from "../lib/nav-destinations";
 import { NAVIGATION_PREFERENCES_VERSION, type NavigationPreferences as StoredNavigationPreferences } from "../lib/navigation-preferences";
 import type { CustomNavItem } from "../lib/custom-navigation";
 import type { NavigationShare } from "../lib/navigation-shares";
-import { UsersTable, type AdminUserRecord } from "../components/UsersTable";
+import { StaffLevelsTable, type AdminUserRecord } from "../components/StaffLevelsTable";
 import {
   AdminSettingsForm,
   AdminSettingsFrame,
@@ -620,35 +620,11 @@ const QUEUE_ITEMS: QueueItem[] = [
 ];
 
 const USERS: AdminUserRecord[] = [
-  {
-    id: "u1",
-    email: "account-3@example.org",
-    displayName: "Jordan Avery",
-    role: "super_admin",
-    grants: [{ role: "super_admin" }],
-  },
-  {
-    id: "u2",
-    email: "account-22@example.org",
-    displayName: "Sam Morgan",
-    role: "admin",
-    grants: [{ role: "admin" }],
-  },
-  {
-    id: "u3",
-    email: "account-4@example.org",
-    displayName: "Blair Harper",
-    role: null,
-    grants: [{ role: "editor", sections: ["news"] }],
-  },
-  {
-    id: "u4",
-    email: "account-12@example.org",
-    displayName: "Parker Reed",
-    role: null,
-    grants: [],
-  },
-] as AdminUserRecord[];
+  { id: "u1", email: "account-3@example.org", displayName: "Jordan Avery", accessTier: "owner", active: true },
+  { id: "u2", email: "account-22@example.org", displayName: "Sam Morgan", accessTier: "admin", active: true },
+  { id: "u3", email: "account-4@example.org", displayName: "Blair Harper", accessTier: "publisher", active: true },
+  { id: "u4", email: "account-12@example.org", displayName: "Parker Reed", active: true },
+];
 
 // ---------------------------------------------------------------------------
 // Mock injections. Each one stages a state that is otherwise awkward to reach.
@@ -1633,7 +1609,7 @@ function BrowsingFamilyShellSpecimen() {
   });
   const principal = family === "media" ? editor : superAdmin;
   const shell: ShellData = { principal, user: { uid: principal.id ?? "gallery-user", email: "editor@example.org", displayName: "Sample editor" },
-    userDoc: { role: family === "media" ? null : "super_admin", grants: principal.grants,
+    userDoc: { ...(family === "media" ? {} : { accessTier: "owner" }),
       displayName: "Sample editor", email: "editor@example.org" }, signOut: () => {}, navigationShares: [] };
   return <ShellProvider value={shell}><RouterProvider router={router} /></ShellProvider>;
 }
@@ -1889,8 +1865,7 @@ function ShellSpecimen({
       displayName: guideCapture ? "Sample editor" : "Jordan Avery",
     },
     userDoc: {
-      role: profileRole,
-      grants: principal.grants,
+      ...(profileRole === "super_admin" ? { accessTier: "owner" } : profileRole === "admin" ? { accessTier: "admin" } : {}),
       displayName: guideCapture ? "Sample editor" : "Jordan Avery",
       email: guideCapture ? "editor@example.org" : "account-3@example.org",
       preferences: navigation === undefined ? undefined : { navigation },
@@ -2129,7 +2104,7 @@ function LoadingUsersGallery() {
     void galleryDelayed(async () => true)().then(setLoaded);
   }, []);
   return loaded ? (
-    <UsersTable users={USERS} canManage onDeactivate={() => {}} onGrant={() => {}} onRevoke={() => {}} />
+    <StaffLevelsTable users={USERS} canManage onSetLevel={async () => {}} onDeactivate={() => {}} />
   ) : (
     <UsersTableSkeleton canManage />
   );
@@ -3981,62 +3956,27 @@ export const SHOTS: Shot[] = [
     render: () => <QueueList items={[]} />,
   },
   {
-    id: "users",
-    title: "Staff access — manageable",
-    note: "Super admin view: roles, section grants, and a role-less account waiting on a grant. Confirm a change to inspect the in-row success state.",
-    render: () => (
-      <UsersTable
-        users={USERS}
-        canManage
-        onDeactivate={() => {}}
-        onGrant={() => {}}
-        onRevoke={() => {}}
-      />
-    ),
-  },
-  {
     id: "users-levels",
     title: "Staff access — six whole-site levels",
-    note: "Activated access levels with retained legacy access, an Owner, and an inactive account.",
+    note: "Access levels with an account that has no level, an Owner, and inactive accounts.",
     render: () => (
-      <UsersTable tiersActive canManage currentUserId="level-owner"
+      <StaffLevelsTable canManage currentUserId="level-owner"
         users={[
-          { id: "level-owner", displayName: "Current owner", email: "owner@example.test", accessTier: "owner", role: null, grants: [], active: true },
-          { id: "level-legacy", displayName: "Existing staff member with a long name", email: "existing.staff@example.test", role: null, grants: [{ role: "editor", sections: ["watch"] }], active: true },
-          { id: "level-editor", displayName: "Content editor", email: "editor@example.test", accessTier: "editor", role: null, grants: [], active: true },
-          { id: "level-inactive", displayName: "Inactive staff member", email: "inactive@example.test", role: null, grants: [], active: false, offboarding: { id: "complete", step: "complete" } },
-          { id: "level-shutdown", displayName: "Unfinished shutdown", email: "shutdown@example.test", role: null, grants: [], active: false, offboarding: { id: "unfinished", step: "sign_in_and_sessions" } },
+          { id: "level-owner", displayName: "Current owner", email: "owner@example.test", accessTier: "owner", active: true },
+          { id: "level-legacy", displayName: "Existing staff member with a long name", email: "existing.staff@example.test", active: true },
+          { id: "level-editor", displayName: "Content editor", email: "editor@example.test", accessTier: "editor", active: true },
+          { id: "level-inactive", displayName: "Inactive staff member", email: "inactive@example.test", active: false, offboarding: { id: "complete", step: "complete" } },
+          { id: "level-shutdown", displayName: "Unfinished shutdown", email: "shutdown@example.test", active: false, offboarding: { id: "unfinished", step: "sign_in_and_sessions" } },
         ]}
-        onSetLevel={async () => {}} onDeactivate={async () => {}} onReactivate={async () => {}} onGrant={() => {}} onRevoke={() => {}} />
-    ),
-  },
-  {
-    id: "users-mutation-states",
-    title: "Staff access — progress and failure",
-    note: "Granting stays in progress; revoking returns an error and keeps the confirmed change ready to retry.",
-    render: () => (
-      <UsersTable
-        users={USERS}
-        canManage
-        onDeactivate={() =>
-          Promise.reject(new Error("Session revocation unavailable"))
-        }
-        onGrant={() => new Promise<void>(() => {})}
-        onRevoke={() => Promise.reject(new Error("Role service unavailable"))}
-      />
+        onSetLevel={async () => {}} onDeactivate={async () => {}} onReactivate={async () => {}} />
     ),
   },
   {
     id: "users-readonly",
     title: "Staff access — read-only",
-    note: "The same table for someone who cannot grant. Controls are absent, not disabled.",
+    note: "The same table for someone who cannot change access. Controls are absent, not disabled.",
     render: () => (
-      <UsersTable
-        users={USERS}
-        canManage={false}
-        onGrant={() => {}}
-        onRevoke={() => {}}
-      />
+      <StaffLevelsTable users={USERS} canManage={false} onSetLevel={async () => {}} />
     ),
   },
   {
@@ -4044,7 +3984,7 @@ export const SHOTS: Shot[] = [
     title: "Staff access — empty",
     note: "No staff yet.",
     render: () => (
-      <UsersTable users={[]} canManage onGrant={() => {}} onRevoke={() => {}} />
+      <StaffLevelsTable users={[]} canManage onSetLevel={async () => {}} />
     ),
   },
   {

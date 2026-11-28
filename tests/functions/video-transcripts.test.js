@@ -67,7 +67,7 @@ async function queued(store=memoryStore()) {
 }
 async function readyPaidFallback() {
   const store=memoryStore();
-  store.rows.set('users/staff',{active:true,grants:[{role:'staff'}]});
+  store.rows.set('users/staff',{active:true,accessTier:'contributor'}); store.rows.set('system/staffAccessActivation',{schema:1,state:"active",cleanScan:true});
   const parentResult=await jobs.requestTranscript({firestore:store.firestore,source,request,actor,audit,
     paidFallbackEnabled:true,localEnabled:false});
   const video=asset(),web=video.rendition.web;
@@ -505,7 +505,7 @@ describe('saved transcript corrections',()=>{
   const editRequest=(extra={})=>({...request,revision:0,segments:[{index:0,text:'Corrected',speaker:'spk_1'}],speakerNames:{spk_1:'Editor name'},...extra});
   async function ready(){
     const store=await queued();const path=`${jobs.TRANSCRIPT_JOBS}/${store.job.id}`;
-    store.rows.set('users/staff',{active:true,grants:[{role:'staff'}]});
+    store.rows.set('users/staff',{active:true,accessTier:'contributor'}); store.rows.set('system/staffAccessActivation',{schema:1,state:"active",cleanScan:true});
     const job=store.rows.get(path);Object.assign(job,{phase:'ready',active:false,totalSegments:1,outputs:{'segments.json':'original-segments',txt:'original-txt',vtt:'original-vtt'}});
     return {...store,path,job};
   }
@@ -788,7 +788,7 @@ describe('explicit transcript variant selection',()=>{
     const {default:byok}=await import('../../functions/lib/video-transcript-byok-job.js');
     const {default:credentials}=await import('../../functions/lib/video-transcription-credentials.js');
     const store=memoryStore();const video=asset(),web=video.rendition.web;
-    store.rows.set('users/staff',{active:true,grants:[{role:'staff'}]});
+    store.rows.set('users/staff',{active:true,accessTier:'contributor'}); store.rows.set('system/staffAccessActivation',{schema:1,state:"active",cleanScan:true});
     const job=byok.createJob({sourceId:source.id,assetId:video.id,originalBucket:source.bucket,originalKey:video.objectKey,originalVersion:video.objectVersionId,originalSize:video.sizeBytes,
       renditionBucket:config.bucket,renditionKey:web.objectKey,renditionVersion:web.objectVersionId,renditionSize:web.sizeBytes,durationSeconds:web.durationSeconds,languageCode:'en-US',maxSpeakers:10,
       credentialScope:'personal',credentialId:credentials.credentialIdentity(actor,{scope:'personal',provider:'elevenlabs'}).id,credentialRevision:1},actor);

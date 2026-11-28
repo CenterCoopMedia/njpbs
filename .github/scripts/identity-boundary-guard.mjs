@@ -14,9 +14,8 @@ export const STAFF_IDENTITY = Object.freeze([
   "functions/lib/auth.js",
   "functions/lib/principal.js",
   "functions/lib/rbac.js",
-  "functions/roles.js",
-  // Role provisioning owns staff authority just as much as the readers above:
-  // staff-access.js approves a request and writes the graded user grant,
+  // Access provisioning owns staff authority just as much as the readers above:
+  // staff-access.js approves a request and writes the approved access tier,
   // staff-profile.js refuses sessions without an existing approved profile,
   // and deactivate-staff.js clears roles and grants on offboarding. None of
   // these names is matched by IDENTITY_VOCAB, so listing them is the only

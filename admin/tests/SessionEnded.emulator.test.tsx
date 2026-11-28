@@ -23,8 +23,10 @@ vi.mock("firebase/firestore", async (importOriginal) => {
   return {
     ...real,
     onSnapshot: (...args: unknown[]) => {
-      const data = profileRead.fixture;
-      if (!data) return (real.onSnapshot as (...call: unknown[]) => () => void)(...args);
+      const profile = profileRead.fixture;
+      if (!profile) return (real.onSnapshot as (...call: unknown[]) => () => void)(...args);
+      const data = (args[0] as { path?: string }).path === "system/staffAccessActivation"
+        ? { schema: 1, state: "active", cleanScan: true } : profile;
       (args[2] as (snapshot: unknown) => void)({
         exists: () => true,
         data: () => data,
@@ -119,6 +121,7 @@ describe.skipIf(process.env.SESSION_ENDED_EMULATORS !== "true")("ended session e
     clients = createFixtureClients();
     await resetFixtureProject();
     await clients.firestore.collection("contentSections").doc("station").set({ label: "Station", order: 1 });
+    await clients.firestore.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true });
   });
 
   afterEach(async () => {
@@ -142,7 +145,7 @@ describe.skipIf(process.env.SESSION_ENDED_EMULATORS !== "true")("ended session e
   async function signedInWorkspace(uid: string) {
     const email = `${uid}@report-roles.invalid`;
     await clients.auth.createUser({ uid, email, password, emailVerified: true });
-    await clients.firestore.collection("users").doc(uid).set({ email, active: true, role: "super_admin", grants: [] });
+    await clients.firestore.collection("users").doc(uid).set({ email, active: true, accessTier: "owner" });
     render(<AuthProvider><Workspace /></AuthProvider>);
     await act(async () => { await signInWithEmailAndPassword(auth, email, password); });
     await waitFor(() => expect(status()).toBe("signed-in"));
@@ -154,7 +157,7 @@ describe.skipIf(process.env.SESSION_ENDED_EMULATORS !== "true")("ended session e
 
   it("signs out after a real revocation and returns through normal sign-in with browser work", async () => {
     const uid = "report-revoked";
-    profileRead.fixture = { email: `${uid}@report-roles.invalid`, active: true, role: "super_admin", grants: [] };
+    profileRead.fixture = { email: `${uid}@report-roles.invalid`, active: true, accessTier: "owner" };
     const email = await signedInWorkspace(uid);
     const token = await auth.currentUser!.getIdToken();
     const work = `njpbs-admin:displaced-work:${uid}:cmsPosts:story`;
@@ -220,7 +223,7 @@ describe.skipIf(process.env.SESSION_ENDED_EMULATORS !== "true")("ended session e
 
   it("keeps browser work when the real SDK signs out a disabled account during refresh", async () => {
     const uid = "report-refresh-disabled";
-    profileRead.fixture = { email: `${uid}@report-roles.invalid`, active: true, role: "super_admin", grants: [] };
+    profileRead.fixture = { email: `${uid}@report-roles.invalid`, active: true, accessTier: "owner" };
     await signedInWorkspace(uid);
     const work = `njpbs-admin:displaced-work:${uid}:cmsPosts:story`;
     localStorage.setItem(work, JSON.stringify({

@@ -70,8 +70,6 @@ async function seedUser(uid, data) {
     .set({
       email: null,
       displayName: null,
-      role: null,
-      grants: [],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       ...data,
@@ -401,6 +399,7 @@ describe("cmsSaveContent function", () => {
         db.collection("sections").doc(id).set({ id, label: id, order: 1 }),
       ),
     );
+    await db.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true });
   });
 
   afterAll(async () => {
@@ -448,7 +447,7 @@ describe("cmsSaveContent function", () => {
 
   it("rejects a non-admin caller", async () => {
     const user = await signInAs("nonadmin@example.com");
-    await seedUser(user.uid, { email: user.email, role: null });
+    await seedUser(user.uid, { email: user.email, accessTier: null });
 
     const res = await callFn("cmsSaveContent", user.token, {
       collection: "cmsPages",
@@ -466,7 +465,7 @@ describe("cmsSaveContent function", () => {
       email: user.email,
       active: false,
       tokensValidAfter: 1,
-      role: "admin",
+      accessTier: "admin",
     });
 
     const res = await callFn("cmsSaveContent", user.token, {
@@ -481,7 +480,7 @@ describe("cmsSaveContent function", () => {
 
   it("saves a page end-to-end for an admin, writing the audit and version rows", async () => {
     const adminUser = await signInAs("admin@example.com");
-    await seedUser(adminUser.uid, { email: adminUser.email, role: "admin" });
+    await seedUser(adminUser.uid, { email: adminUser.email, accessTier: "admin" });
 
     const res = await callFn("cmsSaveContent", adminUser.token, {
       collection: "cmsPages",

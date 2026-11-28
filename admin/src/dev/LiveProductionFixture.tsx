@@ -24,6 +24,6 @@ const router = createMemoryRouter(studio ? [{ path: "/studio", element:
 
 createRoot(document.getElementById("root")!).render(<ShellProvider value={{ principal,
   user: { uid: principal.id, email: "producer@example.test", displayName: "Studio producer" },
-  userDoc: { role: null, grants: principal.grants, displayName: "Studio producer" },
+  userDoc: { displayName: "Studio producer" },
   signOut: () => {}, navigationShares: [],
 }}><LiveProductionProvider><RouterProvider router={router} /></LiveProductionProvider></ShellProvider>);

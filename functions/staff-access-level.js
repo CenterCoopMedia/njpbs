@@ -8,7 +8,7 @@ const { requireSuperAdmin, ForbiddenError, AuthError } = require("./lib/auth");
 const { adminLogEntry } = require("./lib/audit");
 const { isAccessTier } = require("./lib/rbac");
 const { accessTierReadsActive } = require("./lib/access-tier-activation");
-const { accessStateFromUserDoc, administrativeRoleFromUserDoc, normalizeGrants } = require("./lib/principal");
+const { accessStateFromUserDoc, administrativeRoleFromUserDoc } = require("./lib/principal");
 
 class StaffAccessLevelError extends Error {
   constructor(status, message) { super(message); this.status = status; }
@@ -74,7 +74,7 @@ async function replaceStaffAccess({ firestore, actor, targetUid, accessTier, exp
     if (target.accessTier === accessTier && target.role == null &&
         Array.isArray(target.grants) && target.grants.length === 0) return { changed: false };
 
-    const before = { role: target.role ?? null, grants: normalizeGrants(target.grants),
+    const before = { role: target.role ?? null, grants: Array.isArray(target.grants) ? target.grants : [],
       ...(Object.hasOwn(target, "accessTier") ? { accessTier: target.accessTier } : {}) };
     const after = { accessTier, role: null, grants: [] };
     transaction.update(targetRef, { ...after, updatedAt: FieldValue.serverTimestamp() });

@@ -185,8 +185,9 @@ beforeEach(async () => {
     { method: "DELETE" }, db,
   );
   await db.collection("users").doc("editor-1").set({
-    active: true, grants: [{ role: "editor" }],
+    active: true, accessTier: "editor",
   });
+  await db.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true });
 });
 
 afterAll(async () => {
@@ -750,7 +751,7 @@ describe("image bin endpoints", () => {
     ["restore endpoint", true],
     ["private lifecycle endpoint", false],
   ])("restore authorization at the %s", (_name, restoreOnly) => {
-    async function invokeRestore(storageFactory, userDoc = { active: true, grants: [{ role: "editor" }] }) {
+    async function invokeRestore(storageFactory, userDoc = { active: true, accessTier: "editor" }) {
       await db.doc("users/editor-1").set(userDoc);
       if (!restoreOnly) await seedDeployment();
       const admittedPrincipal = await principals.registeredPrincipalFromUserDoc(db, "editor-1", userDoc);
@@ -764,8 +765,8 @@ describe("image bin endpoints", () => {
     }
 
     it.each([
-      ["inactive account", { active: false, grants: [{ role: "editor" }] }],
-      ["demoted account", { active: true, grants: [{ role: "staff" }] }],
+      ["inactive account", { active: false, accessTier: "editor" }],
+      ["demoted account", { active: true, accessTier: "viewer" }],
       ["deleted account", null],
     ])("refuses the %s revoked during storage verification without changing media", async (_state, userDoc) => {
       const before = await seedBin();
@@ -787,14 +788,13 @@ describe("image bin endpoints", () => {
       expect(await docsIn("admin_logs")).toEqual([]);
     });
 
-    it("refuses a scoped editor whose area is removed during storage verification", async () => {
+    it("refuses an editor whose access level is removed during storage verification", async () => {
       const before = await seedBin();
-      await db.doc("sections/news").set({ id: "news", label: "News" });
       const queueBefore = (await bin.mediaPurgeRef(db, "asset-one").get()).data();
       const res = await invokeRestore(() => ({ head: async () => {
-        await db.doc("sections/news").delete();
+        await db.doc("users/editor-1").update({ accessTier: null });
         return objectHead();
-      } }), { active: true, grants: [{ role: "editor", sections: ["news"] }] });
+      } }));
 
       expect(res.statusCode).toBe(404);
       expect((await db.doc("media_assets/asset-one").get()).data()).toEqual(before);
@@ -804,8 +804,8 @@ describe("image bin endpoints", () => {
     });
 
     it.each([
-      ["legacy editor", { grants: [{ role: "editor" }] }],
-      ["registered scoped editor", { active: true, grants: [{ role: "editor", sections: ["news"] }] }],
+      ["Editor without an active flag", { accessTier: "editor" }],
+      ["Contributor", { active: true, accessTier: "contributor" }],
     ])("allows an authorized %s through the transaction", async (_state, userDoc) => {
       await seedBin();
       await db.doc("sections/news").set({ id: "news", label: "News" });
@@ -874,9 +874,9 @@ describe("image bin endpoints", () => {
     expect(res.headers.get("etag")).toBe(formatMediaEtag("asset-one", 3));
     expect(storageFactory).not.toHaveBeenCalled();
   });
-  it.each(["admin", "super_admin"])("allows %s to restore a pending image after its deadline", async (role) => {
+  it.each([["admin", "admin"], ["owner", "super_admin"]])("allows %s to restore a pending image after its deadline", async (accessTier, role) => {
     await seedBin({ purgeAfter: "2026-08-12T00:00:00.000Z" });
-    await db.doc("users/editor-1").set({ active: true, role });
+    await db.doc("users/editor-1").set({ active: true, accessTier });
     const requirePrincipalFn = async () => actor([{ role }]);
     const listed = makeRes();
     await binnedList.createCmsListBinnedMediaHandler({ firestore: db, requirePrincipalFn })(makeReq(), listed);

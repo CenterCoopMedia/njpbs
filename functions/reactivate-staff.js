@@ -20,7 +20,7 @@ const { requireSuperAdmin, ForbiddenError, AuthError } = require("./lib/auth");
 const { adminLogEntry } = require("./lib/audit");
 const { isAccessTier } = require("./lib/rbac");
 const { accessTierReadsActive } = require("./lib/access-tier-activation");
-const { administrativeRoleFromUserDoc, normalizeGrants } = require("./lib/principal");
+const { administrativeRoleFromUserDoc } = require("./lib/principal");
 const { reactivateStaffLinkage, staffRecordRef } = require("./lib/author-profile-store");
 const { revocationSeconds, syncStaffAuth } = require("./lib/staff-auth-sync");
 
@@ -101,7 +101,7 @@ async function reactivateProfile({ firestore, actor, targetUid, accessTier, iden
     const staff = await reactivateStaffLinkage(transaction, firestore, {
       snapshot: staffSnapshot, nowIso, actorUid: actor.uid,
     });
-    const before = { active: false, role: target.role ?? null, grants: normalizeGrants(target.grants),
+    const before = { active: false, role: target.role ?? null, grants: Array.isArray(target.grants) ? target.grants : [],
       ...(Object.hasOwn(target, "accessTier") ? { accessTier: target.accessTier } : {}),
       ...(staff ? { staffStatus: staff.before.status } : {}) };
     const after = { active: true, accessTier, role: null, grants: [],

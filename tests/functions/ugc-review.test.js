@@ -125,8 +125,9 @@ beforeEach(async () => {
   await db.collection("mediaCategories").doc("general").set({ id: "general", label: "General",
     description: "Test", order: 1, active: true, version: 1 });
   await db.collection("users").doc("reviewer").set({
-    active: true, grants: [{ role: "editor" }],
+    active: true, accessTier: "editor",
   });
+  await db.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true });
 });
 
 describe("UGC review", () => {
@@ -663,10 +664,10 @@ describe("UGC review", () => {
 
   for (const kind of ["photo", "video"]) {
     it.each([
-      ["deactivated", { active: false, grants: [{ role: "editor" }] }],
+      ["deactivated", { active: false, accessTier: "editor" }],
       ["deleted", null],
-      ["downgraded", { active: true, grants: [{ role: "contributor" }] }],
-      ["scoped", { active: true, grants: [{ role: "editor", sections: ["general"] }] }],
+      ["downgraded", { active: true, accessTier: "contributor" }],
+      ["left without an access level", { active: true }],
     ])(`refuses a ${kind} commit when its reviewer is %s during storage`, async (_change, profile) => {
       const storage = stores();
       const { id, key } = await pending(storage,
@@ -704,7 +705,7 @@ describe("UGC review", () => {
       expect(storage.quarantine.has(key)).toBe(true);
 
       store[method] = original;
-      await userRef.set({ active: true, grants: [{ role: "editor" }] });
+      await userRef.set({ active: true, accessTier: "editor" });
       const retry = response();
       await handlers(storage).importSubmission(request({ submissionId: id,
         category: "general" }), retry);
@@ -761,7 +762,7 @@ describe("UGC review", () => {
 
     const next = { uid: "next-reviewer", email: "next-reviewer@example.test",
       principal: { id: "next-reviewer", grants: [{ role: "editor" }] } };
-    await db.collection("users").doc(next.uid).set({ active: true, grants: next.principal.grants });
+    await db.collection("users").doc(next.uid).set({ active: true, accessTier: "editor" });
     storage.media.putFinal = original;
     const result = response();
     await handlers(storage, next).importSubmission(request({ submissionId: id,
@@ -788,7 +789,7 @@ describe("UGC review", () => {
     storage.ugc.read = async (...args) => {
       const body = await original(...args);
       await db.collection("users").doc("reviewer").update({
-        grants: [{ role: "editor", sections: ["general"] }],
+        accessTier: "contributor",
       });
       return body;
     };

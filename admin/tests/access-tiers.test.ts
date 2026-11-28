@@ -13,17 +13,14 @@ const content = require("../../functions/lib/content-authorization.js");
 const actor = (accessTier: AccessTier) => principalFromUserDoc("writer", { accessTier }, true);
 
 describe("the six whole-site access levels (#2747, October 13)", () => {
-  it("ignores a planted tier until server-only activation evidence is supplied", () => {
+  it("gives no access before server-only activation evidence is supplied", () => {
     const plantedOwner = { accessTier: "owner", grants: [{ role: "staff" }] } as CmsUserDoc;
     const plantedDemotion = { accessTier: "viewer", role: "super_admin" } as CmsUserDoc;
     for (const doc of [plantedOwner, plantedDemotion]) {
-      const legacy = { ...doc };
-      delete legacy.accessTier;
-      expect(principalFromUserDoc("fixture", doc)).toEqual(principalFromUserDoc("fixture", legacy));
-      expect(server.principalFromUserDoc("fixture", doc)).toEqual(server.principalFromUserDoc("fixture", legacy));
+      expect(principalFromUserDoc("fixture", doc).grants).toEqual([]);
+      expect(server.principalFromUserDoc("fixture", doc).grants).toEqual([]);
+      expect(hasCapability(principalFromUserDoc("fixture", doc), "roles.grant")).toBe(false);
     }
-    expect(hasCapability(principalFromUserDoc("fixture", plantedOwner), "roles.grant")).toBe(false);
-    expect(hasCapability(principalFromUserDoc("fixture", plantedDemotion), "roles.grant")).toBe(true);
   });
 
   it("uses the confirmed order and includes every lower level", () => {
@@ -99,20 +96,19 @@ describe("the six whole-site access levels (#2747, October 13)", () => {
     expect(server.principalFromUserDoc("writer", { accessTier: "owner", active: false }, true).grants).toEqual([]);
   });
 
-  it("does not accept a tier smuggled into a legacy grant or a scoped modern grant", () => {
-    const legacy = principalFromUserDoc("writer", { grants: [{ role: "staff", tier: "owner" }] }, true);
-    expect(hasCapability(legacy, "roles.grant")).toBe(false);
+  it("gives stored role grants no access, with or without a smuggled tier", () => {
+    for (const doc of [
+      { grants: [{ role: "editor" }] },
+      { grants: [{ role: "staff", tier: "owner" }] },
+      { role: "super_admin", grants: [] },
+    ]) {
+      expect(principalFromUserDoc("writer", doc as never, true).grants).toEqual([]);
+      expect(server.principalFromUserDoc("writer", doc, true).grants).toEqual([]);
+      expect(server.administrativeRoleFromUserDoc(doc, true)).toBeNull();
+    }
     const malformed = { grants: [{ role: "super_admin" as const, tier: "owner" as const, sections: [] }] };
     expect(hasCapability(malformed, "roles.grant")).toBe(false);
     expect(rbac.hasCapability(malformed, "roles.grant")).toBe(false);
-  });
-
-  it("keeps old Editor publication and area limits until a deliberate tier replacement", () => {
-    const old = principalFromUserDoc("writer", { grants: [{ role: "editor", sections: ["watch"] }] }, true);
-    expect(can(old, "content.publish", { section: "watch" })).toBe(true);
-    expect(can(old, "content.publish", { section: "support" })).toBe(false);
-    expect(can(old, "content.delete", { section: "watch" })).toBe(false);
-    expect(server.principalFromUserDoc("writer", { grants: [{ role: "editor", sections: ["watch"] }] }, true)).toEqual(old);
   });
 
   it("agrees between every browser and server tier decision", () => {

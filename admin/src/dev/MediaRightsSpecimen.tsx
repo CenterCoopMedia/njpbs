@@ -31,7 +31,7 @@ const router = createMemoryRouter([{ path: "/", element: <ShellLayout />, childr
     saveRecord={async (_kind, document) => { state.postSaves++; return { ...document, id: record.id, version: 2 }; }} />,
 }] }], { initialEntries: ["/content/post/rights-story/edit"] });
 const shell: ShellData = { principal, user: { uid: "rights-fixture", email: null, displayName: "Sample editor" },
-  userDoc: { role: "admin", grants: principal.grants, displayName: "Sample editor" }, signOut() {},
+  userDoc: { accessTier: "admin", displayName: "Sample editor" }, signOut() {},
   getIdToken: async () => "local-rights-evidence-only",
 };
 createRoot(document.getElementById("media-rights-root")!).render(<ShellProvider value={shell}><RouterProvider router={router} /></ShellProvider>);

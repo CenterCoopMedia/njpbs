@@ -32,7 +32,10 @@ async function fixture(change = () => {}) {
 
 it("verifies actual Firebase SDK discovery against the separate reviewed dev manifest", async () => {
   const names = await fixture();
-  expect(names).toHaveLength(46);
+  expect(names).toHaveLength(45);
+  expect(names).toContain("setStaffAccessLevel");
+  expect(names).not.toContain("grantRole");
+  expect(names).not.toContain("revokeRole");
   expect(names).toContain("donationHealth");
   expect(names).toContain("cmsCollectBoardwalkUsage");
   expect(names).toContain("cmsGetBoardwalkUsage");

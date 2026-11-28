@@ -293,12 +293,6 @@ function SignInProbe() {
   return <button onClick={() => void signIn()}>Sign in</button>;
 }
 
-function MediaControlsProbe() {
-  const { state } = useAuth();
-  return state.status === "signed-in" && hasCapability(state.principal, "media.manage")
-    ? <button>Manage media</button>
-    : null;
-}
 
 function SignOutProbe() {
   const { signOut } = useAuth();
@@ -340,7 +334,7 @@ function renderAuthProvider() {
 }
 
 describe("AuthProvider server admission", () => {
-  it("requires a server-confirmed activation receipt before replacing legacy authority with a tier", async () => {
+  it("requires a server-confirmed activation receipt before a tier confers access", async () => {
     renderAuthProvider();
     act(() => authMocks.emitUser({ uid: "tier-browser", email: "staff@example.test", emailVerified: true,
       getIdToken: async () => "synthetic-token" }));
@@ -352,10 +346,10 @@ describe("AuthProvider server admission", () => {
     expect(screen.getByTestId("auth-status")).toHaveTextContent("loading");
     act(() => firestoreMocks.emitActivation({ exists: () => false, data: () => undefined,
       metadata: { hasPendingWrites: false, fromCache: false } }));
-    expect(screen.getByTestId("auth-grants")).toHaveTextContent("staff");
+    expect(screen.getByTestId("auth-grants")).toBeEmptyDOMElement();
     act(() => firestoreMocks.emitActivation({ exists: () => true, data: () => activated,
       metadata: { hasPendingWrites: true, fromCache: false } }));
-    expect(screen.getByTestId("auth-grants")).toHaveTextContent("staff");
+    expect(screen.getByTestId("auth-grants")).toBeEmptyDOMElement();
     act(() => firestoreMocks.emitActivation({ exists: () => true, data: () => activated,
       metadata: { hasPendingWrites: false, fromCache: false } }));
     expect(screen.getByTestId("auth-grants")).toHaveTextContent("super_admin");
@@ -371,91 +365,6 @@ describe("AuthProvider server admission", () => {
     expect(screen.getByTestId("auth-status")).toHaveTextContent("error");
     expect(screen.getByTestId("auth-grants")).toBeEmptyDOMElement();
   });
-  it("withholds scoped media controls for a cached retired area until the server confirms the registry", async () => {
-    const view = render(
-      <AuthProvider>
-        <StatusProbe />
-        <MediaControlsProbe />
-      </AuthProvider>,
-    );
-    act(() => authMocks.emitUser({
-      uid: "scoped-1", email: "account-21@example.org", emailVerified: true,
-      getIdToken: vi.fn(async () => "scoped-token"),
-    }));
-    await waitFor(() => expect(functionsMocks.registerStaffProfile).toHaveBeenCalledWith("scoped-token"));
-    act(() => firestoreMocks.emitSnapshot(existingSnapshot({
-      grants: [{ role: "editor", sections: ["retired-area"] }],
-    })));
-
-    act(() => firestoreMocks.emitSections(["retired-area"], true));
-    expect(screen.getByTestId("auth-status")).toHaveTextContent("loading");
-    expect(screen.getByTestId("auth-media")).toBeEmptyDOMElement();
-    expect(screen.queryByRole("button", { name: "Manage media" })).not.toBeInTheDocument();
-
-    act(() => firestoreMocks.emitSections(["retired-area"], false, true));
-    expect(screen.getByTestId("auth-status")).toHaveTextContent("loading");
-    expect(screen.getByTestId("auth-media")).toBeEmptyDOMElement();
-
-    act(() => firestoreMocks.emitSections(["current-area"]));
-    expect(screen.getByTestId("auth-status")).toHaveTextContent("signed-in");
-    expect(screen.getByTestId("auth-media")).toHaveTextContent("false");
-    expect(screen.queryByRole("button", { name: "Manage media" })).not.toBeInTheDocument();
-    expect(firestoreMocks.onSnapshot).toHaveBeenCalledTimes(2);
-    view.unmount();
-  });
-
-  it("keeps processing cached registry updates after server confirmation", async () => {
-    const view = renderAuthProvider();
-    act(() => authMocks.emitUser({
-      uid: "scoped-1", email: "account-21@example.org", emailVerified: true,
-      getIdToken: vi.fn(async () => "scoped-token"),
-    }));
-    await waitFor(() => expect(functionsMocks.registerStaffProfile).toHaveBeenCalledWith("scoped-token"));
-    act(() => firestoreMocks.emitSnapshot(existingSnapshot({
-      grants: [{ role: "editor", sections: ["current-area"] }],
-    })));
-    act(() => firestoreMocks.emitSections(["current-area"]));
-    expect(screen.getByTestId("auth-media")).toHaveTextContent("true");
-
-    act(() => firestoreMocks.emitSections([], true));
-    expect(screen.getByTestId("auth-status")).toHaveTextContent("signed-in");
-    expect(screen.getByTestId("auth-media")).toHaveTextContent("false");
-    expect(firestoreMocks.onSnapshot).toHaveBeenCalledTimes(2);
-    view.unmount();
-  });
-
-  it("uses one live registry listener for scoped grants and withdraws retired media access", async () => {
-    const view = renderAuthProvider();
-    act(() => authMocks.emitUser({
-      uid: "scoped-1", email: "account-21@example.org", emailVerified: true,
-      getIdToken: vi.fn(async () => "scoped-token"),
-    }));
-    await waitFor(() => expect(functionsMocks.registerStaffProfile).toHaveBeenCalledWith("scoped-token"));
-    act(() => firestoreMocks.emitSnapshot(existingSnapshot({
-      grants: [{ role: "editor", sections: ["retired-area", "current-area"] }],
-    })));
-    expect(screen.getByTestId("auth-status")).toHaveTextContent("loading");
-    expect(screen.getByTestId("auth-media")).toBeEmptyDOMElement();
-    expect(firestoreMocks.collection).toHaveBeenCalledWith(firestoreMocks.testDb, "sections");
-    expect(firestoreMocks.onSnapshot).toHaveBeenCalledTimes(2);
-    act(() => firestoreMocks.emitSections(["current-area"]));
-    expect(screen.getByTestId("auth-status")).toHaveTextContent("signed-in");
-    expect(screen.getByTestId("auth-media")).toHaveTextContent("true");
-    act(() => firestoreMocks.emitSections([]));
-    expect(screen.getByTestId("auth-media")).toHaveTextContent("false");
-    act(() => firestoreMocks.emitSections(["current-area"]));
-    expect(screen.getByTestId("auth-media")).toHaveTextContent("true");
-    act(() => firestoreMocks.emitSections(["current-area", ...Array.from({ length: 100 }, (_, index) => `area-${index}`)]));
-    expect(screen.getByTestId("auth-media")).toHaveTextContent("false");
-    act(() => firestoreMocks.emitSections(["current-area"]));
-    expect(screen.getByTestId("auth-media")).toHaveTextContent("true");
-    act(() => firestoreMocks.emitSectionsError());
-    expect(screen.getByTestId("auth-media")).toHaveTextContent("false");
-    expect(firestoreMocks.onSnapshot).toHaveBeenCalledTimes(2);
-    view.unmount();
-    expect(firestoreMocks.unsubscribeSections).toHaveBeenCalledOnce();
-  });
-
   afterEach(() => {
     vi.clearAllMocks();
     vi.unstubAllGlobals();
@@ -822,8 +731,7 @@ describe("AuthProvider server admission", () => {
         existingSnapshot({
           email: "account-26@example.org",
           displayName: "Staff member",
-          role: "admin",
-          grants: [],
+          accessTier: "admin",
         }),
       );
     });
@@ -833,6 +741,9 @@ describe("AuthProvider server admission", () => {
       resolveAdmission({ success: true, uid: "staff-1", created: false });
       await admission;
     });
+    expect(screen.getByTestId("auth-status")).toHaveTextContent("loading");
+    act(() => firestoreMocks.emitActivation({ exists: () => true, data: () => ({ schema: 1, state: "active", cleanScan: true }),
+      metadata: { hasPendingWrites: false, fromCache: false } }));
     await waitFor(() => {
       expect(screen.getByTestId("auth-status")).toHaveTextContent("signed-in");
       expect(screen.getByTestId("auth-grants")).toHaveTextContent("admin");
@@ -896,11 +807,12 @@ describe("AuthProvider server admission", () => {
         existingSnapshot({
           email: "account-11@example.org",
           displayName: "New staff member",
-          role: null,
-          grants: [{ role: "staff" }],
+          accessTier: "viewer",
         }),
       );
     });
+    act(() => firestoreMocks.emitActivation({ exists: () => true, data: () => ({ schema: 1, state: "active", cleanScan: true }),
+      metadata: { hasPendingWrites: false, fromCache: false } }));
     await waitFor(() => {
       expect(screen.getByTestId("auth-status")).toHaveTextContent("signed-in");
       expect(screen.getByTestId("auth-grants")).toHaveTextContent("staff");
@@ -958,11 +870,12 @@ describe("AuthProvider server admission", () => {
         existingSnapshot({
           email: "approved@example.com",
           displayName: "Approved administrator",
-          role: "admin",
-          grants: [],
+          accessTier: "admin",
         }),
       );
     });
+    act(() => firestoreMocks.emitActivation({ exists: () => true, data: () => ({ schema: 1, state: "active", cleanScan: true }),
+      metadata: { hasPendingWrites: false, fromCache: false } }));
 
     await waitFor(() => {
       expect(screen.getByTestId("auth-status")).toHaveTextContent("signed-in");

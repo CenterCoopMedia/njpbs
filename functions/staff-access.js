@@ -42,7 +42,8 @@ const NOTIFICATION_COOLDOWN_HOURS = 24;
 const NOTIFICATION_COOLDOWN_RETENTION_DAYS = 2;
 const MIN_REASON_LENGTH = 5;
 const MAX_REASON_LENGTH = 500;
-const ALLOWED_APPROVAL_ROLES = new Set(["staff", "editor", "contributor"]);
+// An Owner approves a request at one of the access levels below admin.
+const APPROVAL_TIERS = new Set(["viewer", "contributor", "editor", "publisher"]);
 const ALLOWED_STATES = new Set([
   "email_verification",
   "pending",
@@ -257,7 +258,7 @@ function safeRequest(row, caller = null) {
       state: "not_requested",
       requestVersion: null,
       reference: null,
-      role: null,
+      accessTier: null,
       requestedAt: null,
       decidedAt: null,
       emailVerified: caller?.emailVerified === true,
@@ -272,8 +273,8 @@ function safeRequest(row, caller = null) {
         : null,
     reference:
       typeof row.reference === "string" ? row.reference : null,
-    role: ALLOWED_APPROVAL_ROLES.has(row.approvedRole)
-      ? row.approvedRole
+    accessTier: APPROVAL_TIERS.has(row.approvedAccessTier)
+      ? row.approvedAccessTier
       : null,
     requestedAt: dateFrom(row.requestedAt)?.toISOString() ?? null,
     decidedAt: dateFrom(row.decidedAt)?.toISOString() ?? null,
@@ -509,7 +510,7 @@ function createStaffAccessHandlers(overrides = {}) {
         state,
         requestVersion: version,
         reference,
-        approvedRole: null,
+        approvedAccessTier: null,
         decision: null,
         createdAt: existing?.createdAt ?? now,
         versionCreatedAt,
@@ -954,14 +955,14 @@ function createStaffAccessHandlers(overrides = {}) {
       requirePost(req);
       assertExactKeys(
         req.body ?? {},
-        new Set(["targetUid", "requestVersion", "decision", "role"]),
+        new Set(["targetUid", "requestVersion", "decision", "accessTier"]),
       );
       const caller = await requireSuperAdmin(req);
       const targetUid =
         typeof req.body.targetUid === "string" ? req.body.targetUid.trim() : "";
       const requestVersion = req.body.requestVersion;
       const decision = req.body.decision;
-      const role = req.body.role;
+      const accessTier = req.body.accessTier;
       if (!targetUid || !Number.isInteger(requestVersion) || requestVersion < 1) {
         throw new StaffAccessError(400, "A current request is required", "request_invalid");
       }
@@ -972,13 +973,13 @@ function createStaffAccessHandlers(overrides = {}) {
         throw new StaffAccessError(400, "Choose approve or reject", "decision_invalid");
       }
       if (
-        (decision === "approve" && !ALLOWED_APPROVAL_ROLES.has(role)) ||
-        (decision === "deny" && role !== undefined)
+        (decision === "approve" && !APPROVAL_TIERS.has(accessTier)) ||
+        (decision === "deny" && accessTier !== undefined)
       ) {
         throw new StaffAccessError(
           400,
-          "Approval allows only staff, editor, or contributor access",
-          "role_invalid",
+          "Approval allows only viewer, contributor, editor, or publisher access",
+          "access_tier_invalid",
         );
       }
 
@@ -1042,16 +1043,7 @@ function createStaffAccessHandlers(overrides = {}) {
               "identity_mismatch",
             );
           }
-          const hasRole = target?.role !== null && target?.role !== undefined;
-          const hasGrants = Array.isArray(target?.grants)
-            ? target.grants.length > 0
-            : target?.grants !== null && target?.grants !== undefined;
-          if (
-            target?.active === false ||
-            hasRole ||
-            hasGrants ||
-            await userDocUsesAccessTier(deps.firestore, target, transaction)
-          ) {
+          if (target?.active === false || (target != null && Object.hasOwn(target, "accessTier"))) {
             throw new StaffAccessError(
               409,
               "The staff account permissions changed",
@@ -1067,8 +1059,7 @@ function createStaffAccessHandlers(overrides = {}) {
                 normalizeDisplayName(row.displayName),
               active: true,
               tokensValidAfter: target?.tokensValidAfter ?? 0,
-              role: null,
-              grants: [{ role }],
+              accessTier,
               createdAt: target?.createdAt ?? now,
               updatedAt: now,
             },
@@ -1079,7 +1070,7 @@ function createStaffAccessHandlers(overrides = {}) {
         const nextState = decision === "approve" ? "ready" : "denied";
         const update = {
           state: nextState,
-          approvedRole: decision === "approve" ? role : null,
+          approvedAccessTier: decision === "approve" ? accessTier : null,
           decision: {
             outcome: decision,
             actorUid: caller.uid,
@@ -1101,7 +1092,7 @@ function createStaffAccessHandlers(overrides = {}) {
           },
           after: {
             state: nextState,
-            role: decision === "approve" ? role : null,
+            accessTier: decision === "approve" ? accessTier : null,
           },
           at: now,
           source: req.headers?.["x-njpbs-client-ip"] ?? null,
@@ -1116,7 +1107,7 @@ function createStaffAccessHandlers(overrides = {}) {
             eventType: decision === "approve" ? "approved" : "denied",
             to: row.email,
             displayName: row.displayName,
-            role: decision === "approve" ? role : null,
+            accessTier: decision === "approve" ? accessTier : null,
             reference: row.reference,
           },
           now,
@@ -1153,7 +1144,7 @@ const listStaffAccessRequests = cmsOnRequest(
 const decideStaffAccessRequest = cmsOnRequest(emailOptions, handlers.decide);
 
 module.exports = {
-  ALLOWED_APPROVAL_ROLES,
+  APPROVAL_TIERS,
   MAX_REASON_LENGTH,
   MIN_REASON_LENGTH,
   NOTIFICATION_COOLDOWNS_COLLECTION,

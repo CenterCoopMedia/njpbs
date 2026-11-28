@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-27",
+  "kind": "improved",
+  "order": 1795809250344,
+  "title": "Staff access uses access levels only",
+  "body": "Each staff account now has one whole-site access level: Viewer, Contributor, Editor, Publisher, Admin or Owner. The old role names are gone. When an Owner approves an account request, they choose the access level directly. Accounts that held the old Editor role now have the Publisher level.",
+  "prs": []
+}

@@ -26,15 +26,14 @@ async function seed() {
 }
 
 describe("audited News area backfill", () => {
-  it("defaults to a dry run and exposes only deliberate News capability gains", async () => {
+  // Stored role grants confer no access, and an access level has no section scope, so
+  // stamping a section changes no one's capabilities.
+  it("defaults to a dry run and reports no capability change from stored grants", async () => {
     await seed();
     const plan = await migrate();
     expect(plan).toMatchObject({ dryRun: true, registry: "create", postsStamped: 0, blocked: [] });
     expect(plan.rows.find((row) => row.id === "unassigned").action).toBe("skip-unassigned-draft");
-    expect(plan.rows.find((row) => row.id === "legacy-post").permissionChanges).toEqual([
-      { uid: "editor", gained: ["content.create", "content.edit.any", "content.publish", "content.unpublish"], lost: [] },
-      { uid: "writer", gained: ["content.create", "content.edit.own"], lost: [] },
-    ]);
+    expect(plan.rows.find((row) => row.id === "legacy-post").permissionChanges).toEqual([]);
     expect((await db.collection("sections").doc("news").get()).exists).toBe(false);
     expect((await db.collection("cmsPosts").doc("legacy-post").get()).data()).not.toHaveProperty("section");
     expect((await db.collection("admin_logs").get()).empty).toBe(true);
@@ -94,7 +93,7 @@ describe("audited News area backfill", () => {
     const published = { sourceVersion: 2, title: "Published story", publishedAt: NOW, blocks: [] };
     await db.collection("cmsPosts").doc("legacy-post").update({ section: null, published, status: "published" });
     const plan = await migrate();
-    expect(plan.rows.find((row) => row.id === "legacy-post").permissionChanges.map((row) => row.uid)).toEqual(["editor", "writer"]);
+    expect(plan.rows.find((row) => row.id === "legacy-post").permissionChanges).toEqual([]);
     await migrate({ apply: true, expectedPlan: plan.planHash });
     expect((await db.collection("cmsPosts").doc("legacy-post").get()).data()).toMatchObject({ section: "news", published, status: "published", version: 3 });
   });
@@ -103,8 +102,9 @@ describe("audited News area backfill", () => {
     await seed();
     await db.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true });
     await db.collection("users").doc("editor").update({ accessTier: "publisher" });
+    await db.collection("users").doc("writer").update({ accessTier: "contributor" });
     const plan = await migrate();
-    expect(plan.rows.find((row) => row.id === "legacy-post").permissionChanges.map((row) => row.uid)).toEqual(["writer"]);
+    expect(plan.rows.find((row) => row.id === "legacy-post").permissionChanges).toEqual([]);
   });
 
   it("refuses reassignment from an existing area and requires a reviewed hash", async () => {

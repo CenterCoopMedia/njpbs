@@ -18,7 +18,7 @@ import {
   statusClassFor,
 } from "./perf-receipts";
 import type { LibrarySelection } from "./content-library";
-import type { AccessTier, Role } from "../../../packages/content-core/src/rbac";
+import type { AccessTier } from "../../../packages/content-core/src/rbac";
 import type { NavigationPreferences } from "./navigation-preferences";
 import { PUBLIC_HOMEPAGE_BANNER_SETTINGS_ID, PUBLIC_SITE_CHROME_SETTINGS_ID,
   SITE_NAVIGATION_SETTINGS_ID, NJ_DECIDES_SETTINGS_ID } from "../../../packages/content-core/src/cms-settings";
@@ -79,25 +79,12 @@ export type {
   SelfProfilePhotoListMediaRequest,
 } from "./functions-media-types";
 
-export interface RoleRequest {
-  targetUid?: string;
-  targetEmail?: string;
-  role: Role;
-  sections?: string[];
-  siteWide?: boolean;
-}
-
 export interface NewsroomBannerResponse {
   success: true;
   heading: string;
   milestoneNumber: number;
   source: "default" | "saved";
   version: number | null;
-}
-
-export interface RoleResponse {
-  success: true;
-  uid: string;
 }
 
 const emulatorMode =
@@ -758,20 +745,6 @@ export function cmsGetGithubIssue(
   return postFunction("cmsGetGithubIssue", idToken, { number });
 }
 
-export function grantRole(
-  idToken: string,
-  body: RoleRequest,
-): Promise<RoleResponse> {
-  return postFunction<RoleResponse>("grantRole", idToken, body);
-}
-
-export function revokeRole(
-  idToken: string,
-  body: RoleRequest,
-): Promise<RoleResponse> {
-  return postFunction<RoleResponse>("revokeRole", idToken, body);
-}
-
 export interface StaffAccessLevelRequest {
   targetUid: string;
   accessTier: AccessTier;
@@ -779,7 +752,7 @@ export interface StaffAccessLevelRequest {
 }
 
 export function setStaffAccessLevel(idToken: string, body: StaffAccessLevelRequest) {
-  return postFunction<RoleResponse & { accessTier: AccessTier; changed: boolean }>(
+  return postFunction<{ success: true; uid: string; accessTier: AccessTier; changed: boolean }>(
     "setStaffAccessLevel", idToken, body,
   );
 }
@@ -822,7 +795,7 @@ export interface ReactivateStaffRequest {
 // enabled after the audited Firestore change; after a partial Auth failure, retry
 // the same uid and level to finish it.
 export function reactivateStaff(idToken: string, body: ReactivateStaffRequest) {
-  return postFunction<RoleResponse & { accessTier: AccessTier; alreadyActive: boolean }>(
+  return postFunction<{ success: true; uid: string; accessTier: AccessTier; alreadyActive: boolean }>(
     "reactivateStaff", idToken, body,
   );
 }
@@ -854,11 +827,14 @@ export type StaffAccessState =
   | "expired"
   | "ready";
 
+/** Access levels an Owner can choose when approving a staff access request. */
+export type ApprovalAccessTier = Exclude<AccessTier, "admin" | "owner">;
+
 export interface StaffAccessStatus {
   state: StaffAccessState;
   requestVersion: number | null;
   reference: string | null;
-  role: "staff" | "editor" | "contributor" | null;
+  accessTier: ApprovalAccessTier | null;
   requestedAt: string | null;
   decidedAt: string | null;
   emailVerified: boolean;
@@ -953,7 +929,7 @@ export interface DecideStaffAccessRequest {
   targetUid: string;
   requestVersion: number;
   decision: "approve" | "deny";
-  role?: "staff" | "editor" | "contributor";
+  accessTier?: ApprovalAccessTier;
 }
 
 export function decideStaffAccessRequest(

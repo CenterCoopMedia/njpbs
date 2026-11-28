@@ -44,7 +44,8 @@ describe("studio enrollment Firestore/Auth/HTTP boundary", () => {
     now = 1_000_000;
     const uid = `enrollment-${randomUUID()}`;
     await auth.createUser({ uid, email: `${uid}@example.test`, emailVerified: true });
-    await db.doc(`users/${uid}`).set({ active: true, grants: [{ role: "editor" }] });
+    await db.doc(`users/${uid}`).set({ active: true, accessTier: "editor" });
+    await db.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true });
     actor = { uid, emailVerified: true, approvedActive: true, principal: { id: uid, grants: [{ role: "editor" }] } };
   });
   it("issues a digest-only single-use code and device-only refresh credential; the next call refuses revocation", async () => {

@@ -48,7 +48,7 @@ async function seedLeaseContent(ownerId, holderId = null) {
   });
 }
 describe("authoritative tier rules", () => {
-  it("a planted Owner or demotion field has no authority before activation", async () => {
+  it("no tier or stored role has authority before activation", async () => {
     await environment.withSecurityRulesDisabled(async context => {
       const db = context.firestore();
       await deleteDoc(doc(db, "system/staffAccessActivation"));
@@ -56,8 +56,8 @@ describe("authoritative tier rules", () => {
       await setDoc(doc(db, "users/planted-demotion"), { accessTier: "viewer", role: "super_admin", active: true });
     });
     await assertFails(getDoc(doc(database("planted-owner"), "users/other")));
-    await assertSucceeds(getDoc(doc(database("planted-demotion"), "users/other")));
-    await assertSucceeds(getDoc(doc(database("planted-owner"), "users/planted-owner")));
+    await assertFails(getDoc(doc(database("planted-demotion"), "users/other")));
+    await assertFails(getDoc(doc(database("planted-owner"), "users/planted-owner")));
   });
   it.each(tiers)("%s cannot write activation evidence", async tier => {
     await assertFails(setDoc(doc(database(tier), "system/staffAccessActivation"), { schema: 1, state: "active", cleanScan: true }));

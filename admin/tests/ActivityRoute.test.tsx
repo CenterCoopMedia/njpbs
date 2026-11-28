@@ -25,7 +25,7 @@ const shell: ShellData = {
     email: "account-1@example.org",
     displayName: "Admin User",
   } as ShellData["user"],
-  userDoc: { role: "admin" },
+  userDoc: { accessTier: "admin" },
   signOut: vi.fn(),
 };
 

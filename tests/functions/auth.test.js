@@ -19,6 +19,14 @@ const {
 // auth.js loads this through CommonJS, so the test reads that same module instance.
 const { sessionWasRefused } = createRequire(import.meta.url)("../../functions/lib/session-refusal.js");
 
+
+// Users documents come from `get`; the tier activation receipt is present.
+function mockUsers(get) {
+  vi.spyOn(db, "collection").mockImplementation((name) => name === "system"
+    ? { doc: () => ({ get: async () => ({ exists: true, data: () => ({ schema: 1, state: "active", cleanScan: true }) }) }) }
+    : { doc: vi.fn(() => ({ get })) });
+}
+
 describe("auth helpers", () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -155,14 +163,12 @@ describe("auth helpers", () => {
   });
 
   it("can return admission status from the same profile read as the principal", async () => {
-    vi.spyOn(admin.auth(), "verifyIdToken").mockResolvedValue({ uid: "u1" });
+    vi.spyOn(admin.auth(), "verifyIdToken").mockResolvedValue({ uid: "u1", email_verified: true });
     const get = vi.fn(async () => ({
       exists: true,
-      data: () => ({ active: true, grants: [{ role: "staff" }] }),
+      data: () => ({ active: true, accessTier: "viewer" }),
     }));
-    vi.spyOn(db, "collection").mockReturnValue({
-      doc: vi.fn(() => ({ get })),
-    });
+    mockUsers(get);
 
     await expect(requirePrincipal(
       { headers: { authorization: "Bearer good" } },
@@ -170,7 +176,7 @@ describe("auth helpers", () => {
     )).resolves.toMatchObject({
       uid: "u1",
       approvedActive: true,
-      principal: { id: "u1", grants: [{ role: "staff" }] },
+      principal: { id: "u1", grants: [{ role: "staff", tier: "viewer" }] },
     });
     expect(get).toHaveBeenCalledOnce();
   });
@@ -179,9 +185,9 @@ describe("auth helpers", () => {
     const authTime = Math.floor(Date.now() / 1_000) - 60;
     vi.spyOn(admin.auth(), "verifyIdToken").mockResolvedValue({ uid: "u1", email_verified: true, auth_time: authTime });
     let watermark = authTime;
-    vi.spyOn(db, "collection").mockReturnValue({ doc: vi.fn(() => ({ get: async () => ({
-      exists: true, data: () => ({ active: true, grants: [{ role: "staff" }], tokensValidAfter: watermark }),
-    }) })) });
+    mockUsers(async () => ({
+      exists: true, data: () => ({ active: true, accessTier: "viewer", tokensValidAfter: watermark }),
+    }));
     // Same rule as Firestore: auth_time must be later than the watermark.
     await expect(requirePrincipal({ headers: { authorization: "Bearer good" } })).rejects.toMatchObject({ status: 401 });
     watermark = authTime - 1;
@@ -197,8 +203,8 @@ describe("auth helpers", () => {
   ])("%s refuses a session 60 days after sign-in and accepts one at 59 days", async (name, verify) => {
     const days = n => Math.floor(Date.now() / 1_000) - n * 24 * 60 * 60;
     const token = vi.spyOn(admin.auth(), "verifyIdToken");
-    const get = vi.fn(async () => ({ exists: true, data: () => ({ active: true, role: "super_admin" }) }));
-    vi.spyOn(db, "collection").mockReturnValue({ doc: vi.fn(() => ({ get })) });
+    const get = vi.fn(async () => ({ exists: true, data: () => ({ active: true, accessTier: "owner" }) }));
+    mockUsers(get);
 
     token.mockResolvedValue({ uid: "u1", email_verified: true, auth_time: days(59) });
     await expect(verify({ headers: { authorization: "Bearer recent" } })).resolves.toMatchObject({ uid: "u1" });
@@ -211,9 +217,9 @@ describe("auth helpers", () => {
   });
 
   it("applies the watermark to direct super-admin checks", async () => {
-    vi.spyOn(db, "collection").mockReturnValue({ doc: vi.fn(() => ({ get: async () => ({
-      exists: true, data: () => ({ role: "super_admin", active: true, tokensValidAfter: 1_000 }),
-    }) })) });
+    mockUsers(async () => ({
+      exists: true, data: () => ({ accessTier: "owner", active: true, tokensValidAfter: 1_000 }),
+    }));
     await expect(isSuperAdmin("u1", true, 1_000)).resolves.toBe(false);
     await expect(isSuperAdmin("u1", true)).resolves.toBe(false);
     await expect(isSuperAdmin("u1", true, 1_001)).resolves.toBe(true);

@@ -61,8 +61,6 @@ async function seedUser(uid, data) {
     .set({
       email: null,
       displayName: null,
-      role: null,
-      grants: [],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       ...data,
@@ -239,6 +237,7 @@ describe("cms publish function", () => {
       `http://${AUTH_HOST}/emulator/v1/projects/${PROJECT}/accounts`,
       { method: "DELETE" },
     );
+    await db.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true });
   });
 
   afterAll(async () => {
@@ -265,7 +264,7 @@ describe("cms publish function", () => {
 
   it("rejects a non-admin caller", async () => {
     const user = await signInAs("nonadmin@example.com");
-    await seedUser(user.uid, { email: user.email, role: null });
+    await seedUser(user.uid, { email: user.email, accessTier: null });
 
     const res = await callFn("cmsPublish", user.token, {});
 
@@ -273,11 +272,11 @@ describe("cms publish function", () => {
     expect(await queueDocs()).toHaveLength(0);
   });
 
-  it("lets an editor with publish capability enqueue a build", async () => {
+  it("lets a Publisher enqueue a build", async () => {
     const user = await signInAs("editor@example.com");
     await seedUser(user.uid, {
       email: user.email,
-      grants: [{ role: "editor" }],
+      accessTier: "publisher",
     });
 
     const res = await callFn("cmsPublish", user.token, { changes: [] });
@@ -288,7 +287,7 @@ describe("cms publish function", () => {
 
   it("allows an admin to enqueue serializer work without GitHub credentials", async () => {
     const adminUser = await signInAs("admin@example.com");
-    await seedUser(adminUser.uid, { email: adminUser.email, role: "admin" });
+    await seedUser(adminUser.uid, { email: adminUser.email, accessTier: "admin" });
 
     const res = await callFn("cmsPublish", adminUser.token, {
       changes: [{ id: "home" }],
@@ -1226,6 +1225,7 @@ describe("section-scoped publish", () => {
       `http://${AUTH_HOST}/emulator/v1/projects/${PROJECT}/accounts`,
       { method: "DELETE" },
     );
+    await db.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true });
     await Promise.all(
       ["watch", "support", "station", "compliance"].map((id) =>
         db.collection("sections").doc(id).set({ id, label: id, order: 1 }),
@@ -1262,6 +1262,14 @@ describe("section-scoped publish", () => {
       });
   }
 
+  // Stored profiles carry no section scope. The legacy scoped-grant profiles below have no
+  // access at all; the scope-refusal cases stay until section scoping is removed (#750).
+  async function publisher(email) {
+    const user = await signInAs(email);
+    await seedUser(user.uid, { email: user.email, accessTier: "publisher" });
+    return user;
+  }
+
   async function scopedEditor(email, sections) {
     const user = await signInAs(email);
     await seedUser(user.uid, {
@@ -1271,8 +1279,8 @@ describe("section-scoped publish", () => {
     return user;
   }
 
-  it("carries an in-scope publish from the save through to a queued build", async () => {
-    const user = await scopedEditor("watch-editor@example.com", ["watch"]);
+  it("carries a Publisher's publish from the save through to a queued build", async () => {
+    const user = await publisher("watch-editor@example.com");
     await seedApprovedRecord("watch", "somebody-else");
 
     // The Content tab uses the publication receipt when the save queues the build.
@@ -1397,10 +1405,8 @@ describe("section-scoped publish", () => {
     expect(await adminLogs()).toHaveLength(0);
   });
 
-  it("lets a scoped editor publish a canonical page in their own public area", async () => {
-    // A page's desk is its server-owned public area, so the transport resolves it from the
-    // registry rather than from whatever the stored document happens to carry.
-    const user = await scopedEditor("watch-pages@example.com", ["watch"]);
+  it("lets a Publisher publish a canonical page", async () => {
+    const user = await publisher("watch-pages@example.com");
     await db.collection("cmsPages").doc("schedule").set({
       id: "schedule",
       template: "programLanding",
@@ -1447,7 +1453,7 @@ describe("section-scoped publish", () => {
     const user = await signInAs("sitewide-publisher@example.com");
     await seedUser(user.uid, {
       email: user.email,
-      grants: [{ role: "editor" }],
+      accessTier: "publisher",
     });
 
     const build = await callFn("cmsPublish", user.token, {

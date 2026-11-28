@@ -12,7 +12,7 @@ import "../design-system/editorial.css";
 const principal = { id: "settings-fixture", grants: [{ role: "super_admin" as const }] };
 const shell: ShellData = {
   principal, user: { uid: principal.id, email: "editor@example.org", displayName: "Sample editor" },
-  userDoc: { role: "super_admin", grants: principal.grants, displayName: "Sample editor", email: "editor@example.org" },
+  userDoc: { accessTier: "owner", displayName: "Sample editor", email: "editor@example.org" },
   signOut: () => {}, navigationShares: [],
 };
 const router = createBrowserRouter([{ path: "/", element: <ShellLayout />, children: [

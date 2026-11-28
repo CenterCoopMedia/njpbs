@@ -11,7 +11,7 @@ import localWorker from "../../functions/lib/video-transcript-worker.js";
 import { createHash } from "node:crypto";
 
 const source = { id: "video-library", bucket: "originals", prefix: "", writable: true, access: "active_staff" };
-const actor = { uid: "staff", authTime: 100, displayName: "Staff", principal: { grants: [{ role: "staff" }] } };
+const actor = { uid: "staff", authTime: 100, displayName: "Staff", principal: { grants: [{ role: "contributor", tier: "contributor" }] } };
 const settings = { languageCode: "en-US", maxSpeakers: 10 };
 const identity = { sourceId: source.id, assetId: "asset" };
 const config = { enabled: true, localEnabled: true, fallbackEnabled: true, source, bucket: "renditions", accountId: "123456789012", controlRoleArn: "role", dataRoleArn: "data-role" };
@@ -47,7 +47,8 @@ beforeAll(() => { firestore = isolatedFirestore("video-transcript-attempts"); })
 beforeEach(async () => {
   await clearEmulatorFirestore(`http://${process.env.FIRESTORE_EMULATOR_HOST}/emulator/v1/projects/${firestore.projectId}/databases/(default)/documents`, { method: "DELETE" }, firestore);
   await firestore.collection("mediaSourceAssets").doc("asset").set(video());
-  await firestore.collection("users").doc(actor.uid).set({ active: true, grants: [{ role: "staff" }] });
+  await firestore.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true });
+  await firestore.collection("users").doc(actor.uid).set({ active: true, accessTier: "contributor" });
 });
 
 describe("provider attempts through the callable and Firestore boundaries", () => {
@@ -140,7 +141,7 @@ describe("provider attempts through the callable and Firestore boundaries", () =
 it("shares one active successor across staff action keys without a second paid reservation", async () => {
   const previous = await uncertain();
   const second = { ...actor, uid: "second-staff" };
-  await firestore.collection("users").doc(second.uid).set({ active: true, grants: [{ role: "staff" }] });
+  await firestore.collection("users").doc(second.uid).set({ active: true, accessTier: "contributor" });
   const key = credentials.credentialIdentity(actor, { scope: "organization", provider: "elevenlabs" });
   await firestore.collection(credentials.CREDENTIAL_COLLECTION).doc(key.id).set({ ...key, enabled: true, revision: 1 });
   const body = { ...identity, ...settings, provider: "elevenlabs", credentialScope: "organization", credentialRevision: 1, newAttemptOf: previous };
@@ -177,7 +178,7 @@ it("keeps corrections on the loaded ready ID when a newer provider completes", a
 it.each(["local", "amazon-transcribe"])("reuses an active %s attempt across two staff members", async provider => {
   const previous = await uncertain();
   const second = { ...actor, uid: "second-staff" };
-  await firestore.collection("users").doc(second.uid).set({ active: true, grants: [{ role: "staff" }] });
+  await firestore.collection("users").doc(second.uid).set({ active: true, accessTier: "contributor" });
   const body = { ...identity, ...settings, provider, newAttemptOf: previous };
   const results = await Promise.all([
     call("request", { ...body, attemptKey: "11111111-1111-4111-8111-111111111111" }),
@@ -394,7 +395,7 @@ it("reuses already-active paid work when no attempt slot was recorded", async ()
   expect(slots.size).toBe(1);
   await slots.docs[0].ref.delete();
   const second = { ...actor, uid: "second-staff" };
-  await firestore.collection("users").doc(second.uid).set({ active: true, grants: [{ role: "staff" }] });
+  await firestore.collection("users").doc(second.uid).set({ active: true, accessTier: "contributor" });
   const result = await call("request", { ...identity, ...settings, provider: "amazon-transcribe", newAttemptOf: previous,
     attemptKey: "11111111-1111-4111-8111-111111111111" }, { principal: second });
   expect(result.statusCode).toBe(200); expect(result.body.cached).toBe(true);

@@ -49,8 +49,7 @@ export function SinglePreviewGallery() {
       displayName: "Preview editor",
     },
     userDoc: {
-      role: "admin",
-      grants: principal.grants,
+      accessTier: "admin",
       email: "preview.editor@example.org",
       displayName: "Preview editor",
     },

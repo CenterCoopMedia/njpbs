@@ -13,8 +13,8 @@ const source = { id: "video-library", bucket: "originals", prefix: "", writable:
 const config = { source, bucket: "renditions", accountId: "123456789012", controlRoleArn: "role", dataRoleArn: "data-role", region: "us-east-2" };
 const segments = [{ text: "Original", speaker: "spk_0", startSeconds: 1, endSeconds: 2 }];
 const revocations = [
-  { name: "last top-level role", profile: { active: true, role: "admin" }, update: { role: null } },
-  { name: "last staff grant", profile: { active: true, grants: [{ role: "staff" }] }, update: { grants: [] } },
+  { name: "access level", profile: { active: true, accessTier: "contributor" }, update: { accessTier: null } },
+  { name: "Contributor level", profile: { active: true, accessTier: "contributor" }, update: { accessTier: "viewer" } },
 ];
 let firestore, actor, request, job, userRef, assetRef, jobRef, sectionRef;
 
@@ -27,7 +27,7 @@ beforeAll(() => {
 
 beforeEach(async () => {
   const id = randomUUID();
-  actor = { uid: `staff-${id}`, email: "staff@example.test", principal: { grants: [{ role: "staff" }] } };
+  actor = { uid: `staff-${id}`, email: "staff@example.test", principal: { grants: [{ role: "contributor", tier: "contributor" }] } };
   request = contract.parseTranscriptRequest({ sourceId: source.id, assetId: `asset-${id}` });
   const asset = { sourceId: source.id, objectKey: `objects/${id}.mp4`, objectVersionId: "original-v1", sizeBytes: 100,
     lifecycle: "active", name: "Video", originalName: "video.mp4", nameSort: "video", updatedAtSort: "2026-09-15T12:00:00Z",
@@ -41,7 +41,8 @@ beforeEach(async () => {
   assetRef = firestore.collection("mediaSourceAssets").doc(request.assetId);
   jobRef = firestore.collection(jobs.TRANSCRIPT_JOBS).doc(job.id);
   sectionRef = firestore.collection("sections").doc(`section-${id}`);
-  await Promise.all([userRef.set({ active: true, grants: [{ role: "staff" }] }), assetRef.set(asset), jobRef.set(job)]);
+  await Promise.all([userRef.set({ active: true, accessTier: "contributor" }), assetRef.set(asset), jobRef.set(job),
+    firestore.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true })]);
 });
 
 async function editAudits() {
@@ -113,7 +114,7 @@ describe("transcript edit staff admission at commit", () => {
 
   it.each(revocations)("does not commit when the $name is revoked during private export writes", async ({ profile, update }) => {
     await userRef.set(profile);
-    actor.principal = principals.principalFromUserDoc(actor.uid, profile);
+    actor.principal = principals.principalFromUserDoc(actor.uid, profile, true);
     const { processor, objects } = storage(() => userRef.update(update));
     const result = await edit(processor);
     expect([...objects.values()].some(body => body.includes("Corrected"))).toBe(true);
@@ -126,7 +127,7 @@ describe("transcript edit staff admission at commit", () => {
 
   it.each(revocations)("does not mark a transcript reviewed after the $name is revoked", async ({ profile, update }) => {
     await userRef.set(profile);
-    actor.principal = principals.principalFromUserDoc(actor.uid, profile);
+    actor.principal = principals.principalFromUserDoc(actor.uid, profile, true);
     await sources.authorizeMediaSource({ firestore, actor, source, operation: "transcript" });
     await userRef.update(update);
     const review = contract.parseTranscriptEdit({ ...request, revision: 0, reviewed: true });
@@ -138,14 +139,13 @@ describe("transcript edit staff admission at commit", () => {
   });
 
   it.each([
-    { name: "registered", removed: false, status: 200 },
+    { name: "kept", removed: false, status: 200 },
     { name: "removed during private export writes", removed: true, status: 403 },
-  ])("rechecks scoped video access when its area is $name", async ({ removed, status }) => {
-    await sectionRef.set({ label: "Fixture area" });
-    const profile = { active: true, grants: [{ role: "editor", sections: [sectionRef.id] }] };
+  ])("rechecks video access when the Editor level is $name", async ({ removed, status }) => {
+    const profile = { active: true, accessTier: "editor" };
     await userRef.set(profile);
     actor.principal = await principals.registeredPrincipalFromUserDoc(firestore, actor.uid, profile);
-    const { processor } = storage(removed ? () => sectionRef.delete() : undefined);
+    const { processor } = storage(removed ? () => userRef.update({ accessTier: null }) : undefined);
     const result = await edit(processor);
     expect(result.statusCode).toBe(status);
     if (removed) {
@@ -157,8 +157,8 @@ describe("transcript edit staff admission at commit", () => {
     }
   });
 
-  it.each([{ active: true }, {}])("keeps edits available for an admitted staff record %j", async profile => {
-    await userRef.set({ ...profile, grants: [{ role: "staff" }] });
+  it.each([{ active: true }, {}])("keeps edits available for an admitted Contributor record %j", async profile => {
+    await userRef.set({ ...profile, accessTier: "contributor" });
     const { processor, objects } = storage();
     const result = await edit(processor);
     expect(result.statusCode).toBe(200);

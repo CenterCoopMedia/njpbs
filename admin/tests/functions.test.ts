@@ -40,7 +40,6 @@ import {
   deactivateStaff,
   decideStaffAccessRequest,
   getStaffAccessStatus,
-  grantRole,
   listStaffAccessRequests,
   registerStaffProfile,
   postFunction,
@@ -258,7 +257,7 @@ describe("staff access request API", () => {
         state: "pending" as const,
         requestVersion: 1,
         reference: "NJPBS-USER-1",
-        role: null,
+        accessTier: null,
         requestedAt: null,
         decidedAt: null,
         emailVerified: true,
@@ -293,7 +292,7 @@ describe("staff access request API", () => {
         state: "not_requested" as const,
         requestVersion: null,
         reference: null,
-        role: null,
+        accessTier: null,
         requestedAt: null,
         decidedAt: null,
         emailVerified: true,
@@ -326,7 +325,7 @@ describe("staff access request API", () => {
             state: "ready",
             requestVersion: 2,
             reference: "NJPBS-USER-2",
-            role: "editor",
+            accessTier: "publisher",
             requestedAt: null,
             decidedAt: null,
             emailVerified: true,
@@ -341,7 +340,7 @@ describe("staff access request API", () => {
       targetUid: "requester-1",
       requestVersion: 2,
       decision: "approve",
-      role: "editor",
+      accessTier: "publisher",
     });
 
     expect(fetchMock.mock.calls[0]![0]).toBe(`${BASE}/listStaffAccessRequests`);
@@ -352,7 +351,7 @@ describe("staff access request API", () => {
       targetUid: "requester-1",
       requestVersion: 2,
       decision: "approve",
-      role: "editor",
+      accessTier: "publisher",
     });
   });
 });
@@ -1214,24 +1213,6 @@ describe("cmsSaveContent", () => {
     await expect(
       cmsSaveContent("id-token", { collection: "cmsPosts", document: {} }),
     ).rejects.toThrow("Bad Gateway");
-  });
-});
-
-describe("grantRole (shared post helper regression)", () => {
-  it("posts to the grantRole endpoint through the same helper", async () => {
-    const fetchMock = vi.fn(
-      async (_url: string, _init: RequestInit): Promise<Response> =>
-        okResponse({ success: true, uid: "u1" }),
-    );
-    vi.stubGlobal("fetch", fetchMock);
-
-    const result = await grantRole("id-token", {
-      targetUid: "u1",
-      role: "editor",
-    });
-
-    expect(fetchMock.mock.calls[0]![0]).toBe(`${BASE}/grantRole`);
-    expect(result).toEqual({ success: true, uid: "u1" });
   });
 });
 

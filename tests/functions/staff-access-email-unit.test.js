@@ -126,7 +126,7 @@ describe("staff access email", () => {
     const approved = renderStaffAccessEmail({
       eventType: "approved",
       displayName: "Blake Sutton",
-      role: "editor",
+      accessTier: "editor",
       reference: "NJPBS-BLAKE-1",
     });
     expect(approved.text).toContain(
@@ -162,10 +162,11 @@ describe("staff access email", () => {
   });
 
   it.each([
-    ["staff", "Viewer"],
-    ["contributor", "Writer"],
+    ["viewer", "Viewer"],
+    ["contributor", "Contributor"],
     ["editor", "Editor"],
-  ])("renders the queued %s approval as %s in both email formats", (role, name) => {
+    ["publisher", "Publisher"],
+  ])("renders the queued %s approval as %s in both email formats", (accessTier, name) => {
     const set = vi.fn();
     const firestore = { collection: () => ({ doc: (id) => ({ id }) }) };
     queueStaffAccessEmail({ set }, firestore, {
@@ -173,7 +174,7 @@ describe("staff access email", () => {
       requestVersion: 1,
       eventType: "approved",
       to: "person@example.org",
-      role,
+      accessTier,
     }, new Date("2026-11-20T18:00:00Z"));
 
     const [, row] = set.mock.calls[0];
@@ -183,7 +184,7 @@ describe("staff access email", () => {
     expect(html).toContain(sentence);
   });
 
-  it("renders a queued approval without a recorded role", () => {
+  it("renders a queued approval without a recorded access level", () => {
     const { text, html } = renderStaffAccessEmail({ eventType: "approved" });
     expect(text).toContain("An administrator approved your account.");
     expect(html).toContain("An administrator approved your account.");

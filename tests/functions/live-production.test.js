@@ -49,7 +49,8 @@ async function command(record, overrides = {}) {
     commandAction: "take", bannerId: record.record.id, baseVersion: record.record.draft.version, ...overrides });
 }
 async function setup({ observe = true } = {}) {
-  await db.doc("users/producer").set({ active: true, grants: [{ role: "editor" }] });
+  await db.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true });
+  await db.doc("users/producer").set({ active: true, accessTier: "editor" });
   await db.doc(`liveProductionDevices/${device.deviceId}`).set({ active: true, authUid: device.uid });
   const created = await ok({ action: "create_session", requestId: randomUUID(), title: "Synthetic rehearsal", productionProgramId: "fixture-news" });
   session = created.session;
@@ -724,7 +725,7 @@ describe("private live production Firestore and HTTP boundary", () => {
   });
   it("rechecks revoked staff authority inside reads and mutations instead of trusting the handler snapshot", async () => {
     const row = await banner();
-    await db.doc("users/producer").update({ grants: [] });
+    await db.doc("users/producer").update({ accessTier: null });
     // invoke still supplies the formerly authorized principal at the auth boundary.
     const requests = [
       { action: "get_session", sessionId: session.id },
@@ -739,9 +740,8 @@ describe("private live production Firestore and HTTP boundary", () => {
     expect((await db.collection(`liveProductionSessions/${session.id}/commands`).get()).size).toBe(0);
     expect((await db.collection("liveProductionSessions").get()).size).toBe(1);
   });
-  it("honors a newly activated staff tier inside admission even when legacy grants were cached", async () => {
+  it("honors a lowered staff tier inside admission even when an Editor principal was cached", async () => {
     const row = await banner();
-    await db.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true });
     await db.doc("users/producer").update({ accessTier: "viewer" });
     const result = await invoke({ action: "command", sessionId: session.id, requestId: randomUUID(), commandId: randomUUID(),
       sessionGeneration: session.generation, mappingVersion: 2, expectedObservationSequence: 1, expectedClearGeneration: 0,

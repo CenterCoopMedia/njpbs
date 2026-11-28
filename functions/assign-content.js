@@ -66,26 +66,10 @@ function validateAssignmentRequest(body) {
   return null;
 }
 
-// Top-level roles are persisted in `role`; editor and contributor are persisted as grants.
-// Malformed/unknown role strings deny by default. A scoped grant still makes someone a valid
-// workflow participant even though separate capability checks decide which content they may edit.
+// A workflow participant is an active user whose access tier can create content.
 function isAssignableUser(user, tiersActive = false) {
   if (!user || typeof user !== "object" || Array.isArray(user)) return false;
-  if (user.active === false) return false;
-  if (tiersActive && Object.hasOwn(user, "accessTier")) {
-    return hasCapability(principalFromUserDoc("assignment", user, tiersActive), "content.create");
-  }
-  if (user.role === "admin" || user.role === "super_admin") return true;
-  return (
-    Array.isArray(user.grants) &&
-    user.grants.some(
-      (grant) =>
-        grant &&
-        typeof grant === "object" &&
-        !Array.isArray(grant) &&
-        (grant.role === "editor" || grant.role === "contributor"),
-    )
-  );
+  return hasCapability(principalFromUserDoc("assignment", user, tiersActive), "content.create");
 }
 
 function createCmsAssignContentHandler(deps = {}) {

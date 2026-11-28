@@ -75,9 +75,12 @@ function stores() {
   return { s3, r2, objects };
 }
 
+// Stored profiles carry only an access level, which has no section scope. Section-scope
+// cases build the scoped Principal directly; the rest resolve it from the stored profile.
 async function setup({ sections = ["watch"], content = {}, collection = "cmsPosts", id = postId,
-  profile = { active: true, grants: [{ role: "editor", sections }] } } = {}) {
-  await put(`users/${uid}`, profile);
+  profile } = {}) {
+  await put(`users/${uid}`, profile ?? { active: true });
+  await put("system/staffAccessActivation", { schema: 1, state: "active", cleanScan: true });
   await put("sections/watch", { label: "Watch" });
   await put("sections/news", { label: "News" });
   if (content !== null) await put(`${collection}/${id}`, {
@@ -90,9 +93,9 @@ async function setup({ sections = ["watch"], content = {}, collection = "cmsPost
   const handler = createCmsPublishSourceVideoHandler({
     firestore: db,
     // Auth-token verification is the boundary; user and grant resolution use the real database.
-    requirePrincipalFn: async () => ({ uid, principal: await principals.registeredPrincipalFromUserDoc(
-      db, uid, (await db.doc(`users/${uid}`).get()).data(),
-    ) }),
+    requirePrincipalFn: async () => ({ uid, principal: profile
+      ? await principals.registeredPrincipalFromUserDoc(db, uid, (await db.doc(`users/${uid}`).get()).data())
+      : { id: uid, grants: [{ role: "editor", sections, registeredMediaSections: sections }] } }),
     registryFn: () => new Map([[source.id, source]]),
     awsConfigFn: () => ({ renditionBucket: "private-renditions", renditionExpectedBucketOwner: source.expectedBucketOwner }),
     s3ClientFn: () => storage.s3,
@@ -131,8 +134,8 @@ afterEach(async () => {
 
 describe("public video content authorization (#2822)", () => {
   it.each([
-    ["a site-wide editor", { active: true, grants: [{ role: "editor" }] }],
-    ["an administrator", { active: true, role: "admin" }],
+    ["a Publisher", { active: true, accessTier: "publisher" }],
+    ["an Admin", { active: true, accessTier: "admin" }],
   ])("keeps the deployed Admin request working for %s", async (_name, profile) => {
     const { handler, storage } = await setup({ profile, content: null });
     const result = await call(handler, { sourceId: "video-library", assetId });
@@ -221,7 +224,7 @@ describe("public video content authorization (#2822)", () => {
     ["missing content", null],
     ["deleted content", { deleted: true }],
   ])("retains an honest not-found answer for site-wide publishers of %s", async (_name, content) => {
-    const { handler, storage } = await setup({ content, profile: { active: true, grants: [{ role: "editor" }] } });
+    const { handler, storage } = await setup({ content, profile: { active: true, accessTier: "publisher" } });
     expect(await call(handler, body)).toMatchObject({ status: 404, body: { error: "Content not found" } });
     await expectNoPublicCopy(storage);
   });
@@ -245,9 +248,10 @@ describe("public video content authorization (#2822)", () => {
   });
 
   it.each([
-    ["a contributor", { active: true, grants: [{ role: "contributor", sections: ["watch"] }] }],
-    ["an inactive editor", { active: false, grants: [{ role: "editor", sections: ["watch"] }] }],
-    ["an empty grant", { active: true, grants: [{ role: "editor", sections: [] }] }],
+    ["a Contributor", { active: true, accessTier: "contributor" }],
+    ["an Editor", { active: true, accessTier: "editor" }],
+    ["an inactive Publisher", { active: false, accessTier: "publisher" }],
+    ["a profile without an access level", { active: true }],
   ])("refuses %s without a public copy", async (_name, profile) => {
     const { handler, storage } = await setup({ profile });
     expect((await call(handler, body)).status).toBe(403);
@@ -256,8 +260,8 @@ describe("public video content authorization (#2822)", () => {
 
   it.each([
     ["a scoped editor", {}],
-    ["a site-wide editor", { sections: undefined, profile: { active: true, grants: [{ role: "editor" }] } }],
-    ["an administrator", { profile: { active: true, role: "admin" } }],
+    ["a Publisher", { sections: undefined, profile: { active: true, accessTier: "publisher" } }],
+    ["an Admin", { profile: { active: true, accessTier: "admin" } }],
     ["a canonical page", { collection: "cmsPages", id: "watch", content: { section: "news" } }],
   ])("allows %s to publish a visible video in authorized content", async (_name, options) => {
     const { handler, storage } = await setup(options);

@@ -309,7 +309,8 @@ describe("bug report read projections", () => {
 
 describe("atomic administrator triage", () => {
   beforeEach(async () => {
-    await db.collection("users").doc("admin-1").set({ role: "admin", active: true });
+    await db.collection("users").doc("admin-1").set({ accessTier: "admin", active: true });
+    await db.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true });
   });
 
   function handler(user = principal("admin-1", "admin")) {
@@ -651,12 +652,13 @@ describe("atomic administrator triage", () => {
   });
 
   it.each([
-    ["legacy staff", { active: true, grants: [{ role: "staff" }] }, 400],
-    ["legacy Contributor with empty scope", { active: true, grants: [{ role: "contributor", sections: [] }] }, 200],
-    ["legacy Editor with malformed scope", { active: true, grants: [{ role: "editor", sections: null }] }, 200],
+    ["legacy staff grant", { active: true, grants: [{ role: "staff" }] }, 400],
+    ["legacy Contributor grant", { active: true, grants: [{ role: "contributor" }] }, 400],
+    ["legacy Editor role", { active: true, role: "editor" }, 400],
     ["tier Viewer", { active: true, accessTier: "viewer", role: "super_admin" }, 200],
+    ["tier Contributor", { active: true, accessTier: "contributor" }, 200],
     ["invalid tier with stale Owner", { active: true, accessTier: "invalid", role: "super_admin" }, 400],
-    ["inactive legacy Contributor", { active: false, grants: [{ role: "contributor" }] }, 400],
+    ["inactive tier Contributor", { active: false, accessTier: "contributor" }, 400],
   ])("preserves report assignment admission for %s", async (_label, profile, status) => {
     await db.doc("system/staffAccessActivation").set({ schema: 1, state: "active", cleanScan: true });
     const stored = report(1);
