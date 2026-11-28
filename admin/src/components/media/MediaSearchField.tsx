@@ -138,6 +138,12 @@ export function MediaSearchField({
           setDraft(event.target.value);
           onDraftChange?.(event.target.value);
         }}
+        // Leaving the field applies the draft at once, so a tab link clicked during the typing
+        // pause carries the search the person sees. Moving to Clear search does not apply it.
+        onBlur={(event) => {
+          if (locked || event.currentTarget.form?.contains(event.relatedTarget as Node | null)) return;
+          commitNow(draft.trim());
+        }}
         onKeyDown={(event) => {
           if (event.key !== "Escape") return;
           event.preventDefault();
