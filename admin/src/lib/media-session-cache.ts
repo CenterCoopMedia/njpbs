@@ -185,7 +185,6 @@ function parseTabCounts(value: unknown): MediaTabCounts {
 
 export function mediaTabCounts(): MediaTabCounts { return tabCounts; }
 
-export function mediaTabCountsRevision() { return tabCountsRevision; }
 
 export function subscribeMediaTabCounts(listener: () => void) {
   tabCountListeners.add(listener);
