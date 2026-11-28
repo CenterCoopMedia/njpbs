@@ -38,7 +38,8 @@ describe("video upload panel", () => {
     vi.mocked(transferVideo)
       .mockResolvedValueOnce(processing)
       .mockImplementationOnce(() => new Promise(resolve => { finishSecond = resolve; }))
-      .mockResolvedValueOnce(failed);
+      .mockResolvedValueOnce(failed)
+      .mockResolvedValueOnce(processing);
     render(<VideoUploadPanel {...props} />);
     await waitFor(() => expect(screen.getByRole("button", { name: "Upload media" })).toBeEnabled());
     act(() => routeChosenFiles(["a.mp4", "b.mp4"].map(name => new File(["data"], name, { type: "video/mp4", lastModified: 42 }))));
@@ -70,6 +71,14 @@ describe("video upload panel", () => {
     } finally {
       vi.useRealTimers();
     }
+    // A later confirmation does not replace the follow-up result; only Dismiss removes it.
+    act(() => routeChosenFiles([new File(["data"], "d.mp4", { type: "video/mp4", lastModified: 42 })]));
+    await screen.findByRole("group", { name: "Details before upload: d.mp4" });
+    fireEvent.click(screen.getByRole("button", { name: "Start upload d.mp4" }));
+    await screen.findByText(text);
+    expect(screen.getByText(problem)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: `Dismiss: ${problem}` }));
+    expect(screen.queryByText(problem)).not.toBeInTheDocument();
   });
 
   it("clears an upload confirmation after the success notice time unless the pointer rests on it", async () => {

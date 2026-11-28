@@ -183,6 +183,9 @@ export function VideoUploadPanel({ sourceId, userId, getIdToken, onUploaded, onA
   // Each confirmation is its own event, so a repeated identical message gets the full interval.
   const completionNotice = useRef("");
   const [completionEvent, setCompletionEvent] = useState(0);
+  // Results that need follow-up stay listed until dismissed, even when later notices arrive.
+  const followUpId = useRef(0);
+  const [followUps, setFollowUps] = useState<{ id: number; message: string }[]>([]);
   const [noticeHeld, setNoticeHeld] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
   const input = useRef<HTMLInputElement>(null);
@@ -383,10 +386,15 @@ export function VideoUploadPanel({ sourceId, userId, getIdToken, onUploaded, onA
         recordUpload?.(row.name, asset);
         const message = videoUploadCompletionMessage(asset);
         const state = asset.viewingCopy?.state;
-        completionNotice.current = (state === "ready" || state === "processing") && asset.collectionPlacement !== "unavailable"
-          ? message : "";
-        setNotice(message);
-        setCompletionEvent(value => value + 1);
+        if ((state === "ready" || state === "processing") && asset.collectionPlacement !== "unavailable") {
+          completionNotice.current = message;
+          setNotice(message);
+          setCompletionEvent(value => value + 1);
+        } else {
+          followUpId.current += 1;
+          const id = followUpId.current;
+          setFollowUps(previous => [...previous, { id, message }]);
+        }
         onUploadedRef.current(asset);
       }
     } catch (error) {
@@ -784,6 +792,10 @@ export function VideoUploadPanel({ sourceId, userId, getIdToken, onUploaded, onA
       <Button disabled={collectionPicker.loading} onClick={collectionPicker.loadMore}>Retry loading collections</Button>
     </InlineMessage> : null}
     {notice ? <p role="status" onMouseEnter={() => setNoticeHeld(true)} onMouseLeave={() => setNoticeHeld(false)}>{notice}</p> : null}
+    {followUps.map(({ id, message }) => <div className="video-upload-follow-up" key={id} role="status">
+      <p>{message}</p>
+      <Button variant="ghost" aria-label={`Dismiss: ${message}`} onClick={() => setFollowUps(previous => previous.filter(item => item.id !== id))}>Dismiss</Button>
+    </div>)}
     <ul>{transfers.map(row => {
       const state = states[row.id];
       const running = active.includes(row.id);
