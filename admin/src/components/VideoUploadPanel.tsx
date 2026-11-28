@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Button, InlineMessage, Select, Textarea, TextInput } from "./ui/Primitives";
 import { Icon } from "./ui/Icon";
+import { SUCCESS_NOTICE_TIMEOUT_MS } from "./ui/SuccessNoticeRegion";
 import { VideoRightsFields } from "./media/VideoRightsFields";
 import { MediaUploadTagInput } from "./media/MediaTagInput";
 import { EMPTY_UPLOAD_MEDIA_TAGS, uploadMediaTagsText, type UploadMediaTagDraft } from "../lib/media-tags";
@@ -177,6 +178,15 @@ export function VideoUploadPanel({ sourceId, userId, getIdToken, onUploaded, onA
   const [cancelingIds, setCancelingIds] = useState<string[]>([]);
   const [states, setStates] = useState<Record<string, { phase: Phase; bytes: number; error?: string }>>({});
   const [notice, setNotice] = useState("");
+  // A plain upload confirmation clears itself like other success notices. A result that needs
+  // follow-up (a failed or missing viewing copy, an unavailable collection) and problem notices stay.
+  // Each confirmation is its own event, so a repeated identical message gets the full interval.
+  const completionNotice = useRef("");
+  const [completionEvent, setCompletionEvent] = useState(0);
+  // Results that need follow-up stay listed until dismissed, even when later notices arrive.
+  const followUpId = useRef(0);
+  const [followUps, setFollowUps] = useState<{ id: number; message: string }[]>([]);
+  const [noticeHeld, setNoticeHeld] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
   const input = useRef<HTMLInputElement>(null);
   const uploadButton = useRef<HTMLButtonElement>(null);
@@ -374,7 +384,17 @@ export function VideoUploadPanel({ sourceId, userId, getIdToken, onUploaded, onA
       onMoreWorkRef.current?.(routedLeft);
       if (alive.current) {
         recordUpload?.(row.name, asset);
-        setNotice(videoUploadCompletionMessage(asset));
+        const message = videoUploadCompletionMessage(asset);
+        const state = asset.viewingCopy?.state;
+        if ((state === "ready" || state === "processing") && asset.collectionPlacement !== "unavailable") {
+          completionNotice.current = message;
+          setNotice(message);
+          setCompletionEvent(value => value + 1);
+        } else {
+          followUpId.current += 1;
+          const id = followUpId.current;
+          setFollowUps(previous => [...previous, { id, message }]);
+        }
         onUploadedRef.current(asset);
       }
     } catch (error) {
@@ -639,6 +659,11 @@ export function VideoUploadPanel({ sourceId, userId, getIdToken, onUploaded, onA
   const acceptsFiles = ownsQueue && !isClearing && transfers.length < MAX_TRANSFERS;
   useEffect(() => { onIntakeChangeRef.current?.(acceptsFiles); }, [acceptsFiles]);
   useEffect(() => () => onIntakeChangeRef.current?.(false), []);
+  useEffect(() => {
+    if (!notice || notice !== completionNotice.current || noticeHeld) return;
+    const timer = window.setTimeout(() => setNotice(current => current === notice ? "" : current), SUCCESS_NOTICE_TIMEOUT_MS);
+    return () => window.clearTimeout(timer);
+  }, [notice, noticeHeld, completionEvent]);
   const trayRows: readonly UploadTrayRow[] = transfers.map(row => {
     const state = states[row.id];
     const running = active.includes(row.id);
@@ -766,7 +791,11 @@ export function VideoUploadPanel({ sourceId, userId, getIdToken, onUploaded, onA
     {canChooseCollection && collectionPicker.error ? <InlineMessage tone="warning" title="Some collections could not be loaded">
       <Button disabled={collectionPicker.loading} onClick={collectionPicker.loadMore}>Retry loading collections</Button>
     </InlineMessage> : null}
-    {notice ? <p role="status">{notice}</p> : null}
+    {notice ? <p role="status" onMouseEnter={() => setNoticeHeld(true)} onMouseLeave={() => setNoticeHeld(false)}>{notice}</p> : null}
+    {followUps.map(({ id, message }) => <div className="video-upload-follow-up" key={id} role="status">
+      <p>{message}</p>
+      <Button variant="ghost" aria-label={`Dismiss: ${message}`} onClick={() => setFollowUps(previous => previous.filter(item => item.id !== id))}>Dismiss</Button>
+    </div>)}
     <ul>{transfers.map(row => {
       const state = states[row.id];
       const running = active.includes(row.id);

@@ -2,6 +2,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HttpError, RequestNotDispatchedError } from "../src/lib/functions";
 import { VideoUploadPanel } from "../src/components/VideoUploadPanel";
+import { SUCCESS_NOTICE_TIMEOUT_MS } from "../src/components/ui/SuccessNoticeRegion";
 import { startVideoUpload, transferVideo, cancelVideoUpload } from "../src/lib/source-media-upload";
 import { installTestLockManager } from "./helpers/web-locks";
 import { finishVideoUpload, resetUploadRouter, routeChosenFiles, uploadRouterSnapshot } from "../src/lib/upload-router";
@@ -27,6 +28,84 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 describe("video upload panel", () => {
+
+  it("keeps an upload result that needs follow-up and gives a repeated confirmation its full time", async () => {
+    const processing = { id: "asset", sourceId: props.sourceId, name: "Storm footage", viewingCopy: { state: "processing" },
+    } as Awaited<ReturnType<typeof transferVideo>>;
+    const failed = { id: "asset-2", sourceId: props.sourceId, name: "Night drive", viewingCopy: { state: "failed" },
+    } as Awaited<ReturnType<typeof transferVideo>>;
+    let finishSecond: (value: typeof processing) => void = () => undefined;
+    vi.mocked(transferVideo)
+      .mockResolvedValueOnce(processing)
+      .mockImplementationOnce(() => new Promise(resolve => { finishSecond = resolve; }))
+      .mockResolvedValueOnce(failed)
+      .mockResolvedValueOnce(processing);
+    render(<VideoUploadPanel {...props} />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Upload media" })).toBeEnabled());
+    act(() => routeChosenFiles(["a.mp4", "b.mp4"].map(name => new File(["data"], name, { type: "video/mp4", lastModified: 42 }))));
+    await screen.findByRole("group", { name: "Details before upload: b.mp4" });
+    fireEvent.click(screen.getByRole("button", { name: "Start all uploads" }));
+    const text = "Storm footage uploaded. Its viewing copy is processing.";
+    await screen.findByText(text);
+    vi.useFakeTimers();
+    try {
+      act(() => { vi.advanceTimersByTime(SUCCESS_NOTICE_TIMEOUT_MS - 1_000); });
+      // A second upload with the same title and state finishes; its message gets a fresh interval.
+      await act(async () => { finishSecond(processing); await Promise.resolve(); });
+      act(() => { vi.advanceTimersByTime(SUCCESS_NOTICE_TIMEOUT_MS - 1); });
+      expect(screen.getByText(text)).toBeInTheDocument();
+      act(() => { vi.advanceTimersByTime(1); });
+      expect(screen.queryByText(text)).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+    act(() => routeChosenFiles([new File(["data"], "c.mp4", { type: "video/mp4", lastModified: 42 })]));
+    await screen.findByRole("group", { name: "Details before upload: c.mp4" });
+    fireEvent.click(screen.getByRole("button", { name: "Start upload c.mp4" }));
+    const problem = "Night drive uploaded. Its viewing copy could not be prepared. Check the video in Videos.";
+    await screen.findByText(problem);
+    vi.useFakeTimers();
+    try {
+      act(() => { vi.advanceTimersByTime(SUCCESS_NOTICE_TIMEOUT_MS * 3); });
+      expect(screen.getByText(problem)).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+    // A later confirmation does not replace the follow-up result; only Dismiss removes it.
+    act(() => routeChosenFiles([new File(["data"], "d.mp4", { type: "video/mp4", lastModified: 42 })]));
+    await screen.findByRole("group", { name: "Details before upload: d.mp4" });
+    fireEvent.click(screen.getByRole("button", { name: "Start upload d.mp4" }));
+    await screen.findByText(text);
+    expect(screen.getByText(problem)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: `Dismiss: ${problem}` }));
+    expect(screen.queryByText(problem)).not.toBeInTheDocument();
+  });
+
+  it("clears an upload confirmation after the success notice time unless the pointer rests on it", async () => {
+    const asset = { id: "asset", sourceId: props.sourceId, name: "Storm footage",
+      viewingCopy: { state: "processing" },
+    } as Awaited<ReturnType<typeof transferVideo>>;
+    vi.mocked(transferVideo).mockResolvedValueOnce(asset);
+    render(<VideoUploadPanel {...props} />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Upload media" })).toBeEnabled());
+    act(() => routeChosenFiles([new File(["data"], "storm.mp4", { type: "video/mp4", lastModified: 42 })]));
+    await screen.findByRole("group", { name: "Details before upload: storm.mp4" });
+    fireEvent.click(screen.getByRole("button", { name: "Start upload storm.mp4" }));
+    const message = await screen.findByText("Storm footage uploaded. Its viewing copy is processing.");
+    vi.useFakeTimers();
+    try {
+      fireEvent.mouseEnter(message);
+      act(() => { vi.advanceTimersByTime(SUCCESS_NOTICE_TIMEOUT_MS + 1_000); });
+      expect(message).toBeInTheDocument();
+      fireEvent.mouseLeave(message);
+      act(() => { vi.advanceTimersByTime(SUCCESS_NOTICE_TIMEOUT_MS - 1); });
+      expect(message).toBeInTheDocument();
+      act(() => { vi.advanceTimersByTime(1); });
+      expect(screen.queryByText("Storm footage uploaded. Its viewing copy is processing.")).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
   it("retains a failed file's collection through reopening while its batch peer finishes in a different collection", async () => {
     const privateId = "a".repeat(64);
     const sharedId = "b".repeat(64);

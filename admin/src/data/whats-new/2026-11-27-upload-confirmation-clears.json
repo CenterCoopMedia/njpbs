@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-27",
+  "kind": "improved",
+  "title": "Upload confirmations clear on their own",
+  "body": "The \"uploaded\" message in the video upload panel now goes away after a few seconds, like other confirmations. It stays while you point at it. Problem messages still stay until you act on them.",
+  "prs": []
+}

@@ -38,6 +38,20 @@
   font-size: var(--cms-font-sm);
 }
 
+/* An upload result that needs follow-up stays beside its Dismiss control. */
+.video-upload-follow-up {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--cms-space-2);
+  color: var(--cms-ink-muted);
+  font-size: var(--cms-font-sm);
+}
+
+.video-upload-follow-up > p {
+  flex: 1;
+  min-width: 0;
+}
+
 .video-upload-panel > ul {
   display: grid;
   gap: var(--cms-space-4);
