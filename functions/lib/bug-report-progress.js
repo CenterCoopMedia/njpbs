@@ -12,7 +12,7 @@ const LABELS = Object.freeze({
   changes_requested: ["Changes requested", "The proposed fix needs changes before it can proceed."],
   checks_failed: ["Checks need attention", "The proposed fix has a failed check and needs attention."],
   merged: ["Merged; live verification pending", "The code change is merged. The live fix has not been verified."],
-  live: ["Fix live", "The fix is in the production release. An administrator confirms it before resolving this report."],
+  live: ["Live in Boardwalk", "The fix is in the live Boardwalk Admin and Functions release. Public site and Workers releases are not checked. An administrator confirms the fix before resolving this report."],
   closed: ["Engineering work closed", "The linked engineering work is closed. This does not confirm a live fix or resolve this report."],
   resolved: ["Resolved", "An administrator marked this report resolved."],
   dismissed: ["Closed", "An administrator closed this report without marking it resolved."],

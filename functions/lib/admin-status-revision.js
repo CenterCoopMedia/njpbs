@@ -14,6 +14,8 @@ class AdminStatusRevisionError extends Error {
     super(message);
     this.name = "AdminStatusRevisionError";
     this.status = 503;
+    // Served revisions that were read before this one failed.
+    this.knownRevisions = [];
   }
 }
 
@@ -110,7 +112,14 @@ async function readDeployedRevision(deps = {}) {
 async function readServedRevisions(deps = {}) {
   const functionsRevision = configuredRevision();
   if ((deps.environment ?? deploymentEnvironment()) !== "production") return [functionsRevision];
-  return [...new Set([await readLiveAdminBuildRevision(deps), functionsRevision])].sort();
+  let adminRevision;
+  try {
+    adminRevision = await readLiveAdminBuildRevision(deps);
+  } catch (error) {
+    if (error instanceof AdminStatusRevisionError) error.knownRevisions = [functionsRevision];
+    throw error;
+  }
+  return [...new Set([adminRevision, functionsRevision])].sort();
 }
 
 module.exports = {

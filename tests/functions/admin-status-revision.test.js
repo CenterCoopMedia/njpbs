@@ -89,6 +89,15 @@ describe("served revisions for live fix verification", () => {
       vi.unstubAllEnvs();
     }
   });
+  it("reports the Functions release revision when the live Admin build cannot be read", async () => {
+    vi.stubEnv("CMS_ADMIN_BUILD_REVISION", RELEASE);
+    try {
+      await expect(adminStatus.readServedRevisions({ fetchFn: async () => { throw new Error("offline"); }, environment: "production" }))
+        .rejects.toMatchObject({ name: "AdminStatusRevisionError", knownRevisions: [RELEASE] });
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
   it("refuses a missing Functions release revision", async () => {
     vi.stubEnv("CMS_ADMIN_BUILD_REVISION", "");
     try {

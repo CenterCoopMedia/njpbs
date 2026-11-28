@@ -296,7 +296,7 @@ describe("public fix pull requests on a report filed in the private tracker", ()
     const { next, view } = await sync({ pulls: { 734: merged }, compare });
     expect(next.status).toBe("acknowledged");
     expect(next.links.pullRequests[0]).toMatchObject({ live: true, liveRevisions: [RELEASE] });
-    expect(view).toMatchObject({ phase: "live", stage: "live", label: "Fix live", deployment: "verified", active: true });
+    expect(view).toMatchObject({ phase: "live", stage: "live", label: "Live in Boardwalk", deployment: "verified", active: true });
     expect((await db.collection("bugReportDeliveryOutbox").get()).docs.every((doc) => doc.data().channel !== "email")).toBe(true);
   });
   it("waits for the Functions release when only the live Admin build contains the fix", async () => {
@@ -349,6 +349,20 @@ describe("public fix pull requests on a report filed in the private tracker", ()
     expect(api.requests.some(({ path }) => path.endsWith("/timeline"))).toBe(false);
     expect((await db.collection("bug_reports").doc(stored.id).get()).data()).toMatchObject(identityFields(ISSUE));
   });
+  it.each([["unchanged", RELEASE, true], ["rolled back", "d".repeat(40), false]])(
+    "keeps live evidence during an Admin outage only while the Functions release is %s", async (_name, functions, kept) => {
+      const admin = "a".repeat(40);
+      const { next } = await sync({ pulls: { 734: merged }, compare: "ahead" }, { servedRevisions: async () => [admin, RELEASE] });
+      expect(next.links.pullRequests[0]).toMatchObject({ live: true, liveRevisions: [admin, RELEASE] });
+      await db.collection("bugReportGithubOutbox").doc(`${next.id}--sync`).set({ reportId: next.id,
+        operation: "sync", targetNumber: null, state: "pending", attemptCount: 0, nextAttemptAt: NOW });
+      const outage = Object.assign(new Error("Admin status unavailable"), { knownRevisions: [functions] });
+      const api = boundary({ issueState: "closed", timeline: [reference(FIX.repository, 734)], pulls: { 734: merged } });
+      expect(await run(`${next.id}--sync`, api, { servedRevisions: async () => { throw outage; } })).toEqual({ state: "delivered" });
+      const later = (await db.collection("bug_reports").doc(next.id).get()).data();
+      expect(later.links.pullRequests[0].live === true).toBe(kept);
+      expect(api.requests.some(({ path }) => path.includes("/compare/"))).toBe(false);
+    });
   it("leaves live verification pending when the production revision cannot be read", async () => {
     const { view } = await sync({ pulls: { 734: merged } }, { servedRevisions: async () => { throw new Error("offline"); } });
     expect(view).toMatchObject({ phase: "merged", label: "Merged; live verification pending" });

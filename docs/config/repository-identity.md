@@ -48,12 +48,13 @@ to its deploy SHA) and, in production, the live Admin status (`build.revision`),
 because Admin can deploy on its own. Site and Workers releases are not checked.
 The sync compares the commits through the fix repository and records `live`
 and `liveRevisions` on the pull request row. It compares again when a served
-revision changes, so a rollback to an older build clears `live`. An unreadable
-revision keeps the stored evidence; a failed comparison against new revisions
-leaves the fix pending. Staff progress
-shows "Fix live" on the Live verification step. A fix not yet verified stays at
-"Merged; live verification pending" while the revision or comparison cannot be
-read. Marking the report resolved stays an administrator action.
+revision changes, so a rollback to an older build clears `live`. When a revision
+cannot be read, stored evidence stays only if it covers every revision that was
+read; a failed comparison against new revisions leaves the fix pending. Staff
+progress shows "Live in Boardwalk" on the Live verification step. A fix not yet
+verified stays at "Merged; live verification pending" while the revision or
+comparison cannot be read. Marking the report resolved stays an administrator
+action.
 
 Before enabling the CMS autofix host service, deploy this reader, supply and
 read back the four production settings in the switch packet's F09 table, and

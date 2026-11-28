@@ -64,7 +64,7 @@ describe("staff-safe report progress", () => {
       ["open draft", [publicFix()], "in_progress", "fixing", "In progress"],
       ["open, in review", [publicFix({ draft: false, checksState: "success" })], "ready_for_review", "review", "Fix ready for review"],
       ["merged, not live", [publicFix({ state: "closed", merged: true })], "merged", "awaiting_live", "Merged; live verification pending"],
-      ["merged and live", [publicFix({ state: "closed", merged: true, live: true, liveRevisions: ["f".repeat(40)] })], "live", "live", "Fix live"],
+      ["merged and live", [publicFix({ state: "closed", merged: true, live: true, liveRevisions: ["f".repeat(40)] })], "live", "live", "Live in Boardwalk"],
       ["one of two merged fixes live", [publicFix({ state: "closed", merged: true, live: true }),
         publicFix({ number: 737, url: "https://github.com/example-owner/public-code/pull/737", state: "closed", merged: true })],
       "merged", "awaiting_live", "Merged; live verification pending"],

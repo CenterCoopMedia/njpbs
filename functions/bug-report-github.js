@@ -699,9 +699,9 @@ async function discoverIssuePullRequests(client, issues, manualNumbers, pullRepo
 
 // A merged fix is live when its merge commit is each served revision of the fix
 // repository or an ancestor of it. A rollback can serve an older revision, so
-// stored evidence holds only for the revisions it was checked against. An
-// unreadable revision keeps stored evidence; a failed comparison against new
-// revisions leaves the fix pending.
+// stored evidence holds only for the revisions it was checked against. When a
+// revision is unreadable, stored evidence stays only if it covers every revision
+// that could be read; a failed comparison leaves the fix pending.
 async function markLivePullRequests(row, pullClient, pulls, deps) {
   if (!deps.servedRevisions || !row.fixRepository ||
       pullClient.repository?.toLowerCase() !== row.fixRepository.repository.toLowerCase()) return;
@@ -721,7 +721,9 @@ async function markLivePullRequests(row, pullClient, pulls, deps) {
     revisions = await deps.servedRevisions();
   } catch (error) {
     logger.warn("Production revision unavailable for live fix verification", { error: error?.name ?? "Error" });
-    merged.forEach(keep);
+    const readable = error?.knownRevisions ?? [];
+    merged.filter((pull) => readable.every((revision) => known(pull)?.liveRevisions?.includes(revision)))
+      .forEach(keep);
     return;
   }
   await Promise.all(merged.map(async (pull) => {
