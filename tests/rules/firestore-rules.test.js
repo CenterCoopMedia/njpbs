@@ -1143,17 +1143,21 @@ describe("shared navigation items", () => {
     }));
   });
 
-  it("denies eleven shared ids", async () => {
-    const links = Array.from({ length: 10 }, (_, index) => item({
-      id: `custom:link-${index}`,
-      icon: "external-link",
-    }));
+  // One custom link keeps the ten-id save under the rules limit (#751), so the
+  // eleven-id denial has a passing control at the same shared-id size.
+  it("lets an owner save ten shared ids and denies eleven", async () => {
+    const links = [item({ id: "custom:link-0", icon: "external-link" })];
     const shared = Array.from({ length: 10 }, (_, index) => `custom:share-${index}`);
     const saved = navigation(links, shared);
     await seedNavigation(saved);
-    await assertFails(updateDoc(doc(db("regular"), "users/regular"), {
+    await assertSucceeds(updateDoc(doc(db("regular"), "users/regular"), {
+      "preferences.navigation": { ...saved, order: [...saved.order].reverse(), hidden: [shared[0]] },
+    }));
+    await seedNavigation(saved);
+    const denied = await assertFails(updateDoc(doc(db("regular"), "users/regular"), {
       "preferences.navigation": { ...saved, shared: [...shared, "custom:share-10"] },
     }));
+    expect(denied.message).not.toMatch(/maximum of 1000 expressions/);
   });
 
   it("lets an owner reorder shared ids and denies foreign ids, duplicates and custom edits", async () => {

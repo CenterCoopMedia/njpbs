@@ -88,14 +88,22 @@ only source of access. Stored `role` and `grants` fields confer nothing, and
 an absent, unknown or malformed tier has no access.
 Clients cannot write the tier or activation receipt.
 
-Order for a project that still has accounts without a tier: activate the
-receipt and give every staff account a tier (an Owner first) while the
-project still runs a release that reads legacy roles. Then deploy a release
-without legacy reads. Production and dev completed this order on Nov. 27,
-2026 (#746).
+Order for a project that still has accounts without a tier:
+
+1. While the project still runs a release that reads legacy roles, run the
+   activation operator from the checkout of that deployed release. Its rules
+   must match the live rules, and the scan must find no tier.
+2. Give every active staff account a tier, an Owner first, with the
+   staff-access screen.
+3. Read back the receipt and confirm that no active account lacks a valid
+   tier. Then deploy a release without legacy reads.
+
+Production completed steps 1 and 2 by Nov. 27, 2026, and dev on Nov. 27, 2026.
+The read-only check on Nov. 28, 2026 found 0 active accounts without a valid
+tier in both projects (#746).
 
 The operator is [activate-staff-tier-readers.mjs](../../scripts/activate-staff-tier-readers.mjs).
-Run from the exact reviewed checkout in Bash with the approved service-account
+Run from the checkout of the deployed release in Bash with the approved service-account
 JSON streamed to stdin, a clean credential environment, and explicit project.
 The source supports `--check --project <njpbs-site|njpbs-site-dev>` before the
 separately authorized `--activate` with the same project; both retain their
