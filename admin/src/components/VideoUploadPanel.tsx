@@ -178,8 +178,11 @@ export function VideoUploadPanel({ sourceId, userId, getIdToken, onUploaded, onA
   const [cancelingIds, setCancelingIds] = useState<string[]>([]);
   const [states, setStates] = useState<Record<string, { phase: Phase; bytes: number; error?: string }>>({});
   const [notice, setNotice] = useState("");
-  // An upload confirmation clears itself like other success notices; problem notices stay.
+  // A plain upload confirmation clears itself like other success notices. A result that needs
+  // follow-up (a failed or missing viewing copy, an unavailable collection) and problem notices stay.
+  // Each confirmation is its own event, so a repeated identical message gets the full interval.
   const completionNotice = useRef("");
+  const [completionEvent, setCompletionEvent] = useState(0);
   const [noticeHeld, setNoticeHeld] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
   const input = useRef<HTMLInputElement>(null);
@@ -378,8 +381,12 @@ export function VideoUploadPanel({ sourceId, userId, getIdToken, onUploaded, onA
       onMoreWorkRef.current?.(routedLeft);
       if (alive.current) {
         recordUpload?.(row.name, asset);
-        completionNotice.current = videoUploadCompletionMessage(asset);
-        setNotice(completionNotice.current);
+        const message = videoUploadCompletionMessage(asset);
+        const state = asset.viewingCopy?.state;
+        completionNotice.current = (state === "ready" || state === "processing") && asset.collectionPlacement !== "unavailable"
+          ? message : "";
+        setNotice(message);
+        setCompletionEvent(value => value + 1);
         onUploadedRef.current(asset);
       }
     } catch (error) {
@@ -648,7 +655,7 @@ export function VideoUploadPanel({ sourceId, userId, getIdToken, onUploaded, onA
     if (!notice || notice !== completionNotice.current || noticeHeld) return;
     const timer = window.setTimeout(() => setNotice(current => current === notice ? "" : current), SUCCESS_NOTICE_TIMEOUT_MS);
     return () => window.clearTimeout(timer);
-  }, [notice, noticeHeld]);
+  }, [notice, noticeHeld, completionEvent]);
   const trayRows: readonly UploadTrayRow[] = transfers.map(row => {
     const state = states[row.id];
     const running = active.includes(row.id);

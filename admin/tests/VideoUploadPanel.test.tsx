@@ -29,6 +29,49 @@ beforeEach(() => {
 afterEach(cleanup);
 describe("video upload panel", () => {
 
+  it("keeps an upload result that needs follow-up and gives a repeated confirmation its full time", async () => {
+    const processing = { id: "asset", sourceId: props.sourceId, name: "Storm footage", viewingCopy: { state: "processing" },
+    } as Awaited<ReturnType<typeof transferVideo>>;
+    const failed = { id: "asset-2", sourceId: props.sourceId, name: "Night drive", viewingCopy: { state: "failed" },
+    } as Awaited<ReturnType<typeof transferVideo>>;
+    let finishSecond: (value: typeof processing) => void = () => undefined;
+    vi.mocked(transferVideo)
+      .mockResolvedValueOnce(processing)
+      .mockImplementationOnce(() => new Promise(resolve => { finishSecond = resolve; }))
+      .mockResolvedValueOnce(failed);
+    render(<VideoUploadPanel {...props} />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Upload media" })).toBeEnabled());
+    act(() => routeChosenFiles(["a.mp4", "b.mp4"].map(name => new File(["data"], name, { type: "video/mp4", lastModified: 42 }))));
+    await screen.findByRole("group", { name: "Details before upload: b.mp4" });
+    fireEvent.click(screen.getByRole("button", { name: "Start all uploads" }));
+    const text = "Storm footage uploaded. Its viewing copy is processing.";
+    await screen.findByText(text);
+    vi.useFakeTimers();
+    try {
+      act(() => { vi.advanceTimersByTime(SUCCESS_NOTICE_TIMEOUT_MS - 1_000); });
+      // A second upload with the same title and state finishes; its message gets a fresh interval.
+      await act(async () => { finishSecond(processing); await Promise.resolve(); });
+      act(() => { vi.advanceTimersByTime(SUCCESS_NOTICE_TIMEOUT_MS - 1); });
+      expect(screen.getByText(text)).toBeInTheDocument();
+      act(() => { vi.advanceTimersByTime(1); });
+      expect(screen.queryByText(text)).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+    act(() => routeChosenFiles([new File(["data"], "c.mp4", { type: "video/mp4", lastModified: 42 })]));
+    await screen.findByRole("group", { name: "Details before upload: c.mp4" });
+    fireEvent.click(screen.getByRole("button", { name: "Start upload c.mp4" }));
+    const problem = "Night drive uploaded. Its viewing copy could not be prepared. Check the video in Videos.";
+    await screen.findByText(problem);
+    vi.useFakeTimers();
+    try {
+      act(() => { vi.advanceTimersByTime(SUCCESS_NOTICE_TIMEOUT_MS * 3); });
+      expect(screen.getByText(problem)).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("clears an upload confirmation after the success notice time unless the pointer rests on it", async () => {
     const asset = { id: "asset", sourceId: props.sourceId, name: "Storm footage",
       viewingCopy: { state: "processing" },
