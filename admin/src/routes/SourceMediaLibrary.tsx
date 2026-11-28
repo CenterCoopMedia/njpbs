@@ -1496,8 +1496,20 @@ export function SourceMediaLibrary({ principal, source, getIdToken, userId, onEx
           : quickLook
             ? "Close Quick Look first."
             : undefined;
+  // The tray unmounts while the sheet is open, so its opener cannot take focus back.
+  // Return focus to the remounted tray instead when the sheet was opened from it.
+  const openedFromTray = useRef(false);
+  const [trayFocusRequest, setTrayFocusRequest] = useState(0);
+  useEffect(() => {
+    if (!trayFocusRequest) return;
+    const target = uploadTrayTarget?.querySelector<HTMLElement>(
+      "[data-upload-tray-focus], .media-upload-tray-pill, .media-upload-tray button:not([disabled])");
+    if (target) target.focus();
+    else setUploadFocusRequest(value => value + 1);
+  }, [trayFocusRequest, uploadTrayTarget]);
   function showVideoUpload() {
     if (uploadOpenBlockedReason) return;
+    openedFromTray.current = Boolean(uploadTrayTarget?.contains(document.activeElement));
     setUploadOpen(true);
   }
   function routeVideoDrop(files: readonly File[]) {
@@ -1900,7 +1912,11 @@ export function SourceMediaLibrary({ principal, source, getIdToken, userId, onEx
       setUploadTrayTarget={setUploadTrayTarget}
       upload={source.canUpload && !suppressUpload ? {
         sheet: {
-          heading: `Upload to ${source.label}`, onFocusFallback: () => setUploadFocusRequest(value => value + 1),
+          heading: `Upload to ${source.label}`, onFocusFallback: () => {
+            if (openedFromTray.current) setTrayFocusRequest(value => value + 1);
+            else setUploadFocusRequest(value => value + 1);
+            openedFromTray.current = false;
+          },
           onRequestClose: () => setUploadOpen(false), open: visibleUploadOpen,
         },
         panel: <VideoUploadPanel key={`${userId}:${source.id}`} sourceId={source.id} userId={userId} getIdToken={getIdToken}
